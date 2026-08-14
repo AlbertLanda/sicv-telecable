@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.organization.models import Branch, Zone
@@ -245,6 +246,57 @@ class WorkOrder(models.Model):
             models.Index(fields=["subscription"], name="wo_subscription_idx"),
             models.Index(fields=["created_at"], name="wo_created_at_idx"),
         ]
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.reason
+            and self.order_type_id
+            and self.reason.order_type_id != self.order_type_id
+        ):
+            raise ValidationError({
+                "reason": "El motivo seleccionado no pertenece al tipo de orden."
+            })
+
+        if (
+            self.assigned_technician
+            and self.assigned_technician.role != "TECHNICIAN"
+        ):
+            raise ValidationError({
+                "assigned_technician": (
+                    "El usuario asignado debe tener el rol de Técnico."
+                )
+            })
+
+    def change_status(self, new_status, user=None, remarks=""):
+        valid_statuses = {
+            choice.value
+            for choice in self.Status
+        }
+
+        if new_status not in valid_statuses:
+            raise ValidationError({
+                "status": "El estado indicado no es válido."
+            })
+
+        if self.status == new_status:
+            return False
+
+        previous_status = self.status
+
+        self.status = new_status
+        self.save(update_fields=["status", "updated_at"])
+
+        WorkOrderStatusHistory.objects.create(
+            work_order=self,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=user,
+            remarks=remarks,
+        )
+
+        return True
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"

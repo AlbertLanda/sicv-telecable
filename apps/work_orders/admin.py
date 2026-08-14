@@ -25,7 +25,19 @@ class OrderReasonAdmin(admin.ModelAdmin):
 class WorkOrderStatusHistoryInline(admin.TabularInline):
     model = WorkOrderStatusHistory
     extra = 0
-    readonly_fields = ("changed_at",)
+
+    readonly_fields = (
+        "previous_status",
+        "new_status",
+        "changed_by",
+        "remarks",
+        "changed_at",
+    )
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WorkOrder)
