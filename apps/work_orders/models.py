@@ -4,6 +4,7 @@ from django.db import models
 
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
+from apps.customers.models import CustomerAddress
 
 
 class OrderType(models.Model):
@@ -591,3 +592,259 @@ class WorkOrderStatusHistory(models.Model):
 
     def __str__(self):
         return f"{self.work_order.order_number}: {self.previous_status or '-'} -> {self.new_status}"
+
+class CutDetail(models.Model):
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="cut_detail",
+        verbose_name="Orden de corte"
+    )
+
+    requested_start_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha solicitada de inicio"
+    )
+
+    expected_return_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha estimada de retorno"
+    )
+
+    cancellation_reason_detail = models.TextField(
+        blank=True,
+        verbose_name="Detalle del motivo"
+    )
+
+    competitor = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Operador al que migra"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Detalle de corte"
+        verbose_name_plural = "Detalles de corte"
+
+    def clean(self):
+        super().clean()
+
+        if self.work_order.order_type.code != "CUT":
+            raise ValidationError({
+                "work_order": (
+                    "El detalle de corte solo puede asociarse "
+                    "a una orden de tipo CORTE."
+                )
+            })
+
+        subtype = self.work_order.subtype
+
+        if not subtype:
+            raise ValidationError({
+                "work_order": (
+                    "La orden de corte debe indicar si es "
+                    "temporal o definitiva."
+                )
+            })
+
+        if subtype.code == "TEMPORARY":
+            if not self.expected_return_date:
+                raise ValidationError({
+                    "expected_return_date": (
+                        "Un corte temporal debe indicar "
+                        "una fecha estimada de retorno."
+                    )
+                })
+
+            if self.competitor:
+                raise ValidationError({
+                    "competitor": (
+                        "El operador de destino solo aplica "
+                        "a un corte definitivo."
+                    )
+                })
+
+        elif subtype.code == "DEFINITIVE":
+            if self.expected_return_date:
+                raise ValidationError({
+                    "expected_return_date": (
+                        "Un corte definitivo no debe tener "
+                        "fecha estimada de retorno."
+                    )
+                })
+
+        else:
+            raise ValidationError({
+                "work_order": "El subtipo de corte no es válido."
+            })
+
+    def __str__(self):
+        return f"Detalle corte - {self.work_order.order_number}"
+
+class TransferDetail(models.Model):
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="transfer_detail",
+        verbose_name="Orden de traslado"
+    )
+
+    previous_address = models.ForeignKey(
+        CustomerAddress,
+        on_delete=models.PROTECT,
+        related_name="transfer_origins",
+        null=True,
+        blank=True,
+        verbose_name="Dirección anterior"
+    )
+
+    new_address = models.ForeignKey(
+        CustomerAddress,
+        on_delete=models.PROTECT,
+        related_name="transfer_destinations",
+        null=True,
+        blank=True,
+        verbose_name="Nueva dirección"
+    )
+
+    previous_location = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Ubicación interna anterior"
+    )
+
+    new_location = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Nueva ubicación interna"
+    )
+
+    requires_additional_cabling = models.BooleanField(
+        default=False,
+        verbose_name="Requiere cableado adicional"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Detalle de traslado"
+        verbose_name_plural = "Detalles de traslado"
+
+    def clean(self):
+        super().clean()
+
+        if self.work_order.order_type.code != "TRANSFER":
+            raise ValidationError({
+                "work_order": (
+                    "El detalle de traslado solo puede asociarse "
+                    "a una orden de tipo TRASLADO."
+                )
+            })
+
+        subtype = self.work_order.subtype
+
+        if not subtype:
+            raise ValidationError({
+                "work_order": (
+                    "La orden de traslado debe indicar "
+                    "si es interna o externa."
+                )
+            })
+
+        customer = self.work_order.subscription.customer
+        current_address = self.work_order.subscription.address
+
+        if self.previous_address:
+            if self.previous_address.customer_id != customer.id:
+                raise ValidationError({
+                    "previous_address": (
+                        "La dirección anterior debe pertenecer "
+                        "al cliente de la suscripción."
+                    )
+                })
+
+        if self.new_address:
+            if self.new_address.customer_id != customer.id:
+                raise ValidationError({
+                    "new_address": (
+                        "La nueva dirección debe pertenecer "
+                        "al cliente de la suscripción."
+                    )
+                })
+
+        if subtype.code == "INTERNAL":
+            if self.new_address:
+                raise ValidationError({
+                    "new_address": (
+                        "Un traslado interno no debe cambiar "
+                        "la dirección del servicio."
+                    )
+                })
+
+            if not self.previous_location:
+                raise ValidationError({
+                    "previous_location": (
+                        "Debe indicar la ubicación interna anterior."
+                    )
+                })
+
+            if not self.new_location:
+                raise ValidationError({
+                    "new_location": (
+                        "Debe indicar la nueva ubicación interna."
+                    )
+                })
+
+        elif subtype.code == "EXTERNAL":
+            if not self.previous_address:
+                raise ValidationError({
+                    "previous_address": (
+                        "Un traslado externo debe indicar "
+                        "la dirección anterior."
+                    )
+                })
+
+            if not self.new_address:
+                raise ValidationError({
+                    "new_address": (
+                        "Un traslado externo requiere "
+                        "una nueva dirección."
+                    )
+                })
+
+            if (
+                self.previous_address_id
+                and self.previous_address_id != current_address.id
+            ):
+                raise ValidationError({
+                    "previous_address": (
+                        "La dirección anterior debe coincidir "
+                        "con la dirección actual de la suscripción."
+                    )
+                })
+
+            if (
+                self.previous_address_id
+                and self.new_address_id
+                and self.previous_address_id == self.new_address_id
+            ):
+                raise ValidationError({
+                    "new_address": (
+                        "En un traslado externo la nueva dirección "
+                        "debe ser diferente de la actual."
+                    )
+                })
+
+        else:
+            raise ValidationError({
+                "work_order": "El subtipo de traslado no es válido."
+            })
+
+    def __str__(self):
+        return f"Detalle traslado - {self.work_order.order_number}"
