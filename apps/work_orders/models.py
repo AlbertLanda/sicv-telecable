@@ -46,6 +46,64 @@ class OrderType(models.Model):
     def __str__(self):
         return self.name
 
+class OrderSubtype(models.Model):
+    """
+    Subtipo opcional de una orden.
+
+    Ejemplos:
+    - CORTE -> TEMPORAL / DEFINITIVO
+    - TRASLADO -> INTERNO / EXTERNO
+    """
+
+    order_type = models.ForeignKey(
+        OrderType,
+        on_delete=models.PROTECT,
+        related_name="subtypes",
+        verbose_name="Tipo de orden"
+    )
+
+    code = models.CharField(
+        max_length=30,
+        verbose_name="Código"
+    )
+
+    name = models.CharField(
+        max_length=120,
+        verbose_name="Subtipo"
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descripción"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "Subtipo de orden"
+        verbose_name_plural = "Subtipos de orden"
+        ordering = ["order_type", "name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order_type", "code"],
+                name="unique_subtype_code_per_order_type"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.order_type.name} - {self.name}"
 
 class OrderReason(models.Model):
     """Catálogo de motivos, siempre asociados a un tipo de orden."""
@@ -106,6 +164,134 @@ class OrderReason(models.Model):
     def __str__(self):
         return f"{self.order_type.name} - {self.name}"
 
+class OrderCause(models.Model):
+    """
+    Causa real identificada durante la atención de una orden.
+
+    Ejemplos:
+    - DROP ROTO
+    - ONU AVERIADA
+    - CONFIGURACIÓN INCORRECTA
+    - CLIENTE AUSENTE
+    """
+
+    order_type = models.ForeignKey(
+        OrderType,
+        on_delete=models.PROTECT,
+        related_name="causes",
+        verbose_name="Tipo de orden"
+    )
+
+    code = models.CharField(
+        max_length=30,
+        verbose_name="Código"
+    )
+
+    name = models.CharField(
+        max_length=150,
+        verbose_name="Causa"
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descripción"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "Causa de orden"
+        verbose_name_plural = "Causas de orden"
+        ordering = ["order_type", "name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order_type", "code"],
+                name="unique_cause_code_per_order_type"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.order_type.name} - {self.name}"
+
+class OrderResult(models.Model):
+    """
+    Resultado operativo final de una orden.
+
+    Ejemplos:
+    - INSTALACIÓN EXITOSA
+    - NO FACTIBLE
+    - RESUELTA EN CAMPO
+    - RESUELTA EN NOC
+    - CORTE EJECUTADO
+    - TRASLADO EXITOSO
+    """
+
+    order_type = models.ForeignKey(
+        OrderType,
+        on_delete=models.PROTECT,
+        related_name="results",
+        verbose_name="Tipo de orden"
+    )
+
+    code = models.CharField(
+        max_length=30,
+        verbose_name="Código"
+    )
+
+    name = models.CharField(
+        max_length=150,
+        verbose_name="Resultado"
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descripción"
+    )
+
+    is_success = models.BooleanField(
+        default=False,
+        verbose_name="Resultado exitoso"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "Resultado de orden"
+        verbose_name_plural = "Resultados de orden"
+        ordering = ["order_type", "name"]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order_type", "code"],
+                name="unique_result_code_per_order_type"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.order_type.name} - {self.name}"
 
 class WorkOrder(models.Model):
     """Entidad principal del motor de órdenes."""
@@ -148,6 +334,15 @@ class WorkOrder(models.Model):
         verbose_name="Tipo de orden"
     )
 
+    subtype = models.ForeignKey(
+        OrderSubtype,
+        on_delete=models.PROTECT,
+        related_name="work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Subtipo"
+    )
+
     reason = models.ForeignKey(
         OrderReason,
         on_delete=models.PROTECT,
@@ -155,6 +350,24 @@ class WorkOrder(models.Model):
         null=True,
         blank=True,
         verbose_name="Motivo"
+    )
+
+    cause = models.ForeignKey(
+        OrderCause,
+        on_delete=models.PROTECT,
+        related_name="work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Causa"
+    )
+
+    result = models.ForeignKey(
+        OrderResult,
+        on_delete=models.PROTECT,
+        related_name="work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Resultado"
     )
 
     branch = models.ForeignKey(
@@ -251,6 +464,15 @@ class WorkOrder(models.Model):
         super().clean()
 
         if (
+            self.subtype
+            and self.order_type_id
+            and self.subtype.order_type_id != self.order_type_id
+        ):
+            raise ValidationError({
+                "subtype": "El subtipo seleccionado no pertenece al tipo de orden."
+            })
+
+        if (
             self.reason
             and self.order_type_id
             and self.reason.order_type_id != self.order_type_id
@@ -267,6 +489,24 @@ class WorkOrder(models.Model):
                 "assigned_technician": (
                     "El usuario asignado debe tener el rol de Técnico."
                 )
+            })
+
+        if (
+            self.cause
+            and self.order_type_id
+            and self.cause.order_type_id != self.order_type_id
+        ):
+            raise ValidationError({
+                "cause": "La causa seleccionada no pertenece al tipo de orden."
+            })
+
+        if (
+            self.result
+            and self.order_type_id
+            and self.result.order_type_id != self.order_type_id
+        ):
+            raise ValidationError({
+                "result": "El resultado seleccionado no pertenece al tipo de orden."
             })
 
     def change_status(self, new_status, user=None, remarks=""):

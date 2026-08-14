@@ -105,8 +105,8 @@ class Plan(models.Model):
 class Subscription(models.Model):
 
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Por instalar"
-        INSTALLATION = "INSTALLATION", "Instalación"
+        PRESALE = "PRESALE", "Preventa"
+        INSTALLATION = "INSTALLATION", "En instalación"
         ACTIVE = "ACTIVE", "Activo"
         CUT = "CUT", "Cortado"
         SUSPENDED = "SUSPENDED", "Suspendido"
@@ -143,7 +143,7 @@ class Subscription(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.PENDING,
+        default=Status.PRESALE,
         verbose_name="Estado"
     )
 
