@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
+from django.utils import timezone
 
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
@@ -299,8 +300,11 @@ class WorkOrder(models.Model):
 
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pendiente"
+        ASSIGNED = "ASSIGNED", "Asignada"
         DERIVED = "DERIVED", "Derivada"
+        IN_PROGRESS = "IN_PROGRESS", "En atención"
         ATTENDED = "ATTENDED", "Atendida"
+        REPROGRAMMED = "REPROGRAMMED", "Reprogramada"
         REJECTED = "REJECTED", "Rechazada"
         NOT_FEASIBLE = "NOT_FEASIBLE", "No factible"
         CANCELLED = "CANCELLED", "Anulada"
@@ -314,6 +318,64 @@ class WorkOrder(models.Model):
     class AttentionType(models.TextChoices):
         SYSTEM = "SYSTEM", "Sistema / NOC"
         FIELD = "FIELD", "Campo"
+
+    # Matriz oficial de transiciones. Un estado que no aparece como clave,
+    # o cuya lista está vacía, es un estado terminal: no admite salidas.
+    ALLOWED_TRANSITIONS = {
+        Status.PENDING: [
+            Status.ASSIGNED,
+            Status.DERIVED,
+            Status.CANCELLED,
+        ],
+        Status.ASSIGNED: [
+            Status.IN_PROGRESS,
+            Status.REPROGRAMMED,
+            Status.REJECTED,
+            Status.NOT_FEASIBLE,
+            Status.CANCELLED,
+        ],
+        Status.DERIVED: [
+            Status.ASSIGNED,
+            Status.IN_PROGRESS,
+            Status.CANCELLED,
+        ],
+        Status.IN_PROGRESS: [
+            Status.ATTENDED,
+            Status.REPROGRAMMED,
+            Status.NOT_FEASIBLE,
+        ],
+        Status.REPROGRAMMED: [
+            Status.ASSIGNED,
+            Status.CANCELLED,
+        ],
+        Status.ATTENDED: [],
+        Status.REJECTED: [],
+        Status.NOT_FEASIBLE: [],
+        Status.CANCELLED: [],
+    }
+
+    # Estados en los que la orden ya está cerrada operativamente y no debe
+    # admitir asignación, reasignación ni inicio de atención.
+    TERMINAL_STATUSES = [
+        Status.ATTENDED,
+        Status.REJECTED,
+        Status.NOT_FEASIBLE,
+        Status.CANCELLED,
+    ]
+
+    # Estados desde los que se puede asignar o reasignar un técnico.
+    ASSIGNABLE_STATUSES = [
+        Status.PENDING,
+        Status.ASSIGNED,
+        Status.DERIVED,
+        Status.REPROGRAMMED,
+    ]
+
+    # Estados desde los que se puede iniciar la atención.
+    STARTABLE_STATUSES = [
+        Status.ASSIGNED,
+        Status.DERIVED,
+    ]
 
     order_number = models.CharField(
         max_length=30,
@@ -435,6 +497,12 @@ class WorkOrder(models.Model):
         verbose_name="Fecha programada de atención"
     )
 
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Inicio real de atención"
+    )
+
     attended_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -482,9 +550,11 @@ class WorkOrder(models.Model):
                 "reason": "El motivo seleccionado no pertenece al tipo de orden."
             })
 
+        from apps.accounts.models import User
+
         if (
             self.assigned_technician
-            and self.assigned_technician.role != "TECHNICIAN"
+            and self.assigned_technician.role != User.Role.TECHNICIAN
         ):
             raise ValidationError({
                 "assigned_technician": (
@@ -510,7 +580,24 @@ class WorkOrder(models.Model):
                 "result": "El resultado seleccionado no pertenece al tipo de orden."
             })
 
+    def can_transition_to(self, new_status):
+        """Indica si la transición desde el estado actual está permitida."""
+        return new_status in self.ALLOWED_TRANSITIONS.get(self.status, [])
+
+    @property
+    def is_closed(self):
+        """La orden está cerrada operativamente y no admite más operación."""
+        return self.status in self.TERMINAL_STATUSES
+
+    @transaction.atomic
     def change_status(self, new_status, user=None, remarks=""):
+        """
+        Mecanismo oficial de cambio de estado.
+
+        Valida la transición contra ALLOWED_TRANSITIONS y deja trazabilidad
+        en WorkOrderStatusHistory. Si la transición no está permitida lanza
+        ValidationError sin modificar la orden ni el historial.
+        """
         valid_statuses = {
             choice.value
             for choice in self.Status
@@ -524,10 +611,25 @@ class WorkOrder(models.Model):
         if self.status == new_status:
             return False
 
+        if not self.can_transition_to(new_status):
+            raise ValidationError({
+                "status": (
+                    f"Transición no permitida: "
+                    f"{self.get_status_display()} -> "
+                    f"{self.Status(new_status).label}."
+                )
+            })
+
         previous_status = self.status
+        updated_fields = ["status", "updated_at"]
 
         self.status = new_status
-        self.save(update_fields=["status", "updated_at"])
+
+        if new_status == self.Status.ATTENDED and not self.attended_at:
+            self.attended_at = timezone.now()
+            updated_fields.append("attended_at")
+
+        self.save(update_fields=updated_fields)
 
         WorkOrderStatusHistory.objects.create(
             work_order=self,
@@ -538,6 +640,152 @@ class WorkOrder(models.Model):
         )
 
         return True
+
+    @transaction.atomic
+    def assign_technician(self, technician, assigned_by=None, remarks=""):
+        """
+        Asignación o reasignación formal de un técnico.
+
+        Cierra la asignación vigente (conservando al técnico anterior) y
+        abre una nueva en WorkOrderAssignment. Si la orden aún no estaba
+        asignada, la mueve a ASSIGNED por el mecanismo oficial.
+        """
+        from apps.accounts.models import User
+
+        if technician is None:
+            raise ValidationError({
+                "assigned_technician": "Debe indicar un técnico."
+            })
+
+        if technician.role != User.Role.TECHNICIAN:
+            raise ValidationError({
+                "assigned_technician": (
+                    "El usuario asignado debe tener el rol de Técnico."
+                )
+            })
+
+        if not technician.is_active:
+            raise ValidationError({
+                "assigned_technician": (
+                    "El usuario asignado debe estar activo."
+                )
+            })
+
+        if self.status not in self.ASSIGNABLE_STATUSES:
+            raise ValidationError({
+                "status": (
+                    "No se puede asignar un técnico a una orden en estado "
+                    f"{self.get_status_display()}."
+                )
+            })
+
+        now = timezone.now()
+
+        # Trazabilidad del técnico anterior: la asignación vigente se cierra,
+        # nunca se borra ni se sobrescribe.
+        self.assignments.filter(unassigned_at__isnull=True).update(
+            unassigned_at=now
+        )
+
+        assignment = WorkOrderAssignment.objects.create(
+            work_order=self,
+            technician=technician,
+            assigned_by=assigned_by,
+            assigned_at=now,
+            remarks=remarks,
+        )
+
+        self.assigned_technician = technician
+        self.save(update_fields=["assigned_technician", "updated_at"])
+
+        if self.status != self.Status.ASSIGNED:
+            self.change_status(
+                self.Status.ASSIGNED,
+                user=assigned_by,
+                remarks=remarks,
+            )
+
+        return assignment
+
+    @transaction.atomic
+    def start_attention(self, user=None, remarks=""):
+        """Registra el inicio real de la atención y pasa a IN_PROGRESS."""
+        if self.status not in self.STARTABLE_STATUSES:
+            raise ValidationError({
+                "status": (
+                    "No se puede iniciar la atención de una orden en estado "
+                    f"{self.get_status_display()}."
+                )
+            })
+
+        if not self.assigned_technician:
+            raise ValidationError({
+                "assigned_technician": (
+                    "La orden debe tener un técnico asignado "
+                    "antes de iniciar la atención."
+                )
+            })
+
+        self.started_at = timezone.now()
+        self.save(update_fields=["started_at", "updated_at"])
+
+        self.change_status(
+            self.Status.IN_PROGRESS,
+            user=user,
+            remarks=remarks,
+        )
+
+        return self.started_at
+
+    @transaction.atomic
+    def reprogram(self, new_schedule, user=None, reason=""):
+        """
+        Reprograma la atención conservando el histórico.
+
+        Guarda la fecha anterior en WorkOrderReprogramming, actualiza
+        scheduled_at y mueve la orden a REPROGRAMMED.
+        """
+        if new_schedule is None:
+            raise ValidationError({
+                "scheduled_at": "Debe indicar la nueva fecha de atención."
+            })
+
+        if not self.can_transition_to(self.Status.REPROGRAMMED):
+            raise ValidationError({
+                "status": (
+                    "No se puede reprogramar una orden en estado "
+                    f"{self.get_status_display()}."
+                )
+            })
+
+        previous_schedule = self.scheduled_at
+
+        if previous_schedule and new_schedule <= previous_schedule:
+            raise ValidationError({
+                "scheduled_at": (
+                    "La nueva fecha debe ser posterior "
+                    "a la fecha programada actual."
+                )
+            })
+
+        reprogramming = WorkOrderReprogramming.objects.create(
+            work_order=self,
+            previous_schedule=previous_schedule,
+            new_schedule=new_schedule,
+            reason=reason,
+            created_by=user,
+        )
+
+        self.scheduled_at = new_schedule
+        self.save(update_fields=["scheduled_at", "updated_at"])
+
+        self.change_status(
+            self.Status.REPROGRAMMED,
+            user=user,
+            remarks=reason,
+        )
+
+        return reprogramming
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
@@ -592,6 +840,120 @@ class WorkOrderStatusHistory(models.Model):
 
     def __str__(self):
         return f"{self.work_order.order_number}: {self.previous_status or '-'} -> {self.new_status}"
+
+class WorkOrderAssignment(models.Model):
+    """Historial de asignaciones y reasignaciones de técnico."""
+
+    work_order = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+        verbose_name="Orden"
+    )
+
+    technician = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_assignments",
+        verbose_name="Técnico"
+    )
+
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_assignments_made",
+        null=True,
+        blank=True,
+        verbose_name="Asignado por"
+    )
+
+    assigned_at = models.DateTimeField(
+        verbose_name="Fecha de asignación"
+    )
+
+    unassigned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de desasignación"
+    )
+
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="Observación"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Asignación de orden"
+        verbose_name_plural = "Historial de asignaciones"
+        ordering = ["-assigned_at"]
+
+        indexes = [
+            models.Index(fields=["work_order"], name="wo_assignment_order_idx"),
+            models.Index(fields=["technician"], name="wo_assignment_tech_idx"),
+        ]
+
+    @property
+    def is_active(self):
+        """La asignación sigue vigente mientras no haya sido cerrada."""
+        return self.unassigned_at is None
+
+    def __str__(self):
+        return f"{self.work_order.order_number} -> {self.technician}"
+
+
+class WorkOrderReprogramming(models.Model):
+    """Historial de reprogramaciones de la atención."""
+
+    work_order = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="reprogrammings",
+        verbose_name="Orden"
+    )
+
+    previous_schedule = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha programada anterior"
+    )
+
+    new_schedule = models.DateTimeField(
+        verbose_name="Nueva fecha programada"
+    )
+
+    reason = models.TextField(
+        blank=True,
+        verbose_name="Motivo de la reprogramación"
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_reprogrammings",
+        null=True,
+        blank=True,
+        verbose_name="Registrado por"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de registro"
+    )
+
+    class Meta:
+        verbose_name = "Reprogramación de orden"
+        verbose_name_plural = "Historial de reprogramaciones"
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["work_order"], name="wo_reprog_order_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.work_order.order_number}: {self.new_schedule:%d/%m/%Y %H:%M}"
+
 
 class CutDetail(models.Model):
     work_order = models.OneToOneField(

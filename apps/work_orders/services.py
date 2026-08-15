@@ -33,6 +33,41 @@ def apply_order_result(order: WorkOrder):
     elif order_type_code == "TRANSFER":
         _apply_transfer_result(order, result_code)
 
+
+@transaction.atomic
+def attend_order(order: WorkOrder, result, user=None, remarks=""):
+    """
+    Cierra operativamente la atención de una orden.
+
+    Registra el resultado, mueve la orden a ATTENDED por el mecanismo
+    oficial de transición y aplica los efectos sobre la suscripción
+    delegando en apply_order_result(). Las reglas de negocio no se
+    duplican aquí: viven en las funciones _apply_* de este módulo.
+    """
+    if result is None:
+        raise ValidationError(
+            "Debe indicar el resultado de la atención."
+        )
+
+    if result.order_type_id != order.order_type_id:
+        raise ValidationError(
+            "El resultado seleccionado no corresponde al tipo de orden."
+        )
+
+    order.result = result
+    order.save(update_fields=["result", "updated_at"])
+
+    order.change_status(
+        WorkOrder.Status.ATTENDED,
+        user=user,
+        remarks=remarks,
+    )
+
+    apply_order_result(order)
+
+    return order
+
+
 def _apply_installation_result(order, result_code):
     subscription = order.subscription
 
