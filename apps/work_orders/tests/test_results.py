@@ -13,7 +13,11 @@ from django.utils import timezone
 
 from apps.services.models import Subscription
 from apps.work_orders.models import CutDetail, TransferDetail, WorkOrder
-from apps.work_orders.services import apply_order_result, attend_order
+from apps.work_orders.services import (
+    apply_order_result,
+    attend_order,
+    start_order_attention,
+)
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -197,3 +201,120 @@ class OrderResultTests(WorkOrderTestCase):
         self.assertEqual(order.status, WorkOrder.Status.ATTENDED)
         self.assertEqual(self.subscription.status, Subscription.Status.PRESALE)
         self.assertIsNone(self.subscription.installation_date)
+
+    def test_start_installation_changes_presale_to_installation(self):
+        """
+        Cuando inicia realmente una instalación,
+        PREVENTA pasa a EN INSTALACIÓN.
+        """
+        order = self.create_assigned_order(
+            order_type=self.installation_type,
+        )
+
+        self.assertEqual(
+            self.subscription.status,
+            Subscription.Status.PRESALE,
+        )
+
+        start_order_attention(
+            order,
+            user=self.technician,
+            remarks="Técnico inicia instalación",
+        )
+
+        self.subscription.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+
+        self.assertEqual(
+            self.subscription.status,
+            Subscription.Status.INSTALLATION,
+        )
+
+    def test_attend_order_from_pending_is_rejected(self):
+        """No se puede atender una orden que nunca inició atención."""
+        order = self.create_order(
+            order_type=self.installation_type,
+        )
+
+        with self.assertRaises(ValidationError):
+            attend_order(
+                order,
+                result=self.installation_success,
+                user=self.technician,
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.PENDING,
+        )
+
+    def test_attend_order_from_assigned_is_rejected(self):
+        """Una orden asignada todavía no puede finalizarse."""
+        order = self.create_assigned_order(
+            order_type=self.installation_type,
+        )
+
+        with self.assertRaises(ValidationError):
+            attend_order(
+                order,
+                result=self.installation_success,
+                user=self.technician,
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.ASSIGNED,
+        )
+
+    def test_full_installation_flow_presale_to_active(self):
+        """
+        Flujo completo:
+        PRESALE -> INSTALLATION -> ACTIVE.
+        """
+        order = self.create_assigned_order(
+            order_type=self.installation_type,
+        )
+
+        start_order_attention(
+            order,
+            user=self.technician,
+        )
+
+        self.subscription.refresh_from_db()
+
+        self.assertEqual(
+            self.subscription.status,
+            Subscription.Status.INSTALLATION,
+        )
+
+        attend_order(
+            order,
+            result=self.installation_success,
+            user=self.technician,
+        )
+
+        self.subscription.refresh_from_db()
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.ATTENDED,
+        )
+
+        self.assertEqual(
+            self.subscription.status,
+            Subscription.Status.ACTIVE,
+        )
+
+        self.assertIsNotNone(
+            self.subscription.installation_date,
+        )

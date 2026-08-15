@@ -346,6 +346,7 @@ class WorkOrder(models.Model):
         ],
         Status.REPROGRAMMED: [
             Status.ASSIGNED,
+            Status.IN_PROGRESS,
             Status.CANCELLED,
         ],
         Status.ATTENDED: [],
@@ -375,6 +376,7 @@ class WorkOrder(models.Model):
     STARTABLE_STATUSES = [
         Status.ASSIGNED,
         Status.DERIVED,
+        Status.REPROGRAMMED,
     ]
 
     order_number = models.CharField(
@@ -760,11 +762,18 @@ class WorkOrder(models.Model):
 
         previous_schedule = self.scheduled_at
 
-        if previous_schedule and new_schedule <= previous_schedule:
+        if previous_schedule and new_schedule == previous_schedule:
             raise ValidationError({
                 "scheduled_at": (
-                    "La nueva fecha debe ser posterior "
+                    "La nueva fecha debe ser diferente "
                     "a la fecha programada actual."
+                )
+            })
+
+        if new_schedule <= timezone.now():
+            raise ValidationError({
+                "scheduled_at": (
+                    "La nueva fecha de atención debe ser futura."
                 )
             })
 

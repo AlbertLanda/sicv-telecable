@@ -200,7 +200,15 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "subscription__customer__business_name",
     )
     raw_id_fields = ("subscription", "assigned_technician", "created_by")
-    readonly_fields = ("started_at", "attended_at", "created_at", "updated_at")
+    readonly_fields = (
+        "status",
+        "assigned_technician",
+        "scheduled_at",
+        "started_at",
+        "attended_at",
+        "created_at",
+        "updated_at",
+    )
     date_hierarchy = "created_at"
     # Cubre las relaciones que se pintan en list_display y, además, el
     # segundo salto que hacen sus __str__: Subscription muestra su plan,

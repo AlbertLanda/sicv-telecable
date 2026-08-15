@@ -33,6 +33,33 @@ def apply_order_result(order: WorkOrder):
     elif order_type_code == "TRANSFER":
         _apply_transfer_result(order, result_code)
 
+@transaction.atomic
+def start_order_attention(order: WorkOrder, user=None, remarks=""):
+    """
+    Inicia formalmente la atención de una orden.
+
+    Usa el workflow oficial de WorkOrder y aplica efectos
+    adicionales sobre la suscripción cuando corresponda.
+    """
+    order.start_attention(
+        user=user,
+        remarks=remarks,
+    )
+
+    if (
+        order.order_type.code == "INSTALLATION"
+        and order.subscription.status == Subscription.Status.PRESALE
+    ):
+        order.subscription.status = Subscription.Status.INSTALLATION
+
+        order.subscription.save(
+            update_fields=[
+                "status",
+                "updated_at",
+            ]
+        )
+
+    return order
 
 @transaction.atomic
 def attend_order(order: WorkOrder, result, user=None, remarks=""):
@@ -47,6 +74,11 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
     if result is None:
         raise ValidationError(
             "Debe indicar el resultado de la atención."
+        )
+
+    if order.status != WorkOrder.Status.IN_PROGRESS:
+        raise ValidationError(
+            "Solo una orden en atención puede finalizarse como atendida."
         )
 
     if result.order_type_id != order.order_type_id:

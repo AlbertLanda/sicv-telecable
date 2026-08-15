@@ -11,6 +11,11 @@ from django.core.exceptions import ValidationError
 from apps.work_orders.models import WorkOrder, WorkOrderStatusHistory
 from apps.work_orders.tests.base import WorkOrderTestCase
 
+from datetime import timedelta
+
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+
 
 class WorkOrderTransitionTests(WorkOrderTestCase):
 
@@ -162,3 +167,25 @@ class WorkOrderTransitionTests(WorkOrderTestCase):
 
         self.assertFalse(changed)
         self.assertEqual(order.status_history.count(), 0)
+
+    def test_reprogrammed_to_in_progress_is_allowed(self):
+        """REPROGRAMMED -> IN_PROGRESS -> permitido."""
+        order = self.create_assigned_order()
+
+        order.reprogram(
+            new_schedule=timezone.now() + timedelta(days=2),
+            user=self.supervisor,
+            reason="Cliente solicita nueva fecha",
+        )
+
+        order.start_attention(
+            user=self.technician,
+            remarks="Atención retomada en fecha reprogramada",
+        )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )

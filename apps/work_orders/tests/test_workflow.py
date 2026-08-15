@@ -81,21 +81,76 @@ class WorkOrderReprogrammingTests(WorkOrderTestCase):
 
         self.assertEqual(order.reprogrammings.count(), 0)
 
-    def test_reprogramming_backwards_is_rejected(self):
-        """Complemento: la nueva fecha debe ser posterior a la vigente."""
+    def test_reprogramming_to_earlier_future_date_is_allowed(self):
+        """
+        Una reprogramación puede adelantarse si la nueva fecha
+        sigue estando en el futuro.
+        """
         original_schedule = timezone.now() + timedelta(days=5)
+        new_schedule = timezone.now() + timedelta(days=2)
 
-        order = self.create_assigned_order(scheduled_at=original_schedule)
+        order = self.create_assigned_order(
+            scheduled_at=original_schedule
+        )
+
+        order.reprogram(
+            new_schedule=new_schedule,
+            user=self.supervisor,
+            reason="Se liberó disponibilidad antes",
+        )
+
+        order.refresh_from_db()
+
+        self.assertEqual(order.scheduled_at, new_schedule)
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.REPROGRAMMED,
+        )
+        self.assertEqual(order.reprogrammings.count(), 1)
+
+    def test_reprogramming_same_schedule_is_rejected(self):
+        """No debe aceptarse exactamente la misma fecha."""
+        original_schedule = timezone.now() + timedelta(days=3)
+
+        order = self.create_assigned_order(
+            scheduled_at=original_schedule
+        )
 
         with self.assertRaises(ValidationError):
             order.reprogram(
-                new_schedule=timezone.now() + timedelta(days=1),
+                new_schedule=original_schedule,
                 user=self.supervisor,
             )
 
         order.refresh_from_db()
 
-        self.assertEqual(order.scheduled_at, original_schedule)
+        self.assertEqual(
+            order.scheduled_at,
+            original_schedule,
+        )
+        self.assertEqual(order.reprogrammings.count(), 0)
+
+    def test_reprogramming_to_past_is_rejected(self):
+        """Una reprogramación nunca puede quedar en el pasado."""
+        original_schedule = timezone.now() + timedelta(days=3)
+        past_schedule = timezone.now() - timedelta(hours=1)
+
+        order = self.create_assigned_order(
+            scheduled_at=original_schedule
+        )
+
+        with self.assertRaises(ValidationError):
+            order.reprogram(
+                new_schedule=past_schedule,
+                user=self.supervisor,
+            )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.scheduled_at,
+            original_schedule,
+        )
         self.assertEqual(order.reprogrammings.count(), 0)
 
 
@@ -154,3 +209,29 @@ class WorkOrderStartAttentionTests(WorkOrderTestCase):
 
         self.assertIsNone(order.started_at)
         self.assertTrue(order.is_closed)
+
+    def test_start_attention_from_reprogrammed_is_allowed(self):
+        """
+        Una orden reprogramada puede retomar atención
+        directamente si conserva el técnico asignado.
+        """
+        order = self.create_assigned_order()
+
+        order.reprogram(
+            new_schedule=timezone.now() + timedelta(days=1),
+            user=self.supervisor,
+            reason="Cliente solicita atención mañana",
+        )
+
+        order.start_attention(
+            user=self.technician,
+            remarks="Se retoma atención",
+        )
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+        self.assertIsNotNone(order.started_at)
