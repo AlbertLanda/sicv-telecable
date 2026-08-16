@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -304,6 +307,7 @@ class WorkOrder(models.Model):
         DERIVED = "DERIVED", "Derivada"
         IN_PROGRESS = "IN_PROGRESS", "En atención"
         ATTENDED = "ATTENDED", "Atendida"
+        LIQUIDATED = "LIQUIDATED", "Liquidada"
         REPROGRAMMED = "REPROGRAMMED", "Reprogramada"
         REJECTED = "REJECTED", "Rechazada"
         NOT_FEASIBLE = "NOT_FEASIBLE", "No factible"
@@ -349,16 +353,42 @@ class WorkOrder(models.Model):
             Status.IN_PROGRESS,
             Status.CANCELLED,
         ],
-        Status.ATTENDED: [],
+        # La atención ya terminó: la única salida es la liquidación técnica.
+        # No hay retorno a IN_PROGRESS, ASSIGNED ni REPROGRAMMED.
+        Status.ATTENDED: [
+            Status.LIQUIDATED,
+        ],
+        Status.LIQUIDATED: [],
         Status.REJECTED: [],
         Status.NOT_FEASIBLE: [],
         Status.CANCELLED: [],
     }
 
     # Estados en los que la orden ya está cerrada operativamente y no debe
-    # admitir asignación, reasignación ni inicio de atención.
+    # admitir asignación, reasignación ni inicio de atención. Que un estado
+    # sea terminal no implica que no tenga salidas administrativas: ATTENDED
+    # sale hacia LIQUIDATED, pero nunca vuelve a la operación de campo.
     TERMINAL_STATUSES = [
         Status.ATTENDED,
+        Status.LIQUIDATED,
+        Status.REJECTED,
+        Status.NOT_FEASIBLE,
+        Status.CANCELLED,
+    ]
+
+    # Estados en los que la orden sigue viva operativamente. Ninguna
+    # transición desde un estado terminal puede devolver la orden aquí.
+    ACTIVE_STATUSES = [
+        Status.PENDING,
+        Status.ASSIGNED,
+        Status.DERIVED,
+        Status.IN_PROGRESS,
+        Status.REPROGRAMMED,
+    ]
+
+    # Estados finales absolutos: no admiten ninguna transición de salida.
+    FINAL_STATUSES = [
+        Status.LIQUIDATED,
         Status.REJECTED,
         Status.NOT_FEASIBLE,
         Status.CANCELLED,
@@ -590,6 +620,17 @@ class WorkOrder(models.Model):
     def is_closed(self):
         """La orden está cerrada operativamente y no admite más operación."""
         return self.status in self.TERMINAL_STATUSES
+
+    @property
+    def is_liquidated(self):
+        """
+        La orden ya tiene una liquidación técnica registrada.
+
+        Se consulta la existencia del registro, no el estado: liquidar es un
+        hecho documentado por WorkOrderLiquidation, y el estado LIQUIDATED es
+        su consecuencia.
+        """
+        return WorkOrderLiquidation.objects.filter(work_order=self).exists()
 
     @transaction.atomic
     def change_status(self, new_status, user=None, remarks=""):
@@ -1219,3 +1260,306 @@ class TransferDetail(models.Model):
 
     def __str__(self):
         return f"Detalle traslado - {self.work_order.order_number}"
+
+
+def evidence_upload_path(instance, filename):
+    """
+    Ruta de almacenamiento de la evidencia, agrupada por orden.
+
+    Depende solo de la API de storage de Django, de modo que cambiar el
+    backend en producción (por ejemplo a Azure Blob Storage) no obligue a
+    tocar el modelo.
+    """
+    return f"work_orders/{instance.work_order.order_number}/evidences/{filename}"
+
+
+class WorkOrderLiquidation(models.Model):
+    """
+    Liquidación técnica de una orden atendida.
+
+    Documenta qué se ejecutó realmente en campo, quién lo liquidó y cuándo.
+    Liquidar **no** es validar ni cerrar: son etapas posteriores y separadas.
+    Se crea exclusivamente mediante services.liquidate_order().
+    """
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="liquidation",
+        verbose_name="Orden liquidada"
+    )
+
+    liquidated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_liquidations",
+        verbose_name="Liquidado por"
+    )
+
+    liquidated_at = models.DateTimeField(
+        verbose_name="Fecha y hora de liquidación"
+    )
+
+    resolution_detail = models.TextField(
+        verbose_name="Detalle de la solución ejecutada"
+    )
+
+    technical_notes = models.TextField(
+        blank=True,
+        verbose_name="Observaciones técnicas"
+    )
+
+    # --- Datos de red y campo -------------------------------------------
+    # Genéricos a propósito: el mismo modelo sirve para instalación, avería,
+    # corte, reconexión y traslado. Cada dato vive en su propio campo para
+    # poder medirse después sin parsear texto libre.
+
+    network_element = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Elemento de red (NAP / caja / mufa)"
+    )
+
+    network_port = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Puerto"
+    )
+
+    equipment_serial = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Serie del equipo instalado o retirado"
+    )
+
+    signal_level_dbm = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Nivel de señal (dBm)"
+    )
+
+    cable_meters_used = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        verbose_name="Metros de cable utilizados"
+    )
+
+    # Campo preparado para la futura integración con Krill. En esta fase se
+    # captura manualmente si el técnico lo tiene a la mano: NO se consume
+    # ninguna API externa.
+    krill_reference = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Referencia Krill (pendiente de integración)"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de registro"
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "Liquidación técnica"
+        verbose_name_plural = "Liquidaciones técnicas"
+        ordering = ["-liquidated_at"]
+
+        indexes = [
+            models.Index(fields=["liquidated_at"], name="wo_liq_date_idx"),
+            models.Index(fields=["liquidated_by"], name="wo_liq_user_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if not self.resolution_detail.strip():
+            raise ValidationError({
+                "resolution_detail": (
+                    "Debe describir la solución o el trabajo ejecutado."
+                )
+            })
+
+        if self.liquidated_by and not self.liquidated_by.is_active:
+            raise ValidationError({
+                "liquidated_by": (
+                    "El usuario responsable de la liquidación debe estar activo."
+                )
+            })
+
+    def __str__(self):
+        return f"Liquidación - {self.work_order.order_number}"
+
+
+class WorkOrderLiquidationItem(models.Model):
+    """
+    Material o equipo declarado por el técnico en la liquidación.
+
+    La declaración es **informativa y trazable**. En esta fase no descuenta
+    stock, no genera kardex y no afecta el stock por técnico ni el de almacén.
+    """
+
+    class MovementType(models.TextChoices):
+        USED = "USED", "Utilizado"
+        REMOVED = "REMOVED", "Retirado"
+
+    class UnitOfMeasure(models.TextChoices):
+        UNIT = "UNIT", "Unidad"
+        METER = "METER", "Metro"
+        ROLL = "ROLL", "Rollo"
+        SET = "SET", "Juego"
+
+    liquidation = models.ForeignKey(
+        WorkOrderLiquidation,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Liquidación"
+    )
+
+    movement_type = models.CharField(
+        max_length=20,
+        choices=MovementType.choices,
+        default=MovementType.USED,
+        verbose_name="Tipo de movimiento"
+    )
+
+    material_code = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Código o referencia"
+    )
+
+    material_name = models.CharField(
+        max_length=150,
+        verbose_name="Material o equipo"
+    )
+
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Cantidad"
+    )
+
+    unit_of_measure = models.CharField(
+        max_length=20,
+        choices=UnitOfMeasure.choices,
+        blank=True,
+        verbose_name="Unidad de medida"
+    )
+
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="Observación"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Material declarado"
+        verbose_name_plural = "Materiales declarados"
+        ordering = ["id"]
+
+        indexes = [
+            models.Index(fields=["liquidation"], name="wo_liq_item_liq_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if not self.material_name.strip():
+            raise ValidationError({
+                "material_name": "Debe indicar el material o equipo."
+            })
+
+        if self.quantity is not None and self.quantity <= 0:
+            raise ValidationError({
+                "quantity": "La cantidad declarada debe ser mayor que cero."
+            })
+
+    def __str__(self):
+        return f"{self.get_movement_type_display()}: {self.material_name} x {self.quantity}"
+
+
+class WorkOrderEvidence(models.Model):
+    """
+    Evidencia (foto o archivo) de la atención.
+
+    Cuelga siempre de la orden y, opcionalmente, de la liquidación que la
+    respalda. En desarrollo se guarda en MEDIA_ROOT mediante el storage por
+    defecto de Django; el backend es intercambiable sin tocar este modelo.
+    """
+
+    work_order = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="evidences",
+        verbose_name="Orden"
+    )
+
+    liquidation = models.ForeignKey(
+        WorkOrderLiquidation,
+        on_delete=models.CASCADE,
+        related_name="evidences",
+        null=True,
+        blank=True,
+        verbose_name="Liquidación"
+    )
+
+    file = models.FileField(
+        upload_to=evidence_upload_path,
+        verbose_name="Archivo o fotografía"
+    )
+
+    description = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Descripción"
+    )
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_evidences",
+        null=True,
+        blank=True,
+        verbose_name="Adjuntado por"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de carga"
+    )
+
+    class Meta:
+        verbose_name = "Evidencia de atención"
+        verbose_name_plural = "Evidencias de atención"
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["work_order"], name="wo_evidence_order_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.liquidation_id
+            and self.work_order_id
+            and self.liquidation.work_order_id != self.work_order_id
+        ):
+            raise ValidationError({
+                "liquidation": (
+                    "La liquidación indicada pertenece a otra orden."
+                )
+            })
+
+    def __str__(self):
+        return f"Evidencia - {self.work_order.order_number}"

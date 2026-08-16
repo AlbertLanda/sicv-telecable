@@ -8,6 +8,9 @@ from apps.work_orders.models import (
     OrderResult,
     WorkOrder,
     WorkOrderAssignment,
+    WorkOrderEvidence,
+    WorkOrderLiquidation,
+    WorkOrderLiquidationItem,
     WorkOrderReprogramming,
     WorkOrderStatusHistory,
 )
@@ -159,6 +162,86 @@ class WorkOrderReprogrammingInline(admin.TabularInline):
         return super().get_queryset(request).select_related("created_by")
 
 
+class WorkOrderLiquidationInline(admin.StackedInline):
+    model = WorkOrderLiquidation
+    extra = 0
+
+    readonly_fields = (
+        "liquidated_by",
+        "liquidated_at",
+        "resolution_detail",
+        "technical_notes",
+        "network_element",
+        "network_port",
+        "equipment_serial",
+        "signal_level_dbm",
+        "cable_meters_used",
+        "krill_reference",
+        "created_at",
+        "updated_at",
+    )
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        # La liquidación solo nace de liquidate_order().
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("liquidated_by")
+
+
+class WorkOrderLiquidationItemInline(admin.TabularInline):
+    model = WorkOrderLiquidationItem
+    extra = 0
+
+    readonly_fields = (
+        "movement_type",
+        "material_code",
+        "material_name",
+        "quantity",
+        "unit_of_measure",
+        "remarks",
+        "created_at",
+    )
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+class WorkOrderEvidenceInline(admin.TabularInline):
+    model = WorkOrderEvidence
+    extra = 0
+
+    readonly_fields = (
+        "file",
+        "description",
+        "uploaded_by",
+        "created_at",
+    )
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "uploaded_by", "liquidation"
+        )
+
+
 @admin.register(WorkOrder)
 class WorkOrderAdmin(admin.ModelAdmin):
     list_display = (
@@ -177,6 +260,9 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "priority",
         "attention_type",
         "scheduled_at",
+        "liquidation_display",
+        "liquidated_by_display",
+        "liquidated_at_display",
         "created_at",
     )
     list_filter = (
@@ -200,6 +286,8 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "subscription__customer__business_name",
     )
     raw_id_fields = ("subscription", "assigned_technician", "created_by")
+    # `status` es de solo lectura también para impedir marcar LIQUIDATED a
+    # mano y saltarse liquidate_order(): la liquidación exige su registro.
     readonly_fields = (
         "status",
         "assigned_technician",
@@ -231,8 +319,12 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "zone",
         "zone__branch",
         "assigned_technician",
+        "liquidation",
+        "liquidation__liquidated_by",
     )
     inlines = [
+        WorkOrderLiquidationInline,
+        WorkOrderEvidenceInline,
         WorkOrderStatusHistoryInline,
         WorkOrderAssignmentInline,
         WorkOrderReprogrammingInline,
@@ -262,6 +354,30 @@ class WorkOrderAdmin(admin.ModelAdmin):
     @admin.display(description="Cliente", ordering="subscription__customer")
     def customer_display(self, obj):
         return obj.subscription.customer
+
+    @staticmethod
+    def _liquidation(obj):
+        """Liquidación de la orden, o None si todavía no fue liquidada."""
+        try:
+            return obj.liquidation
+        except WorkOrder.liquidation.RelatedObjectDoesNotExist:
+            return None
+
+    @admin.display(description="Liquidada", boolean=True)
+    def liquidation_display(self, obj):
+        return self._liquidation(obj) is not None
+
+    @admin.display(description="Liquidado por")
+    def liquidated_by_display(self, obj):
+        liquidation = self._liquidation(obj)
+
+        return liquidation.liquidated_by if liquidation else "—"
+
+    @admin.display(description="Fecha de liquidación")
+    def liquidated_at_display(self, obj):
+        liquidation = self._liquidation(obj)
+
+        return liquidation.liquidated_at if liquidation else "—"
 
 
 @admin.register(WorkOrderStatusHistory)
@@ -322,6 +438,74 @@ class WorkOrderAssignmentAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(WorkOrderLiquidation)
+class WorkOrderLiquidationAdmin(admin.ModelAdmin):
+    list_display = (
+        "work_order",
+        "liquidated_by",
+        "liquidated_at",
+        "network_element",
+        "network_port",
+        "equipment_serial",
+        "created_at",
+    )
+    list_filter = (
+        ("liquidated_by", admin.RelatedOnlyFieldListFilter),
+        "liquidated_at",
+    )
+    search_fields = (
+        "work_order__order_number",
+        "resolution_detail",
+        "technical_notes",
+        "equipment_serial",
+        "network_element",
+    )
+    list_select_related = ("work_order", "liquidated_by")
+    date_hierarchy = "liquidated_at"
+    readonly_fields = (
+        "work_order",
+        "liquidated_by",
+        "liquidated_at",
+        "resolution_detail",
+        "technical_notes",
+        "network_element",
+        "network_port",
+        "equipment_serial",
+        "signal_level_dbm",
+        "cable_meters_used",
+        "krill_reference",
+        "created_at",
+        "updated_at",
+    )
+    inlines = [
+        WorkOrderLiquidationItemInline,
+        WorkOrderEvidenceInline,
+    ]
+
+    def has_add_permission(self, request):
+        # Liquidar es una operación de negocio: pasa por liquidate_order().
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(WorkOrderEvidence)
+class WorkOrderEvidenceAdmin(admin.ModelAdmin):
+    list_display = (
+        "work_order",
+        "description",
+        "file",
+        "uploaded_by",
+        "created_at",
+    )
+    list_filter = ("created_at",)
+    search_fields = ("work_order__order_number", "description")
+    list_select_related = ("work_order", "uploaded_by", "liquidation")
+    raw_id_fields = ("work_order", "liquidation", "uploaded_by")
+    readonly_fields = ("created_at",)
 
 
 @admin.register(WorkOrderReprogramming)

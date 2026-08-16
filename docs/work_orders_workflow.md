@@ -4,8 +4,8 @@ Documentación técnica del módulo `apps/work_orders/` del nuevo SICV
 (Telecable / Fiber The Andes).
 
 Cubre el workflow operativo: estados, matriz de transiciones, asignación de
-técnicos, inicio de atención, reprogramación e integración con los resultados
-operativos.
+técnicos, inicio de atención, reprogramación, integración con los resultados
+operativos y la liquidación técnica posterior a la atención.
 
 ---
 
@@ -22,6 +22,7 @@ en su ciclo de atención**. Es una dimensión distinta del **resultado operativo
 | `DERIVED` | Derivada | Orden derivada a otro nivel o área de atención. |
 | `IN_PROGRESS` | En atención | La atención fue iniciada. |
 | `ATTENDED` | Atendida | La atención operativa terminó. |
+| `LIQUIDATED` | Liquidada | La atención fue liquidada técnicamente. Ver §9. |
 | `REPROGRAMMED` | Reprogramada | La atención fue movida a otra fecha/hora. |
 | `REJECTED` | Rechazada | La orden fue rechazada según regla operativa. |
 | `NOT_FEASIBLE` | No factible | La ejecución no fue técnicamente factible. |
@@ -30,7 +31,7 @@ en su ciclo de atención**. Es una dimensión distinta del **resultado operativo
 **Flujo principal de referencia:**
 
 ```
-PENDING → ASSIGNED → IN_PROGRESS → ATTENDED
+PENDING → ASSIGNED → IN_PROGRESS → ATTENDED → LIQUIDATED
 ```
 
 **Rutas alternativas:** `DERIVED`, `REPROGRAMMED`, `REJECTED`, `NOT_FEASIBLE`
@@ -50,22 +51,27 @@ sobre qué movimientos son válidos.
 | `DERIVED` | `ASSIGNED`, `IN_PROGRESS`, `CANCELLED` |
 | `IN_PROGRESS` | `ATTENDED`, `REPROGRAMMED`, `NOT_FEASIBLE` |
 | `REPROGRAMMED` | `ASSIGNED`, `CANCELLED` |
-| `ATTENDED` | — (terminal) |
-| `REJECTED` | — (terminal) |
-| `NOT_FEASIBLE` | — (terminal) |
-| `CANCELLED` | — (terminal) |
+| `ATTENDED` | `LIQUIDATED` |
+| `LIQUIDATED` | — (final) |
+| `REJECTED` | — (final) |
+| `NOT_FEASIBLE` | — (final) |
+| `CANCELLED` | — (final) |
 
-### Estados terminales
+### Estados terminales y estados finales
 
-`ATTENDED`, `REJECTED`, `NOT_FEASIBLE` y `CANCELLED` están listados en
-`WorkOrder.TERMINAL_STATUSES`. Una orden en cualquiera de ellos:
+Son dos conceptos distintos:
 
-- no admite ninguna transición de salida,
-- no admite asignación ni reasignación de técnico,
-- no admite inicio de atención,
-- no admite reprogramación.
+- **`WorkOrder.TERMINAL_STATUSES`** (`ATTENDED`, `LIQUIDATED`, `REJECTED`,
+  `NOT_FEASIBLE`, `CANCELLED`): la orden está **cerrada operativamente**. No
+  admite asignación ni reasignación de técnico, ni inicio de atención, ni
+  reprogramación. La propiedad `WorkOrder.is_closed` devuelve `True`.
+- **`WorkOrder.FINAL_STATUSES`** (`LIQUIDATED`, `REJECTED`, `NOT_FEASIBLE`,
+  `CANCELLED`): además **no admiten ninguna transición de salida**.
 
-La propiedad `WorkOrder.is_closed` devuelve `True` en estos estados.
+`ATTENDED` es terminal pero no final: su única salida es la liquidación
+técnica. Ningún estado terminal puede devolver la orden a
+`WorkOrder.ACTIVE_STATUSES` (`PENDING`, `ASSIGNED`, `DERIVED`, `IN_PROGRESS`,
+`REPROGRAMMED`); es decir, **liquidar no reabre la atención de campo**.
 
 ### Mecanismo oficial de cambio de estado
 
@@ -308,7 +314,146 @@ distorsionaría los indicadores operativos.
 
 ---
 
-## 9. Administración (Django Admin)
+## 9. Liquidación técnica
+
+### Atender no es liquidar
+
+Son dos hechos distintos y deliberadamente separados:
+
+| | Atender | Liquidar |
+|---|---|---|
+| Pregunta que responde | ¿Terminó la atención en campo? | ¿Qué se ejecutó exactamente? |
+| Estado resultante | `ATTENDED` | `LIQUIDATED` |
+| Registro | `WorkOrder.result` + `attended_at` | `WorkOrderLiquidation` |
+| Momento | Al cerrar la visita | Después, con el detalle técnico a la mano |
+
+La cadena completa prevista es **atender → liquidar → validar → cerrar**. Las
+dos últimas etapas (validación NOC, validación de almacén y cierre definitivo)
+**no están implementadas todavía**: `LIQUIDATED` no equivale a validada ni a
+cerrada.
+
+### Modelo `WorkOrderLiquidation`
+
+Relación `OneToOne` con `WorkOrder`: **una orden tiene como máximo una
+liquidación vigente**, garantizado por la base de datos y revalidado por el
+servicio antes de escribir.
+
+| Campo | Descripción |
+|---|---|
+| `work_order` | Orden liquidada (`OneToOneField`) |
+| `liquidated_by` | Usuario responsable de la liquidación |
+| `liquidated_at` | Fecha y hora real de la liquidación |
+| `resolution_detail` | Detalle de la solución o trabajo ejecutado (**obligatorio**) |
+| `technical_notes` | Observaciones técnicas de la atención |
+| `network_element` | Elemento de red: NAP, caja o mufa |
+| `network_port` | Puerto utilizado |
+| `equipment_serial` | Serie del equipo instalado o retirado |
+| `signal_level_dbm` | Nivel de señal medido (dBm) |
+| `cable_meters_used` | Metros de cable utilizados |
+| `krill_reference` | Referencia Krill, **capturada a mano** |
+| `created_at` / `updated_at` | Trazabilidad del registro |
+
+Los datos técnicos viven **cada uno en su propio campo**, no mezclados en
+texto libre, para poder medirse después sin parsear. Los campos son genéricos
+a propósito: el mismo modelo sirve para instalación, avería, corte, reconexión
+y traslado.
+
+**Krill:** `krill_reference` queda preparado, pero en esta fase **no se
+consume ninguna API externa**. La sincronización real (traer el elemento de
+red, el puerto y la potencia óptica desde Krill en lugar de digitarlos) queda
+pendiente.
+
+### Servicio `liquidate_order()`
+
+```python
+liquidate_order(
+    order,
+    user,
+    technical_notes="",
+    resolution_detail="",
+    items=None,
+    remarks="",
+    **technical_data,
+)
+```
+
+Es el **único** camino autorizado para liquidar. Valida, en este orden:
+
+| Regla | Efecto si falla |
+|---|---|
+| La orden debe estar en `ATTENDED` | `ValidationError` |
+| La orden no debe estar ya liquidada | `ValidationError` |
+| Debe indicarse un usuario responsable | `ValidationError` |
+| El usuario responsable debe estar activo | `ValidationError` |
+| `resolution_detail` no puede estar vacío | `ValidationError` |
+| Los datos técnicos deben pertenecer a `LIQUIDATION_TECHNICAL_FIELDS` | `ValidationError` |
+
+Efectos, **todos dentro de una única `transaction.atomic`**:
+
+1. Crea la `WorkOrderLiquidation` (validada con `full_clean()`).
+2. Crea los `WorkOrderLiquidationItem` recibidos en `items`, validando cada uno.
+3. Mueve la orden a `LIQUIDATED` mediante `change_status()`, lo que deja
+   registro en `WorkOrderStatusHistory`.
+
+`order.status` **nunca** se modifica con `save()` directo: la transición pasa
+por el mecanismo oficial para conservar el historial. Si cualquier paso falla
+—por ejemplo un ítem con cantidad inválida— no queda liquidación parcial: la
+orden se mantiene en `ATTENDED` y no se escribe historial.
+
+La propiedad `WorkOrder.is_liquidated` consulta la **existencia del registro**,
+no el estado: liquidar es un hecho documentado por `WorkOrderLiquidation`, y
+`LIQUIDATED` es su consecuencia.
+
+### Materiales y equipos declarados
+
+Modelo `WorkOrderLiquidationItem`, con `ForeignKey` a la liquidación
+(`related_name="items"`): **múltiples ítems por liquidación**.
+
+| Campo | Descripción |
+|---|---|
+| `movement_type` | `USED` (utilizado) o `REMOVED` (retirado) |
+| `material_code` | Código o referencia del material |
+| `material_name` | Nombre del material o equipo |
+| `quantity` | Cantidad declarada (debe ser mayor que cero) |
+| `unit_of_measure` | `UNIT`, `METER`, `ROLL` o `SET` |
+| `remarks` | Observación del ítem |
+
+> **La declaración es informativa y trazable.** En esta fase **no descuenta
+> stock, no genera kardex y no afecta el stock por técnico ni el de almacén.**
+> El ítem no referencia ninguna entidad de inventario, precisamente para que
+> no pueda moverlo.
+
+### Evidencias de la atención
+
+Modelo `WorkOrderEvidence`.
+
+| Campo | Descripción |
+|---|---|
+| `work_order` | Orden a la que pertenece (obligatorio) |
+| `liquidation` | Liquidación que respalda, si corresponde (opcional) |
+| `file` | Archivo o fotografía |
+| `description` | Descripción de la evidencia |
+| `uploaded_by` | Usuario que la adjuntó |
+| `created_at` | Fecha y hora de carga |
+
+`clean()` impide vincular una evidencia a la liquidación de **otra** orden.
+
+**Almacenamiento:** en desarrollo se usa el storage local de Django
+(`MEDIA_ROOT = BASE_DIR / 'media'`, `MEDIA_URL = 'media/'`), servido por
+`config/urls.py` solo cuando `DEBUG` está activo. La ruta la resuelve
+`evidence_upload_path()`, que agrupa por orden:
+
+```
+media/work_orders/<order_number>/evidences/<archivo>
+```
+
+El modelo depende únicamente de la API de storage de Django, de modo que
+migrar a Azure Blob Storage en producción sea **un cambio de configuración**,
+no de código. Azure **no** se configura en esta fase.
+
+---
+
+## 10. Administración (Django Admin)
 
 `WorkOrderAdmin` expone número de orden, cliente, suscripción, tipo, subtipo,
 motivo, causa, resultado, sede, zona, técnico, estado, prioridad, tipo de
@@ -325,9 +470,24 @@ El historial de estados también está bloqueado en su propio `ModelAdmin`
 (`has_add_permission`, `has_change_permission` y `has_delete_permission`
 devuelven `False`): solo `change_status()` puede escribirlo.
 
+### Liquidación en el admin
+
+- El changelist de órdenes muestra tres columnas nuevas: **Liquidada** (sí/no),
+  **Liquidado por** y **Fecha de liquidación**, resueltas con
+  `select_related("liquidation", "liquidation__liquidated_by")` para no
+  disparar una consulta por fila.
+- La liquidación y sus evidencias aparecen como **inlines de solo lectura** en
+  la ficha de la orden.
+- `WorkOrderLiquidationAdmin` expone los datos técnicos completos, con los
+  materiales declarados y las evidencias como inlines de solo lectura. No
+  permite alta ni edición: liquidar pasa por `liquidate_order()`.
+- **`status` sigue siendo de solo lectura en `WorkOrderAdmin`**, de modo que
+  nadie pueda marcar `LIQUIDATED` a mano y saltarse el servicio (lo que
+  dejaría una orden en estado liquidado sin registro de liquidación).
+
 ---
 
-## 10. Pruebas implementadas
+## 11. Pruebas implementadas
 
 Paquete `apps/work_orders/tests/`, separado por módulos. Ejecutar con:
 
@@ -338,7 +498,8 @@ python manage.py test apps.work_orders
 `base.py` define `WorkOrderTestCase`, que arma el escenario común (sede, zona,
 cliente con dos direcciones, suscripción, usuarios por rol y catálogos con
 códigos estables) y expone los helpers `create_order()`,
-`create_assigned_order()` y `create_order_in_progress()`.
+`create_assigned_order()`, `create_order_in_progress()` y
+`create_attended_order()`.
 
 ### `test_catalogs.py` — catálogos y validación cruzada
 
@@ -375,9 +536,15 @@ códigos estables) y expone los helpers `create_order()`,
 | 13 | `CANCELLED → IN_PROGRESS` prohibido, sin tocar orden ni historial |
 | 14 | `change_status()` crea `WorkOrderStatusHistory` completo |
 | + | El flujo principal deja las tres transiciones en orden |
-| + | Los estados terminales no tienen salidas |
+| + | Los estados finales no tienen salidas |
+| + | Ningún estado terminal devuelve la orden a la operación |
 | + | Un estado inexistente es rechazado |
 | + | Repetir el estado actual no crea historial |
+
+> La prueba «los estados terminales no tienen salidas» se dividió en dos al
+> abrirse `ATTENDED → LIQUIDATED`: `FINAL_STATUSES` conserva la regla original
+> y una prueba nueva verifica que ningún estado terminal pueda volver a
+> `ACTIVE_STATUSES`.
 
 ### `test_workflow.py` — reprogramación e inicio de atención
 
@@ -406,16 +573,67 @@ códigos estables) y expone los helpers `create_order()`,
 | + | Resultado de otro tipo de orden → `ValidationError` |
 | + | Orden `ATTENDED` con resultado no factible no activa la suscripción |
 
+### `test_liquidation.py` — liquidación técnica
+
+26 pruebas nuevas, agrupadas en cuatro clases.
+
+**`WorkOrderLiquidationTests`** — servicio `liquidate_order()`
+
+| # | Prueba |
+|---|---|
+| 1 | Se crea una liquidación válida para una orden `ATTENDED` |
+| 2 | `ATTENDED → LIQUIDATED` se permite |
+| 3 | Liquidar desde `PENDING` → `ValidationError` |
+| 4 | Liquidar desde `ASSIGNED` → `ValidationError` |
+| 5 | Liquidar desde `IN_PROGRESS` → `ValidationError` |
+| 6 | Una orden ya liquidada no puede liquidarse de nuevo |
+| 7 | La liquidación registra `liquidated_by` |
+| 8 | La liquidación registra `liquidated_at` |
+| 9 | El cambio a `LIQUIDATED` crea `WorkOrderStatusHistory` |
+| 10 | Un error no deja liquidación parcial ni historial |
+| 14 | Un usuario inactivo no puede liquidar |
+| + | Sin usuario responsable → `ValidationError` |
+| + | `resolution_detail` vacío → `ValidationError` |
+| + | Los datos de red se guardan en campos separados |
+| + | Un campo técnico desconocido es rechazado |
+| + | `is_liquidated` depende del registro, no del estado |
+
+**`WorkOrderLiquidationTransitionTests`** — `LIQUIDATED` como estado posterior
+
+| # | Prueba |
+|---|---|
+| 15 | Toda transición desde `LIQUIDATED` queda bloqueada |
+| + | Una orden liquidada no admite asignación ni inicio de atención |
+| + | Liquidar no equivale a validar ni cerrar |
+
+**`WorkOrderLiquidationItemTests`** — materiales declarados
+
+| # | Prueba |
+|---|---|
+| 11 | Se pueden declarar múltiples materiales/equipos |
+| 12 | Un ítem conserva tipo, cantidad y observación |
+| + | La declaración no toca stock ni inventario |
+| + | Una cantidad no positiva es rechazada |
+
+**`WorkOrderEvidenceTests`** — evidencias (`MEDIA_ROOT` temporal)
+
+| # | Prueba |
+|---|---|
+| 13 | La evidencia queda vinculada a su orden y liquidación |
+| + | Una liquidación de otra orden es rechazada |
+| + | El archivo se guarda bajo la carpeta de la orden |
+
 ---
 
-## 11. Fuera del alcance de esta fase
+## 12. Fuera del alcance de esta fase
 
 No implementado todavía, por definición de la actividad:
 
-- Liquidación digital del técnico.
-- Materiales utilizados o retirados, y stock por técnico.
-- Integración Krill.
-- Galería / evidencias fotográficas.
-- Validación NOC y validación de almacén.
+- Validación NOC.
+- Validación de almacén.
 - Cierre definitivo de la orden.
+- Descuento o devolución real de inventario, kardex y stock por técnico.
+- Integración Krill (`krill_reference` queda preparado, sin consumir la API).
+- Azure Blob Storage (en desarrollo se usa `MEDIA_ROOT` local).
 - Frontend / PWA de técnicos.
+- Notificaciones WhatsApp.
