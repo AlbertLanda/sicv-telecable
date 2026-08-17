@@ -10,22 +10,76 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# Configuracion por variables de entorno
+# Se usa unicamente la libreria estandar (os.environ) para no agregar dependencias.
+# Si existe un archivo .env en la raiz del proyecto se carga como conveniencia
+# para el entorno local. Las variables ya presentes en el entorno tienen prioridad.
+
+def load_dotenv(path):
+    """Carga pares CLAVE=VALOR desde un archivo .env sin sobreescribir el entorno."""
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+load_dotenv(BASE_DIR / '.env')
+
+
+def env_bool(name, default=False):
+    """Convierte una variable de entorno a booleano de forma explicita."""
+    value = os.environ.get(name)
+    if value is None or value.strip() == '':
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on', 'si')
+
+
+def env_list(name, default=()):
+    """Convierte una variable separada por comas en una lista limpia."""
+    value = os.environ.get(name)
+    if value is None or value.strip() == '':
+        return list(default)
+    return [item.strip() for item in value.split(',') if item.strip()]
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9p=lfp*-+w-tudv%k3tmc4!1kw=e$ibz3e#68i1ym0p_2+_%_*'
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool('DJANGO_DEBUG', default=False)
 
-ALLOWED_HOSTS = []
+# SECURITY WARNING: keep the secret key used in production secret!
+# La clave nunca se escribe en el repositorio. Cada entorno (local, pruebas, QA,
+# produccion) define su propia DJANGO_SECRET_KEY.
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        # Valor solo para desarrollo local con DEBUG=True. No usar fuera de local.
+        SECRET_KEY = 'dev-only-insecure-key-not-for-production'
+    else:
+        raise ImproperlyConfigured(
+            'Falta la variable de entorno DJANGO_SECRET_KEY. '
+            'Definela en el entorno o en el archivo .env (ver .env.example).'
+        )
+
+# Lista separada por comas. Sin valor por defecto permisivo: nunca ['*'].
+ALLOWED_HOSTS = env_list(
+    'DJANGO_ALLOWED_HOSTS',
+    default=('localhost', '127.0.0.1') if DEBUG else (),
+)
 
 
 # Application definition
@@ -83,6 +137,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# Desarrollo y CI usan SQLite. PostgreSQL se configurara en una actividad
+# posterior mediante variables de entorno (ver docs/configuration.md).
 
 DATABASES = {
     'default': {
@@ -114,9 +170,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Lima'
 
 USE_I18N = True
 
@@ -127,6 +183,13 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Destino de collectstatic para un futuro despliegue. No se usa en desarrollo.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Media local (evidencias de ordenes de trabajo).
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -16,7 +16,7 @@ staticfiles/
 .env.*
 !.env.example
 
-# IDE
+# IDE / herramientas locales
 .vscode/
 .idea/
 
