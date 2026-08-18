@@ -7,6 +7,7 @@ Los catálogos se crean con los códigos estables que consume services.py.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 
 from apps.customers.models import Customer, CustomerAddress
@@ -110,6 +111,32 @@ class WorkOrderTestCase(TestCase):
 
         self.supervisor = User.objects.create_user(
             username="supervisor1",
+            password="test1234",
+            role=User.Role.SUPERVISOR,
+            branch=self.branch,
+        )
+
+        # --- Usuarios del ciclo de revisión --------------------------------
+        # El validador se define por PERMISO, no por rol. Se le asigna un rol
+        # cualquiera a propósito para demostrar que la autorización no depende
+        # de que sea NOC o almacén.
+        self.validation_permission = Permission.objects.get(
+            content_type__app_label="work_orders",
+            codename="validate_liquidation",
+        )
+
+        self.validator = User.objects.create_user(
+            username="validador1",
+            password="test1234",
+            role=User.Role.SUPERVISOR,
+            branch=self.branch,
+        )
+        self.validator.user_permissions.add(self.validation_permission)
+
+        # Mismo rol que el validador pero SIN el permiso: aísla el permiso
+        # como única causa de la autorización.
+        self.unauthorized_validator = User.objects.create_user(
+            username="validador2",
             password="test1234",
             role=User.Role.SUPERVISOR,
             branch=self.branch,
@@ -269,3 +296,76 @@ class WorkOrderTestCase(TestCase):
         )
 
         return order
+
+    def create_liquidation(self, order=None, **kwargs):
+        """Crea una liquidación técnica en estado LIQUIDATED (sin enviar)."""
+        from apps.work_orders.services import liquidate_order
+
+        order = order or self.create_attended_order()
+
+        defaults = {
+            "resolution_detail": "Se instaló la ONU y se dejó el servicio operativo.",
+            "equipment_serial": "ABC123",
+            "network_element": "NAP-014",
+            "network_port": "5",
+        }
+
+        defaults.update(kwargs)
+
+        return liquidate_order(order, user=self.technician, **defaults)
+
+    def create_submitted_liquidation(self, order=None, **kwargs):
+        """Crea una liquidación ya enviada a revisión (SUBMITTED)."""
+        from apps.work_orders.services import submit_liquidation
+
+        liquidation = self.create_liquidation(order=order, **kwargs)
+
+        submit_liquidation(liquidation, user=self.technician)
+
+        return liquidation
+
+    def create_liquidation_awaiting_correction(
+        self,
+        order=None,
+        reason="Serie de ONU incorrecta",
+        **kwargs,
+    ):
+        """Crea una liquidación con corrección solicitada."""
+        from apps.work_orders.services import request_liquidation_correction
+
+        liquidation = self.create_submitted_liquidation(order=order, **kwargs)
+
+        request_liquidation_correction(
+            liquidation,
+            validator=self.validator,
+            reason=reason,
+        )
+
+        return liquidation
+
+    def create_resubmitted_liquidation(self, order=None, **kwargs):
+        """Crea una liquidación ya corregida y reenviada (RESUBMITTED)."""
+        from apps.work_orders.services import resubmit_liquidation
+
+        liquidation = self.create_liquidation_awaiting_correction(
+            order=order,
+            **kwargs,
+        )
+
+        resubmit_liquidation(
+            liquidation,
+            technician=self.technician,
+            changes={"equipment_serial": "XYZ987"},
+        )
+
+        return liquidation
+
+    def create_validated_liquidation(self, order=None, **kwargs):
+        """Crea una liquidación validada y bloqueada."""
+        from apps.work_orders.services import validate_liquidation
+
+        liquidation = self.create_submitted_liquidation(order=order, **kwargs)
+
+        validate_liquidation(liquidation, validator=self.validator)
+
+        return liquidation

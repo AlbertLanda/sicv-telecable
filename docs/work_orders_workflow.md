@@ -7,6 +7,10 @@ Cubre el workflow operativo: estados, matriz de transiciones, asignación de
 técnicos, inicio de atención, reprogramación, integración con los resultados
 operativos y la liquidación técnica posterior a la atención.
 
+La **revisión** de esa liquidación (validación única, corrección controlada,
+permiso del validador y trazabilidad) está documentada aparte en
+[`liquidation_review.md`](liquidation_review.md).
+
 ---
 
 ## 1. Estados del workflow
@@ -327,10 +331,15 @@ Son dos hechos distintos y deliberadamente separados:
 | Registro | `WorkOrder.result` + `attended_at` | `WorkOrderLiquidation` |
 | Momento | Al cerrar la visita | Después, con el detalle técnico a la mano |
 
-La cadena completa prevista es **atender → liquidar → validar → cerrar**. Las
-dos últimas etapas (validación NOC, validación de almacén y cierre definitivo)
-**no están implementadas todavía**: `LIQUIDATED` no equivale a validada ni a
-cerrada.
+La cadena completa prevista es **atender → liquidar → validar → cerrar**.
+
+La etapa de **validación** ya está implementada como un ciclo de revisión
+propio de la liquidación, con validación única y una sola oportunidad de
+corrección: ver [`liquidation_review.md`](liquidation_review.md). La decisión
+funcional vigente descartó la doble validación NOC + almacén.
+
+El **cierre definitivo** sigue sin implementarse: `LIQUIDATED` no equivale a
+cerrada, y validar la liquidación **no** cambia el estado de la orden.
 
 ### Modelo `WorkOrderLiquidation`
 
@@ -629,9 +638,9 @@ códigos estables) y expone los helpers `create_order()`,
 
 No implementado todavía, por definición de la actividad:
 
-- Validación NOC.
-- Validación de almacén.
-- Cierre definitivo de la orden.
+- Doble validación NOC + almacén (descartada: la revisión es única, ver
+  [`liquidation_review.md`](liquidation_review.md)).
+- Cierre definitivo de la orden y `WorkOrder.Status.CLOSED`.
 - Descuento o devolución real de inventario, kardex y stock por técnico.
 - Integración Krill (`krill_reference` queda preparado, sin consumir la API).
 - Azure Blob Storage (en desarrollo se usa `MEDIA_ROOT` local).

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -1282,6 +1282,23 @@ class WorkOrderLiquidation(models.Model):
     Se crea exclusivamente mediante services.liquidate_order().
     """
 
+    class ReviewStatus(models.TextChoices):
+        """
+        Ciclo de revisión **de la liquidación**, independiente de
+        WorkOrder.Status.
+
+        WorkOrder.Status describe dónde está la orden en la operación de
+        campo; ReviewStatus describe dónde está el documento de liquidación
+        en su revisión administrativa. Una orden puede quedarse en LIQUIDATED
+        mientras su liquidación recorre todo este ciclo.
+        """
+
+        LIQUIDATED = "LIQUIDATED", "Liquidada"
+        SUBMITTED = "SUBMITTED", "Enviada"
+        CORRECTION_REQUESTED = "CORRECTION_REQUESTED", "Corrección solicitada"
+        RESUBMITTED = "RESUBMITTED", "Reenviada"
+        VALIDATED = "VALIDATED", "Validada"
+
     work_order = models.OneToOneField(
         WorkOrder,
         on_delete=models.CASCADE,
@@ -1358,6 +1375,91 @@ class WorkOrderLiquidation(models.Model):
         verbose_name="Referencia Krill (pendiente de integración)"
     )
 
+    # --- Ciclo de revisión ----------------------------------------------
+    # Una sola validación funcional y una sola oportunidad de corrección.
+    # Estos campos NO se editan a mano: los escriben los servicios de
+    # services.py, que son los únicos que conocen las reglas del ciclo.
+
+    review_status = models.CharField(
+        max_length=25,
+        choices=ReviewStatus.choices,
+        default=ReviewStatus.LIQUIDATED,
+        verbose_name="Estado de revisión"
+    )
+
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="submitted_liquidations",
+        null=True,
+        blank=True,
+        verbose_name="Enviada por"
+    )
+
+    submitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de envío"
+    )
+
+    submission_remarks = models.TextField(
+        blank=True,
+        verbose_name="Observación del envío"
+    )
+
+    # Tope duro en 1: el técnico corrige una vez y solo una.
+    correction_count = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(1)],
+        verbose_name="Correcciones consumidas"
+    )
+
+    correction_reason = models.TextField(
+        blank=True,
+        verbose_name="Motivo de la corrección solicitada"
+    )
+
+    correction_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="requested_liquidation_corrections",
+        null=True,
+        blank=True,
+        verbose_name="Corrección solicitada por"
+    )
+
+    correction_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de solicitud de corrección"
+    )
+
+    resubmitted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de reenvío"
+    )
+
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="validated_liquidations",
+        null=True,
+        blank=True,
+        verbose_name="Validada por"
+    )
+
+    validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de validación"
+    )
+
+    validation_remarks = models.TextField(
+        blank=True,
+        verbose_name="Observación de la validación"
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name="Fecha de registro"
@@ -1375,6 +1477,25 @@ class WorkOrderLiquidation(models.Model):
         indexes = [
             models.Index(fields=["liquidated_at"], name="wo_liq_date_idx"),
             models.Index(fields=["liquidated_by"], name="wo_liq_user_idx"),
+            models.Index(fields=["review_status"], name="wo_liq_review_idx"),
+        ]
+
+        constraints = [
+            # La regla "una sola corrección" se defiende también en base de
+            # datos, no solo en los servicios.
+            models.CheckConstraint(
+                check=models.Q(correction_count__lte=1),
+                name="wo_liq_correction_count_max_1",
+            ),
+        ]
+
+        # Permiso funcional del validador. A propósito NO se amarra a un área
+        # (NOC, almacén): quien tenga el permiso valida, sin importar su rol.
+        permissions = [
+            (
+                "validate_liquidation",
+                "Puede validar y solicitar corrección de liquidaciones",
+            ),
         ]
 
     def clean(self):
@@ -1393,6 +1514,99 @@ class WorkOrderLiquidation(models.Model):
                     "El usuario responsable de la liquidación debe estar activo."
                 )
             })
+
+        if self.correction_count > 1:
+            raise ValidationError({
+                "correction_count": (
+                    "Una liquidación admite una sola corrección."
+                )
+            })
+
+        # El estado de revisión y sus fechas no pueden contradecirse.
+        if self.review_status == self.ReviewStatus.CORRECTION_REQUESTED:
+            if not self.correction_reason.strip():
+                raise ValidationError({
+                    "correction_reason": (
+                        "El motivo de corrección es obligatorio."
+                    )
+                })
+
+            if not self.correction_requested_at:
+                raise ValidationError({
+                    "correction_requested_at": (
+                        "Debe registrarse la fecha de solicitud de corrección."
+                    )
+                })
+
+        if self.review_status == self.ReviewStatus.RESUBMITTED and not self.resubmitted_at:
+            raise ValidationError({
+                "resubmitted_at": (
+                    "Una liquidación reenviada debe registrar su fecha de reenvío."
+                )
+            })
+
+        if self.review_status == self.ReviewStatus.VALIDATED:
+            if not self.validated_at:
+                raise ValidationError({
+                    "validated_at": (
+                        "Una liquidación validada debe registrar su fecha de validación."
+                    )
+                })
+
+            if not self.validated_by_id:
+                raise ValidationError({
+                    "validated_by": (
+                        "Una liquidación validada debe registrar quién la validó."
+                    )
+                })
+
+        if self.validated_at and self.review_status != self.ReviewStatus.VALIDATED:
+            raise ValidationError({
+                "validated_at": (
+                    "Solo una liquidación validada puede tener fecha de validación."
+                )
+            })
+
+    # --- Estado del ciclo de revisión -----------------------------------
+
+    @property
+    def is_editable(self):
+        """
+        La liquidación solo es editable en su única ventana de corrección.
+
+        Antes del envío el técnico todavía la está construyendo; después del
+        envío queda bloqueada salvo que el validador pida una corrección.
+        """
+        return self.review_status in (
+            self.ReviewStatus.LIQUIDATED,
+            self.ReviewStatus.CORRECTION_REQUESTED,
+        )
+
+    @property
+    def is_locked(self):
+        """Bloqueada: enviada, reenviada o ya validada."""
+        return not self.is_editable
+
+    @property
+    def is_validated(self):
+        return self.review_status == self.ReviewStatus.VALIDATED
+
+    @property
+    def can_be_validated(self):
+        """Se valida en el primer envío o después de la única corrección."""
+        return self.review_status in (
+            self.ReviewStatus.SUBMITTED,
+            self.ReviewStatus.RESUBMITTED,
+        )
+
+    @property
+    def has_pending_correction(self):
+        return self.review_status == self.ReviewStatus.CORRECTION_REQUESTED
+
+    @property
+    def correction_available(self):
+        """Queda oportunidad de corrección sin consumir."""
+        return self.correction_count == 0
 
     def __str__(self):
         return f"Liquidación - {self.work_order.order_number}"
@@ -1486,6 +1700,128 @@ class WorkOrderLiquidationItem(models.Model):
 
     def __str__(self):
         return f"{self.get_movement_type_display()}: {self.material_name} x {self.quantity}"
+
+
+class WorkOrderLiquidationCorrection(models.Model):
+    """
+    Traza de la única corrección aplicada a una liquidación.
+
+    No basta con guardar el valor final: para auditar hay que poder responder
+    qué decía la liquidación antes, qué dice después, quién la cambió, cuándo
+    y por qué motivo. Cada instancia es el snapshot completo de esa corrección.
+
+    Se crea exclusivamente desde services.resubmit_liquidation().
+    """
+
+    liquidation = models.ForeignKey(
+        WorkOrderLiquidation,
+        on_delete=models.CASCADE,
+        related_name="corrections",
+        verbose_name="Liquidación corregida"
+    )
+
+    corrected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="liquidation_corrections",
+        verbose_name="Corregida por"
+    )
+
+    correction_reason = models.TextField(
+        verbose_name="Motivo indicado por el validador"
+    )
+
+    # Solo se guardan los campos que efectivamente cambiaron, con la forma
+    # {"campo": "valor"}. Los valores se serializan como texto para que el
+    # snapshot siga siendo legible aunque el modelo cambie más adelante.
+    values_before = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Valores antes de la corrección"
+    )
+
+    values_after = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Valores después de la corrección"
+    )
+
+    # Snapshot de los materiales declarados antes de la corrección: los items
+    # se borran y se recrean, así que sin esto la versión previa se perdería.
+    items_before = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Materiales declarados antes de la corrección"
+    )
+
+    items_after = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Materiales declarados después de la corrección"
+    )
+
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="Observación del técnico"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de modificación"
+    )
+
+    class Meta:
+        verbose_name = "Corrección de liquidación"
+        verbose_name_plural = "Correcciones de liquidación"
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(fields=["liquidation"], name="wo_liq_corr_liq_idx"),
+        ]
+
+    def clean(self):
+        super().clean()
+
+        if not self.correction_reason.strip():
+            raise ValidationError({
+                "correction_reason": (
+                    "La corrección debe conservar el motivo indicado por el validador."
+                )
+            })
+
+    @property
+    def changed_fields(self):
+        """Nombres de los campos técnicos que cambiaron en la corrección."""
+        return sorted(set(self.values_before) | set(self.values_after))
+
+    def summary(self):
+        """
+        Resumen legible de la corrección, en el formato del documento:
+
+            ANTES: equipment_serial=ABC123 | network_port=5
+            MOTIVO: Serie de ONU incorrecta
+            DESPUÉS: equipment_serial=XYZ987 | network_port=5
+        """
+        def render(values):
+            if not values:
+                return "(sin cambios)"
+
+            return " | ".join(
+                f"{field}={values.get(field, '')}"
+                for field in self.changed_fields
+            )
+
+        return (
+            f"ANTES: {render(self.values_before)}\n"
+            f"MOTIVO: {self.correction_reason}\n"
+            f"DESPUÉS: {render(self.values_after)}"
+        )
+
+    def __str__(self):
+        return (
+            f"Corrección - {self.liquidation.work_order.order_number} "
+            f"({self.created_at:%d/%m/%Y})"
+        )
 
 
 class WorkOrderEvidence(models.Model):

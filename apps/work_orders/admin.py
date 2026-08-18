@@ -10,6 +10,7 @@ from apps.work_orders.models import (
     WorkOrderAssignment,
     WorkOrderEvidence,
     WorkOrderLiquidation,
+    WorkOrderLiquidationCorrection,
     WorkOrderLiquidationItem,
     WorkOrderReprogramming,
     WorkOrderStatusHistory,
@@ -177,6 +178,8 @@ class WorkOrderLiquidationInline(admin.StackedInline):
         "signal_level_dbm",
         "cable_meters_used",
         "krill_reference",
+        "review_status",
+        "correction_count",
         "created_at",
         "updated_at",
     )
@@ -440,19 +443,55 @@ class WorkOrderAssignmentAdmin(admin.ModelAdmin):
         return False
 
 
+class WorkOrderLiquidationCorrectionInline(admin.TabularInline):
+    """Traza de la única corrección, en modo consulta."""
+
+    model = WorkOrderLiquidationCorrection
+    extra = 0
+
+    fields = (
+        "corrected_by",
+        "created_at",
+        "correction_reason",
+        "values_before",
+        "values_after",
+        "remarks",
+    )
+
+    readonly_fields = fields
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        # Las correcciones solo nacen de resubmit_liquidation().
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("corrected_by")
+
+
 @admin.register(WorkOrderLiquidation)
 class WorkOrderLiquidationAdmin(admin.ModelAdmin):
     list_display = (
         "work_order",
         "liquidated_by",
         "liquidated_at",
-        "network_element",
-        "network_port",
+        "review_status",
+        "correction_count",
+        "correction_requested_by",
+        "correction_requested_at",
+        "validated_by",
+        "validated_at",
         "equipment_serial",
-        "created_at",
     )
     list_filter = (
+        "review_status",
+        "correction_count",
         ("liquidated_by", admin.RelatedOnlyFieldListFilter),
+        ("validated_by", admin.RelatedOnlyFieldListFilter),
         "liquidated_at",
     )
     search_fields = (
@@ -462,7 +501,12 @@ class WorkOrderLiquidationAdmin(admin.ModelAdmin):
         "equipment_serial",
         "network_element",
     )
-    list_select_related = ("work_order", "liquidated_by")
+    list_select_related = (
+        "work_order",
+        "liquidated_by",
+        "correction_requested_by",
+        "validated_by",
+    )
     date_hierarchy = "liquidated_at"
     readonly_fields = (
         "work_order",
@@ -476,13 +520,73 @@ class WorkOrderLiquidationAdmin(admin.ModelAdmin):
         "signal_level_dbm",
         "cable_meters_used",
         "krill_reference",
+        # El ciclo de revisión completo es de solo lectura en el Admin: se
+        # mueve únicamente por los servicios de services.py. En particular,
+        # VALIDATED no puede marcarse desde un select.
+        "review_status",
+        "submitted_by",
+        "submitted_at",
+        "submission_remarks",
+        "correction_count",
+        "correction_reason",
+        "correction_requested_by",
+        "correction_requested_at",
+        "resubmitted_at",
+        "validated_by",
+        "validated_at",
+        "validation_remarks",
         "created_at",
         "updated_at",
     )
     inlines = [
         WorkOrderLiquidationItemInline,
+        WorkOrderLiquidationCorrectionInline,
         WorkOrderEvidenceInline,
     ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(WorkOrderLiquidationCorrection)
+class WorkOrderLiquidationCorrectionAdmin(admin.ModelAdmin):
+    """Consulta y auditoría de las correcciones aplicadas."""
+
+    list_display = (
+        "liquidation",
+        "corrected_by",
+        "created_at",
+        "correction_reason",
+    )
+    list_filter = (
+        "created_at",
+        ("corrected_by", admin.RelatedOnlyFieldListFilter),
+    )
+    search_fields = (
+        "liquidation__work_order__order_number",
+        "correction_reason",
+        "remarks",
+    )
+    list_select_related = ("liquidation__work_order", "corrected_by")
+    date_hierarchy = "created_at"
+
+    readonly_fields = (
+        "liquidation",
+        "corrected_by",
+        "correction_reason",
+        "values_before",
+        "values_after",
+        "items_before",
+        "items_after",
+        "remarks",
+        "created_at",
+    )
 
     def has_add_permission(self, request):
         return False
