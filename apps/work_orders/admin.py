@@ -485,10 +485,12 @@ class WorkOrderLiquidationAdmin(admin.ModelAdmin):
     ]
 
     def has_add_permission(self, request):
-        # Liquidar es una operación de negocio: pasa por liquidate_order().
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 
@@ -506,6 +508,9 @@ class WorkOrderEvidenceAdmin(admin.ModelAdmin):
     list_select_related = ("work_order", "uploaded_by", "liquidation")
     raw_id_fields = ("work_order", "liquidation", "uploaded_by")
     readonly_fields = ("created_at",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WorkOrderReprogramming)
