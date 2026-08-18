@@ -255,3 +255,17 @@ class WorkOrderTestCase(TestCase):
         order.start_attention(user=self.technician)
 
         return order
+
+    def create_attended_order(self, order_type=None, result=None, **kwargs):
+        """Crea una orden ya atendida, lista para liquidarse."""
+        from apps.work_orders.services import attend_order
+
+        order = self.create_order_in_progress(order_type=order_type, **kwargs)
+
+        attend_order(
+            order,
+            result=result or self.installation_success,
+            user=self.technician,
+        )
+
+        return order

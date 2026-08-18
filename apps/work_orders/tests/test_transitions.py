@@ -138,14 +138,30 @@ class WorkOrderTransitionTests(WorkOrderTestCase):
             ],
         )
 
-    def test_terminal_statuses_have_no_exits(self):
-        """Complemento: los estados terminales no admiten salidas."""
-        for status in WorkOrder.TERMINAL_STATUSES:
+    def test_final_statuses_have_no_exits(self):
+        """Complemento: los estados finales no admiten ninguna salida."""
+        for status in WorkOrder.FINAL_STATUSES:
             self.assertEqual(
                 WorkOrder.ALLOWED_TRANSITIONS[status],
                 [],
                 f"El estado {status} no debería admitir transiciones.",
             )
+
+    def test_terminal_statuses_never_return_to_operation(self):
+        """
+        Complemento: un estado terminal nunca devuelve la orden a la operación.
+
+        ATTENDED dejó de ser final al abrirse la liquidación técnica, pero
+        sigue siendo terminal: su única salida es LIQUIDATED, y ni ella ni
+        ningún otro estado terminal puede reabrir la atención de campo.
+        """
+        for status in WorkOrder.TERMINAL_STATUSES:
+            for target in WorkOrder.ALLOWED_TRANSITIONS[status]:
+                self.assertNotIn(
+                    target,
+                    WorkOrder.ACTIVE_STATUSES,
+                    f"El estado {status} no debería poder volver a {target}.",
+                )
 
     def test_invalid_status_value_is_rejected(self):
         """Complemento: un estado inexistente es rechazado."""

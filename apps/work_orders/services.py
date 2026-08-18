@@ -3,7 +3,11 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.services.models import Subscription
-from apps.work_orders.models import WorkOrder
+from apps.work_orders.models import (
+    WorkOrder,
+    WorkOrderLiquidation,
+    WorkOrderLiquidationItem,
+)
 
 
 @transaction.atomic
@@ -98,6 +102,103 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
     apply_order_result(order)
 
     return order
+
+
+# Campos técnicos opcionales que liquidate_order() acepta y traslada tal cual
+# a WorkOrderLiquidation. Se declaran aquí para rechazar cualquier clave
+# desconocida antes de tocar la base de datos.
+LIQUIDATION_TECHNICAL_FIELDS = (
+    "network_element",
+    "network_port",
+    "equipment_serial",
+    "signal_level_dbm",
+    "cable_meters_used",
+    "krill_reference",
+)
+
+
+@transaction.atomic
+def liquidate_order(
+    order: WorkOrder,
+    user,
+    technical_notes="",
+    resolution_detail="",
+    items=None,
+    remarks="",
+    **technical_data,
+):
+    """
+    Liquidación técnica de una orden ya atendida.
+
+    Registra en un solo movimiento atómico la WorkOrderLiquidation, los
+    materiales/equipos declarados y la transición ATTENDED -> LIQUIDATED
+    por el mecanismo oficial change_status().
+
+    Liquidar documenta la atención; **no** valida (NOC ni almacén) ni cierra
+    la orden, y los materiales declarados no mueven inventario.
+
+    `items` es una lista de diccionarios con las claves de
+    WorkOrderLiquidationItem (movement_type, material_name, quantity,
+    unit_of_measure, material_code, remarks).
+    """
+    if order.status != WorkOrder.Status.ATTENDED:
+        raise ValidationError(
+            "Solo una orden atendida puede liquidarse. "
+            f"Estado actual: {order.get_status_display()}."
+        )
+
+    if order.is_liquidated:
+        raise ValidationError(
+            "La orden ya cuenta con una liquidación registrada."
+        )
+
+    if user is None:
+        raise ValidationError(
+            "Debe indicar el usuario responsable de la liquidación."
+        )
+
+    if not user.is_active:
+        raise ValidationError(
+            "El usuario responsable de la liquidación debe estar activo."
+        )
+
+    if not resolution_detail or not resolution_detail.strip():
+        raise ValidationError(
+            "Debe describir la solución o el trabajo ejecutado en campo."
+        )
+
+    unknown_fields = set(technical_data) - set(LIQUIDATION_TECHNICAL_FIELDS)
+
+    if unknown_fields:
+        raise ValidationError(
+            "Datos técnicos no reconocidos en la liquidación: "
+            f"{', '.join(sorted(unknown_fields))}."
+        )
+
+    liquidation = WorkOrderLiquidation(
+        work_order=order,
+        liquidated_by=user,
+        liquidated_at=timezone.now(),
+        resolution_detail=resolution_detail,
+        technical_notes=technical_notes,
+        **technical_data,
+    )
+
+    liquidation.full_clean(exclude=["work_order"])
+    liquidation.save()
+
+    for item_data in items or []:
+        item = WorkOrderLiquidationItem(liquidation=liquidation, **item_data)
+        item.full_clean(exclude=["liquidation"])
+        item.save()
+
+    order.change_status(
+        WorkOrder.Status.LIQUIDATED,
+        user=user,
+        remarks=remarks,
+    )
+
+    return liquidation
 
 
 def _apply_installation_result(order, result_code):

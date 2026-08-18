@@ -187,7 +187,9 @@ STATIC_URL = 'static/'
 # Destino de collectstatic para un futuro despliegue. No se usa en desarrollo.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media local (evidencias de ordenes de trabajo).
+# Archivos subidos por los usuarios (evidencias de atención).
+# En desarrollo se sirven desde el disco local. En producción solo debe
+# cambiar el backend de storage: ningún modelo depende de esta ruta.
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
