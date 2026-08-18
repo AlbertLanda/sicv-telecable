@@ -1,0 +1,751 @@
+{% extends "base.html" %}
+
+{% block title %}SICV - Iniciar Sesión{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: #f4f6fb;
+    }
+
+    .login-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 30px;
+        background:
+            radial-gradient(
+                circle at 10% 20%,
+                rgba(1, 7, 107, 0.08),
+                transparent 30%
+            ),
+            radial-gradient(
+                circle at 90% 80%,
+                rgba(0, 102, 204, 0.08),
+                transparent 30%
+            ),
+            #f4f6fb;
+    }
+
+    .login-container {
+        width: 100%;
+        max-width: 1050px;
+        min-height: 620px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        background: #ffffff;
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+    }
+
+    /* PANEL IZQUIERDO */
+
+    .login-brand {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 55px;
+        color: #ffffff;
+        background:
+            linear-gradient(
+                145deg,
+                rgba(1, 7, 107, 0.98),
+                rgba(0, 49, 140, 0.96)
+            ),
+            #01076B;
+        overflow: hidden;
+    }
+
+    .login-brand::before {
+        content: "";
+        position: absolute;
+        width: 350px;
+        height: 350px;
+        border: 70px solid rgba(255, 255, 255, 0.05);
+        border-radius: 50%;
+        right: -160px;
+        top: -130px;
+    }
+
+    .login-brand::after {
+        content: "";
+        position: absolute;
+        width: 250px;
+        height: 250px;
+        border: 50px solid rgba(255, 255, 255, 0.04);
+        border-radius: 50%;
+        left: -130px;
+        bottom: -100px;
+    }
+
+    .brand-content,
+    .brand-footer {
+        position: relative;
+        z-index: 2;
+    }
+
+    .brand-logo {
+        width: 72px;
+        height: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 30px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.13);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        font-size: 28px;
+        font-weight: 800;
+    }
+
+    .brand-content h1 {
+        margin: 0 0 15px;
+        font-size: 42px;
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -1px;
+    }
+
+    .brand-content h1 span {
+        color: #7db7ff;
+    }
+
+    .brand-description {
+        max-width: 390px;
+        margin: 0;
+        color: rgba(255, 255, 255, 0.78);
+        font-size: 16px;
+        line-height: 1.7;
+    }
+
+    .system-features {
+        margin-top: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .system-feature {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.88);
+    }
+
+    .feature-icon {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.12);
+        font-size: 14px;
+    }
+
+    .brand-footer {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 12px;
+    }
+
+    /* PANEL DERECHO */
+
+    .login-form-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 55px;
+        background: #ffffff;
+    }
+
+    .login-form-container {
+        width: 100%;
+        max-width: 390px;
+    }
+
+    .login-header {
+        margin-bottom: 35px;
+    }
+
+    .login-header .welcome {
+        margin-bottom: 8px;
+        color: #6b7280;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .login-header h2 {
+        margin: 0 0 8px;
+        color: #111827;
+        font-size: 30px;
+        font-weight: 750;
+        letter-spacing: -0.5px;
+    }
+
+    .login-header p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 14px;
+    }
+
+    /* ERROR */
+
+    .login-error {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 22px;
+        padding: 13px 15px;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        background: #fef2f2;
+        color: #b91c1c;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .error-icon {
+        flex-shrink: 0;
+        font-weight: bold;
+    }
+
+    /* CAMPOS */
+
+    .form-group {
+        margin-bottom: 21px;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 8px;
+        color: #374151;
+        font-size: 13px;
+        font-weight: 650;
+    }
+
+    .input-wrapper {
+        position: relative;
+    }
+
+    .input-icon {
+        position: absolute;
+        left: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        font-size: 16px;
+        pointer-events: none;
+        transition: color 0.2s ease;
+    }
+
+    .form-input {
+        width: 100%;
+        height: 52px;
+        box-sizing: border-box;
+        padding: 0 48px 0 45px;
+        border: 1px solid #d9dee8;
+        border-radius: 12px;
+        outline: none;
+        background: #ffffff;
+        color: #111827;
+        font-size: 14px;
+        transition:
+            border-color 0.2s ease,
+            box-shadow 0.2s ease;
+    }
+
+    .form-input::placeholder {
+        color: #adb5c1;
+    }
+
+    .form-input:hover {
+        border-color: #b9c1d0;
+    }
+
+    .form-input:focus {
+        border-color: #01076B;
+        box-shadow: 0 0 0 4px rgba(1, 7, 107, 0.08);
+    }
+
+    .input-wrapper:focus-within .input-icon {
+        color: #01076B;
+    }
+
+    .password-toggle {
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        cursor: pointer;
+        font-size: 15px;
+        padding: 5px;
+    }
+
+    .password-toggle:hover {
+        color: #01076B;
+    }
+
+    /* OPCIONES */
+
+    .login-options {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 4px 0 25px;
+        font-size: 13px;
+    }
+
+    .remember-user {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #6b7280;
+        cursor: pointer;
+    }
+
+    .remember-user input {
+        width: 15px;
+        height: 15px;
+        accent-color: #01076B;
+        cursor: pointer;
+    }
+
+    /* BOTÓN */
+
+    .login-button {
+        width: 100%;
+        height: 53px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        border: none;
+        border-radius: 12px;
+        background: #01076B;
+        color: #ffffff;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 700;
+        box-shadow: 0 8px 18px rgba(1, 7, 107, 0.20);
+        transition:
+            transform 0.2s ease,
+            box-shadow 0.2s ease,
+            background 0.2s ease;
+    }
+
+    .login-button:hover {
+        background: #020b91;
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(1, 7, 107, 0.25);
+    }
+
+    .login-button:active {
+        transform: translateY(0);
+    }
+
+    .login-button.loading {
+        pointer-events: none;
+        opacity: 0.8;
+    }
+
+    .spinner {
+        width: 17px;
+        height: 17px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* SEGURIDAD */
+
+    .security-message {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 7px;
+        margin-top: 28px;
+        color: #9ca3af;
+        font-size: 11px;
+        text-align: center;
+    }
+
+    /* RESPONSIVE */
+
+    @media (max-width: 850px) {
+        .login-container {
+            max-width: 520px;
+            grid-template-columns: 1fr;
+        }
+
+        .login-brand {
+            display: none;
+        }
+
+        .login-form-section {
+            padding: 45px 35px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .login-page {
+            padding: 15px;
+        }
+
+        .login-container {
+            min-height: auto;
+            border-radius: 18px;
+        }
+
+        .login-form-section {
+            padding: 35px 24px;
+        }
+
+        .login-header h2 {
+            font-size: 26px;
+        }
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+<div class="login-page">
+
+    <div class="login-container">
+
+        <!-- IDENTIDAD DEL SISTEMA -->
+        <section class="login-brand">
+
+            <div class="brand-content">
+
+                <div class="brand-logo">
+                    TC
+                </div>
+
+                <h1>
+                    SICV<span>.</span>
+                </h1>
+
+                <p class="brand-description">
+                    Sistema Integrado de Clientes y Ventas
+                    para la gestión eficiente de abonados,
+                    contratos, servicios y operaciones.
+                </p>
+
+                <div class="system-features">
+
+                    <div class="system-feature">
+                        <span class="feature-icon">✓</span>
+                        Gestión de abonados
+                    </div>
+
+                    <div class="system-feature">
+                        <span class="feature-icon">✓</span>
+                        Consulta de servicios y contratos
+                    </div>
+
+                    <div class="system-feature">
+                        <span class="feature-icon">✓</span>
+                        Gestión de órdenes e incidencias
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="brand-footer">
+                Sistema interno · Telecable
+            </div>
+
+        </section>
+
+
+        <!-- FORMULARIO -->
+        <section class="login-form-section">
+
+            <div class="login-form-container">
+
+                <div class="login-header">
+
+                    <div class="welcome">
+                        Bienvenido nuevamente
+                    </div>
+
+                    <h2>
+                        Iniciar sesión
+                    </h2>
+
+                    <p>
+                        Ingresa tus credenciales para acceder al sistema.
+                    </p>
+
+                </div>
+
+
+                {% if form.errors %}
+
+                <div class="login-error">
+                    <span class="error-icon">!</span>
+
+                    <span>
+                        Usuario o contraseña incorrectos.
+                        Verifica tus datos e intenta nuevamente.
+                    </span>
+                </div>
+
+                {% endif %}
+
+
+                <form method="post" id="loginForm">
+
+                    {% csrf_token %}
+
+                    <!-- USUARIO -->
+                    <div class="form-group">
+
+                        <label
+                            class="form-label"
+                            for="id_username"
+                        >
+                            Usuario
+                        </label>
+
+                        <div class="input-wrapper">
+
+                            <span class="input-icon" aria-hidden="true">
+                                👤
+                            </span>
+
+                            <input
+                                type="text"
+                                name="username"
+                                id="id_username"
+                                class="form-input"
+                                placeholder="Ingresa tu usuario"
+                                autocomplete="username"
+                                required
+                                autofocus
+                            >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- CONTRASEÑA -->
+                    <div class="form-group">
+
+                        <label
+                            class="form-label"
+                            for="id_password"
+                        >
+                            Contraseña
+                        </label>
+
+                        <div class="input-wrapper">
+
+                            <span class="input-icon" aria-hidden="true">
+                                🔒
+                            </span>
+
+                            <input
+                                type="password"
+                                name="password"
+                                id="id_password"
+                                class="form-input"
+                                placeholder="Ingresa tu contraseña"
+                                autocomplete="current-password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle"
+                                id="togglePassword"
+                                aria-label="Mostrar contraseña"
+                            >
+                                👁
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- RECORDAR USUARIO -->
+                    <div class="login-options">
+
+                        <label class="remember-user">
+
+                            <input
+                                type="checkbox"
+                                name="remember"
+                                id="remember"
+                            >
+
+                            <span>
+                                Recordar usuario
+                            </span>
+
+                        </label>
+
+                    </div>
+
+
+                    <!-- BOTÓN -->
+                    <button
+                        type="submit"
+                        class="login-button"
+                        id="loginButton"
+                    >
+
+                        <span id="buttonIcon" aria-hidden="true">
+                            →
+                        </span>
+
+                        <span id="buttonText">
+                            Ingresar al sistema
+                        </span>
+
+                    </button>
+
+                </form>
+
+
+                <div class="security-message">
+                    <span aria-hidden="true">🔒</span>
+                    Acceso protegido · Uso exclusivo del personal autorizado
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+    /*
+     * MOSTRAR / OCULTAR CONTRASEÑA
+     */
+    const passwordInput = document.getElementById("id_password");
+    const togglePassword = document.getElementById("togglePassword");
+
+    if (passwordInput && togglePassword) {
+
+        togglePassword.addEventListener("click", function () {
+
+            const isPassword = passwordInput.type === "password";
+
+            passwordInput.type = isPassword
+                ? "text"
+                : "password";
+
+            this.textContent = isPassword
+                ? "🙈"
+                : "👁";
+
+            this.setAttribute(
+                "aria-label",
+                isPassword
+                    ? "Ocultar contraseña"
+                    : "Mostrar contraseña"
+            );
+
+        });
+    }
+
+
+    /*
+     * ESTADO DE CARGA AL INGRESAR
+     */
+    const loginForm = document.getElementById("loginForm");
+    const loginButton = document.getElementById("loginButton");
+    const buttonText = document.getElementById("buttonText");
+    const buttonIcon = document.getElementById("buttonIcon");
+
+    if (loginForm) {
+
+        loginForm.addEventListener("submit", function () {
+
+            if (!loginForm.checkValidity()) {
+                return;
+            }
+
+            loginButton.classList.add("loading");
+
+            buttonIcon.innerHTML =
+                '<span class="spinner"></span>';
+
+            buttonText.textContent =
+                "Validando acceso...";
+
+        });
+    }
+
+
+    /*
+     * RECORDAR USUARIO
+     */
+    const usernameInput =
+        document.getElementById("id_username");
+
+    const rememberCheckbox =
+        document.getElementById("remember");
+
+    if (usernameInput && rememberCheckbox) {
+
+        const savedUsername =
+            localStorage.getItem("sicv_username");
+
+        if (savedUsername) {
+
+            usernameInput.value =
+                savedUsername;
+
+            rememberCheckbox.checked =
+                true;
+        }
+
+        loginForm.addEventListener("submit", function () {
+
+            if (rememberCheckbox.checked) {
+
+                localStorage.setItem(
+                    "sicv_username",
+                    usernameInput.value
+                );
+
+            } else {
+
+                localStorage.removeItem(
+                    "sicv_username"
+                );
+
+            }
+
+        });
+    }
+</script>
+{% endblock %}
