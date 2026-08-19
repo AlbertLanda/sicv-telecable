@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar Cliente{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <!-- ENCABEZADO -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+
+        <div>
+            <h1 class="h3 mb-1">
+                Registrar nuevo cliente
+            </h1>
+
+            <p class="text-muted mb-0">
+                Ingrese los datos básicos del cliente.
+            </p>
+        </div>
+
+        <a
+            href="{% url 'customers:search' %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Cancelar
+        </a>
+
+    </div>
+
+
+    <!-- ERRORES GENERALES -->
+    {% if form.non_field_errors %}
+
+        <div class="alert alert-danger">
+
+            {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+
+        </div>
+
+    {% endif %}
+
+
+    <!-- FORMULARIO -->
+    <div class="card shadow-sm">
+
+        <div class="card-header">
+            <strong>
+                Datos básicos del cliente
+            </strong>
+        </div>
+
+
+        <div class="card-body">
+
+            <form
+                method="post"
+                novalidate
+            >
+
+                {% csrf_token %}
+
+
+                <div class="row g-3">
+
+                    <!-- TIPO DE DOCUMENTO -->
+                    <div class="col-md-4">
+
+                        <label
+                            for="{{ form.document_type.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.document_type.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+                        </label>
+
+                        {{ form.document_type }}
+
+                        {% for error in form.document_type.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- DOCUMENTO -->
+                    <div class="col-md-8">
+
+                        <label
+                            for="{{ form.document_number.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.document_number.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+                        </label>
+
+                        {{ form.document_number }}
+
+                        {% for error in form.document_number.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- APELLIDO PATERNO -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.paternal_surname.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.paternal_surname.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+                        </label>
+
+                        {{ form.paternal_surname }}
+
+                        {% for error in form.paternal_surname.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- APELLIDO MATERNO -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.maternal_surname.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.maternal_surname.label }}
+                        </label>
+
+                        {{ form.maternal_surname }}
+
+                        {% for error in form.maternal_surname.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- NOMBRES -->
+                    <div class="col-md-12">
+
+                        <label
+                            for="{{ form.first_name.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.first_name.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+                        </label>
+
+                        {{ form.first_name }}
+
+                        {% for error in form.first_name.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <hr class="my-4">
+
+
+                <!-- BOTONES -->
+                <div class="d-flex justify-content-end gap-2">
+
+                    <a
+                        href="{% url 'customers:search' %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        Cancelar
+                    </a>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        Continuar →
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

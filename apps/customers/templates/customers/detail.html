@@ -1,0 +1,1079 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+
+    <div>
+        <h2 class="fw-bold text-primary mb-1">
+            Ficha del Cliente
+        </h2>
+
+        <p class="text-muted mb-0">
+            Consulta consolidada del abonado
+        </p>
+    </div>
+
+    <div class="d-flex gap-2">
+
+        <a
+            href="{% url 'customers:use' customer.pk %}"
+            class="btn btn-primary"
+        >
+            Usar cliente
+        </a>
+
+        <a
+            href="{% url 'customers:search' %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la búsqueda
+        </a>
+
+    </div>
+
+</div>
+
+{% if messages %}
+
+    {% for message in messages %}
+
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+
+            {{ message }}
+
+            <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="alert"
+            ></button>
+
+        </div>
+
+    {% endfor %}
+
+{% endif %}
+
+
+<!-- ========================================================= -->
+<!-- BLOQUE A - DATOS DEL CLIENTE -->
+<!-- ========================================================= -->
+
+<div class="card card-custom mb-4">
+
+    <div class="card-header bg-dark text-white fw-bold">
+        Bloque A - Datos del Cliente
+    </div>
+
+    <div class="card-body">
+
+        <div class="row g-4">
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Código de abonado</small>
+                <strong class="text-primary">
+                    {{ customer.code }}
+                </strong>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Documento</small>
+                <strong>
+                    {{ customer.document_type }}
+                    {{ customer.document_number }}
+                </strong>
+            </div>
+
+            <div class="col-md-6">
+                <small class="text-muted d-block">Cliente</small>
+
+                <strong>
+                    {% if customer.person_type == "LEGAL" %}
+                        {{ customer.business_name }}
+                    {% else %}
+                        {{ customer.first_name }}
+                        {{ customer.paternal_surname }}
+                        {{ customer.maternal_surname }}
+                    {% endif %}
+                </strong>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Teléfono principal</small>
+                <span>
+                    {{ customer.phone|default:"No registrado" }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Teléfono secundario</small>
+                <span>
+                    {{ customer.secondary_phone|default:"No registrado" }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Correo electrónico</small>
+                <span>
+                    {{ customer.email|default:"No registrado" }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Sede</small>
+                <span>
+                    {{ customer.branch.name }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Tipo de persona</small>
+                <span>
+                    {{ customer.get_person_type_display }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Fecha de registro</small>
+                <span>
+                    {{ customer.created_at|date:"d/m/Y H:i" }}
+                </span>
+            </div>
+
+            <div class="col-md-3">
+                <small class="text-muted d-block">Estado</small>
+
+                {% if customer.is_active %}
+                    <span class="badge bg-success">
+                        Activo
+                    </span>
+                {% else %}
+                    <span class="badge bg-secondary">
+                        Inactivo
+                    </span>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOQUE B - DIRECCIONES -->
+<!-- ========================================================= -->
+
+<div class="card card-custom mb-4">
+
+    <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
+        Bloque B - Direcciones
+    </span>
+
+    <a
+        href="{% url 'customers:address_create' customer.pk %}"
+        class="btn btn-light btn-sm"
+    >
+        + Nueva dirección
+    </a>
+
+</div>
+
+    <div class="card-body">
+
+        {% if addresses %}
+
+            <div class="row g-4">
+
+                {% for addr in addresses %}
+
+                    <div class="col-12">
+
+                        <div class="card border">
+
+                            <div class="card-body">
+
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+
+                                    <h5 class="fw-bold mb-0">
+                                        Dirección {{ forloop.counter }}
+                                    </h5>
+
+                                    {% if addr.is_primary %}
+                                        <span class="badge bg-success">
+                                            Principal
+                                        </span>
+                                    {% endif %}
+
+                                </div>
+
+                                <div class="row g-3">
+
+                                    <div class="col-md-8">
+                                        <small class="text-muted d-block">
+                                            Dirección
+                                        </small>
+
+                                        <strong>
+                                            {{ addr.address }}
+                                        </strong>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">
+                                            Distrito
+                                        </small>
+
+                                        <span>
+                                            {{ addr.district }}
+                                        </span>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <small class="text-muted d-block">
+                                            Referencia
+                                        </small>
+
+                                        <span>
+                                            {{ addr.reference|default:"No registrada" }}
+                                        </span>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <small class="text-muted d-block">
+                                            Zona
+                                        </small>
+
+                                        <span>
+                                            {% if addr.zone %}
+                                                {{ addr.zone.name }}
+                                            {% else %}
+                                                No registrada
+                                            {% endif %}
+                                        </span>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">
+                                            Número de medidor
+                                        </small>
+
+                                        <span>
+                                            {{ addr.meter_number|default:"No registrado" }}
+                                        </span>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">
+                                            Latitud
+                                        </small>
+
+                                        <span>
+                                            {{ addr.latitude|default:"No registrada" }}
+                                        </span>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">
+                                            Longitud
+                                        </small>
+
+                                        <span>
+                                            {{ addr.longitude|default:"No registrada" }}
+                                        </span>
+                                    </div>
+
+                                    {% if addr.gps_link %}
+                                        <div class="col-12">
+                                            <a href="{{ addr.gps_link }}"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="btn btn-sm btn-outline-primary">
+                                                Ver ubicación GPS
+                                            </a>
+                                        </div>
+                                    {% endif %}
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div class="alert alert-secondary mb-0">
+                El cliente no tiene direcciones registradas.
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<!-- ========================================================= -->
+<!-- BLOQUE C - SUSCRIPCIONES -->
+<!-- ========================================================= -->
+
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+
+    <h4 class="fw-bold mb-0">
+        Bloque C - Suscripciones y Servicios
+    </h4>
+
+    <a
+        href="{% url 'services:subscription_create' customer.pk %}"
+        class="btn btn-primary"
+    >
+        + Nueva suscripción
+    </a>
+
+</div>
+
+{% if subscriptions %}
+
+    {% for sub in subscriptions %}
+
+        <div class="card card-custom mb-4 border-info">
+
+            <div class="card-header bg-light">
+
+                <div class="d-flex justify-content-between align-items-center">
+
+                    <strong>
+                        Suscripción
+                        #{{ sub.id }}
+                    </strong>
+
+                    {% if sub.status == 'PRESALE' %}
+                        <span class="badge bg-warning text-dark">
+                            Preventa
+                        </span>
+
+                    {% elif sub.status == 'INSTALLATION' %}
+                        <span class="badge bg-primary">
+                            En instalación
+                        </span>
+
+                    {% elif sub.status == 'ACTIVE' %}
+                        <span class="badge bg-success">
+                            Activo
+                        </span>
+
+                    {% elif sub.status == 'SUSPENDED' %}
+                        <span class="badge bg-secondary">
+                            Suspendido
+                        </span>
+
+                    {% elif sub.status == 'CUT' %}
+                        <span class="badge bg-danger">
+                            Corte
+                        </span>
+
+                    {% elif sub.status == 'CANCELLED' %}
+                        <span class="badge bg-dark">
+                            Cancelado
+                        </span>
+
+                    {% else %}
+                        <span class="badge bg-secondary">
+                            {{ sub.status }}
+                        </span>
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+            <div class="card-body">
+
+                <div class="row g-3">
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">
+                            Tipo de servicio
+                        </small>
+
+                        <strong>
+                            {{ sub.service_type.name }}
+                        </strong>
+                    </div>
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">
+                            Plan
+                        </small>
+
+                        <strong>
+                            {{ sub.plan.name }}
+                        </strong>
+                    </div>
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">
+                            Número de servicio
+                        </small>
+
+                        <span>
+                            {{ sub.service_number }}
+                        </span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <small class="text-muted d-block">
+                            Dirección del servicio
+                        </small>
+
+                        <span>
+                            {{ sub.address.address }}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Velocidad
+                        </small>
+
+                        <span>
+                            {% if sub.plan.speed_mbps %}
+                                {{ sub.plan.speed_mbps }} Mbps
+                            {% else %}
+                                No especificada
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Tecnología
+                        </small>
+
+                        <span>
+                            {{ sub.plan.technology|default:"No especificada" }}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Fecha de instalación
+                        </small>
+
+                        <span>
+                            {% if sub.installation_date %}
+                                {{ sub.installation_date|date:"d/m/Y" }}
+                            {% else %}
+                                No registrada
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Fecha de corte
+                        </small>
+
+                        <span>
+                            {% if sub.cut_date %}
+                                {{ sub.cut_date|date:"d/m/Y" }}
+                            {% else %}
+                                No registrada
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Fecha de reconexión
+                        </small>
+
+                        <span>
+                            {% if sub.reconnection_date %}
+                                {{ sub.reconnection_date|date:"d/m/Y" }}
+                            {% else %}
+                                No registrada
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">
+                            Ciclo de facturación
+                        </small>
+
+                        <span>
+                            {{ sub.billing_cycle|default:"No registrado" }}
+                        </span>
+                    </div>
+
+                </div>
+
+
+                <!-- ÓRDENES DE LA SUSCRIPCIÓN -->
+
+                <hr class="my-4">
+
+                <h6 class="fw-bold">
+                    Órdenes de Trabajo
+                </h6>
+
+                {% if sub.work_orders.all %}
+
+                    <div class="table-responsive mt-3">
+
+                        <table class="table table-sm table-bordered align-middle">
+
+                            <thead class="table-light">
+
+                                <tr>
+                                    <th>N.º Orden</th>
+                                    <th>Tipo</th>
+                                    <th>Subtipo</th>
+                                    <th>Motivo</th>
+                                    <th>Estado</th>
+                                    <th>Técnico</th>
+                                    <th>Resultado</th>
+                                    <th>Creación</th>
+                                    <th>Programada</th>
+                                    <th>Atención</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                {% for order in sub.work_orders.all %}
+
+                                    <tr>
+
+                                        <td>
+                                            {{ order.order_number }}
+                                        </td>
+
+                                        <td>
+                                            {{ order.order_type.name }}
+                                        </td>
+
+                                        <td>
+                                            {% if order.subtype %}
+                                                {{ order.subtype.name }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if order.reason %}
+                                                {{ order.reason.name }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {{ order.get_status_display }}
+                                        </td>
+
+                                        <td>
+                                            {% if order.assigned_technician %}
+                                                {{ order.assigned_technician }}
+                                            {% else %}
+                                                Sin asignar
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if order.result %}
+                                                {{ order.result.name }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {{ order.created_at|date:"d/m/Y H:i" }}
+                                        </td>
+
+                                        <td>
+                                            {% if order.scheduled_at %}
+                                                {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+
+                                        <td>
+                                            {% if order.attended_at %}
+                                                {{ order.attended_at|date:"d/m/Y H:i" }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+
+                                    </tr>
+
+                                {% endfor %}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                {% else %}
+
+                    <p class="text-muted small mb-0">
+                        Esta suscripción no tiene órdenes de trabajo asociadas.
+                    </p>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    {% endfor %}
+
+{% else %}
+
+    <div class="alert alert-secondary card-custom text-center">
+        El cliente no tiene suscripciones registradas.
+    </div>
+
+{% endif %}
+
+
+<!-- ========================================================= -->
+<!-- BLOQUE D - CONTRATOS -->
+<!-- ========================================================= -->
+
+<div class="card card-custom mb-5">
+
+    <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
+        Bloque D - Contratos
+    </span>
+
+    <a
+        href="{% url 'contracts:contract_create' customer.pk %}"
+        class="btn btn-light btn-sm"
+    >
+        + Nuevo contrato
+    </a>
+
+</div>
+
+    <div class="card-body p-0">
+
+        {% if contracts %}
+
+            <div class="table-responsive">
+
+                <table class="table table-hover align-middle mb-0">
+
+                    <thead class="table-light">
+
+                        <tr>
+                            <th class="ps-3">
+                                N.º Contrato
+                            </th>
+
+                            <th>
+                                Suscripción
+                            </th>
+
+                            <th>
+                                Fecha Inicio
+                            </th>
+
+                            <th>
+                                Fecha Fin
+                            </th>
+
+                            <th>
+                                Estado
+                            </th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for contract in contracts %}
+
+                            <tr>
+
+                                <td class="ps-3">
+                                    <strong>
+                                        {{ contract.contract_number }}
+                                    </strong>
+                                </td>
+
+                                <td>
+                                    #{{ contract.subscription.id }}
+                                </td>
+
+                                <td>
+                                    {{ contract.start_date|date:"d/m/Y" }}
+                                </td>
+
+                                <td>
+                                    {% if contract.end_date %}
+                                        {{ contract.end_date|date:"d/m/Y" }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+
+                                <td>
+
+                                    {% if contract.status == 'ACTIVE' %}
+                                        <span class="badge bg-success">
+                                            Activo
+                                        </span>
+
+                                    {% elif contract.status == 'SUSPENDED' %}
+                                        <span class="badge bg-secondary">
+                                            Suspendido
+                                        </span>
+
+                                    {% elif contract.status == 'CANCELLED' %}
+                                        <span class="badge bg-danger">
+                                            Cancelado
+                                        </span>
+
+                                    {% elif contract.status == 'FINISHED' %}
+                                        <span class="badge bg-dark">
+                                            Finalizado
+                                        </span>
+
+                                    {% elif contract.status == 'DRAFT' %}
+                                        <span class="badge bg-warning text-dark">
+                                            Borrador
+                                        </span>
+
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            {{ contract.status }}
+                                        </span>
+                                    {% endif %}
+
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        {% else %}
+
+            <p class="p-3 mb-0 text-muted">
+                El cliente no tiene contratos registrados.
+            </p>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- BLOQUE E - ÓRDENES DE TRABAJO DEL CLIENTE -->
+<!-- ========================================================= -->
+
+<div class="card card-custom mb-5">
+
+    <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
+        Bloque E - Órdenes de Trabajo del Cliente
+    </span>
+
+</div>
+
+    <div class="card-body p-0">
+
+        {% if work_orders %}
+
+            <div class="table-responsive">
+
+                <table class="table table-hover table-sm align-middle mb-0">
+
+                    <thead class="table-light">
+
+                        <tr>
+                            <th class="ps-3">
+                                N.º Orden
+                            </th>
+
+                            <th>
+                                Servicio
+                            </th>
+
+                            <th>
+                                Tipo
+                            </th>
+
+                            <th>
+                                Subtipo
+                            </th>
+
+                            <th>
+                                Motivo
+                            </th>
+
+                            <th>
+                                Causa
+                            </th>
+
+                            <th>
+                                Estado
+                            </th>
+
+                            <th>
+                                Prioridad
+                            </th>
+
+                            <th>
+                                Técnico
+                            </th>
+
+                            <th>
+                                Resultado
+                            </th>
+
+                            <th>
+                                Programada
+                            </th>
+
+                            <th>
+                                Creación
+                            </th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for order in work_orders %}
+
+                            <tr>
+
+                                <td class="ps-3">
+                                    <strong>
+                                        {{ order.order_number }}
+                                    </strong>
+                                </td>
+
+                                <td>
+                                    #{{ order.subscription.service_number }}
+                                </td>
+
+                                <td>
+                                    {{ order.order_type.name }}
+                                </td>
+
+                                <td>
+                                    {% if order.subtype %}
+                                        {{ order.subtype.name }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if order.reason %}
+                                        {{ order.reason.name }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if order.cause %}
+                                        {{ order.cause.name }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+
+                                <td>
+
+                                    {% if order.status == 'PENDING' %}
+
+                                        <span class="badge bg-warning text-dark">
+                                            Pendiente
+                                        </span>
+
+                                    {% elif order.status == 'ASSIGNED' %}
+
+                                        <span class="badge bg-primary">
+                                            Asignada
+                                        </span>
+
+                                    {% elif order.status == 'DERIVED' %}
+
+                                        <span class="badge bg-info text-dark">
+                                            Derivada
+                                        </span>
+
+                                    {% elif order.status == 'IN_PROGRESS' %}
+
+                                        <span class="badge bg-primary">
+                                            En atención
+                                        </span>
+
+                                    {% elif order.status == 'ATTENDED' %}
+
+                                        <span class="badge bg-success">
+                                            Atendida
+                                        </span>
+
+                                    {% elif order.status == 'REPROGRAMMED' %}
+
+                                        <span class="badge bg-warning text-dark">
+                                            Reprogramada
+                                        </span>
+
+                                    {% elif order.status == 'REJECTED' %}
+
+                                        <span class="badge bg-danger">
+                                            Rechazada
+                                        </span>
+
+                                    {% elif order.status == 'NOT_FEASIBLE' %}
+
+                                        <span class="badge bg-secondary">
+                                            No factible
+                                        </span>
+
+                                    {% elif order.status == 'CANCELLED' %}
+
+                                        <span class="badge bg-dark">
+                                            Anulada
+                                        </span>
+
+                                    {% else %}
+
+                                        <span class="badge bg-secondary">
+                                            {{ order.status }}
+                                        </span>
+
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+
+                                    {% if order.priority == 'LOW' %}
+
+                                        <span class="badge bg-secondary">
+                                            Baja
+                                        </span>
+
+                                    {% elif order.priority == 'NORMAL' %}
+
+                                        <span class="badge bg-primary">
+                                            Normal
+                                        </span>
+
+                                    {% elif order.priority == 'HIGH' %}
+
+                                        <span class="badge bg-warning text-dark">
+                                            Alta
+                                        </span>
+
+                                    {% elif order.priority == 'URGENT' %}
+
+                                        <span class="badge bg-danger">
+                                            Urgente
+                                        </span>
+
+                                    {% else %}
+
+                                        <span class="badge bg-secondary">
+                                            {{ order.priority }}
+                                        </span>
+
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+
+                                    {% if order.assigned_technician %}
+                                        {{ order.assigned_technician }}
+                                    {% else %}
+                                        <span class="text-muted">
+                                            Sin asignar
+                                        </span>
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+
+                                    {% if order.result %}
+                                        {{ order.result.name }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+
+                                    {% if order.scheduled_at %}
+                                        {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+
+                                </td>
+
+                                <td>
+                                    {{ order.created_at|date:"d/m/Y H:i" }}
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        {% else %}
+
+            <div class="p-3">
+
+                <p class="text-muted mb-0">
+                    El cliente no tiene órdenes de trabajo registradas.
+                </p>
+
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+{% endblock %}
