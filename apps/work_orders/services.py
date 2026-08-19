@@ -249,22 +249,13 @@ def _require_validator(user):
 
 def _require_liquidation_owner(liquidation, user):
     """
-    Solo el técnico responsable de la liquidación puede corregirla.
-
-    Se acepta también al técnico asignado a la orden, porque una reasignación
-    posterior no debe dejar la corrección sin nadie que pueda ejecutarla.
+    Solo el técnico que realizó la liquidación puede operar sobre ella.
     """
     _require_active_user(user, "corrige la liquidación")
 
-    authorized_ids = {
-        liquidation.liquidated_by_id,
-        liquidation.work_order.assigned_technician_id,
-    }
-    authorized_ids.discard(None)
-
-    if user.pk not in authorized_ids:
+    if user.pk != liquidation.liquidated_by_id:
         raise ValidationError(
-            "Solo el técnico responsable de la liquidación puede corregirla."
+            "Solo el técnico que realizó la liquidación puede corregirla."
         )
 
 
@@ -309,7 +300,7 @@ def submit_liquidation(liquidation: WorkOrderLiquidation, user, remarks=""):
             f"Estado actual: {liquidation.get_review_status_display()}."
         )
 
-    _require_active_user(user, "envía la liquidación")
+    _require_liquidation_owner(liquidation, user)
 
     if not liquidation.resolution_detail.strip():
         raise ValidationError(

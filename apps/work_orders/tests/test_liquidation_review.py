@@ -67,6 +67,24 @@ class LiquidationSubmissionTests(WorkOrderTestCase):
         with self.assertRaises(ValidationError):
             submit_liquidation(liquidation, user=self.technician)
 
+    def test_only_liquidation_owner_can_submit(self):
+        liquidation = self.create_liquidation()
+
+        with self.assertRaises(ValidationError):
+            submit_liquidation(
+                liquidation,
+                user=self.unauthorized_validator,
+            )
+
+        liquidation.refresh_from_db()
+
+        self.assertEqual(
+            liquidation.review_status,
+            ReviewStatus.LIQUIDATED,
+        )
+        self.assertIsNone(liquidation.submitted_by)
+        self.assertIsNone(liquidation.submitted_at)
+
 
 class LiquidationValidationTests(WorkOrderTestCase):
     """Validación única por permiso funcional."""
@@ -381,6 +399,31 @@ class LiquidationResubmissionTests(WorkOrderTestCase):
 
         self.assertEqual(liquidation.equipment_serial, "ABC123")
         self.assertEqual(liquidation.review_status, ReviewStatus.VALIDATED)
+
+    def test_reassigned_technician_cannot_correct_another_technicians_liquidation(self):
+        liquidation = self.create_liquidation_awaiting_correction()
+
+        liquidation.work_order.assigned_technician = self.other_technician
+        liquidation.work_order.save(
+            update_fields=["assigned_technician", "updated_at"]
+        )
+
+        with self.assertRaises(ValidationError):
+            resubmit_liquidation(
+                liquidation,
+                technician=self.other_technician,
+                changes={
+                    "equipment_serial": "XYZ987",
+                },
+            )
+
+        liquidation.refresh_from_db()
+
+        self.assertEqual(
+            liquidation.review_status,
+            ReviewStatus.CORRECTION_REQUESTED,
+        )
+        self.assertEqual(liquidation.correction_count, 0)
 
 
 class LiquidationReviewAtomicityTests(WorkOrderTestCase):
