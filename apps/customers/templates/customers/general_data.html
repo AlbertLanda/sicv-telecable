@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar Cliente - Datos Generales{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <!-- ENCABEZADO -->
+
+    <div class="mb-4">
+
+        <h1 class="h3 mb-1">
+            Registrar cliente
+        </h1>
+
+        <p class="text-muted mb-0">
+            Complete los datos generales del cliente.
+        </p>
+
+    </div>
+
+
+    <!-- ===================================================== -->
+    <!-- DATOS DE IDENTIDAD -->
+    <!-- ===================================================== -->
+
+    <div class="card shadow-sm mb-4">
+
+        <div class="card-header">
+
+            <strong>
+                Datos de identidad
+            </strong>
+
+        </div>
+
+        <div class="card-body">
+
+            <div class="row g-3">
+
+                <!-- TIPO DE DOCUMENTO -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Tipo de documento
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ registration_data.document_type }}"
+                        readonly
+                    >
+
+                </div>
+
+
+                <!-- NÚMERO DE DOCUMENTO -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Número de documento
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ registration_data.document_number }}"
+                        readonly
+                    >
+
+                </div>
+
+
+                <!-- TIPO DE PERSONA -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Tipo de persona
+                    </label>
+
+                    {% if registration_data.document_type == "DNI" or registration_data.document_type == "CE" or registration_data.document_type == "PASSPORT" %}
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="Persona Natural"
+                            readonly
+                        >
+
+                    {% elif registration_data.document_type == "RUC" %}
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="Persona Jurídica"
+                            readonly
+                        >
+
+                    {% endif %}
+
+                </div>
+
+
+                <!-- APELLIDO PATERNO -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Apellido paterno
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ registration_data.paternal_surname }}"
+                        readonly
+                    >
+
+                </div>
+
+
+                <!-- APELLIDO MATERNO -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Apellido materno
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ registration_data.maternal_surname }}"
+                        readonly
+                    >
+
+                </div>
+
+
+                <!-- NOMBRES -->
+
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Nombres
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ registration_data.first_name }}"
+                        readonly
+                    >
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ===================================================== -->
+    <!-- DATOS GENERALES -->
+    <!-- ===================================================== -->
+
+    <div class="card shadow-sm">
+
+        <div class="card-header">
+
+            <strong>
+                Datos generales
+            </strong>
+
+        </div>
+
+
+        <div class="card-body">
+
+            {% if form.non_field_errors %}
+
+                <div class="alert alert-danger">
+
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+
+                </div>
+
+            {% endif %}
+
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+
+                <div class="row g-3">
+
+                    <!-- SEDE -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.branch.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.branch.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+
+                        </label>
+
+                        {{ form.branch }}
+
+                        {% for error in form.branch.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- TIPO DE PERSONA -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.person_type.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.person_type.label }}
+
+                            <span class="text-danger">
+                                *
+                            </span>
+
+                        </label>
+
+                        {{ form.person_type }}
+
+                        {% for error in form.person_type.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- TELÉFONO PRINCIPAL -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.phone.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.phone.label }}
+                        </label>
+
+                        {{ form.phone }}
+
+                        {% for error in form.phone.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- TELÉFONO SECUNDARIO -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.secondary_phone.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.secondary_phone.label }}
+                        </label>
+
+                        {{ form.secondary_phone }}
+
+                        {% for error in form.secondary_phone.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- CORREO -->
+
+                    <div class="col-md-12">
+
+                        <label
+                            for="{{ form.email.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.email.label }}
+                        </label>
+
+                        {{ form.email }}
+
+                        {% for error in form.email.errors %}
+
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <hr class="my-4">
+
+
+                <!-- BOTONES -->
+
+                <div class="d-flex justify-content-between">
+
+                    <a
+                        href="{% url 'customers:create' %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        ← Volver
+                    </a>
+
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        Registrar cliente →
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

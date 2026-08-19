@@ -8,7 +8,10 @@ SICV - Consulta de Clientes
 
 <div class="container-fluid py-4">
 
+    <!-- ===================================================== -->
     <!-- ENCABEZADO -->
+    <!-- ===================================================== -->
+
     <div class="d-flex justify-content-between align-items-center mb-4">
 
         <div>
@@ -17,239 +20,273 @@ SICV - Consulta de Clientes
             </h2>
 
             <p class="text-muted mb-0">
-                Busca y consulta la información consolidada del abonado.
+                Busca por nombre, apellidos, razón social, documento,
+                teléfono, código o dirección.
             </p>
         </div>
 
+        <a
+            href="{% url 'customers:create' %}"
+            class="btn btn-success"
+        >
+            + Registrar Cliente
+        </a>
+
     </div>
 
+    <!-- ===================================================== -->
+<!-- BUSCADOR DE CLIENTE -->
+<!-- ===================================================== -->
 
-    <!-- BUSCADOR -->
-    <div class="card card-custom mb-4">
+<div class="card card-custom mb-4">
 
-        <div class="card-header bg-dark text-white">
-            <strong>
-                Buscar cliente
-            </strong>
-        </div>
+    <div class="card-header bg-dark text-white">
+        <strong>
+            Buscar cliente
+        </strong>
+    </div>
 
-        <div class="card-body p-4">
+    <div class="card-body p-4">
 
-            <form
-                method="GET"
-                action="{% url 'customers:search' %}"
-            >
+        <form
+            method="GET"
+            action="{% url 'customers:search' %}"
+        >
 
-                <div class="row g-3 align-items-end">
+            <div class="row g-3 align-items-end">
 
-                    <div class="col-lg-10">
+                <div class="col-md-10">
 
-                        <label
-                            for="customer-search"
-                            class="form-label fw-semibold"
-                        >
-                            Criterio de búsqueda
-                        </label>
+                    <label
+                        for="q"
+                        class="form-label fw-semibold"
+                    >
+                        Buscar cliente
+                    </label>
 
-                        <input
-                            id="customer-search"
-                            type="text"
-                            name="q"
-                            class="form-control form-control-lg"
-                            placeholder="DNI, RUC, código, nombre, apellido o teléfono..."
-                            value="{{ current_query }}"
-                            autocomplete="off"
-                        >
-
-                        <div class="form-text">
-                            Puedes buscar por uno o varios datos del cliente.
-                        </div>
-
-                    </div>
-
-                    <div class="col-lg-2">
-
-                        <button
-                            type="submit"
-                            class="btn btn-primary btn-lg w-100"
-                        >
-                            Buscar
-                        </button>
-
-                    </div>
+                    <input
+                        id="q"
+                        type="text"
+                        name="q"
+                        class="form-control form-control-lg"
+                        value="{{ current_query }}"
+                        placeholder="Nombre, apellido, DNI, RUC, teléfono, dirección, razón social..."
+                        autocomplete="off"
+                    >
 
                 </div>
 
-            </form>
+                <div class="col-md-2">
 
-        </div>
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-lg w-100"
+                    >
+                        Buscar
+                    </button>
+
+                </div>
+
+            </div>
+
+        </form>
 
     </div>
 
+</div>
 
+    <!-- ===================================================== -->
     <!-- RESULTADOS -->
-    {% if current_query %}
+    <!-- ===================================================== -->
+
+    {% if customer_search %}
 
         {% if customers %}
 
-            <div class="card card-custom overflow-hidden mb-4">
+            <!-- ================================================= -->
+            <!-- CLIENTES ENCONTRADOS -->
+            <!-- ================================================= -->
 
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <div class="card card-custom mb-4 border-success">
 
-                    <div>
-                        <strong>
-                            Resultados de búsqueda
-                        </strong>
+                <div class="card-header bg-success text-white">
 
-                        <span class="text-muted ms-2">
-                            "{{ current_query }}"
-                        </span>
-                    </div>
-
-                    <span class="badge bg-primary">
-                        {{ page_obj.paginator.count }} resultado{{ page_obj.paginator.count|pluralize }}
-                    </span>
+                    <strong>
+                        ✓ Clientes encontrados
+                    </strong>
 
                 </div>
 
+                <div class="card-body p-4">
 
-                <div class="table-responsive">
+                    {% for customer in customers %}
 
-                    <table class="table table-hover align-middle mb-0">
+                        <div class="border rounded p-4 mb-3">
 
-                        <thead class="table-dark">
+                            <div class="row g-4">
 
-                            <tr>
+                                <!-- CÓDIGO -->
 
-                                <th>
-                                    Código
-                                </th>
+                                <div class="col-md-3">
 
-                                <th>
-                                    Sede
-                                </th>
+                                    <small class="text-muted d-block">
+                                        Código de abonado
+                                    </small>
 
-                                <th>
-                                    Documento
-                                </th>
+                                    <strong class="text-primary">
+                                        {{ customer.code }}
+                                    </strong>
 
-                                <th>
-                                    Cliente
-                                </th>
-
-                                <th>
-                                    Teléfono
-                                </th>
-
-                                <th>
-                                    Estado
-                                </th>
-
-                                <th class="text-end">
-                                    Acción
-                                </th>
-
-                            </tr>
-
-                        </thead>
+                                </div>
 
 
-                        <tbody>
+                                <!-- DOCUMENTO -->
 
-                            {% for c in customers %}
+                                <div class="col-md-3">
 
-                                <tr>
+                                    <small class="text-muted d-block">
+                                        Documento
+                                    </small>
 
-                                    <!-- CÓDIGO -->
-                                    <td>
-                                        <span class="badge bg-secondary">
-                                            {{ c.code }}
+                                    <strong>
+                                        {{ customer.get_document_type_display }}
+                                        {{ customer.document_number }}
+                                    </strong>
+
+                                </div>
+
+
+                                <!-- CLIENTE -->
+
+                                <div class="col-md-6">
+
+                                    <small class="text-muted d-block">
+                                        Cliente
+                                    </small>
+
+                                    <strong>
+                                        {{ customer }}
+                                    </strong>
+
+                                </div>
+
+
+                                <!-- TIPO PERSONA -->
+
+                                <div class="col-md-3">
+
+                                    <small class="text-muted d-block">
+                                        Tipo de persona
+                                    </small>
+
+                                    <span>
+                                        {{ customer.get_person_type_display }}
+                                    </span>
+
+                                </div>
+
+
+                                <!-- SEDE -->
+
+                                <div class="col-md-3">
+
+                                    <small class="text-muted d-block">
+                                        Sede
+                                    </small>
+
+                                    <span>
+                                        {{ customer.branch.name }}
+                                    </span>
+
+                                </div>
+
+
+                                <!-- TELÉFONO -->
+
+                                <div class="col-md-3">
+
+                                    <small class="text-muted d-block">
+                                        Teléfono
+                                    </small>
+
+                                    {% if customer.phone %}
+
+                                        {{ customer.phone }}
+
+                                    {% else %}
+
+                                        <span class="text-muted">
+                                            No registrado
                                         </span>
-                                    </td>
+
+                                    {% endif %}
+
+                                </div>
 
 
-                                    <!-- SEDE -->
-                                    <td>
-                                        {{ c.branch.name }}
-                                    </td>
+                                <!-- ESTADO -->
+
+                                <div class="col-md-3">
+
+                                    <small class="text-muted d-block">
+                                        Estado
+                                    </small>
+
+                                    {% if customer.is_active %}
+
+                                        <span class="badge bg-success">
+                                            Activo
+                                        </span>
+
+                                    {% else %}
+
+                                        <span class="badge bg-secondary">
+                                            Inactivo
+                                        </span>
+
+                                    {% endif %}
+
+                                </div>
+
+                            </div>
 
 
-                                    <!-- DOCUMENTO -->
-                                    <td>
-                                        <strong>
-                                            {{ c.document_type }}
-                                        </strong>
-
-                                        {{ c.document_number }}
-                                    </td>
+                            <hr class="my-4">
 
 
-                                    <!-- CLIENTE -->
-                                    <td>
-                                        <strong>
-                                            {{ c }}
-                                        </strong>
-                                    </td>
+                            <!-- ACCIONES -->
 
+                            <div class="d-flex justify-content-end gap-2">
 
-                                    <!-- TELÉFONO -->
-                                    <td>
-                                        {% if c.phone %}
-                                            {{ c.phone }}
-                                        {% else %}
-                                            <span class="text-muted">
-                                                No registrado
-                                            </span>
-                                        {% endif %}
-                                    </td>
+                                <a
+                                    href="{% url 'customers:detail' customer.pk %}"
+                                    class="btn btn-outline-primary"
+                                >
+                                    Ver ficha
+                                </a>
 
+                                <a
+                                    href="{% url 'customers:use' customer.pk %}"
+                                    class="btn btn-primary"
+                                >
+                                    Usar cliente existente
+                                </a>
 
-                                    <!-- ESTADO -->
-                                    <td>
+                            </div>
 
-                                        {% if c.is_active %}
+                        </div>
 
-                                            <span class="badge bg-success">
-                                                Activo
-                                            </span>
-
-                                        {% else %}
-
-                                            <span class="badge bg-secondary">
-                                                Inactivo
-                                            </span>
-
-                                        {% endif %}
-
-                                    </td>
-
-
-                                    <!-- ACCIÓN -->
-                                    <td class="text-end">
-
-                                        <a
-                                            href="{% url 'customers:detail' c.pk %}?q={{ current_query|urlencode }}"
-                                            class="btn btn-sm btn-primary"
-                                        >
-                                            Ver ficha
-                                        </a>
-
-                                    </td>
-
-                                </tr>
-
-                            {% endfor %}
-
-                        </tbody>
-
-                    </table>
+                    {% endfor %}
 
                 </div>
 
             </div>
 
 
+            <!-- ================================================= -->
             <!-- PAGINACIÓN -->
+            <!-- ================================================= -->
+
             {% if is_paginated %}
 
                 <nav aria-label="Paginación de clientes">
@@ -272,15 +309,11 @@ SICV - Consulta de Clientes
                         {% endif %}
 
 
-                        <li class="page-item disabled">
+                        <li class="page-item active">
 
                             <span class="page-link">
-
-                                Página
-                                {{ page_obj.number }}
-                                de
-                                {{ page_obj.paginator.num_pages }}
-
+                                Página {{ page_obj.number }}
+                                de {{ page_obj.paginator.num_pages }}
                             </span>
 
                         </li>
@@ -310,26 +343,62 @@ SICV - Consulta de Clientes
 
         {% else %}
 
+            <!-- ================================================= -->
             <!-- SIN RESULTADOS -->
+            <!-- ================================================= -->
 
-            <div class="card card-custom">
+            <div class="card card-custom mb-4 border-warning">
 
-                <div class="card-body p-5 text-center">
+                <div class="card-header bg-warning">
 
-                    <div class="mb-3">
-                        <span class="fs-1">
-                            🔎
-                        </span>
+                    <strong>
+                        Cliente no encontrado
+                    </strong>
+
+                </div>
+
+                <div class="card-body p-4">
+
+                    <div class="row align-items-center">
+
+                        <div class="col-md-9">
+
+                            <h5 class="fw-bold">
+                                No se encontraron clientes.
+                            </h5>
+
+                            <p class="text-muted mb-0">
+
+                                Búsqueda realizada:
+
+                                <strong>
+                                    "{{ current_query }}"
+                                </strong>
+
+                            </p>
+
+                            <p class="text-muted mt-2 mb-0">
+
+                                Puedes verificar los datos ingresados
+                                o registrar un nuevo cliente.
+
+                            </p>
+
+                        </div>
+
+
+                        <div class="col-md-3 text-md-end mt-3 mt-md-0">
+
+                            <a
+                                href="{% url 'customers:create' %}"
+                                class="btn btn-success"
+                            >
+                                Registrar Cliente
+                            </a>
+
+                        </div>
+
                     </div>
-
-                    <h5 class="fw-bold">
-                        No se encontraron clientes
-                    </h5>
-
-                    <p class="text-muted mb-0">
-                        No existen clientes que coincidan con:
-                        <strong>{{ current_query }}</strong>
-                    </p>
 
                 </div>
 
@@ -337,19 +406,22 @@ SICV - Consulta de Clientes
 
         {% endif %}
 
-
     {% else %}
 
+        <!-- ================================================= -->
         <!-- ESTADO INICIAL -->
+        <!-- ================================================= -->
 
         <div class="card card-custom">
 
             <div class="card-body p-5 text-center">
 
                 <div class="mb-3">
+
                     <span class="fs-1">
-                        👤
+                        🔎
                     </span>
+
                 </div>
 
                 <h5 class="fw-bold">
@@ -357,8 +429,9 @@ SICV - Consulta de Clientes
                 </h5>
 
                 <p class="text-muted mb-0">
-                    Ingresa un DNI, RUC, código de abonado,
-                    nombre, apellido o teléfono para comenzar.
+                    Ingresa un nombre, apellido, razón social,
+                    documento, teléfono, código o dirección
+                    para buscar un cliente.
                 </p>
 
             </div>

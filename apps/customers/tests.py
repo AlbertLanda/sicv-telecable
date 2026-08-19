@@ -247,178 +247,75 @@ class CustomerUIConsultaTests(TestCase):
     def test_busqueda_por_dni(self):
         response = self.client.get(
             self.search_url,
-            {"q": "12345678"},
+            {
+                "document_type": Customer.DocumentType.DNI,
+                "document_number": "12345678"
+            },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Juan")
-        self.assertEqual(
-            list(response.context["customers"]),
-            [self.customer],
-        )
+        self.assertEqual(response.context["customer_found"], self.customer)
 
     def test_busqueda_por_ruc(self):
         response = self.client.get(
             self.search_url,
-            {"q": "20123456789"},
+            {
+                "document_type": Customer.DocumentType.RUC,
+                "document_number": "20123456789"
+            },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Empresa Telecable SAC")
-
-    def test_busqueda_por_codigo(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "CLI-0001"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_nombre_parcial(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Jua"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_apellido_paterno(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Perez"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_apellido_materno(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Gomez"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_razon_social(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Telecable"},
-        )
-
-        self.assertContains(response, "Empresa Telecable SAC")
-
-    def test_busqueda_por_telefono_principal(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "987654321"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_telefono_secundario(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "912345678"},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_ignora_espacios_externos(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "   Juan   "},
-        )
-
-        self.assertContains(response, "Juan")
-
-    def test_busqueda_por_multiples_terminos(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Juan Perez"},
-        )
-
-        self.assertContains(response, "Juan")
+        self.assertEqual(response.context["customer_found"], self.customer_2)
 
     def test_busqueda_sin_coincidencias(self):
         response = self.client.get(
             self.search_url,
-            {"q": "CLIENTE-QUE-NO-EXISTE"},
+            {
+                "document_type": Customer.DocumentType.DNI,
+                "document_number": "99999999"
+            },
         )
 
-        self.assertEqual(
-            response.context["paginator"].count,
-            0,
-        )
+        self.assertEqual(len(response.context["customers"]), 0)
+        self.assertIsNone(response.context["customer_found"])
 
     def test_busqueda_vacia_no_devuelve_todos_los_clientes(self):
         response = self.client.get(
             self.search_url,
-            {"q": ""},
+            {
+                "document_type": "",
+                "document_number": ""
+            },
         )
 
-        self.assertEqual(
-            len(response.context["customers"]),
-            0,
-        )
-
-    def test_busqueda_no_duplica_clientes(self):
-        response = self.client.get(
-            self.search_url,
-            {"q": "Juan 12345678"},
-        )
-
-        customers = list(response.context["customers"])
-
-        self.assertEqual(
-            customers.count(self.customer),
-            1,
-        )
+        self.assertEqual(len(response.context["customers"]), 0)
 
     def test_busqueda_conserva_criterio(self):
         response = self.client.get(
             self.search_url,
-            {"q": "Juan"},
+            {
+                "document_type": Customer.DocumentType.DNI,
+                "document_number": "12345678"
+            },
         )
 
-        self.assertEqual(
-            response.context["current_query"],
-            "Juan",
-        )
-        self.assertContains(response, 'value="Juan"')
+        self.assertEqual(response.context["current_document_number"], "12345678")
+        self.assertEqual(response.context["current_document_type"], Customer.DocumentType.DNI)
+        self.assertContains(response, 'value="12345678"')
 
     def test_busqueda_post_no_permite_modificacion(self):
         response = self.client.post(
             self.search_url,
-            {"q": "Juan"},
+            {
+                "document_type": Customer.DocumentType.DNI,
+                "document_number": "12345678"
+            },
         )
 
         self.assertEqual(response.status_code, 405)
-
-    # ------------------------------------------------------------------
-    # PAGINACIÓN
-    # ------------------------------------------------------------------
-
-    def test_paginacion_funciona(self):
-        for index in range(25):
-            Customer.objects.create(
-                code=f"CLI-PAGE-{index:03d}",
-                branch=self.branch,
-                document_type=Customer.DocumentType.DNI,
-                document_number=f"700000{index:02d}",
-                person_type=Customer.PersonType.NATURAL,
-                first_name=f"Cliente{index}",
-                paternal_surname="Paginacion",
-            )
-
-        response = self.client.get(
-            self.search_url,
-            {"q": "Paginacion"},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.context["paginator"].num_pages,
-            2,
-        )
 
     # ------------------------------------------------------------------
     # FICHA DEL CLIENTE

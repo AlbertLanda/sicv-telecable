@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar dirección{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+
+        <div>
+            <h1 class="h3 mb-1">Registrar dirección</h1>
+
+            <p class="text-muted mb-0">
+                Cliente:
+                <strong>{{ customer }}</strong>
+            </p>
+        </div>
+
+        <a href="{% url 'customers:detail' customer.pk %}"
+           class="btn btn-outline-secondary">
+            ← Volver a ficha
+        </a>
+
+    </div>
+
+
+    {% if form.non_field_errors %}
+
+        <div class="alert alert-danger">
+
+            {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+
+        </div>
+
+    {% endif %}
+
+
+    <div class="card shadow-sm">
+
+        <div class="card-header">
+
+            <strong>
+                Datos de la dirección
+            </strong>
+
+        </div>
+
+
+        <div class="card-body">
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+                <div class="row g-3">
+
+
+                    <!-- ZONA -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.zone.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.zone.label }}
+                        </label>
+
+                        {{ form.zone }}
+
+                        {% for error in form.zone.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- DISTRITO -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.district.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.district.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+
+                        {{ form.district }}
+
+                        {% for error in form.district.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- DIRECCIÓN -->
+                    <div class="col-12">
+
+                        <label
+                            for="{{ form.address.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.address.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+
+                        {{ form.address }}
+
+                        {% for error in form.address.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- REFERENCIA -->
+                    <div class="col-12">
+
+                        <label
+                            for="{{ form.reference.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.reference.label }}
+                        </label>
+
+                        {{ form.reference }}
+
+                        {% for error in form.reference.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- MEDIDOR -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.meter_number.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.meter_number.label }}
+                        </label>
+
+                        {{ form.meter_number }}
+
+                        {% for error in form.meter_number.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- GPS LINK -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.gps_link.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.gps_link.label }}
+                        </label>
+
+                        {{ form.gps_link }}
+
+                        {% for error in form.gps_link.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- LATITUD -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.latitude.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.latitude.label }}
+                        </label>
+
+                        {{ form.latitude }}
+
+                        {% for error in form.latitude.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- LONGITUD -->
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.longitude.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.longitude.label }}
+                        </label>
+
+                        {{ form.longitude }}
+
+                        {% for error in form.longitude.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- PRINCIPAL -->
+                    <div class="col-12">
+
+                        <div class="form-check">
+
+                            {{ form.is_primary }}
+
+                            <label
+                                for="{{ form.is_primary.id_for_label }}"
+                                class="form-check-label"
+                            >
+                                {{ form.is_primary.label }}
+                            </label>
+
+                        </div>
+
+                        {% for error in form.is_primary.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <hr class="my-4">
+
+
+                <div class="d-flex justify-content-end gap-2">
+
+                    <a
+                        href="{% url 'customers:detail' customer.pk %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        Cancelar
+                    </a>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        Registrar dirección
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

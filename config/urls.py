@@ -36,4 +36,22 @@ urlpatterns = [
         'customers/',
         include('apps.customers.urls'),
     ),
+
+    # Módulo de servicios
+    path(
+        'services/',
+        include('apps.services.urls'),
+    ),
+
+   # Módulo de contratos
+    path(
+        'contracts/',
+        include('apps.contracts.urls'),
+    ),
+
+    # Módulo de órdenes de trabajo
+    path(
+        'work-orders/',
+        include('apps.work_orders.urls'),
+    ), 
 ]

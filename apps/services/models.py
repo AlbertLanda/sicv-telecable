@@ -194,5 +194,16 @@ class Subscription(models.Model):
         verbose_name_plural = "Suscripciones"
         ordering = ["customer", "service_number"]
 
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "customer",
+                    "service_type",
+                    "service_number",
+                ],
+                name="unique_customer_service_number",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.customer} - {self.plan}"

@@ -3,20 +3,56 @@
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
+
     <div>
         <h2 class="fw-bold text-primary mb-1">
             Ficha del Cliente
         </h2>
+
         <p class="text-muted mb-0">
             Consulta consolidada del abonado
         </p>
     </div>
 
-    <a href="{% url 'customers:search' %}?q={{ request.GET.q|default:''|urlencode }}"
-       class="btn btn-outline-secondary">
-        &larr; Volver a la búsqueda
-    </a>
+    <div class="d-flex gap-2">
+
+        <a
+            href="{% url 'customers:use' customer.pk %}"
+            class="btn btn-primary"
+        >
+            Usar cliente
+        </a>
+
+        <a
+            href="{% url 'customers:search' %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la búsqueda
+        </a>
+
+    </div>
+
 </div>
+
+{% if messages %}
+
+    {% for message in messages %}
+
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+
+            {{ message }}
+
+            <button
+                type="button"
+                class="btn-close"
+                data-bs-dismiss="alert"
+            ></button>
+
+        </div>
+
+    {% endfor %}
+
+{% endif %}
 
 
 <!-- ========================================================= -->
@@ -130,9 +166,20 @@
 
 <div class="card card-custom mb-4">
 
-    <div class="card-header bg-secondary text-white fw-bold">
+    <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
         Bloque B - Direcciones
-    </div>
+    </span>
+
+    <a
+        href="{% url 'customers:address_create' customer.pk %}"
+        class="btn btn-light btn-sm"
+    >
+        + Nueva dirección
+    </a>
+
+</div>
 
     <div class="card-body">
 
@@ -278,9 +325,20 @@
 <!-- BLOQUE C - SUSCRIPCIONES -->
 <!-- ========================================================= -->
 
-<h4 class="fw-bold mt-4 mb-3">
-    Bloque C - Suscripciones y Servicios
-</h4>
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+
+    <h4 class="fw-bold mb-0">
+        Bloque C - Suscripciones y Servicios
+    </h4>
+
+    <a
+        href="{% url 'services:subscription_create' customer.pk %}"
+        class="btn btn-primary"
+    >
+        + Nueva suscripción
+    </a>
+
+</div>
 
 {% if subscriptions %}
 
@@ -600,9 +658,20 @@
 
 <div class="card card-custom mb-5">
 
-    <div class="card-header bg-dark text-white fw-bold">
+    <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
         Bloque D - Contratos
-    </div>
+    </span>
+
+    <a
+        href="{% url 'contracts:contract_create' customer.pk %}"
+        class="btn btn-light btn-sm"
+    >
+        + Nuevo contrato
+    </a>
+
+</div>
 
     <div class="card-body p-0">
 
@@ -729,9 +798,20 @@
 
 <div class="card card-custom mb-5">
 
-    <div class="card-header bg-primary text-white fw-bold">
+    <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+
+    <span>
         Bloque E - Órdenes de Trabajo del Cliente
-    </div>
+    </span>
+
+    <a
+        href="{% url 'work_orders:order_create' customer.pk %}"
+        class="btn btn-light btn-sm"
+    >
+        + Nueva orden
+    </a>
+
+</div>
 
     <div class="card-body p-0">
 
