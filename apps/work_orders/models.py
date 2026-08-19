@@ -298,6 +298,47 @@ class OrderResult(models.Model):
     def __str__(self):
         return f"{self.order_type.name} - {self.name}"
 
+class WorkOrderSequence(models.Model):
+    """
+    Correlativo persistente de las órdenes de trabajo.
+
+    Una fila por año, con el último número emitido. El servicio de creación
+    bloquea la fila con select_for_update() antes de incrementarla, de modo
+    que dos colaboradores de ATC que registren órdenes al mismo tiempo
+    obtienen números distintos. Nunca se calcula el correlativo leyendo la
+    última orden creada.
+
+    Es un correlativo general de empresa (no por sede): la sede ya viaja como
+    dato propio de la orden en WorkOrder.branch.
+    """
+
+    year = models.PositiveIntegerField(
+        unique=True,
+        verbose_name="Año"
+    )
+
+    last_number = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Último correlativo emitido"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = "Correlativo de órdenes"
+        verbose_name_plural = "Correlativos de órdenes"
+        ordering = ["-year"]
+
+    def __str__(self):
+        return f"{self.year}: {self.last_number}"
+
+
 class WorkOrder(models.Model):
     """Entidad principal del motor de órdenes."""
 

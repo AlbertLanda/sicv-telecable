@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.services.models import Subscription
@@ -8,7 +8,243 @@ from apps.work_orders.models import (
     WorkOrderLiquidation,
     WorkOrderLiquidationCorrection,
     WorkOrderLiquidationItem,
+    WorkOrderSequence,
 )
+
+
+# --- Creación de órdenes de trabajo -----------------------------------------
+#
+# create_work_order() es el ÚNICO camino legítimo para registrar una OT.
+# Vistas, API e interfaz deben consumirlo en lugar de
+# WorkOrder.objects.create().
+#
+# Crear la orden solo registra la necesidad de trabajo: no inicia la atención
+# ni mueve el estado de la suscripción. Una OT de instalación nacida de una
+# suscripción en PRESALE la deja en PRESALE. Los cambios operativos ocurren
+# después, en start_order_attention() y apply_order_result().
+
+ORDER_NUMBER_PREFIX = "OT"
+ORDER_NUMBER_PADDING = 6
+
+# Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
+SUBSCRIPTION_BLOCKED_STATUSES = (
+    Subscription.Status.CANCELLED,
+)
+
+
+def format_order_number(year, number):
+    """Formato oficial del correlativo: OT-2026-000001."""
+    return f"{ORDER_NUMBER_PREFIX}-{year}-{number:0{ORDER_NUMBER_PADDING}d}"
+
+
+def generate_order_number(year=None):
+    """
+    Reserva y devuelve el siguiente número de OT del año.
+
+    Debe ejecutarse dentro de una transacción: bloquea la fila del correlativo
+    con select_for_update() y la incrementa. Mientras esa transacción no
+    termine, cualquier otro proceso que pida un número del mismo año espera en
+    el bloqueo, de modo que jamás se reparte el mismo número dos veces.
+
+    En PostgreSQL (motor de producción) select_for_update() aplica un bloqueo
+    real de fila. SQLite ignora la cláusula FOR UPDATE, pero serializa las
+    escrituras a nivel de base de datos; además la restricción unique de
+    WorkOrder.order_number actúa como última barrera de integridad.
+    """
+    if year is None:
+        year = timezone.localdate().year
+
+    try:
+        sequence = WorkOrderSequence.objects.select_for_update().get(year=year)
+
+    except WorkOrderSequence.DoesNotExist:
+        # Primer número del año. El savepoint evita que una colisión con otro
+        # proceso creando la misma fila invalide la transacción de la orden.
+        try:
+            with transaction.atomic():
+                WorkOrderSequence.objects.create(year=year, last_number=0)
+
+        except IntegrityError:
+            pass
+
+        sequence = WorkOrderSequence.objects.select_for_update().get(year=year)
+
+    sequence.last_number += 1
+
+    sequence.save(
+        update_fields=[
+            "last_number",
+            "updated_at",
+        ]
+    )
+
+    return format_order_number(year, sequence.last_number)
+
+
+def _resolve_branch(subscription, branch):
+    """
+    La sede de la orden es la del cliente de la suscripción.
+
+    Si el llamador la envía explícitamente debe coincidir: no se registra
+    trabajo de un cliente bajo la sede de otro.
+    """
+    customer_branch = subscription.customer.branch
+
+    if branch is None:
+        return customer_branch
+
+    if branch.pk != customer_branch.pk:
+        raise ValidationError(
+            "La sede indicada no corresponde a la sede del cliente "
+            "de la suscripción."
+        )
+
+    return branch
+
+
+def _resolve_zone(subscription, zone, branch):
+    """
+    La zona de la orden es la de la dirección donde vive el servicio.
+
+    Si el llamador la envía explícitamente debe pertenecer a la sede de la
+    orden; de lo contrario la orden quedaría en la zona de otra sede.
+    """
+    if zone is None:
+        return subscription.address.zone
+
+    if zone.branch_id != branch.pk:
+        raise ValidationError(
+            "La zona indicada no pertenece a la sede de la orden."
+        )
+
+    return zone
+
+
+def _validate_creation_catalogs(order_type, subtype, reason, cause):
+    if order_type is None or order_type.pk is None:
+        raise ValidationError(
+            "Debe indicar un tipo de orden registrado."
+        )
+
+    if not order_type.is_active:
+        raise ValidationError(
+            "El tipo de orden seleccionado no está activo."
+        )
+
+    if subtype is not None and subtype.order_type_id != order_type.pk:
+        raise ValidationError(
+            "El subtipo seleccionado no pertenece al tipo de orden."
+        )
+
+    if reason is not None and reason.order_type_id != order_type.pk:
+        raise ValidationError(
+            "El motivo seleccionado no pertenece al tipo de orden."
+        )
+
+    if cause is not None and cause.order_type_id != order_type.pk:
+        raise ValidationError(
+            "La causa seleccionada no pertenece al tipo de orden."
+        )
+
+
+def _validate_creation_subscription(subscription, customer):
+    if subscription is None or subscription.pk is None:
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
+    if not subscription.is_active:
+        raise ValidationError(
+            "La suscripción no está habilitada para registrar órdenes."
+        )
+
+    if subscription.status in SUBSCRIPTION_BLOCKED_STATUSES:
+        raise ValidationError(
+            "No puede registrarse trabajo sobre una suscripción cancelada."
+        )
+
+    if customer is not None and customer.pk != subscription.customer_id:
+        raise ValidationError(
+            "La suscripción no corresponde al cliente indicado."
+        )
+
+
+@transaction.atomic
+def create_work_order(
+    *,
+    subscription,
+    order_type,
+    created_by,
+    customer=None,
+    branch=None,
+    zone=None,
+    subtype=None,
+    reason=None,
+    cause=None,
+    attention_type=None,
+    priority=None,
+    detail="",
+    scheduled_at=None,
+):
+    """
+    Registra una nueva orden de trabajo y devuelve la instancia creada.
+
+    Punto de entrada único: valida las reglas de negocio ANTES de persistir,
+    reserva el correlativo de forma transaccional y deja la orden en
+    Status.PENDING con created_by trazado al usuario ejecutor.
+
+    `created_by` sale siempre del usuario que ejecuta la operación, nunca de
+    datos enviados por el cliente. Tampoco se aceptan `order_number` ni
+    `assigned_technician`: el número lo emite el correlativo y la asignación
+    de técnico es un flujo aparte.
+
+    Crear la orden NO toca la suscripción. Una OT de instalación sobre una
+    suscripción en PRESALE la deja en PRESALE.
+
+    Todo ocurre dentro de una única transacción: si cualquier validación o
+    escritura falla no queda ni la orden ni el consumo del correlativo.
+    """
+    if created_by is None or created_by.pk is None:
+        raise ValidationError(
+            "Debe indicar el usuario que registra la orden."
+        )
+
+    if not created_by.is_active:
+        raise ValidationError(
+            "El usuario que registra la orden debe estar activo."
+        )
+
+    _validate_creation_subscription(subscription, customer)
+    _validate_creation_catalogs(order_type, subtype, reason, cause)
+
+    branch = _resolve_branch(subscription, branch)
+    zone = _resolve_zone(subscription, zone, branch)
+
+    order = WorkOrder(
+        order_number=generate_order_number(),
+        subscription=subscription,
+        order_type=order_type,
+        subtype=subtype,
+        reason=reason,
+        cause=cause,
+        branch=branch,
+        zone=zone,
+        status=WorkOrder.Status.PENDING,
+        created_by=created_by,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
+
+    if attention_type is not None:
+        order.attention_type = attention_type
+
+    if priority is not None:
+        order.priority = priority
+
+    order.full_clean()
+    order.save()
+
+    return order
 
 
 @transaction.atomic

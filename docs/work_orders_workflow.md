@@ -11,6 +11,10 @@ La **revisión** de esa liquidación (validación única, corrección controlada
 permiso del validador y trazabilidad) está documentada aparte en
 [`liquidation_review.md`](liquidation_review.md).
 
+El **registro** de la orden (servicio único de creación, validaciones previas,
+correlativo transaccional y concurrencia) está documentado aparte en
+[`work_orders_creation.md`](work_orders_creation.md).
+
 ---
 
 ## 1. Estados del workflow
