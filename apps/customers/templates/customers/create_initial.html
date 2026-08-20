@@ -87,9 +87,37 @@
                     </div>
 
 
+                    <!-- TIPO DE PERSONA -->
+                    <!--
+                        Solo informativo: se calcula en JavaScript a
+                        partir del tipo de documento apenas cambia
+                        (y se reconfirma al usar "Obtener datos"). El
+                        valor real y vinculante se sigue derivando
+                        siempre en el servidor
+                        (Customer.person_type_for_document), nunca de
+                        este campo, que ni siquiera se envía en el
+                        formulario.
+                    -->
+
+                    <div class="col-md-4">
+
+                        <label class="form-label fw-semibold">
+                            Tipo de persona
+                        </label>
+
+                        <input
+                            type="text"
+                            id="person-type-display"
+                            class="form-control"
+                            readonly
+                        >
+
+                    </div>
+
+
                     <!-- DOCUMENTO -->
 
-                    <div class="col-md-8">
+                    <div class="col-md-4">
 
                         <label
                             for="{{ form.document_number.id_for_label }}"
@@ -103,7 +131,19 @@
 
                         </label>
 
-                        {{ form.document_number }}
+                        <div class="d-flex gap-2">
+
+                            {{ form.document_number }}
+
+                            <button
+                                type="button"
+                                id="btn-lookup-document"
+                                class="btn btn-outline-primary text-nowrap"
+                            >
+                                Obtener datos
+                            </button>
+
+                        </div>
 
                         {% for error in form.document_number.errors %}
 
@@ -113,87 +153,187 @@
 
                         {% endfor %}
 
-                    </div>
+                        <!--
+                            Estado de la consulta a RENIEC/SUNAT
+                            (cargando, éxito o error). Es solo
+                            informativo: nunca bloquea el llenado
+                            manual del formulario.
+                        -->
 
-
-                    <!-- APELLIDO PATERNO -->
-
-                    <div class="col-md-4">
-
-                        <label
-                            for="{{ form.paternal_surname.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.paternal_surname.label }}
-
-                            <span class="text-danger">
-                                *
-                            </span>
-
-                        </label>
-
-                        {{ form.paternal_surname }}
-
-                        {% for error in form.paternal_surname.errors %}
-
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-
-                        {% endfor %}
+                        <div
+                            id="lookup-status"
+                            class="small mt-1"
+                        ></div>
 
                     </div>
 
+                    <!--
+                        Fecha de nacimiento (RENIEC): oculto en esta
+                        pantalla, solo transporta el dato hacia la
+                        sesión cuando "Obtener datos" lo encuentra.
+                        El campo editable se muestra en la Pantalla 4
+                        (Datos generales), junto a género y estado
+                        civil.
+                    -->
 
-                    <!-- APELLIDO MATERNO -->
+                    {{ form.birth_date }}
 
-                    <div class="col-md-4">
 
-                        <label
-                            for="{{ form.maternal_surname.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.maternal_surname.label }}
-                        </label>
+                    <!-- DATOS PERSONALES (SOLO PERSONA NATURAL) -->
+                    <!--
+                        Este bloque se oculta con JavaScript cuando se
+                        selecciona RUC, solo como ayuda visual. La
+                        obligatoriedad real de estos campos se resuelve
+                        en el servidor (CustomerInitialForm.clean), por
+                        lo que ocultarlos aquí no es la validación.
+                    -->
 
-                        {{ form.maternal_surname }}
+                    <div
+                        id="natural-person-fields"
+                        class="col-12"
+                    >
 
-                        {% for error in form.maternal_surname.errors %}
+                        <div class="row g-3">
 
-                            <div class="text-danger small mt-1">
-                                {{ error }}
+                            <!-- APELLIDO PATERNO -->
+
+                            <div class="col-md-4">
+
+                                <label
+                                    for="{{ form.paternal_surname.id_for_label }}"
+                                    class="form-label fw-semibold"
+                                >
+                                    {{ form.paternal_surname.label }}
+
+                                    <span
+                                        class="text-danger natural-required-mark"
+                                    >
+                                        *
+                                    </span>
+
+                                </label>
+
+                                {{ form.paternal_surname }}
+
+                                {% for error in form.paternal_surname.errors %}
+
+                                    <div class="text-danger small mt-1">
+                                        {{ error }}
+                                    </div>
+
+                                {% endfor %}
+
                             </div>
 
-                        {% endfor %}
+
+                            <!-- APELLIDO MATERNO -->
+
+                            <div class="col-md-4">
+
+                                <label
+                                    for="{{ form.maternal_surname.id_for_label }}"
+                                    class="form-label fw-semibold"
+                                >
+                                    {{ form.maternal_surname.label }}
+                                </label>
+
+                                {{ form.maternal_surname }}
+
+                                {% for error in form.maternal_surname.errors %}
+
+                                    <div class="text-danger small mt-1">
+                                        {{ error }}
+                                    </div>
+
+                                {% endfor %}
+
+                            </div>
+
+
+                            <!-- NOMBRES -->
+
+                            <div class="col-md-4">
+
+                                <label
+                                    for="{{ form.first_name.id_for_label }}"
+                                    class="form-label fw-semibold"
+                                >
+                                    {{ form.first_name.label }}
+
+                                    <span
+                                        class="text-danger natural-required-mark"
+                                    >
+                                        *
+                                    </span>
+
+                                </label>
+
+                                {{ form.first_name }}
+
+                                {% for error in form.first_name.errors %}
+
+                                    <div class="text-danger small mt-1">
+                                        {{ error }}
+                                    </div>
+
+                                {% endfor %}
+
+                            </div>
+
+                        </div>
 
                     </div>
 
 
-                    <!-- NOMBRES -->
+                    <!-- DATOS DE PERSONA JURÍDICA (SOLO RUC) -->
+                    <!--
+                        Igual que "natural-person-fields", este bloque
+                        se oculta con JavaScript cuando el documento
+                        no es RUC, solo como ayuda visual. La
+                        obligatoriedad real de "Razón social" para
+                        persona jurídica se valida en el servidor, en
+                        la Pantalla 4 (CustomerRegistrationForm.clean),
+                        que es donde finalmente se confirma este dato.
+                    -->
 
-                    <div class="col-md-4">
+                    <div
+                        id="legal-person-fields"
+                        class="col-12 d-none"
+                    >
 
-                        <label
-                            for="{{ form.first_name.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.first_name.label }}
+                        <div class="row g-3">
 
-                            <span class="text-danger">
-                                *
-                            </span>
+                            <!-- RAZÓN SOCIAL -->
 
-                        </label>
+                            <div class="col-md-6">
 
-                        {{ form.first_name }}
+                                <label
+                                    for="{{ form.business_name.id_for_label }}"
+                                    class="form-label fw-semibold"
+                                >
+                                    {{ form.business_name.label }}
+                                </label>
 
-                        {% for error in form.first_name.errors %}
+                                {{ form.business_name }}
 
-                            <div class="text-danger small mt-1">
-                                {{ error }}
+                                {% for error in form.business_name.errors %}
+
+                                    <div class="text-danger small mt-1">
+                                        {{ error }}
+                                    </div>
+
+                                {% endfor %}
+
+                                <div class="form-text">
+                                    Se autocompleta al consultar SUNAT
+                                    con el botón "Obtener datos". Puede
+                                    editarse manualmente si es
+                                    necesario.
+                                </div>
+
                             </div>
 
-                        {% endfor %}
+                        </div>
 
                     </div>
 
@@ -231,5 +371,226 @@
     </div>
 
 </div>
+
+<script>
+    // -----------------------------------------------------------------
+    // AYUDA VISUAL: mostrar/ocultar los campos personales según el
+    // tipo de documento elegido.
+    //
+    // IMPORTANTE: esto es solo una mejora de experiencia de uso. La
+    // obligatoriedad real de "Apellido paterno" y "Nombres" para
+    // persona natural se valida siempre en el servidor, en
+    // CustomerInitialForm.clean() (apps/customers/forms.py), por lo
+    // que deshabilitar JavaScript en el navegador no permite saltarse
+    // la regla de negocio.
+    // -----------------------------------------------------------------
+
+    (function () {
+        var documentTypeSelect = document.getElementById("id_document_type");
+        var naturalFields = document.getElementById("natural-person-fields");
+        var legalFields = document.getElementById("legal-person-fields");
+        var personTypeDisplay = document.getElementById("person-type-display");
+
+        // Debe coincidir con Customer.DOCUMENT_PERSON_TYPE_MAP
+        // (apps/customers/models.py). Es solo para mostrar el dato
+        // en pantalla de inmediato; el tipo de persona real siempre
+        // se calcula en el servidor a partir del tipo de documento.
+        var PERSON_TYPE_LABELS = {
+            DNI: "Persona Natural",
+            CE: "Persona Natural",
+            PASSPORT: "Persona Natural",
+            RUC: "Persona Jurídica",
+        };
+
+        if (!documentTypeSelect || !naturalFields || !legalFields) {
+            return;
+        }
+
+        function toggleByDocumentType() {
+            var isLegal = documentTypeSelect.value === "RUC";
+
+            naturalFields.classList.toggle("d-none", isLegal);
+            legalFields.classList.toggle("d-none", !isLegal);
+
+            if (personTypeDisplay) {
+                personTypeDisplay.value = (
+                    PERSON_TYPE_LABELS[documentTypeSelect.value] || ""
+                );
+            }
+        }
+
+        // Se actualiza apenas cambia el tipo de documento (no hace
+        // falta esperar al botón "Obtener datos": el tipo de persona
+        // depende únicamente del tipo de documento elegido).
+        documentTypeSelect.addEventListener("change", toggleByDocumentType);
+        toggleByDocumentType();
+    })();
+</script>
+
+<script>
+    // -----------------------------------------------------------------
+    // BOTÓN "OBTENER DATOS": consulta RENIEC (DNI) / SUNAT (RUC)
+    //
+    // Llama al endpoint AJAX de solo lectura
+    // customers:lookup_document y, si encuentra datos, autocompleta
+    // los campos del formulario. Es una ayuda opcional: si falla o no
+    // está configurada, el usuario simplemente completa los campos a
+    // mano, tal como ya podía hacerlo antes.
+    //
+    // Solo está disponible para DNI y RUC, que son los únicos
+    // documentos con un servicio público oficial en Perú.
+    // -----------------------------------------------------------------
+
+    (function () {
+        var LOOKUP_URL = "{% url 'customers:lookup_document' %}";
+        var LOOKUP_DOCUMENT_TYPES = ["DNI", "RUC"];
+
+        var documentTypeSelect = document.getElementById("id_document_type");
+        var documentNumberInput = document.getElementById(
+            "{{ form.document_number.id_for_label }}"
+        );
+        var lookupButton = document.getElementById("btn-lookup-document");
+        var statusBox = document.getElementById("lookup-status");
+
+        var firstNameInput = document.getElementById(
+            "{{ form.first_name.id_for_label }}"
+        );
+        var paternalSurnameInput = document.getElementById(
+            "{{ form.paternal_surname.id_for_label }}"
+        );
+        var maternalSurnameInput = document.getElementById(
+            "{{ form.maternal_surname.id_for_label }}"
+        );
+        var businessNameInput = document.getElementById(
+            "{{ form.business_name.id_for_label }}"
+        );
+        var birthDateInput = document.getElementById(
+            "{{ form.birth_date.id_for_label }}"
+        );
+
+        if (!documentTypeSelect || !documentNumberInput || !lookupButton) {
+            return;
+        }
+
+        function setStatus(message, variant) {
+            if (!statusBox) {
+                return;
+            }
+
+            statusBox.textContent = message || "";
+            statusBox.className = "small mt-1" + (
+                variant ? " text-" + variant : ""
+            );
+        }
+
+        function updateButtonAvailability() {
+            var isLookupable = LOOKUP_DOCUMENT_TYPES.indexOf(
+                documentTypeSelect.value
+            ) !== -1;
+
+            lookupButton.classList.toggle("d-none", !isLookupable);
+            setStatus("");
+        }
+
+        function setLoading(isLoading) {
+            lookupButton.disabled = isLoading;
+            lookupButton.textContent = isLoading
+                ? "Consultando..."
+                : "Obtener datos";
+        }
+
+        function applyResult(documentType, data) {
+            if (documentType === "DNI") {
+                if (firstNameInput) {
+                    firstNameInput.value = data.first_name || "";
+                }
+
+                if (paternalSurnameInput) {
+                    paternalSurnameInput.value = data.paternal_surname || "";
+                }
+
+                if (maternalSurnameInput) {
+                    maternalSurnameInput.value = data.maternal_surname || "";
+                }
+
+                // La fecha de nacimiento no siempre está disponible
+                // en el plan gratuito del proveedor. Si no vino, el
+                // campo (visible en la Pantalla 4) se completa a
+                // mano; no es obligatorio para continuar aquí.
+                if (birthDateInput) {
+                    birthDateInput.value = data.birth_date || "";
+                }
+
+                setStatus("Datos obtenidos de RENIEC.", "success");
+                return;
+            }
+
+            if (documentType === "RUC") {
+                if (businessNameInput) {
+                    businessNameInput.value = data.business_name || "";
+                }
+
+                setStatus("Datos obtenidos de SUNAT.", "success");
+            }
+        }
+
+        function lookupDocument() {
+            var documentType = documentTypeSelect.value;
+            var documentNumber = documentNumberInput.value.trim();
+
+            if (LOOKUP_DOCUMENT_TYPES.indexOf(documentType) === -1) {
+                return;
+            }
+
+            if (!documentNumber) {
+                setStatus("Ingrese el número de documento.", "danger");
+                return;
+            }
+
+            var url = LOOKUP_URL +
+                "?document_type=" + encodeURIComponent(documentType) +
+                "&document_number=" + encodeURIComponent(documentNumber);
+
+            setLoading(true);
+            setStatus("Consultando...", "muted");
+
+            fetch(url, {
+                method: "GET",
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+            })
+                .then(function (response) {
+                    return response.json().then(function (payload) {
+                        return { ok: response.ok, payload: payload };
+                    });
+                })
+                .then(function (result) {
+                    if (result.payload && result.payload.ok) {
+                        applyResult(documentType, result.payload.data || {});
+                    } else {
+                        var message = (
+                            result.payload && result.payload.message
+                        ) || "No fue posible obtener los datos.";
+
+                        setStatus(message, "danger");
+                    }
+                })
+                .catch(function () {
+                    setStatus(
+                        "No fue posible conectarse al servicio. " +
+                        "Complete los datos manualmente.",
+                        "danger"
+                    );
+                })
+                .finally(function () {
+                    setLoading(false);
+                });
+        }
+
+        documentTypeSelect.addEventListener("change", updateButtonAvailability);
+        lookupButton.addEventListener("click", lookupDocument);
+
+        updateButtonAvailability();
+    })();
+</script>
 
 {% endblock %}

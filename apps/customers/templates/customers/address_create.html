@@ -17,10 +17,13 @@
             </p>
         </div>
 
-        <a href="{% url 'customers:detail' customer.pk %}"
-           class="btn btn-outline-secondary">
-            ← Volver a ficha
-        </a>
+        <button
+            type="button"
+            class="btn btn-outline-secondary"
+            onclick="history.back()"
+        >
+            ← Volver
+        </button>
 
     </div>
 
@@ -260,13 +263,21 @@
 
                 <div class="d-flex justify-content-end gap-2">
 
-                    <a
-                        href="{% url 'customers:detail' customer.pk %}"
-                        class="btn btn-outline-secondary"
-                    >
-                        Cancelar
-                    </a>
-
+                    {% if return_to_general %}
+                        <a
+                            href="{% url 'customers:general_edit' customer.pk %}"
+                            class="btn btn-outline-secondary"
+                        >
+                            Cancelar
+                        </a>
+                    {% else %}
+                        <a
+                            href="{% url 'customers:detail' customer.pk %}#bloque-a"
+                            class="btn btn-outline-secondary"
+                        >
+                            Cancelar
+                        </a>
+                    {% endif %}
                     <button
                         type="submit"
                         class="btn btn-primary"

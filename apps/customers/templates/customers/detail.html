@@ -23,12 +23,13 @@
             Usar cliente
         </a>
 
-        <a
-            href="{% url 'customers:search' %}"
+        <button
+            type="button"
             class="btn btn-outline-secondary"
+            onclick="history.back()"
         >
-            ← Volver a la búsqueda
-        </a>
+            ← Volver
+        </button>
 
     </div>
 
@@ -56,10 +57,31 @@
 
 
 <!-- ========================================================= -->
+<!-- NAVEGACIÓN RÁPIDA ENTRE BLOQUES
+
+     Ayuda a ATC a ubicar rápidamente la información relevante
+     sin tener que desplazarse manualmente por toda la ficha.
+-->
+<!-- ========================================================= -->
+
+<nav class="card card-custom mb-4">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-2">
+            <a href="#bloque-a" class="btn btn-sm btn-outline-dark">Datos del cliente</a>
+            <a href="#bloque-b" class="btn btn-sm btn-outline-secondary">Direcciones</a>
+            <a href="#bloque-c" class="btn btn-sm btn-outline-info">Suscripciones</a>
+            <a href="#bloque-d" class="btn btn-sm btn-outline-dark">Contratos</a>
+            <a href="#bloque-e" class="btn btn-sm btn-outline-primary">Órdenes de trabajo</a>
+        </div>
+    </div>
+</nav>
+
+
+<!-- ========================================================= -->
 <!-- BLOQUE A - DATOS DEL CLIENTE -->
 <!-- ========================================================= -->
 
-<div class="card card-custom mb-4">
+<div id="bloque-a" class="card card-custom mb-4">
 
     <div class="card-header bg-dark text-white fw-bold">
         Bloque A - Datos del Cliente
@@ -164,7 +186,7 @@
 <!-- BLOQUE B - DIRECCIONES -->
 <!-- ========================================================= -->
 
-<div class="card card-custom mb-4">
+<div id="bloque-b" class="card card-custom mb-4">
 
     <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
 
@@ -325,20 +347,24 @@
 <!-- BLOQUE C - SUSCRIPCIONES -->
 <!-- ========================================================= -->
 
-<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+<div id="bloque-c" class="card card-custom mb-4">
 
-    <h4 class="fw-bold mb-0">
-        Bloque C - Suscripciones y Servicios
-    </h4>
+    <div class="card-header bg-info text-white fw-bold d-flex justify-content-between align-items-center">
 
-    <a
-        href="{% url 'services:subscription_create' customer.pk %}"
-        class="btn btn-primary"
-    >
-        + Nueva suscripción
-    </a>
+        <span>
+            Bloque C - Suscripciones y Servicios
+        </span>
 
-</div>
+        <a
+            href="{% url 'services:subscription_create' customer.pk %}"
+            class="btn btn-light btn-sm"
+        >
+            + Nueva suscripción
+        </a>
+
+    </div>
+
+    <div class="card-body">
 
 {% if subscriptions %}
 
@@ -645,18 +671,22 @@
 
 {% else %}
 
-    <div class="alert alert-secondary card-custom text-center">
+    <div class="alert alert-secondary text-center mb-0">
         El cliente no tiene suscripciones registradas.
     </div>
 
 {% endif %}
+
+    </div>
+
+</div>
 
 
 <!-- ========================================================= -->
 <!-- BLOQUE D - CONTRATOS -->
 <!-- ========================================================= -->
 
-<div class="card card-custom mb-5">
+<div id="bloque-d" class="card card-custom mb-5">
 
     <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
 
@@ -796,13 +826,21 @@
 <!-- BLOQUE E - ÓRDENES DE TRABAJO DEL CLIENTE -->
 <!-- ========================================================= -->
 
-<div class="card card-custom mb-5">
+<div id="bloque-e" class="card card-custom mb-5">
 
     <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
 
     <span>
         Bloque E - Órdenes de Trabajo del Cliente
     </span>
+
+    <a
+        href="{% url 'customers:work_order_ui_preview' customer.pk %}"
+        class="btn btn-light btn-sm"
+        title="Vista previa visual del formulario de OT. No crea ninguna orden todavía."
+    >
+        + Nueva orden de trabajo
+    </a>
 
 </div>
 

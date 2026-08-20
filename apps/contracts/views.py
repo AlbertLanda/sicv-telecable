@@ -1,4 +1,6 @@
-﻿from django.contrib import messages
+﻿from multiprocessing import context
+
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect
@@ -104,5 +106,9 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
         context = super().get_context_data(**kwargs)
 
         context["customer"] = self.customer
+
+        context["return_to_general"] = (
+            self.request.GET.get("return") == "general"
+        )
 
         return context

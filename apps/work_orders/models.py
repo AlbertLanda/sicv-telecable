@@ -11,6 +11,53 @@ from apps.services.models import Subscription
 from apps.customers.models import CustomerAddress
 
 
+class PlanScope(models.TextChoices):
+    """
+    A qué tipo de plan del cliente aplica un elemento del catálogo
+    (tipo de orden, subtipo o motivo).
+
+    - ANY: aplica sin importar el servicio contratado.
+    - CATV: solo visible si la suscripción incluye TV por cable
+      (ServiceType.includes_catv), lo que cubre tanto planes CATV puro
+      como planes DÚO.
+    - INTERNET: solo visible si la suscripción incluye Internet
+      (ServiceType.includes_internet), lo que cubre tanto planes de
+      Internet puro como planes DÚO.
+    """
+
+    ANY = "ANY", "Cualquier plan"
+    CATV = "CATV", "Solo CATV (incluye Dúo)"
+    INTERNET = "INTERNET", "Internet o Dúo"
+
+
+def plan_scope_applies(plan_scope, subscription):
+    """
+    Indica si un elemento de catálogo (OrderType, OrderSubtype u
+    OrderReason) con el `plan_scope` dado debe ofrecerse para la
+    suscripción indicada.
+
+    Se apoya en ServiceType.includes_catv / includes_internet, de modo
+    que un plan Dúo (ambos en True) ve tanto el catálogo de CATV como
+    el de Internet.
+    """
+
+    if plan_scope == PlanScope.ANY or subscription is None:
+        return True
+
+    service_type = getattr(subscription, "service_type", None)
+
+    if service_type is None:
+        return True
+
+    if plan_scope == PlanScope.CATV:
+        return bool(service_type.includes_catv)
+
+    if plan_scope == PlanScope.INTERNET:
+        return bool(service_type.includes_internet)
+
+    return True
+
+
 class OrderType(models.Model):
     """Catálogo de tipos de orden: Instalación, Avería, Corte, Reconexión, etc."""
 
@@ -28,6 +75,17 @@ class OrderType(models.Model):
     description = models.TextField(
         blank=True,
         verbose_name="Descripción"
+    )
+
+    plan_scope = models.CharField(
+        max_length=10,
+        choices=PlanScope.choices,
+        default=PlanScope.ANY,
+        verbose_name="Alcance por plan",
+        help_text=(
+            "Restringe en qué tipo de suscripción (CATV, Internet/Dúo o "
+            "cualquiera) debe ofrecerse este tipo de orden."
+        ),
     )
 
     is_active = models.BooleanField(
@@ -82,6 +140,13 @@ class OrderSubtype(models.Model):
         verbose_name="Descripción"
     )
 
+    plan_scope = models.CharField(
+        max_length=10,
+        choices=PlanScope.choices,
+        default=PlanScope.ANY,
+        verbose_name="Alcance por plan",
+    )
+
     is_active = models.BooleanField(
         default=True,
         verbose_name="Activo"
@@ -124,6 +189,20 @@ class OrderReason(models.Model):
         verbose_name="Tipo de orden"
     )
 
+    subtype = models.ForeignKey(
+        OrderSubtype,
+        on_delete=models.PROTECT,
+        related_name="reasons",
+        null=True,
+        blank=True,
+        verbose_name="Subtipo",
+        help_text=(
+            "Opcional. Si se indica, este motivo solo debe ofrecerse "
+            "cuando la orden tiene este subtipo (por ejemplo, los motivos "
+            "de un corte 'Definitivo' frente a uno 'Temporal')."
+        ),
+    )
+
     code = models.CharField(
         max_length=30,
         verbose_name="Código"
@@ -139,6 +218,13 @@ class OrderReason(models.Model):
         choices=Classification.choices,
         blank=True,
         verbose_name="Clasificación"
+    )
+
+    plan_scope = models.CharField(
+        max_length=10,
+        choices=PlanScope.choices,
+        default=PlanScope.ANY,
+        verbose_name="Alcance por plan",
     )
 
     is_active = models.BooleanField(
@@ -621,6 +707,15 @@ class WorkOrder(models.Model):
         ):
             raise ValidationError({
                 "reason": "El motivo seleccionado no pertenece al tipo de orden."
+            })
+
+        if (
+            self.reason
+            and self.reason.subtype_id
+            and self.reason.subtype_id != self.subtype_id
+        ):
+            raise ValidationError({
+                "reason": "El motivo seleccionado requiere otro subtipo de orden."
             })
 
         from apps.accounts.models import User

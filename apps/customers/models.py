@@ -15,6 +15,35 @@ class Customer(models.Model):
         NATURAL = "NATURAL", "Persona Natural"
         LEGAL = "LEGAL", "Persona Jurídica"
 
+    # ---------------------------------------------------------------
+    # REGLA DE CORRESPONDENCIA DOCUMENTO / TIPO DE PERSONA
+    #
+    # Fuente única de verdad para evitar combinaciones incoherentes
+    # como RUC + Persona Natural o DNI + Persona Jurídica. Se usa
+    # tanto en los formularios (apps/customers/forms.py) como en las
+    # vistas (apps/customers/views.py), por lo que el tipo de persona
+    # nunca depende únicamente de lo que el usuario elija en pantalla.
+    # ---------------------------------------------------------------
+
+    DOCUMENT_PERSON_TYPE_MAP = {
+        DocumentType.DNI: PersonType.NATURAL,
+        DocumentType.CE: PersonType.NATURAL,
+        DocumentType.PASSPORT: PersonType.NATURAL,
+        DocumentType.RUC: PersonType.LEGAL,
+    }
+
+    @classmethod
+    def person_type_for_document(cls, document_type):
+        """
+        Devuelve el tipo de persona esperado para un tipo de documento,
+        según la tabla de correspondencia obligatoria del flujo de
+        registro (DNI/CE/PASAPORTE -> NATURAL, RUC -> LEGAL).
+
+        Devuelve None si el tipo de documento no es reconocido.
+        """
+
+        return cls.DOCUMENT_PERSON_TYPE_MAP.get(document_type)
+
     code = models.CharField(
         max_length=30,
         unique=True,
@@ -69,6 +98,48 @@ class Customer(models.Model):
         max_length=200,
         blank=True,
         verbose_name="Razón social / Nombre comercial"
+    )
+
+    # -----------------------------------------------------------
+    # DATOS ADICIONALES (SOLO PERSONA NATURAL)
+    #
+    # Género, estado civil y fecha de nacimiento solo aplican a
+    # persona natural. Para persona jurídica (RUC) se dejan en
+    # blanco, tal como ya ocurre con first_name/paternal_surname/
+    # maternal_surname. La fecha de nacimiento puede llegar
+    # autocompletada desde RENIEC (consulta por DNI, Pantalla 3)
+    # o completarse manualmente en la Pantalla 4 (Datos generales).
+    # -----------------------------------------------------------
+
+    class Gender(models.TextChoices):
+        MALE = "M", "Masculino"
+        FEMALE = "F", "Femenino"
+
+    class MaritalStatus(models.TextChoices):
+        SINGLE = "SOLTERO", "Soltero(a)"
+        MARRIED = "CASADO", "Casado(a)"
+        DIVORCED = "DIVORCIADO", "Divorciado(a)"
+        WIDOWED = "VIUDO", "Viudo(a)"
+        COHABITANT = "CONVIVIENTE", "Conviviente"
+
+    gender = models.CharField(
+        max_length=1,
+        choices=Gender.choices,
+        blank=True,
+        verbose_name="Género"
+    )
+
+    marital_status = models.CharField(
+        max_length=20,
+        choices=MaritalStatus.choices,
+        blank=True,
+        verbose_name="Estado civil"
+    )
+
+    birth_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de nacimiento"
     )
 
     phone = models.CharField(

@@ -16,12 +16,13 @@
             </p>
         </div>
 
-        <a
-            href="{% url 'customers:detail' customer.pk %}"
+        <button
+            type="button"
             class="btn btn-outline-secondary"
+            onclick="history.back()"
         >
-            ← Volver al cliente
-        </a>
+            ← Volver
+        </button>
 
     </div>
 
@@ -190,7 +191,7 @@
                 <div class="d-flex justify-content-end gap-2">
 
                     <a
-                        href="{% url 'customers:detail' customer.pk %}"
+                        href="{% url 'customers:detail' customer.pk %}#bloque-a"
                         class="btn btn-outline-secondary"
                     >
                         Cancelar

@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva Orden de Trabajo (vista previa) - {{ customer }}{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <!-- ENCABEZADO -->
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+
+        <div>
+            <h1 class="h3 mb-1">
+                Nueva orden de trabajo
+            </h1>
+
+            <p class="text-muted mb-0">
+                Propuesta visual del formulario. La creación real de
+                órdenes se habilitará en una integración posterior.
+            </p>
+        </div>
+
+        <button
+            type="button"
+            class="btn btn-outline-secondary"
+            onclick="history.back()"
+        >
+            ← Volver
+        </button>
+
+    </div>
+
+
+    <!-- AVISO: SOLO VISTA PREVIA -->
+
+    <div class="alert alert-warning">
+        <strong>Vista previa sin persistencia.</strong>
+        Esta pantalla es únicamente una propuesta visual reutilizable
+        para la futura creación de órdenes de trabajo. No guarda
+        ni crea ningún registro de <code>WorkOrder</code>; la lógica
+        de negocio será proporcionada por el servicio backend
+        implementado en otra actividad.
+    </div>
+
+
+    <div class="card card-custom shadow-sm">
+
+        <div class="card-header bg-primary text-white fw-bold">
+            Datos de la orden (maqueta)
+        </div>
+
+        <div class="card-body">
+
+            <!--
+                No se usa <form method="post"> a propósito: esta
+                pantalla no envía datos a ningún endpoint de
+                persistencia. El botón inferior está deshabilitado.
+            -->
+
+            <div class="row g-3">
+
+                <!-- CLIENTE (SOLO LECTURA) -->
+
+                <div class="col-md-6">
+
+                    <label class="form-label fw-semibold">
+                        Cliente
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ customer.code }} - {{ customer }}"
+                        readonly
+                    >
+
+                    <div class="form-text">
+                        Dato de contexto, no editable.
+                    </div>
+
+                </div>
+
+
+                <!-- SUSCRIPCIÓN -->
+
+                <div class="col-md-6">
+
+                    <label
+                        for="preview_subscription"
+                        class="form-label fw-semibold"
+                    >
+                        Suscripción
+                        <span class="text-danger">*</span>
+                    </label>
+
+                    <select
+                        id="preview_subscription"
+                        class="form-select"
+                        disabled
+                    >
+                        <option value="">
+                            Seleccione una suscripción del cliente...
+                        </option>
+
+                        {% for sub in subscriptions %}
+                            <option value="{{ sub.id }}">
+                                {{ sub.service_type.name }} #{{ sub.service_number }}
+                                - {{ sub.plan.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    {% if not subscriptions %}
+                        <div class="form-text text-danger">
+                            Este cliente aún no tiene suscripciones
+                            registradas.
+                        </div>
+                    {% else %}
+                        <div class="form-text">
+                            Solo se listan suscripciones de este cliente.
+                        </div>
+                    {% endif %}
+
+                </div>
+
+
+                <!-- TIPO DE ORDEN -->
+
+                <div class="col-md-4">
+
+                    <label
+                        for="preview_order_type"
+                        class="form-label fw-semibold"
+                    >
+                        Tipo de orden
+                        <span class="text-danger">*</span>
+                    </label>
+
+                    <select
+                        id="preview_order_type"
+                        class="form-select"
+                        disabled
+                    >
+                        <option value="">Seleccione...</option>
+
+                        {% for order_type in order_types %}
+                            <option value="{{ order_type.id }}">
+                                {{ order_type.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                </div>
+
+
+                <!-- SUBTIPO (DEPENDIENTE) -->
+
+                <div class="col-md-4">
+
+                    <label
+                        for="preview_order_subtype"
+                        class="form-label fw-semibold"
+                    >
+                        Subtipo
+                    </label>
+
+                    <select
+                        id="preview_order_subtype"
+                        class="form-select"
+                        disabled
+                    >
+                        <option value="">
+                            Depende del tipo de orden
+                        </option>
+                    </select>
+
+                </div>
+
+
+                <!-- MOTIVO (DEPENDIENTE) -->
+
+                <div class="col-md-4">
+
+                    <label
+                        for="preview_order_reason"
+                        class="form-label fw-semibold"
+                    >
+                        Motivo
+                    </label>
+
+                    <select
+                        id="preview_order_reason"
+                        class="form-select"
+                        disabled
+                    >
+                        <option value="">
+                            Depende del tipo de orden
+                        </option>
+                    </select>
+
+                </div>
+
+
+                <!-- SEDE -->
+
+                <div class="col-md-6">
+
+                    <label class="form-label fw-semibold">
+                        Sede
+                    </label>
+
+                    <input
+                        type="text"
+                        class="form-control"
+                        value="{{ customer.branch.name }}"
+                        readonly
+                    >
+
+                </div>
+
+
+                <!-- ZONA -->
+
+                <div class="col-md-6">
+
+                    <label
+                        for="preview_zone"
+                        class="form-label fw-semibold"
+                    >
+                        Zona
+                    </label>
+
+                    <select
+                        id="preview_zone"
+                        class="form-select"
+                        disabled
+                    >
+                        <option value="">Seleccione...</option>
+
+                        {% for zone in zones %}
+                            <option value="{{ zone.id }}">
+                                {{ zone.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                </div>
+
+
+                <!-- OBSERVACIONES -->
+
+                <div class="col-12">
+
+                    <label
+                        for="preview_observations"
+                        class="form-label fw-semibold"
+                    >
+                        Observaciones
+                    </label>
+
+                    <textarea
+                        id="preview_observations"
+                        class="form-control"
+                        rows="3"
+                        disabled
+                        placeholder="Detalle adicional de la orden..."
+                    ></textarea>
+
+                </div>
+
+            </div>
+
+
+            <!-- CATÁLOGO DE REFERENCIA (SUBTIPOS / MOTIVOS POR TIPO) -->
+
+            {% if order_types %}
+
+                <hr class="my-4">
+
+                <h6 class="fw-bold">
+                    Referencia de catálogo por tipo de orden
+                </h6>
+
+                <p class="text-muted small">
+                    Esta tabla es solo informativa, para anticipar cómo
+                    se relacionarán subtipo y motivo con el tipo de
+                    orden elegido una vez que se conecte la lógica real.
+                    La columna <strong>Aplica a</strong> indica si el
+                    tipo de orden corresponde a un plan solo CATV, a un
+                    plan de Internet/Dúo, o a cualquier plan; en un
+                    plan Dúo se ofrecen ambos catálogos (CATV +
+                    Internet) a la vez.
+                </p>
+
+                <div class="table-responsive">
+
+                    <table class="table table-sm table-bordered align-middle">
+
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo de orden</th>
+                                <th>Aplica a</th>
+                                <th>Subtipos</th>
+                                <th>Motivos</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+
+                            {% for order_type in order_types %}
+                                <tr>
+                                    <td>{{ order_type.name }}</td>
+
+                                    <td>
+                                        {% if order_type.plan_scope == "CATV" %}
+                                            <span class="badge bg-info text-dark">
+                                                Solo CATV (incluye Dúo)
+                                            </span>
+                                        {% elif order_type.plan_scope == "INTERNET" %}
+                                            <span class="badge bg-primary">
+                                                Internet o Dúo
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                Cualquier plan
+                                            </span>
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {% for subtype in order_type.subtypes.all %}
+                                            <span class="badge bg-light text-dark border">
+                                                {{ subtype.name }}
+                                            </span>
+                                        {% empty %}
+                                            <span class="text-muted">-</span>
+                                        {% endfor %}
+                                    </td>
+
+                                    <td>
+                                        {% for reason in order_type.reasons.all %}
+                                            <span class="badge bg-light text-dark border">
+                                                {{ reason.name }}
+                                                {% if reason.subtype %}
+                                                    <em class="text-muted">
+                                                        (solo si {{ reason.subtype.name }})
+                                                    </em>
+                                                {% endif %}
+                                            </span>
+                                        {% empty %}
+                                            <span class="text-muted">-</span>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            {% endif %}
+
+
+            <hr class="my-4">
+
+            <div class="d-flex justify-content-end gap-2">
+
+                <a
+                    href="{% url 'customers:detail' customer.pk %}"
+                    class="btn btn-outline-secondary"
+                >
+                    Cancelar
+                </a>
+
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    disabled
+                    title="Función en desarrollo: la creación de órdenes se habilitará en una integración posterior."
+                >
+                    Crear orden de trabajo (próximamente)
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
