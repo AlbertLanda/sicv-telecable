@@ -104,20 +104,22 @@ def _resolve_branch(subscription, branch):
 
 def _resolve_zone(subscription, zone, branch):
     """
-    La zona de la orden es la de la dirección donde vive el servicio.
+    La zona de la orden debe ser coherente con la sede de la orden.
 
-    Si el llamador la envía explícitamente debe pertenecer a la sede de la
-    orden; de lo contrario la orden quedaría en la zona de otra sede.
+    Si no se envía una zona explícita, se toma la zona de la dirección
+    de la suscripción, pero también se valida su coherencia.
     """
-    if zone is None:
-        return subscription.address.zone
+    resolved_zone = zone or subscription.address.zone
 
-    if zone.branch_id != branch.pk:
+    if resolved_zone is None:
+        return None
+
+    if resolved_zone.branch_id != branch.pk:
         raise ValidationError(
-            "La zona indicada no pertenece a la sede de la orden."
+            "La zona de la orden no pertenece a la sede correspondiente."
         )
 
-    return zone
+    return resolved_zone
 
 
 def _validate_creation_catalogs(order_type, subtype, reason, cause):
@@ -129,6 +131,21 @@ def _validate_creation_catalogs(order_type, subtype, reason, cause):
     if not order_type.is_active:
         raise ValidationError(
             "El tipo de orden seleccionado no está activo."
+        )
+
+    if subtype is not None and not subtype.is_active:
+        raise ValidationError(
+            "El subtipo seleccionado no está activo."
+        )
+
+    if reason is not None and not reason.is_active:
+        raise ValidationError(
+            "El motivo seleccionado no está activo."
+        )
+
+    if cause is not None and not cause.is_active:
+        raise ValidationError(
+            "La causa seleccionada no está activa."
         )
 
     if subtype is not None and subtype.order_type_id != order_type.pk:

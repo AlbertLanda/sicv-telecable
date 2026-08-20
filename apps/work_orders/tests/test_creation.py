@@ -223,6 +223,71 @@ class CreateWorkOrderValidationTests(WorkOrderTestCase):
 
         self.assertEqual(order.zone, another_zone)
 
+    def test_rejects_inactive_subtype(self):
+        self.temporary_subtype.is_active = False
+        self.temporary_subtype.save(
+            update_fields=["is_active", "updated_at"]
+        )
+
+        with self.assertRaises(ValidationError):
+            self._create(
+                order_type=self.cut_type,
+                subtype=self.temporary_subtype,
+            )
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+
+    def test_rejects_inactive_reason(self):
+        self.installation_reason.is_active = False
+        self.installation_reason.save(
+            update_fields=["is_active", "updated_at"]
+        )
+
+        with self.assertRaises(ValidationError):
+            self._create(
+                reason=self.installation_reason,
+            )
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+
+    def test_rejects_inactive_cause(self):
+        self.cut_cause.is_active = False
+        self.cut_cause.save(
+            update_fields=["is_active", "updated_at"]
+        )
+
+        with self.assertRaises(ValidationError):
+            self._create(
+                order_type=self.cut_type,
+                cause=self.cut_cause,
+            )
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+
+    def test_rejects_subscription_zone_from_another_branch(self):
+        other_branch = Branch.objects.create(
+            code="SED04",
+            name="Sede Inconsistente",
+        )
+
+        foreign_zone = Zone.objects.create(
+            branch=other_branch,
+            name="Zona Inconsistente",
+        )
+
+        self.subscription.address.zone = foreign_zone
+        self.subscription.address.save(
+            update_fields=["zone", "updated_at"]
+        )
+
+        with self.assertRaises(ValidationError):
+            self._create()
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
 
 class CreateWorkOrderSubscriptionStateTests(WorkOrderTestCase):
     """Crear una OT registra trabajo pendiente; no ejecuta la instalación."""
