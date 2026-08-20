@@ -99,19 +99,6 @@ class CustomerInitialForm(forms.Form):
         ),
     )
 
-    # Solo aplica a persona natural (DNI). Se completa mediante el
-    # botón "Obtener datos" (consulta a RENIEC) cuando el proveedor
-    # devuelve la fecha de nacimiento. Se mantiene oculto en esta
-    # pantalla porque el campo editable se muestra recién en la
-    # Pantalla 4 (Datos generales), junto a género y estado civil;
-    # aquí solo se usa para transportar el valor obtenido hacia la
-    # sesión. Si no se pudo obtener automáticamente, queda vacío y
-    # el usuario lo completa manualmente en la Pantalla 4.
-    birth_date = forms.DateField(
-        required=False,
-        widget=forms.HiddenInput(),
-    )
-
     def clean_business_name(self):
         return self.cleaned_data.get("business_name", "").strip()
 
@@ -249,9 +236,6 @@ class CustomerRegistrationForm(forms.ModelForm):
         fields = [
             "branch",
             "business_name",
-            "gender",
-            "marital_status",
-            "birth_date",
             "phone",
             "secondary_phone",
             "email",
@@ -287,23 +271,6 @@ class CustomerRegistrationForm(forms.ModelForm):
                     "maxlength": "200",
                 }
             ),
-            "gender": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "marital_status": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "birth_date": forms.DateInput(
-                attrs={
-                    "class": "form-control",
-                    "type": "date",
-                },
-                format="%Y-%m-%d",
-            ),
         }
 
         labels = {
@@ -312,9 +279,6 @@ class CustomerRegistrationForm(forms.ModelForm):
             "secondary_phone": "Teléfono secundario",
             "email": "Correo electrónico",
             "business_name": "Razón social / Nombre comercial",
-            "gender": "Género",
-            "marital_status": "Estado civil",
-            "birth_date": "Fecha de nacimiento",
         }
 
     def __init__(self, *args, document_type=None, **kwargs):

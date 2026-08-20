@@ -100,48 +100,6 @@ class Customer(models.Model):
         verbose_name="Razón social / Nombre comercial"
     )
 
-    # -----------------------------------------------------------
-    # DATOS ADICIONALES (SOLO PERSONA NATURAL)
-    #
-    # Género, estado civil y fecha de nacimiento solo aplican a
-    # persona natural. Para persona jurídica (RUC) se dejan en
-    # blanco, tal como ya ocurre con first_name/paternal_surname/
-    # maternal_surname. La fecha de nacimiento puede llegar
-    # autocompletada desde RENIEC (consulta por DNI, Pantalla 3)
-    # o completarse manualmente en la Pantalla 4 (Datos generales).
-    # -----------------------------------------------------------
-
-    class Gender(models.TextChoices):
-        MALE = "M", "Masculino"
-        FEMALE = "F", "Femenino"
-
-    class MaritalStatus(models.TextChoices):
-        SINGLE = "SOLTERO", "Soltero(a)"
-        MARRIED = "CASADO", "Casado(a)"
-        DIVORCED = "DIVORCIADO", "Divorciado(a)"
-        WIDOWED = "VIUDO", "Viudo(a)"
-        COHABITANT = "CONVIVIENTE", "Conviviente"
-
-    gender = models.CharField(
-        max_length=1,
-        choices=Gender.choices,
-        blank=True,
-        verbose_name="Género"
-    )
-
-    marital_status = models.CharField(
-        max_length=20,
-        choices=MaritalStatus.choices,
-        blank=True,
-        verbose_name="Estado civil"
-    )
-
-    birth_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name="Fecha de nacimiento"
-    )
-
     phone = models.CharField(
         max_length=20,
         blank=True,

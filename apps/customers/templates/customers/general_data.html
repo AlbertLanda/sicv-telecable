@@ -226,7 +226,7 @@
 
                     {% if person_type_display == "Persona Jurídica" %}
 
-                        <!-- RAZÓN SOCIAL / NOMBRE COMERCIAL (SOLO PERSONA JURÍDICA) -->
+                        <!-- RAZÓN SOCIAL / NOMBRE COMERCIAL -->
 
                         <div class="col-md-6">
 
@@ -251,84 +251,6 @@
                                 </div>
 
                             {% endfor %}
-
-                        </div>
-
-                    {% endif %}
-
-
-                    {% if person_type_display == "Persona Natural" %}
-
-                        <!-- GÉNERO, ESTADO CIVIL Y FECHA DE NACIMIENTO (SOLO PERSONA NATURAL) -->
-
-                        <div class="col-md-4">
-
-                            <label
-                                for="{{ form.gender.id_for_label }}"
-                                class="form-label fw-semibold"
-                            >
-                                {{ form.gender.label }}
-                            </label>
-
-                            {{ form.gender }}
-
-                            {% for error in form.gender.errors %}
-
-                                <div class="text-danger small mt-1">
-                                    {{ error }}
-                                </div>
-
-                            {% endfor %}
-
-                        </div>
-
-
-                        <div class="col-md-4">
-
-                            <label
-                                for="{{ form.marital_status.id_for_label }}"
-                                class="form-label fw-semibold"
-                            >
-                                {{ form.marital_status.label }}
-                            </label>
-
-                            {{ form.marital_status }}
-
-                            {% for error in form.marital_status.errors %}
-
-                                <div class="text-danger small mt-1">
-                                    {{ error }}
-                                </div>
-
-                            {% endfor %}
-
-                        </div>
-
-
-                        <div class="col-md-4">
-
-                            <label
-                                for="{{ form.birth_date.id_for_label }}"
-                                class="form-label fw-semibold"
-                            >
-                                {{ form.birth_date.label }}
-                            </label>
-
-                            {{ form.birth_date }}
-
-                            {% for error in form.birth_date.errors %}
-
-                                <div class="text-danger small mt-1">
-                                    {{ error }}
-                                </div>
-
-                            {% endfor %}
-
-                            <div class="form-text">
-                                Se autocompleta si RENIEC la entregó en
-                                el paso anterior. Si no, complétela
-                                manualmente.
-                            </div>
 
                         </div>
 
@@ -414,15 +336,6 @@
 
                 <!-- ===================================================== -->
                 <!-- SIGUIENTE PASO OPCIONAL -->
-                <!--
-                    Estos tres botones son completamente opcionales:
-                    registran al cliente con los datos ya ingresados
-                    en este formulario y, además, llevan directamente
-                    a la ficha correspondiente para completarla. Si el
-                    operador no necesita hacerlo ahora, puede ignorar
-                    esta sección y usar "Registrar cliente" para
-                    continuar como antes, hacia la ficha del cliente.
-                -->
                 <!-- ===================================================== -->
 
                 <div class="mb-4">

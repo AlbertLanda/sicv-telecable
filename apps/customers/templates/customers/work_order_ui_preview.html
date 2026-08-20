@@ -313,22 +313,6 @@
                                     <td>{{ order_type.name }}</td>
 
                                     <td>
-                                        {% if order_type.plan_scope == "CATV" %}
-                                            <span class="badge bg-info text-dark">
-                                                Solo CATV (incluye Dúo)
-                                            </span>
-                                        {% elif order_type.plan_scope == "INTERNET" %}
-                                            <span class="badge bg-primary">
-                                                Internet o Dúo
-                                            </span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">
-                                                Cualquier plan
-                                            </span>
-                                        {% endif %}
-                                    </td>
-
-                                    <td>
                                         {% for subtype in order_type.subtypes.all %}
                                             <span class="badge bg-light text-dark border">
                                                 {{ subtype.name }}

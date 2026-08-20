@@ -20,18 +20,6 @@ class ServiceType(models.Model):
         verbose_name="Descripción"
     )
 
-    includes_internet = models.BooleanField(
-        default=True,
-        verbose_name="Incluye Internet",
-        help_text="Marca si este servicio provee conexión a Internet.",
-    )
-
-    includes_catv = models.BooleanField(
-        default=False,
-        verbose_name="Incluye CATV",
-        help_text="Marca si este servicio provee TV por cable.",
-    )
-
     is_active = models.BooleanField(
         default=True,
         verbose_name="Activo"

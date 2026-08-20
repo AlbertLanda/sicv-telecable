@@ -167,64 +167,12 @@ def _get(path):
 
     return payload
 
-
-def _parse_fecha_nacimiento(payload):
-    """
-    Intenta extraer la fecha de nacimiento del payload de RENIEC y
-    normalizarla a ISO (YYYY-MM-DD).
-
-    Perú API (y proveedores similares) no siempre incluyen este dato
-    en el plan gratuito, y el nombre exacto de la clave puede variar
-    según el proveedor configurado. Por eso se prueban varias claves
-    conocidas y varios formatos de fecha; si ninguna coincide, se
-    devuelve cadena vacía y el usuario completa la fecha manualmente
-    en la Pantalla 4, tal como ya ocurre con el resto de datos
-    obtenidos de este servicio opcional.
-    """
-
-    import datetime
-
-    posibles_claves = (
-        "fecha_nacimiento",
-        "fechaNacimiento",
-        "fecha_de_nacimiento",
-        "birth_date",
-    )
-
-    valor = ""
-
-    for clave in posibles_claves:
-        valor = (payload.get(clave) or "").strip()
-
-        if valor:
-            break
-
-    if not valor:
-        return ""
-
-    formatos_conocidos = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y")
-
-    for formato in formatos_conocidos:
-        try:
-            return datetime.datetime.strptime(
-                valor, formato
-            ).date().isoformat()
-        except ValueError:
-            continue
-
-    return ""
-
-
 def consultar_dni(numero):
     """
     Consulta datos personales por DNI.
 
     Devuelve un dict con las claves usadas por CustomerInitialForm:
-    first_name, paternal_surname, maternal_surname y, cuando el
-    proveedor la entrega, birth_date (ISO YYYY-MM-DD). birth_date es
-    siempre opcional: si el proveedor no la incluye en el plan
-    contratado, se devuelve vacía y el usuario la completa
-    manualmente en la Pantalla 4 (Datos generales).
+    first_name, paternal_surname y maternal_surname.
     """
 
     numero = (numero or "").strip()
@@ -250,7 +198,6 @@ def consultar_dni(numero):
         "first_name": nombres,
         "paternal_surname": apellido_paterno,
         "maternal_surname": apellido_materno,
-        "birth_date": _parse_fecha_nacimiento(payload),
     }
 
 

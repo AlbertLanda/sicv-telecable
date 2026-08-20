@@ -286,17 +286,6 @@ class CustomerInitialCreateView(LoginRequiredMixin, FormView):
             "business_name": form.cleaned_data.get(
                 "business_name", ""
             ),
-            # Solo tiene valor para DNI cuando RENIEC devuelve fecha
-            # de nacimiento (vía el botón "Obtener datos"). Se usa
-            # para prellenar "Fecha de nacimiento" en la Pantalla 4;
-            # si no se obtuvo, el usuario la completa manualmente
-            # allí. Se serializa a ISO (YYYY-MM-DD) para que el
-            # campo de fecha de la Pantalla 4 lo entienda.
-            "birth_date": (
-                form.cleaned_data["birth_date"].isoformat()
-                if form.cleaned_data.get("birth_date")
-                else ""
-            ),
         }
 
         return redirect(
@@ -748,8 +737,8 @@ class CustomerWorkOrderUIPreviewView(LoginRequiredMixin, DetailView):
         context["order_types"] = (
             OrderType.objects
             .filter(is_active=True)
-            .prefetch_related("subtypes", "reasons__subtype")
-            .order_by("plan_scope", "name")
+            .prefetch_related("subtypes", "reasons")
+            .order_by("name")
         )
 
         context["zones"] = (
