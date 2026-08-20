@@ -507,3 +507,526 @@ class CustomerUIConsultaTests(TestCase):
             self.work_order.status,
             original_status,
         )
+
+
+class CustomerRegistrationFlowTests(TestCase):
+    """
+    Cubre el flujo funcional obligatorio del ajuste:
+
+    - DNI / CE / Pasaporte -> persona natural.
+    - RUC -> persona jurídica.
+    - Reglas de obligatoriedad de razón social vs. datos personales.
+    - Registro duplicado sigue bloqueado.
+    - Registro de una segunda dirección y unicidad de "principal".
+    - La vista previa visual de OT no crea ninguna WorkOrder.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(
+            code="LIM",
+            name="Sede Lima",
+        )
+
+        self.zone = Zone.objects.create(
+            branch=self.branch,
+            name="Zona Centro",
+        )
+
+        self.user = User.objects.create_user(
+            username="colaborador2",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.branch,
+        )
+
+        self.client.login(
+            username="colaborador2",
+            password="123",
+        )
+
+        self.create_url = reverse("customers:create")
+        self.general_create_url = reverse("customers:general_create")
+
+    # ------------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------------
+
+    def _iniciar_registro(
+        self,
+        document_type,
+        document_number,
+        first_name="",
+        paternal_surname="",
+        maternal_surname="",
+    ):
+        """
+        Ejecuta la Pantalla 3 (datos mínimos) y devuelve la respuesta.
+        """
+
+        return self.client.post(
+            self.create_url,
+            {
+                "document_type": document_type,
+                "document_number": document_number,
+                "first_name": first_name,
+                "paternal_surname": paternal_surname,
+                "maternal_surname": maternal_surname,
+            },
+        )
+
+    def _completar_datos_generales(
+        self,
+        business_name="",
+        phone="987000000",
+        email="cliente@example.com",
+    ):
+        """
+        Ejecuta la Pantalla 4 (datos generales) y devuelve la respuesta.
+        Asume que la sesión ya tiene "customer_registration" cargada.
+        """
+
+        return self.client.post(
+            self.general_create_url,
+            {
+                "branch": self.branch.pk,
+                "business_name": business_name,
+                "phone": phone,
+                "secondary_phone": "",
+                "email": email,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # DNI / CE / PASAPORTE -> PERSONA NATURAL
+    # ------------------------------------------------------------------
+
+    def test_dni_utiliza_flujo_de_persona_natural(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "45678912",
+            first_name="Maria",
+            paternal_surname="Lopez",
+        )
+
+        self.assertRedirects(response, self.general_create_url)
+
+        response = self._completar_datos_generales()
+
+        self.assertEqual(response.status_code, 302)
+
+        customer = Customer.objects.get(document_number="45678912")
+
+        self.assertEqual(
+            customer.person_type,
+            Customer.PersonType.NATURAL,
+        )
+        self.assertEqual(customer.first_name, "Maria")
+        self.assertEqual(customer.paternal_surname, "Lopez")
+
+    def test_ce_utiliza_flujo_de_persona_natural(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.CE,
+            "CE-000111",
+            first_name="John",
+            paternal_surname="Smith",
+        )
+
+        self.assertRedirects(response, self.general_create_url)
+
+        self._completar_datos_generales()
+
+        customer = Customer.objects.get(document_number="CE-000111")
+
+        self.assertEqual(
+            customer.person_type,
+            Customer.PersonType.NATURAL,
+        )
+
+    def test_pasaporte_utiliza_flujo_de_persona_natural(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.PASSPORT,
+            "PA-998877",
+            first_name="Ana",
+            paternal_surname="Diaz",
+        )
+
+        self.assertRedirects(response, self.general_create_url)
+
+        self._completar_datos_generales()
+
+        customer = Customer.objects.get(document_number="PA-998877")
+
+        self.assertEqual(
+            customer.person_type,
+            Customer.PersonType.NATURAL,
+        )
+
+    # ------------------------------------------------------------------
+    # RUC -> PERSONA JURÍDICA
+    # ------------------------------------------------------------------
+
+    def test_ruc_utiliza_flujo_de_persona_juridica(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.RUC,
+            "20555666771",
+        )
+
+        self.assertRedirects(response, self.general_create_url)
+
+        response = self._completar_datos_generales(
+            business_name="Corporación Andina SAC",
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        customer = Customer.objects.get(document_number="20555666771")
+
+        self.assertEqual(
+            customer.person_type,
+            Customer.PersonType.LEGAL,
+        )
+        self.assertEqual(
+            customer.business_name,
+            "Corporación Andina SAC",
+        )
+
+    def test_ruc_exige_razon_social(self):
+        self._iniciar_registro(
+            Customer.DocumentType.RUC,
+            "20555666772",
+        )
+
+        response = self._completar_datos_generales(
+            business_name="",
+        )
+
+        # No debe redirigir: el formulario vuelve a mostrarse con error.
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            "business_name",
+            "La razón social es obligatoria para una persona jurídica.",
+        )
+
+        self.assertFalse(
+            Customer.objects.filter(
+                document_number="20555666772"
+            ).exists()
+        )
+
+    def test_ruc_no_exige_apellidos_personales_para_registrar_empresa(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.RUC,
+            "20555666773",
+            first_name="",
+            paternal_surname="",
+        )
+
+        # La Pantalla 3 debe aceptar el RUC sin datos personales.
+        self.assertRedirects(response, self.general_create_url)
+
+        response = self._completar_datos_generales(
+            business_name="Distribuidora Central EIRL",
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        customer = Customer.objects.get(document_number="20555666773")
+
+        self.assertEqual(customer.first_name, "")
+        self.assertEqual(customer.paternal_surname, "")
+        self.assertEqual(
+            customer.business_name,
+            "Distribuidora Central EIRL",
+        )
+
+    # ------------------------------------------------------------------
+    # PERSONA NATURAL: DATOS PERSONALES OBLIGATORIOS
+    # ------------------------------------------------------------------
+
+    def test_persona_natural_exige_nombres_y_apellido_paterno(self):
+        response = self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "45678999",
+            first_name="",
+            paternal_surname="",
+        )
+
+        # No debe avanzar a la Pantalla 4: el formulario de la
+        # Pantalla 3 vuelve a mostrarse con errores.
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            "first_name",
+            "Los nombres son obligatorios para persona natural.",
+        )
+        self.assertFormError(
+            response.context["form"],
+            "paternal_surname",
+            (
+                "El apellido paterno es obligatorio para "
+                "persona natural."
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # COHERENCIA DOCUMENTO / TIPO DE PERSONA
+    # ------------------------------------------------------------------
+
+    def test_tipo_de_persona_se_deriva_siempre_del_documento(self):
+        """
+        No existe ningún campo en el formulario de la Pantalla 4 que
+        permita elegir libremente el tipo de persona: siempre se
+        calcula a partir del tipo de documento registrado en la
+        Pantalla 3 (Customer.person_type_for_document).
+        """
+
+        self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "45671234",
+            first_name="Carlos",
+            paternal_surname="Vega",
+        )
+
+        response = self.client.get(self.general_create_url)
+
+        self.assertNotIn("person_type", response.context["form"].fields)
+
+    # ------------------------------------------------------------------
+    # DUPLICADOS
+    # ------------------------------------------------------------------
+
+    def test_registro_duplicado_de_cliente_continua_bloqueado(self):
+        Customer.objects.create(
+            code="CLI-DUP",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="11223344",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Pedro",
+            paternal_surname="Ramos",
+        )
+
+        response = self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "11223344",
+            first_name="Pedro",
+            paternal_surname="Ramos",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            "document_number",
+            (
+                "Ya existe un cliente registrado con este "
+                "tipo y número de documento."
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # DIRECCIONES
+    # ------------------------------------------------------------------
+
+    def test_registro_de_segunda_direccion_funciona(self):
+        customer = Customer.objects.create(
+            code="CLI-ADDR",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="55667788",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Luis",
+            paternal_surname="Torres",
+        )
+
+        CustomerAddress.objects.create(
+            customer=customer,
+            zone=self.zone,
+            address="Av. Primera 100",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        address_create_url = reverse(
+            "customers:address_create",
+            kwargs={"customer_pk": customer.pk},
+        )
+
+        response = self.client.post(
+            address_create_url,
+            {
+                "zone": self.zone.pk,
+                "address": "Av. Segunda 200",
+                "reference": "",
+                "district": "Huancayo",
+                "meter_number": "",
+                "latitude": "",
+                "longitude": "",
+                "gps_link": "",
+                "is_primary": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(customer.addresses.count(), 2)
+
+    def test_marcar_nueva_direccion_principal_deja_solo_una_principal(self):
+        customer = Customer.objects.create(
+            code="CLI-ADDR2",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="55667799",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Rosa",
+            paternal_surname="Flores",
+        )
+
+        first_address = CustomerAddress.objects.create(
+            customer=customer,
+            zone=self.zone,
+            address="Av. Primera 100",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        address_create_url = reverse(
+            "customers:address_create",
+            kwargs={"customer_pk": customer.pk},
+        )
+
+        self.client.post(
+            address_create_url,
+            {
+                "zone": self.zone.pk,
+                "address": "Av. Segunda 200",
+                "reference": "",
+                "district": "Huancayo",
+                "meter_number": "",
+                "latitude": "",
+                "longitude": "",
+                "gps_link": "",
+                "is_primary": "on",
+            },
+        )
+
+        first_address.refresh_from_db()
+
+        self.assertFalse(first_address.is_primary)
+
+        primary_addresses = customer.addresses.filter(is_primary=True)
+
+        self.assertEqual(primary_addresses.count(), 1)
+        self.assertEqual(
+            primary_addresses.first().address,
+            "Av. Segunda 200",
+        )
+
+
+class CustomerWorkOrderUIPreviewTests(TestCase):
+    """
+    Cubre la preparación visual del formulario de OT: debe mostrarse
+    correctamente y, sobre todo, NO debe crear ninguna WorkOrder.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(
+            code="HYO",
+            name="Sede Huancayo",
+        )
+
+        self.zone = Zone.objects.create(
+            branch=self.branch,
+            name="Zona Norte",
+        )
+
+        self.user = User.objects.create_user(
+            username="colaborador3",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.branch,
+        )
+
+        self.service_type = ServiceType.objects.create(
+            code="INTERNET2",
+            name="Internet",
+        )
+
+        self.plan = Plan.objects.create(
+            service_type=self.service_type,
+            code="PLAN200",
+            name="Plan 200 Mbps",
+            speed_mbps=200,
+        )
+
+        self.customer = Customer.objects.create(
+            code="CLI-OTPREV",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="66778899",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Sofia",
+            paternal_surname="Rios",
+        )
+
+        self.address = CustomerAddress.objects.create(
+            customer=self.customer,
+            zone=self.zone,
+            address="Jr. Preview 123",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        self.subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=1,
+        )
+
+        self.order_type = OrderType.objects.create(
+            code="AVERIA",
+            name="Avería",
+        )
+
+        self.preview_url = reverse(
+            "customers:work_order_ui_preview",
+            kwargs={"pk": self.customer.pk},
+        )
+
+        self.client.login(
+            username="colaborador3",
+            password="123",
+        )
+
+    def test_vista_previa_de_ot_se_muestra_correctamente(self):
+        response = self.client.get(self.preview_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CLI-OTPREV")
+        self.assertContains(response, "Avería")
+
+    def test_vista_previa_de_ot_no_crea_ninguna_orden(self):
+        initial_count = WorkOrder.objects.count()
+
+        response = self.client.get(self.preview_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(WorkOrder.objects.count(), initial_count)
+
+    def test_vista_previa_de_ot_no_acepta_post(self):
+        response = self.client.post(self.preview_url, {})
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+    def test_usuario_anonimo_no_accede_a_la_vista_previa(self):
+        self.client.logout()
+
+        response = self.client.get(self.preview_url)
+
+        self.assertEqual(response.status_code, 302)

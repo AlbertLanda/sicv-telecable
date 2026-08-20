@@ -7,6 +7,16 @@ class CustomerInitialForm(forms.Form):
     """
     Pantalla 3:
     Datos mínimos para iniciar el registro del cliente.
+
+    Los campos de nombres/apellidos personales solo son obligatorios
+    para persona natural (DNI/CE/PASAPORTE). Para persona jurídica
+    (RUC) no se exigen datos personales; la razón social se solicita
+    en la Pantalla 4 (Datos generales).
+
+    IMPORTANTE: esta obligatoriedad condicional se resuelve en
+    clean(), es decir, del lado servidor. El JavaScript del template
+    solo oculta/muestra campos para mejorar la experiencia de uso,
+    pero no es la fuente de la validación.
     """
 
     document_type = forms.ChoiceField(
@@ -15,6 +25,7 @@ class CustomerInitialForm(forms.Form):
         widget=forms.Select(
             attrs={
                 "class": "form-select",
+                "id": "id_document_type",
             }
         ),
     )
@@ -34,6 +45,7 @@ class CustomerInitialForm(forms.Form):
     paternal_surname = forms.CharField(
         label="Apellido paterno",
         max_length=100,
+        required=False,
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
@@ -57,6 +69,7 @@ class CustomerInitialForm(forms.Form):
     first_name = forms.CharField(
         label="Nombres",
         max_length=100,
+        required=False,
         widget=forms.TextInput(
             attrs={
                 "class": "form-control",
@@ -64,6 +77,43 @@ class CustomerInitialForm(forms.Form):
             }
         ),
     )
+
+    # Solo aplica a RUC (persona jurídica). Se completa mediante el
+    # botón "Obtener datos" (consulta a SUNAT) o manualmente por el
+    # usuario. Es un campo visible (igual que nombres/apellidos lo
+    # son para persona natural) para que el operador vea y pueda
+    # corregir la razón social apenas se consulta SUNAT. El valor
+    # viaja a la sesión junto con el resto de datos de esta pantalla
+    # para prellenar "Razón social" en la Pantalla 4
+    # (CustomerGeneralDataView), donde puede volver a editarse.
+    business_name = forms.CharField(
+        label="Razón social",
+        max_length=200,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "maxlength": "200",
+                "id": "id_business_name",
+            }
+        ),
+    )
+
+    # Solo aplica a persona natural (DNI). Se completa mediante el
+    # botón "Obtener datos" (consulta a RENIEC) cuando el proveedor
+    # devuelve la fecha de nacimiento. Se mantiene oculto en esta
+    # pantalla porque el campo editable se muestra recién en la
+    # Pantalla 4 (Datos generales), junto a género y estado civil;
+    # aquí solo se usa para transportar el valor obtenido hacia la
+    # sesión. Si no se pudo obtener automáticamente, queda vacío y
+    # el usuario lo completa manualmente en la Pantalla 4.
+    birth_date = forms.DateField(
+        required=False,
+        widget=forms.HiddenInput(),
+    )
+
+    def clean_business_name(self):
+        return self.cleaned_data.get("business_name", "").strip()
 
     def clean_document_number(self):
         return self.cleaned_data["document_number"].strip().upper()
@@ -121,6 +171,33 @@ class CustomerInitialForm(forms.Form):
                 )
 
         # ---------------------------------------------------------
+        # VALIDACIÓN DE DATOS PERSONALES SEGÚN TIPO DE PERSONA
+        #
+        # Persona natural (DNI/CE/PASAPORTE): nombres y apellido
+        # paterno son obligatorios.
+        # Persona jurídica (RUC): no se exigen datos personales.
+        # ---------------------------------------------------------
+
+        person_type = Customer.person_type_for_document(document_type)
+
+        if person_type == Customer.PersonType.NATURAL:
+
+            if not (cleaned_data.get("first_name") or "").strip():
+                self.add_error(
+                    "first_name",
+                    "Los nombres son obligatorios para persona natural.",
+                )
+
+            if not (cleaned_data.get("paternal_surname") or "").strip():
+                self.add_error(
+                    "paternal_surname",
+                    (
+                        "El apellido paterno es obligatorio para "
+                        "persona natural."
+                    ),
+                )
+
+        # ---------------------------------------------------------
         # VALIDACIÓN DE DUPLICADO
         # ---------------------------------------------------------
 
@@ -151,6 +228,19 @@ class CustomerRegistrationForm(forms.ModelForm):
 
     Los datos básicos de identidad vienen de la Pantalla 3
     mediante la sesión.
+
+    NOTA IMPORTANTE:
+    "person_type" NO es un campo editable de este formulario. Se
+    deriva siempre del tipo de documento (Customer.person_type_for_
+    document), tal como exige la regla de correspondencia
+    documento/tipo de persona. Esto evita que la interfaz permita
+    combinaciones incoherentes (p. ej. RUC + Persona Natural) y hace
+    que la regla se cumpla también del lado servidor, sin depender
+    de lo que el usuario seleccione.
+
+    El tipo de documento se recibe en __init__ (no en los datos del
+    formulario) para poder calcular el tipo de persona esperado y
+    exigir la razón social cuando corresponda.
     """
 
     class Meta:
@@ -158,8 +248,10 @@ class CustomerRegistrationForm(forms.ModelForm):
 
         fields = [
             "branch",
-            "person_type",
             "business_name",
+            "gender",
+            "marital_status",
+            "birth_date",
             "phone",
             "secondary_phone",
             "email",
@@ -167,11 +259,6 @@ class CustomerRegistrationForm(forms.ModelForm):
 
         widgets = {
             "branch": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "person_type": forms.Select(
                 attrs={
                     "class": "form-select",
                 }
@@ -200,25 +287,55 @@ class CustomerRegistrationForm(forms.ModelForm):
                     "maxlength": "200",
                 }
             ),
+            "gender": forms.Select(
+                attrs={
+                    "class": "form-select",
+                }
+            ),
+            "marital_status": forms.Select(
+                attrs={
+                    "class": "form-select",
+                }
+            ),
+            "birth_date": forms.DateInput(
+                attrs={
+                    "class": "form-control",
+                    "type": "date",
+                },
+                format="%Y-%m-%d",
+            ),
         }
 
         labels = {
             "branch": "Sede",
-            "person_type": "Tipo de persona",
             "phone": "Teléfono principal",
             "secondary_phone": "Teléfono secundario",
             "email": "Correo electrónico",
             "business_name": "Razón social / Nombre comercial",
+            "gender": "Género",
+            "marital_status": "Estado civil",
+            "birth_date": "Fecha de nacimiento",
         }
+
+    def __init__(self, *args, document_type=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.document_type = document_type
+        self.person_type = Customer.person_type_for_document(document_type)
+
+        # El campo solo es obligatorio a nivel de negocio para
+        # persona jurídica; se deja opcional a nivel de Django para
+        # que la validación real ocurra en clean(), donde se conoce
+        # el tipo de persona derivado del documento.
+        self.fields["business_name"].required = False
 
     def clean(self):
         cleaned_data = super().clean()
 
-        person_type = cleaned_data.get("person_type")
-        business_name = cleaned_data.get("business_name", "").strip()
+        business_name = (cleaned_data.get("business_name") or "").strip()
 
         if (
-            person_type == Customer.PersonType.LEGAL
+            self.person_type == Customer.PersonType.LEGAL
             and not business_name
         ):
             self.add_error(
