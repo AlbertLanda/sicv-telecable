@@ -51,6 +51,12 @@ urlpatterns = [
         include("apps.contracts.urls"),
     ),
 
+    # Órdenes de trabajo
+    path(
+        "work-orders/",
+        include("apps.work_orders.urls"),
+    ),
+
 ]
 
 

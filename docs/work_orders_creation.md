@@ -337,7 +337,8 @@ En todos los rechazos se comprueba además que **no quedó ninguna orden**.
 ## 8. Fuera del alcance de esta actividad
 
 - Vistas, formularios, plantillas o API de creación (el servicio queda listo
-  para que los consuman).
+  para que los consuman). La capa web que lo consume se documentó después en
+  [`work_orders_web_creation.md`](work_orders_web_creation.md).
 - Asignación de técnico en el momento de la creación.
 - Cierre automático de órdenes.
 - Movimientos de inventario.

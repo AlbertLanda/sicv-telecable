@@ -835,9 +835,9 @@
     </span>
 
     <a
-        href="{% url 'customers:work_order_ui_preview' customer.pk %}"
+        href="{% url 'work_orders:create' customer.pk %}"
         class="btn btn-light btn-sm"
-        title="Vista previa visual del formulario de OT. No crea ninguna orden todavía."
+        title="Registrar una nueva orden de trabajo para este cliente."
     >
         + Nueva orden de trabajo
     </a>

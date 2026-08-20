@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva orden de trabajo - {{ customer }}{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <!-- ENCABEZADO -->
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+
+        <div>
+            <h1 class="h3 mb-1">
+                Nueva orden de trabajo
+            </h1>
+
+            <p class="text-muted mb-0">
+                El número de orden y el registro definitivo los emite el
+                servicio de órdenes de SICV.
+            </p>
+        </div>
+
+        <a
+            href="{% url 'customers:detail' customer.pk %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la ficha
+        </a>
+
+    </div>
+
+
+    <div class="card card-custom shadow-sm">
+
+        <div class="card-header bg-primary text-white fw-bold">
+            Datos de la orden
+        </div>
+
+        <div class="card-body">
+
+            <!-- CLIENTE: CONTEXTO DE SERVIDOR, NO EDITABLE -->
+
+            <div class="alert alert-info">
+
+                <strong>Cliente:</strong>
+                {{ customer.code }} - {{ customer }}
+
+                {% if customer.document_number %}
+                    <span class="ms-2">
+                        {{ customer.document_type }}
+                        {{ customer.document_number }}
+                    </span>
+                {% endif %}
+
+                <span class="ms-2">
+                    <strong>Sede:</strong> {{ customer.branch }}
+                </span>
+
+            </div>
+
+
+            {% if not has_subscriptions %}
+
+                <div class="alert alert-warning mb-0">
+                    Este cliente aún no tiene suscripciones activas. Registre
+                    primero una suscripción: una orden de trabajo siempre se
+                    registra sobre un servicio contratado.
+                </div>
+
+            {% else %}
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+
+                <div class="row g-3">
+
+                    <!-- SUSCRIPCIÓN -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.subscription.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.subscription.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+
+                        {{ form.subscription }}
+
+                        {% for error in form.subscription.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            Solo se listan las suscripciones de este cliente.
+                        </div>
+
+                    </div>
+
+
+                    <!-- TIPO DE ORDEN -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.order_type.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.order_type.label }}
+                            <span class="text-danger">*</span>
+                        </label>
+
+                        {{ form.order_type }}
+
+                        {% for error in form.order_type.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- SUBTIPO -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.subtype.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.subtype.label }}
+                        </label>
+
+                        {{ form.subtype }}
+
+                        {% for error in form.subtype.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            Solo cuando el tipo de orden lo requiera.
+                        </div>
+
+                    </div>
+
+
+                    <!-- MOTIVO -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.reason.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.reason.label }}
+                        </label>
+
+                        {{ form.reason }}
+
+                        {% for error in form.reason.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            Debe corresponder al tipo de orden seleccionado.
+                        </div>
+
+                    </div>
+
+
+                    <!-- SEDE -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.branch.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.branch.label }}
+                        </label>
+
+                        {{ form.branch }}
+
+                        {% for error in form.branch.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            La sede de la orden es la del cliente.
+                        </div>
+
+                    </div>
+
+
+                    <!-- ZONA -->
+
+                    <div class="col-md-6">
+
+                        <label
+                            for="{{ form.zone.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.zone.label }}
+                        </label>
+
+                        {{ form.zone }}
+
+                        {% for error in form.zone.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            {{ form.zone.help_text }}
+                        </div>
+
+                    </div>
+
+
+                    <!-- TIPO DE ATENCIÓN -->
+
+                    <div class="col-md-4">
+
+                        <label
+                            for="{{ form.attention_type.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.attention_type.label }}
+                        </label>
+
+                        {{ form.attention_type }}
+
+                        {% for error in form.attention_type.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- PRIORIDAD -->
+
+                    <div class="col-md-4">
+
+                        <label
+                            for="{{ form.priority.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.priority.label }}
+                        </label>
+
+                        {{ form.priority }}
+
+                        {% for error in form.priority.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- FECHA PROGRAMADA -->
+
+                    <div class="col-md-4">
+
+                        <label
+                            for="{{ form.scheduled_at.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.scheduled_at.label }}
+                        </label>
+
+                        {{ form.scheduled_at }}
+
+                        {% for error in form.scheduled_at.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            {{ form.scheduled_at.help_text }}
+                        </div>
+
+                    </div>
+
+
+                    <!-- DETALLE -->
+
+                    <div class="col-12">
+
+                        <label
+                            for="{{ form.detail.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.detail.label }}
+                        </label>
+
+                        {{ form.detail }}
+
+                        {% for error in form.detail.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <!-- ACCIONES -->
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+
+                    <a
+                        href="{% url 'customers:detail' customer.pk %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-primary">
+                        Registrar orden de trabajo
+                    </button>
+
+                </div>
+
+            </form>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <p class="text-muted small mt-3 mb-0">
+        La orden se registra en estado <strong>Pendiente</strong>. La
+        asignación del técnico, la atención y la liquidación son etapas
+        posteriores del flujo.
+    </p>
+
+</div>
+
+{% endblock %}
