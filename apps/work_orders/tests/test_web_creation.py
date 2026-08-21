@@ -24,6 +24,7 @@ from apps.work_orders.models import (
 )
 from apps.work_orders.services import format_order_number
 from apps.work_orders.tests.base import WorkOrderTestCase
+from django.contrib.auth.models import Permission
 
 
 class WorkOrderWebCreationTestCase(WorkOrderTestCase):
@@ -38,6 +39,13 @@ class WorkOrderWebCreationTestCase(WorkOrderTestCase):
         )
 
         self.client.login(username="atc1", password="test1234")
+
+        permission = Permission.objects.get(
+            codename="add_workorder",
+            content_type__app_label="work_orders",
+        )
+
+        self.atc_user.user_permissions.add(permission)
 
     def valid_payload(self, **overrides):
         """POST mínimo y correcto para registrar una OT de instalación."""
@@ -122,6 +130,27 @@ class WorkOrderCreateViewAccessTests(WorkOrderWebCreationTestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 404)
+
+    def test_authenticated_user_without_permission_cannot_open_form(self):
+        self.client.logout()
+        self.client.login(username="tecnico1", password="test1234")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 403)
+
+
+    def test_authenticated_user_without_permission_cannot_create_order(self):
+        self.client.logout()
+        self.client.login(username="tecnico1", password="test1234")
+
+        response = self.client.post(
+            self.url,
+            self.valid_payload(),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(WorkOrder.objects.count(), 0)
 
 
 class WorkOrderCreateViewSuccessTests(WorkOrderWebCreationTestCase):

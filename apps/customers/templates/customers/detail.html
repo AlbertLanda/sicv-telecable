@@ -834,13 +834,15 @@
         Bloque E - Órdenes de Trabajo del Cliente
     </span>
 
-    <a
-        href="{% url 'work_orders:create' customer.pk %}"
-        class="btn btn-light btn-sm"
-        title="Registrar una nueva orden de trabajo para este cliente."
-    >
-        + Nueva orden de trabajo
-    </a>
+    {% if perms.work_orders.add_workorder %}
+        <a
+            href="{% url 'work_orders:create' customer.pk %}"
+            class="btn btn-light btn-sm"
+            title="Registrar una nueva orden de trabajo para este cliente."
+        >
+            + Nueva orden de trabajo
+        </a>
+    {% endif %}
 
 </div>
 

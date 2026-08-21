@@ -8,7 +8,6 @@ duplica las reglas del dominio.
 """
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -18,9 +17,18 @@ from apps.customers.models import Customer
 from apps.services.models import Subscription
 from apps.work_orders.forms import WorkOrderCreateForm
 from apps.work_orders.services import create_work_order
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 
 
-class WorkOrderCreateView(LoginRequiredMixin, FormView):
+class WorkOrderCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    permission_required = "work_orders.add_workorder"
+
+    form_class = WorkOrderCreateForm
+    template_name = "work_orders/work_order_create.html"
     """
     Registro web de una nueva orden de trabajo para un cliente.
 
