@@ -602,6 +602,17 @@ class WorkOrder(models.Model):
             models.Index(fields=["created_at"], name="wo_created_at_idx"),
         ]
 
+        # Despachar es una atribución operativa propia, distinta de crear o
+        # editar una orden: quien asigna decide qué técnico atiende. Se
+        # declara como permiso funcional para no tener que conceder
+        # change_workorder -que habilita mucho más- solo para despachar.
+        permissions = [
+            (
+                "assign_workorder",
+                "Puede asignar órdenes de trabajo a un técnico",
+            ),
+        ]
+
     def clean(self):
         super().clean()
 
@@ -661,6 +672,17 @@ class WorkOrder(models.Model):
     def is_closed(self):
         """La orden está cerrada operativamente y no admite más operación."""
         return self.status in self.TERMINAL_STATUSES
+
+    @property
+    def can_be_assigned(self):
+        """
+        La orden admite asignar o reasignar técnico.
+
+        Existe para que la interfaz consulte la regla en lugar de repetir la
+        lista de estados: quien decide sigue siendo assign_technician(), esto
+        solo evita ofrecer una acción que el dominio va a rechazar.
+        """
+        return self.status in self.ASSIGNABLE_STATUSES
 
     @property
     def is_liquidated(self):

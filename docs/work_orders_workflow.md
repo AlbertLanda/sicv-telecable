@@ -15,6 +15,11 @@ El **registro** de la orden (servicio único de creación, validaciones previas,
 correlativo transaccional y concurrencia) está documentado aparte en
 [`work_orders_creation.md`](work_orders_creation.md).
 
+La **capa web** que consume este workflow está documentada aparte: el registro
+desde la ficha del cliente en
+[`work_orders_web_creation.md`](work_orders_web_creation.md) y el despacho al
+técnico en [`work_orders_web_assignment.md`](work_orders_web_assignment.md).
+
 ---
 
 ## 1. Estados del workflow

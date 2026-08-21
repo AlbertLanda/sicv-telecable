@@ -1,19 +1,25 @@
 """
-Formulario web de creación de órdenes de trabajo.
+Formularios web del módulo de órdenes de trabajo.
 
-Capa de presentación: recopila los datos que create_work_order() necesita y
-acota lo que el usuario puede elegir al ámbito del cliente que se está
-atendiendo. Las reglas de negocio NO viven aquí: el servicio de dominio sigue
-siendo el que decide si la orden puede registrarse.
+Capa de presentación: recopilan los datos que el dominio necesita y acotan
+lo que el usuario puede elegir al ámbito que le corresponde -el cliente que
+se atiende, la sede de la orden-. Las reglas de negocio NO viven aquí: el
+servicio y el modelo siguen siendo los que deciden si la operación procede.
 
-El formulario deliberadamente NO expone order_number, created_by, status,
-assigned_technician, cause ni result. Al no declararlos en Meta.fields, un
-POST manipulado que los incluya simplemente no los alcanza: Django los
-descarta y el servicio los fija por su cuenta.
+El principio compartido es el mismo en ambos formularios: un campo que no se
+declara no se puede enviar, y una opción que no está en el queryset no es
+válida. Así, el POST manipulado se agota en la capa web sin que el dominio
+tenga que confiar en ella.
+
+- WorkOrderCreateForm no expone order_number, created_by, status,
+  assigned_technician, cause ni result: el servicio los fija por su cuenta.
+- WorkOrderAssignForm solo expone el técnico y una observación: el estado lo
+  mueve assign_technician(), nunca el navegador.
 """
 
 from django import forms
 
+from apps.accounts.models import User
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.work_orders.models import (
@@ -263,3 +269,80 @@ class WorkOrderCreateForm(forms.ModelForm):
             "detail": data.get("detail", ""),
             "scheduled_at": data.get("scheduled_at"),
         }
+
+
+class WorkOrderAssignForm(forms.Form):
+    """
+    Asignación de una orden de trabajo a un técnico.
+
+    Deliberadamente NO es un ModelForm: la asignación no es "guardar campos",
+    es una transición de dominio. Sin form.save() no existe siquiera la
+    tentación de persistir el técnico por fuera de assign_technician().
+
+    El único control real de quién puede recibir la orden es el queryset:
+    lo que no está en él no es una opción válida, así que un POST manipulado
+    con un técnico inactivo, con un usuario administrativo o con un técnico
+    de otra sede se rechaza aquí -como "opción no válida"- y nunca llega al
+    dominio. Las validaciones del modelo siguen siendo la última palabra.
+    """
+
+    assigned_technician = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        label="Técnico asignado",
+        empty_label="Seleccione un técnico...",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+        error_messages={
+            "invalid_choice": (
+                "El técnico seleccionado no es elegible para esta orden."
+            ),
+        },
+    )
+
+    remarks = forms.CharField(
+        required=False,
+        label="Observación de la asignación",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "placeholder": (
+                    "Indicaciones para el despacho (opcional)..."
+                ),
+            }
+        ),
+        help_text=(
+            "Opcional. Queda registrada en el historial de asignaciones."
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        order = kwargs.pop("order", None)
+
+        super().__init__(*args, **kwargs)
+
+        self.order = order
+
+        # -------------------------------------------------------------
+        # TÉCNICOS ELEGIBLES
+        #
+        # Sin orden resuelta no se ofrece a nadie: antes un selector vacío
+        # que uno que exponga personal de sedes ajenas.
+        # -------------------------------------------------------------
+
+        if order is None:
+            return
+
+        self.fields["assigned_technician"].queryset = (
+            User.objects
+            .filter(
+                role=User.Role.TECHNICIAN,
+                is_active=True,
+                branch=order.branch_id,
+            )
+            .select_related("branch")
+            .order_by("first_name", "last_name", "username")
+        )

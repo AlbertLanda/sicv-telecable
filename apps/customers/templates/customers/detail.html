@@ -904,6 +904,10 @@
                             <th>
                                 Creación
                             </th>
+
+                            <th class="text-end pe-3">
+                                Acciones
+                            </th>
                         </tr>
 
                     </thead>
@@ -1088,6 +1092,30 @@
 
                                 <td>
                                     {{ order.created_at|date:"d/m/Y H:i" }}
+                                </td>
+
+                                <td class="text-end pe-3">
+
+                                    {% if perms.work_orders.assign_workorder and order.can_be_assigned %}
+
+                                        <a
+                                            href="{% url 'work_orders:assign' order.pk %}"
+                                            class="btn btn-outline-primary btn-sm"
+                                            title="Asignar o reasignar el técnico de esta orden."
+                                        >
+                                            {% if order.assigned_technician %}
+                                                Reasignar
+                                            {% else %}
+                                                Asignar
+                                            {% endif %}
+                                        </a>
+
+                                    {% else %}
+
+                                        <span class="text-muted">-</span>
+
+                                    {% endif %}
+
                                 </td>
 
                             </tr>

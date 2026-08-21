@@ -8,7 +8,9 @@ el servicio `create_work_order()`. El servicio en sí, sus validaciones y el
 correlativo transaccional están en
 [`work_orders_creation.md`](work_orders_creation.md); el ciclo posterior de
 asignación, atención y liquidación, en
-[`work_orders_workflow.md`](work_orders_workflow.md).
+[`work_orders_workflow.md`](work_orders_workflow.md), y la pantalla que
+despacha la OT a un técnico, en
+[`work_orders_web_assignment.md`](work_orders_web_assignment.md).
 
 ---
 

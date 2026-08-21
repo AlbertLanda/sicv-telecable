@@ -17,4 +17,14 @@ urlpatterns = [
         views.WorkOrderCreateView.as_view(),
         name="create",
     ),
+
+    # Asignar una orden de trabajo pendiente a un técnico.
+    #
+    # La orden viaja en la ruta; el POST solo elige entre los técnicos que el
+    # formulario ya acotó a la sede de esa orden.
+    path(
+        "<int:pk>/assign/",
+        views.WorkOrderAssignView.as_view(),
+        name="assign",
+    ),
 ]
