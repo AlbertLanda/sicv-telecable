@@ -17,12 +17,12 @@
         </div>
 
         <button
-        type="button"
-        class="btn btn-outline-secondary"
-        onclick="history.back()"
-    >
-        ← Volver
-    </button>
+            type="button"
+            class="btn btn-outline-secondary"
+            onclick="history.back()"
+        >
+            ← Volver
+        </button>
 
     </div>
 
@@ -68,53 +68,32 @@
 
                 <div class="row g-3">
 
-    <!-- NÚMERO DE CONTRATO -->
+                    <!-- SUSCRIPCIÓN -->
 
-    <div class="col-md-6">
+                    <div class="col-12">
 
-        <label
-            for="{{ form.contract_number.id_for_label }}"
-            class="form-label"
-        >
-            {{ form.contract_number.label }}
-        </label>
+                        <label
+                            for="{{ form.subscription.id_for_label }}"
+                            class="form-label"
+                        >
+                            {{ form.subscription.label }}
+                        </label>
 
-        {{ form.contract_number }}
+                        {{ form.subscription }}
 
-        {% for error in form.contract_number.errors %}
-            <div class="text-danger small mt-1">
-                {{ error }}
-            </div>
-        {% endfor %}
+                        {% for error in form.subscription.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
 
-    </div>
+                        <div class="form-text">
+                            Solo se muestran suscripciones en estado
+                            <strong>Preventa</strong>, pertenecientes a
+                            este cliente y disponibles para contrato.
+                        </div>
 
-
-    <!-- SUSCRIPCIÓN -->
-
-    <div class="col-md-6">
-
-        <label
-            for="{{ form.subscription.id_for_label }}"
-            class="form-label"
-        >
-            {{ form.subscription.label }}
-        </label>
-
-        {{ form.subscription }}
-
-        {% for error in form.subscription.errors %}
-            <div class="text-danger small mt-1">
-                {{ error }}
-            </div>
-        {% endfor %}
-
-        <div class="form-text">
-            Solo se muestran las suscripciones activas
-            pertenecientes a este cliente.
-        </div>
-
-    </div>
+                    </div>
 
 
                     <!-- FECHA DE INICIO -->
@@ -157,32 +136,6 @@
                                 {{ error }}
                             </div>
                         {% endfor %}
-
-                    </div>
-
-
-                    <!-- ESTADO -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.status.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.status.label }}
-                        </label>
-
-                        {{ form.status }}
-
-                        {% for error in form.status.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            Estado inicial definido por el modelo.
-                        </div>
 
                     </div>
 

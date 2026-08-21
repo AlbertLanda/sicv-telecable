@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 
 {% block title %}Registrar Cliente - Datos Generales{% endblock %}
 
@@ -97,6 +97,7 @@
 
                 </div>
 
+                {% if person_type_display == "Persona Natural" %}
 
                 <!-- APELLIDO PATERNO -->
 
@@ -150,6 +151,9 @@
                     >
 
                 </div>
+
+            {% endif %}
+
 
             </div>
 
@@ -340,43 +344,17 @@
 
                 <div class="mb-4">
 
-                    <label class="form-label fw-semibold d-block">
-                        A continuación, opcionalmente puede registrar
-                        de una vez:
-                    </label>
+    <label class="form-label fw-semibold d-block">
+        Siguiente paso opcional
+    </label>
 
-                    <div class="d-flex flex-wrap gap-2">
+    <div class="form-text">
+        Después de registrar una dirección podrá crear una
+        suscripción y continuar con el contrato y la orden
+        de instalación.
+    </div>
 
-                        <button
-                            type="submit"
-                            name="action"
-                            value="address"
-                            class="btn btn-outline-secondary btn-sm"
-                        >
-                            + Nueva dirección
-                        </button>
-
-                        <button
-                            type="submit"
-                            name="action"
-                            value="subscription"
-                            class="btn btn-outline-secondary btn-sm"
-                        >
-                            + Nueva suscripción
-                        </button>
-
-                        <button
-                            type="submit"
-                            name="action"
-                            value="contract"
-                            class="btn btn-outline-secondary btn-sm"
-                        >
-                            + Nuevo contrato
-                        </button>
-
-                    </div>
-
-                </div>
+</div>
 
 
                 <!-- BOTONES -->

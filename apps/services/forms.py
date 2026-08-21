@@ -154,25 +154,35 @@ class SubscriptionCreateForm(forms.ModelForm):
         plan = cleaned_data.get("plan")
         service_number = cleaned_data.get("service_number")
 
-        # ---------------------------------------------------------
-        # VALIDAR DIRECCIÓN DEL CLIENTE
-        # ---------------------------------------------------------
-
+        # Dirección
         if self.customer and address:
-
             if address.customer_id != self.customer.pk:
                 self.add_error(
                     "address",
                     "La dirección seleccionada no pertenece al cliente.",
                 )
+            elif not address.is_active:
+                self.add_error(
+                    "address",
+                    "La dirección seleccionada no está activa.",
+                )
 
-        # ---------------------------------------------------------
-        # VALIDAR PLAN VS TIPO DE SERVICIO
-        # ---------------------------------------------------------
+        # Servicio
+        if service_type and not service_type.is_active:
+            self.add_error(
+                "service_type",
+                "El tipo de servicio seleccionado no está activo.",
+            )
 
-        if service_type and plan:
+        # Plan
+        if plan:
+            if not plan.is_active:
+                self.add_error(
+                    "plan",
+                    "El plan seleccionado no está activo.",
+                )
 
-            if plan.service_type_id != service_type.pk:
+            if service_type and plan.service_type_id != service_type.pk:
                 self.add_error(
                     "plan",
                     (
@@ -181,15 +191,8 @@ class SubscriptionCreateForm(forms.ModelForm):
                     ),
                 )
 
-        # ---------------------------------------------------------
-        # VALIDAR NÚMERO DE SERVICIO
-        # ---------------------------------------------------------
-
-        if (
-            self.customer
-            and service_type
-            and service_number
-        ):
+        # Número de servicio
+        if self.customer and service_type and service_number:
             exists = Subscription.objects.filter(
                 customer=self.customer,
                 service_type=service_type,

@@ -524,24 +524,6 @@ class CustomerGeneralDataView(LoginRequiredMixin, FormView):
             )
 
         # -----------------------------------------
-        # NUEVO CONTRATO
-        # -----------------------------------------
-
-        if next_step == "contract":
-
-            self.request.session[
-                "customer_flow_return"
-            ] = {
-                "type": "general_data",
-                "customer_pk": self.object.pk,
-            }
-
-            return redirect(
-                "contracts:contract_create",
-                customer_pk=self.object.pk,
-            )
-
-        # -----------------------------------------
         # FINAL NORMAL
         # -----------------------------------------
 
@@ -583,6 +565,7 @@ class CustomerGeneralDataEditView(LoginRequiredMixin, UpdateView):
             "first_name": customer.first_name,
             "paternal_surname": customer.paternal_surname,
             "maternal_surname": customer.maternal_surname,
+            "business_name": customer.business_name,
         }
 
         context["person_type_display"] = dict(
