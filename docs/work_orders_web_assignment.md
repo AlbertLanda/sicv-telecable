@@ -236,7 +236,7 @@ informa, no autoriza.
 | Solo se ofrecen técnicos elegibles |
 | Se rechaza un técnico inactivo |
 | Se rechaza un usuario que no es técnico |
-| Se rechaza un técnico de otra sede |
+| Un técnico activo de otra sede puede ser asignado |
 | El técnico es obligatorio |
 | Una asignación rechazada no deja historial |
 | Una reasignación fallida conserva al técnico anterior |

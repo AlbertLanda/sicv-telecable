@@ -1,22 +1,3 @@
-"""
-Formularios web del módulo de órdenes de trabajo.
-
-Capa de presentación: recopilan los datos que el dominio necesita y acotan
-lo que el usuario puede elegir al ámbito que le corresponde -el cliente que
-se atiende, la sede de la orden-. Las reglas de negocio NO viven aquí: el
-servicio y el modelo siguen siendo los que deciden si la operación procede.
-
-El principio compartido es el mismo en ambos formularios: un campo que no se
-declara no se puede enviar, y una opción que no está en el queryset no es
-válida. Así, el POST manipulado se agota en la capa web sin que el dominio
-tenga que confiar en ella.
-
-- WorkOrderCreateForm no expone order_number, created_by, status,
-  assigned_technician, cause ni result: el servicio los fija por su cuenta.
-- WorkOrderAssignForm solo expone el técnico y una observación: el estado lo
-  mueve assign_technician(), nunca el navegador.
-"""
-
 from django import forms
 
 from apps.accounts.models import User
@@ -31,16 +12,6 @@ from apps.work_orders.models import (
 
 
 class WorkOrderCreateForm(forms.ModelForm):
-    """
-    Datos de creación de una OT para un cliente concreto.
-
-    Recibe el cliente ya resuelto por la vista (nunca por el navegador) y
-    restringe los querysets a su ámbito: sus suscripciones, su sede, las zonas
-    de esa sede y los catálogos activos. Lo que no está en el queryset no es
-    una opción válida, así que una suscripción ajena o una zona de otra sede
-    se rechazan como "opción no válida" sin llegar al servicio.
-    """
-
     scheduled_at = forms.DateTimeField(
         required=False,
         label="Fecha programada",
@@ -247,13 +218,6 @@ class WorkOrderCreateForm(forms.ModelForm):
         )
 
     def service_arguments(self):
-        """
-        Traduce los datos limpios a los argumentos de create_work_order().
-
-        La vista no arma este diccionario a mano: si mañana cambia la firma
-        del servicio, el ajuste ocurre en un solo lugar. `created_by` no
-        aparece aquí a propósito: lo aporta la vista desde request.user.
-        """
         data = self.cleaned_data
 
         return {
@@ -272,19 +236,6 @@ class WorkOrderCreateForm(forms.ModelForm):
 
 
 class WorkOrderAssignForm(forms.Form):
-    """
-    Asignación de una orden de trabajo a un técnico.
-
-    Deliberadamente NO es un ModelForm: la asignación no es "guardar campos",
-    es una transición de dominio. Sin form.save() no existe siquiera la
-    tentación de persistir el técnico por fuera de assign_technician().
-
-    El único control real de quién puede recibir la orden es el queryset:
-    lo que no está en él no es una opción válida, así que un POST manipulado
-    con un técnico inactivo, con un usuario administrativo o con un técnico
-    de otra sede se rechaza aquí -como "opción no válida"- y nunca llega al
-    dominio. Las validaciones del modelo siguen siendo la última palabra.
-    """
 
     assigned_technician = forms.ModelChoiceField(
         queryset=User.objects.none(),
@@ -326,13 +277,6 @@ class WorkOrderAssignForm(forms.Form):
 
         self.order = order
 
-        # -------------------------------------------------------------
-        # TÉCNICOS ELEGIBLES
-        #
-        # Sin orden resuelta no se ofrece a nadie: antes un selector vacío
-        # que uno que exponga personal de sedes ajenas.
-        # -------------------------------------------------------------
-
         if order is None:
             return
 
@@ -341,8 +285,12 @@ class WorkOrderAssignForm(forms.Form):
             .filter(
                 role=User.Role.TECHNICIAN,
                 is_active=True,
-                branch=order.branch_id,
             )
             .select_related("branch")
-            .order_by("first_name", "last_name", "username")
+            .order_by(
+                "branch__name",
+                "first_name",
+                "last_name",
+                "username",
+            )
         )

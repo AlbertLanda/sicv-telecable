@@ -52,7 +52,8 @@ class WorkOrderWebAssignmentTestCase(WorkOrderTestCase):
         self.dispatcher = self.supervisor
         self.dispatcher.user_permissions.add(self.assignment_permission)
 
-        # Sede distinta a la de la orden, con su propio técnico activo: es el
+        # Técnico activo perteneciente a otra sede. Debe seguir siendo elegible,
+        # ya que las cuadrillas pueden atender órdenes fuera de su sede base.
         # candidato que la vista debe rechazar aunque sea técnico y esté
         # activo.
         self.other_branch = Branch.objects.create(
@@ -308,7 +309,7 @@ class WorkOrderAssignEligibilityTests(WorkOrderWebAssignmentTestCase):
         self.assertNotIn(self.inactive_technician, choices)
         self.assertNotIn(self.atc_user, choices)
         self.assertNotIn(self.supervisor, choices)
-        self.assertNotIn(self.foreign_technician, choices)
+        self.assertIn(self.foreign_technician, choices)
 
     def test_inactive_technician_is_rejected(self):
         """Prueba 4: un técnico inactivo no puede recibir la orden."""
@@ -334,8 +335,13 @@ class WorkOrderAssignEligibilityTests(WorkOrderWebAssignmentTestCase):
         self.assertTrue(response.context["form"].errors)
         self.assertOrderUntouched()
 
-    def test_technician_from_another_branch_is_rejected(self):
-        """Prueba 6: la sede de la orden acota el personal elegible."""
+    def test_active_technician_from_another_branch_can_be_assigned(self):
+        """
+        La sede del técnico es una referencia operativa, no una restricción.
+
+        Una cuadrilla puede recibir órdenes de otra sede según la distribución
+        realizada por despacho o el jefe de cuadrilla.
+        """
         response = self.client.post(
             self.url,
             self.valid_payload(
@@ -343,9 +349,18 @@ class WorkOrderAssignEligibilityTests(WorkOrderWebAssignmentTestCase):
             ),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["form"].errors)
-        self.assertOrderUntouched()
+        self.assertEqual(response.status_code, 302)
+
+        self.order.refresh_from_db()
+
+        self.assertEqual(
+            self.order.assigned_technician,
+            self.foreign_technician,
+        )
+        self.assertEqual(
+            self.order.status,
+            WorkOrder.Status.ASSIGNED,
+        )
 
     def test_technician_is_required(self):
         response = self.client.post(
@@ -365,7 +380,7 @@ class WorkOrderAssignEligibilityTests(WorkOrderWebAssignmentTestCase):
         self.client.post(
             self.url,
             self.valid_payload(
-                assigned_technician=self.foreign_technician.pk,
+                assigned_technician=self.inactive_technician.pk,
             ),
         )
 
