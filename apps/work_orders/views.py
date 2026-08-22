@@ -12,11 +12,15 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views.generic import FormView
+from django.views.generic import FormView, ListView
 
 from apps.customers.models import Customer
 from apps.services.models import Subscription
-from apps.work_orders.forms import WorkOrderAssignForm, WorkOrderCreateForm
+from apps.work_orders.forms import (
+    WorkOrderAssignForm,
+    WorkOrderCreateForm,
+    WorkOrderDispatchFilterForm,
+)
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import create_work_order
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -237,3 +241,103 @@ class WorkOrderAssignView(
             "customers:detail",
             kwargs={"pk": self.get_work_order().subscription.customer_id},
         )
+
+
+class WorkOrderDispatchListView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    ListView,
+):
+    """
+    Bandeja operativa de despacho de órdenes de trabajo.
+
+    Es el paso entre el registro de la OT por ATC y su despacho a un técnico:
+    lista, busca y filtra, y desde ahí enlaza al flujo de asignación que ya
+    existe.
+
+    Decisiones deliberadas:
+
+    - Es una vista de solo lectura. No crea órdenes, no cambia estados y no
+      asigna: la acción Asignar/Reasignar es un enlace a work_orders:assign,
+      que es quien ejecuta la transición contra el dominio.
+    - El permiso de visualización es view_workorder, el permiso por defecto
+      de Django sobre el modelo. No se hardcodea ningún rol en la vista y no
+      hace falta migración para declararlo.
+    - Ver la bandeja y despachar son atribuciones distintas: view_workorder
+      abre el listado, assign_workorder habilita la acción. Un usuario puede
+      tener la primera sin la segunda.
+    - Los filtros se validan en WorkOrderDispatchFilterForm, no aquí. La vista
+      no interpreta parámetros crudos de la URL ni arma consultas a mano.
+    - sede y zona filtran el listado y nada más. WorkOrderAssignForm no se
+      toca: un técnico activo de otra sede sigue siendo elegible para una
+      orden de cualquier sede.
+    """
+
+    permission_required = "work_orders.view_workorder"
+
+    model = WorkOrder
+    template_name = "work_orders/work_order_dispatch.html"
+    context_object_name = "orders"
+    paginate_by = 20
+
+    def get_filter_form(self):
+        """Formulario de filtros, enlazado a la query string de la petición."""
+        if not hasattr(self, "_filter_form"):
+            self._filter_form = WorkOrderDispatchFilterForm(
+                data=self.request.GET,
+            )
+
+        return self._filter_form
+
+    def get_queryset(self):
+        queryset = (
+            WorkOrder.objects
+            # Todo lo que la tabla pinta por fila se trae en la misma consulta.
+            # Sin esto, listar 20 órdenes dispara una consulta por cliente,
+            # sede, zona, tipo y técnico de cada fila.
+            .select_related(
+                "subscription",
+                "subscription__customer",
+                "subscription__address",
+                "subscription__address__zone",
+                "branch",
+                "zone",
+                "order_type",
+                "subtype",
+                "assigned_technician",
+                "assigned_technician__branch",
+            )
+            # Meta.ordering ya ordena por -created_at. Se repite aquí con un
+            # desempate explícito por -pk porque la paginación lo necesita:
+            # con dos órdenes creadas en el mismo instante, un orden no
+            # determinista puede repetir o saltar filas entre páginas.
+            .order_by("-created_at", "-pk")
+        )
+
+        return self.get_filter_form().apply_to(queryset)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["filter_form"] = self.get_filter_form()
+
+        # Los filtros deben sobrevivir a la paginación: se reenvía la query
+        # string sin el parámetro de página, que cada enlace pone por su
+        # cuenta.
+        parameters = self.request.GET.copy()
+        parameters.pop("page", None)
+
+        context["querystring"] = parameters.urlencode()
+
+        # Cuántas órdenes coinciden en total, no cuántas caben en la página.
+        context["total_count"] = (
+            context["paginator"].count
+            if context.get("paginator")
+            else len(context["orders"])
+        )
+
+        # Marca si hay algún filtro aplicado, para distinguir en pantalla
+        # "no hay órdenes todavía" de "ningún resultado para esta búsqueda".
+        context["has_filters"] = bool(context["querystring"])
+
+        return context

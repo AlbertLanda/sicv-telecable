@@ -8,6 +8,16 @@ app_name = "work_orders"
 
 urlpatterns = [
 
+    # Bandeja operativa de despacho.
+    #
+    # Listado de solo lectura: busca, filtra y enlaza al flujo de asignación.
+    # No ejecuta ninguna transición por sí misma.
+    path(
+        "dispatch/",
+        views.WorkOrderDispatchListView.as_view(),
+        name="dispatch",
+    ),
+
     # Registrar una nueva orden de trabajo para un cliente.
     #
     # El cliente viaja en la ruta, no en el cuerpo del POST: la vista lo
