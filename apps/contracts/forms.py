@@ -10,22 +10,13 @@ class ContractCreateForm(forms.ModelForm):
         model = Contract
 
         fields = [
-            "contract_number",
             "subscription",
             "start_date",
             "end_date",
-            "status",
             "notes",
         ]
 
         widgets = {
-            "contract_number": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "placeholder": "Ej. CONT-000001",
-                    "maxlength": "30",
-                }
-            ),
             "subscription": forms.Select(
                 attrs={
                     "class": "form-select",
@@ -43,11 +34,6 @@ class ContractCreateForm(forms.ModelForm):
                     "type": "date",
                 }
             ),
-            "status": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
             "notes": forms.Textarea(
                 attrs={
                     "class": "form-control",
@@ -58,11 +44,9 @@ class ContractCreateForm(forms.ModelForm):
         }
 
         labels = {
-            "contract_number": "Número de contrato",
             "subscription": "Suscripción",
             "start_date": "Fecha de inicio",
             "end_date": "Fecha de finalización",
-            "status": "Estado",
             "notes": "Observaciones",
         }
 
@@ -83,6 +67,7 @@ class ContractCreateForm(forms.ModelForm):
                 .filter(
                     customer=customer,
                     is_active=True,
+                    status=Subscription.Status.PRESALE,
                 )
                 .select_related(
                     "customer",
@@ -95,14 +80,6 @@ class ContractCreateForm(forms.ModelForm):
                     "service_number",
                 )
             )
-
-    def clean_contract_number(self):
-        value = self.cleaned_data.get("contract_number")
-
-        if value:
-            value = value.strip().upper()
-
-        return value
 
     def clean(self):
         cleaned_data = super().clean()
@@ -121,6 +98,27 @@ class ContractCreateForm(forms.ModelForm):
                 self.add_error(
                     "subscription",
                     "La suscripción seleccionada no pertenece al cliente.",
+                )
+
+        # ---------------------------------------------------------
+        # VALIDAR SUSCRIPCIÓN ACTIVA
+        # ---------------------------------------------------------
+
+        if subscription:
+
+            if not subscription.is_active:
+                self.add_error(
+                    "subscription",
+                    "La suscripción seleccionada no está activa.",
+                )
+
+            if subscription.status != Subscription.Status.PRESALE:
+                self.add_error(
+                    "subscription",
+                    (
+                        "Solo se puede registrar un contrato para "
+                        "una suscripción en estado Preventa."
+                    ),
                 )
 
         # ---------------------------------------------------------

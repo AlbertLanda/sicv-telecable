@@ -14,24 +14,31 @@
         </p>
     </div>
 
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 flex-wrap">
 
-        <a
-            href="{% url 'customers:use' customer.pk %}"
-            class="btn btn-primary"
-        >
-            Usar cliente
-        </a>
+    <a
+        href="{% url 'customers:general_edit' customer_pk=customer.pk %}"
+        class="btn btn-outline-primary"
+    >
+        Editar datos
+    </a>
 
-        <button
-            type="button"
-            class="btn btn-outline-secondary"
-            onclick="history.back()"
-        >
-            ← Volver
-        </button>
+    <a
+        href="{% url 'customers:use' customer.pk %}"
+        class="btn btn-primary"
+    >
+        Usar cliente
+    </a>
 
-    </div>
+    <button
+        type="button"
+        class="btn btn-outline-secondary"
+        onclick="history.back()"
+    >
+        ← Volver
+    </button>
+
+</div>
 
 </div>
 
@@ -332,11 +339,26 @@
 
         {% else %}
 
-            <div class="alert alert-secondary mb-0">
-                El cliente no tiene direcciones registradas.
-            </div>
+    <div class="alert alert-secondary mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-        {% endif %}
+        <div>
+            <strong>Sin direcciones registradas.</strong>
+
+            <div class="small">
+                Este cliente todavía no tiene direcciones asociadas.
+            </div>
+        </div>
+
+        <a
+            href="{% url 'customers:address_create' customer.pk %}"
+            class="btn btn-outline-secondary btn-sm"
+        >
+            + Registrar dirección
+        </a>
+
+    </div>
+
+{% endif %}
 
     </div>
 
@@ -355,12 +377,16 @@
             Bloque C - Suscripciones y Servicios
         </span>
 
-        <a
-            href="{% url 'services:subscription_create' customer.pk %}"
-            class="btn btn-light btn-sm"
-        >
-            + Nueva suscripción
-        </a>
+        {% if addresses %}
+
+            <a
+                href="{% url 'services:subscription_create' customer.pk %}"
+                class="btn btn-light btn-sm"
+            >
+                + Nueva suscripción
+            </a>
+
+        {% endif %}
 
     </div>
 
@@ -543,126 +569,6 @@
 
                 </div>
 
-
-                <!-- ÓRDENES DE LA SUSCRIPCIÓN -->
-
-                <hr class="my-4">
-
-                <h6 class="fw-bold">
-                    Órdenes de Trabajo
-                </h6>
-
-                {% if sub.work_orders.all %}
-
-                    <div class="table-responsive mt-3">
-
-                        <table class="table table-sm table-bordered align-middle">
-
-                            <thead class="table-light">
-
-                                <tr>
-                                    <th>N.º Orden</th>
-                                    <th>Tipo</th>
-                                    <th>Subtipo</th>
-                                    <th>Motivo</th>
-                                    <th>Estado</th>
-                                    <th>Técnico</th>
-                                    <th>Resultado</th>
-                                    <th>Creación</th>
-                                    <th>Programada</th>
-                                    <th>Atención</th>
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                {% for order in sub.work_orders.all %}
-
-                                    <tr>
-
-                                        <td>
-                                            {{ order.order_number }}
-                                        </td>
-
-                                        <td>
-                                            {{ order.order_type.name }}
-                                        </td>
-
-                                        <td>
-                                            {% if order.subtype %}
-                                                {{ order.subtype.name }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                            {% if order.reason %}
-                                                {{ order.reason.name }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                            {{ order.get_status_display }}
-                                        </td>
-
-                                        <td>
-                                            {% if order.assigned_technician %}
-                                                {{ order.assigned_technician }}
-                                            {% else %}
-                                                Sin asignar
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                            {% if order.result %}
-                                                {{ order.result.name }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                            {{ order.created_at|date:"d/m/Y H:i" }}
-                                        </td>
-
-                                        <td>
-                                            {% if order.scheduled_at %}
-                                                {{ order.scheduled_at|date:"d/m/Y H:i" }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-
-                                        <td>
-                                            {% if order.attended_at %}
-                                                {{ order.attended_at|date:"d/m/Y H:i" }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
-                                        </td>
-
-                                    </tr>
-
-                                {% endfor %}
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
-                {% else %}
-
-                    <p class="text-muted small mb-0">
-                        Esta suscripción no tiene órdenes de trabajo asociadas.
-                    </p>
-
-                {% endif %}
-
             </div>
 
         </div>
@@ -694,12 +600,16 @@
         Bloque D - Contratos
     </span>
 
+    {% if subscriptions %}
+
     <a
         href="{% url 'contracts:contract_create' customer.pk %}"
         class="btn btn-light btn-sm"
     >
         + Nuevo contrato
     </a>
+
+{% endif %}
 
 </div>
 
@@ -812,11 +722,47 @@
 
         {% else %}
 
-            <p class="p-3 mb-0 text-muted">
-                El cliente no tiene contratos registrados.
-            </p>
+    <div class="p-3">
+
+        {% if subscriptions %}
+
+            <div class="alert alert-secondary mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+                <div>
+                    <strong>Sin contratos registrados.</strong>
+
+                    <div class="small">
+                        Este cliente tiene suscripciones, pero todavía no tiene contratos registrados.
+                    </div>
+                </div>
+
+                <a
+                    href="{% url 'contracts:contract_create' customer.pk %}"
+                    class="btn btn-outline-dark btn-sm"
+                >
+                    + Registrar contrato
+                </a>
+
+            </div>
+
+        {% else %}
+
+            <div class="alert alert-secondary mb-0">
+
+                <strong>Sin contratos registrados.</strong>
+
+                <div class="small">
+                    Este cliente todavía no tiene suscripciones registradas.
+                    Registre una suscripción antes de crear un contrato.
+                </div>
+
+            </div>
 
         {% endif %}
+
+    </div>
+
+{% endif %}
 
     </div>
 
@@ -830,21 +776,21 @@
 
     <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
 
-    <span>
-        Bloque E - Órdenes de Trabajo del Cliente
-    </span>
+        <span>
+            Bloque E - Órdenes de Trabajo del Cliente
+        </span>
 
-    {% if perms.work_orders.add_workorder %}
-        <a
-            href="{% url 'work_orders:create' customer.pk %}"
-            class="btn btn-light btn-sm"
-            title="Registrar una nueva orden de trabajo para este cliente."
-        >
-            + Nueva orden de trabajo
-        </a>
-    {% endif %}
+        {% if perms.work_orders.add_workorder %}
+            <a
+                href="{% url 'work_orders:create' customer.pk %}"
+                class="btn btn-light btn-sm"
+                title="Registrar una nueva orden de trabajo para este cliente."
+            >
+                + Nueva orden de trabajo
+            </a>
+        {% endif %}
 
-</div>
+    </div>
 
     <div class="card-body p-0">
 

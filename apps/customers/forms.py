@@ -184,6 +184,17 @@ class CustomerInitialForm(forms.Form):
                     ),
                 )
 
+            if person_type == Customer.PersonType.LEGAL:
+
+                if not (cleaned_data.get("business_name") or "").strip():
+                    self.add_error(
+                        "business_name",
+                        (
+                            "La razón social es obligatoria para "
+                            "persona jurídica."
+                        ),
+                    )
+
         # ---------------------------------------------------------
         # VALIDACIÓN DE DUPLICADO
         # ---------------------------------------------------------

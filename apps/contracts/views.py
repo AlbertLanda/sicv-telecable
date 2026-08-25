@@ -70,6 +70,8 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
                     self.generate_contract_number()
                 )
 
+                contract.status = Contract.Status.ACTIVE
+
                 contract.save()
 
                 self.object = contract

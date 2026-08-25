@@ -41,6 +41,7 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
                 subscription = form.save(commit=False)
 
                 subscription.customer = self.customer
+                subscription.status = Subscription.Status.PRESALE
 
                 subscription.save()
 
