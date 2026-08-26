@@ -22,6 +22,10 @@ from .forms import (
     CustomerRegistrationForm,
 )
 from .models import Customer, CustomerAddress
+from .services.activity import (
+    build_customer_operational_summary,
+    build_customer_recent_activity,
+)
 from .services.sunat import consultar_documento, DocumentLookupError
 
 from apps.organization.models import Zone
@@ -674,6 +678,29 @@ class CustomerDetailView(LoginRequiredMixin, DetailView):
 
         context["selected_customer"] = (
             self.request.session.get("selected_customer_id") == customer.pk
+        )
+
+        # -------------------------------------------------------------
+        # BLOQUE F - RESUMEN OPERATIVO Y ACTIVIDAD RECIENTE
+        #
+        # Reutiliza las colecciones ya cargadas arriba (suscripciones,
+        # contratos, OT) para no repetir consultas. No se crea ningún
+        # modelo de historial: los eventos se derivan en memoria de
+        # las fuentes reales (Subscription, Contract, WorkOrder,
+        # WorkOrderStatusHistory, WorkOrderAssignment).
+        # -------------------------------------------------------------
+
+        context["operational_summary"] = build_customer_operational_summary(
+            subscriptions=context["subscriptions"],
+            contracts=context["contracts"],
+            work_orders=context["work_orders"],
+        )
+
+        context["recent_activity"] = build_customer_recent_activity(
+            customer=customer,
+            subscriptions=context["subscriptions"],
+            contracts=context["contracts"],
+            work_orders=context["work_orders"],
         )
 
         return context

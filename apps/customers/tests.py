@@ -1,8 +1,10 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.contracts.models import Contract
 from apps.organization.models import Branch, Zone
@@ -14,9 +16,12 @@ from apps.work_orders.models import (
     OrderSubtype,
     OrderType,
     WorkOrder,
+    WorkOrderAssignment,
+    WorkOrderStatusHistory,
 )
 
 from .models import Customer, CustomerAddress
+from .services.activity import MAX_RECENT_EVENTS
 
 
 User = get_user_model()
@@ -1030,3 +1035,453 @@ class CustomerWorkOrderUIPreviewTests(TestCase):
         response = self.client.get(self.preview_url)
 
         self.assertEqual(response.status_code, 302)
+
+class CustomerRecentActivityTests(TestCase):
+    """
+    Pruebas del Bloque F (resumen operativo + actividad reciente) descrito
+    en la actividad "Implementación del historial integral y trazabilidad
+    operativa del cliente". Cubre los escenarios mínimos 3-5, 7, 11-20 de
+    la sección 10 del PDF de actividad.
+    """
+
+    def setUp(self):
+        self.branch = Branch.objects.create(code="LIM2", name="Sede Lima 2")
+        self.zone = Zone.objects.create(branch=self.branch, name="Zona Sur")
+
+        self.user = User.objects.create_user(
+            username="atc_historial",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.branch,
+        )
+
+        self.technician = User.objects.create_user(
+            username="tecnico_historial",
+            password="123",
+            role=User.Role.TECHNICIAN,
+            branch=self.branch,
+        )
+
+        self.service_type = ServiceType.objects.create(
+            code="INTERNET2",
+            name="Internet",
+        )
+
+        self.plan = Plan.objects.create(
+            service_type=self.service_type,
+            code="PLAN200",
+            name="Plan 200 Mbps",
+            speed_mbps=200,
+        )
+
+        self.customer = Customer.objects.create(
+            code="CLI-HIST-01",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="45678912",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Ana",
+            paternal_surname="Torres",
+            maternal_surname="Lopez",
+            phone="911222333",
+        )
+
+        self.address = CustomerAddress.objects.create(
+            customer=self.customer,
+            zone=self.zone,
+            address="Calle Los Pinos 100",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        self.order_type = OrderType.objects.create(
+            code="AVERIA2",
+            name="Avería",
+        )
+
+        self.detail_url = reverse(
+            "customers:detail",
+            kwargs={"pk": self.customer.pk},
+        )
+
+        self.client.login(username="atc_historial", password="123")
+
+    # ------------------------------------------------------------------
+    # ESTADOS VACÍOS (escenarios 3, 7, 16)
+    # ------------------------------------------------------------------
+
+    def test_ficha_sin_ninguna_fuente_muestra_estado_vacio_de_actividad(self):
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No se registran actividades recientes para este cliente.",
+        )
+        self.assertEqual(
+            response.context["operational_summary"]["total_subscriptions"], 0
+        )
+        self.assertEqual(
+            response.context["operational_summary"]["total_contracts"], 0
+        )
+        self.assertEqual(response.context["recent_activity"], [])
+
+    # ------------------------------------------------------------------
+    # SUSCRIPCIONES Y CONTRATOS (escenarios 4, 5, 6)
+    # ------------------------------------------------------------------
+
+    def test_evento_de_suscripcion_aparece_en_actividad_reciente(self):
+        Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=10,
+        )
+
+        response = self.client.get(self.detail_url)
+
+        events = response.context["recent_activity"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].event_type, "SUBSCRIPTION")
+        self.assertEqual(response.context["operational_summary"]["total_subscriptions"], 1)
+
+    def test_varias_suscripciones_aparecen_asociadas_correctamente(self):
+        for number in range(2):
+            Subscription.objects.create(
+                customer=self.customer,
+                address=self.address,
+                service_type=self.service_type,
+                plan=self.plan,
+                status=Subscription.Status.ACTIVE,
+                service_number=20 + number,
+            )
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(
+            response.context["operational_summary"]["total_subscriptions"], 2
+        )
+        subscription_events = [
+            event
+            for event in response.context["recent_activity"]
+            if event.event_type == "SUBSCRIPTION"
+        ]
+        self.assertEqual(len(subscription_events), 2)
+
+    def test_evento_de_contrato_aparece_en_actividad_reciente(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=30,
+        )
+
+        Contract.objects.create(
+            contract_number="CTR-HIST-01",
+            customer=self.customer,
+            subscription=subscription,
+            start_date=date(2026, 1, 1),
+            status=Contract.Status.ACTIVE,
+        )
+
+        response = self.client.get(self.detail_url)
+
+        contract_events = [
+            event
+            for event in response.context["recent_activity"]
+            if event.event_type == "CONTRACT"
+        ]
+        self.assertEqual(len(contract_events), 1)
+        self.assertEqual(contract_events[0].reference, "CTR-HIST-01")
+
+    # ------------------------------------------------------------------
+    # ÓRDENES DE TRABAJO: creación, asignación, cambio de estado
+    # (escenarios 11, 12, 13)
+    # ------------------------------------------------------------------
+
+    def _crear_orden(self, number="OT-HIST-01", status=WorkOrder.Status.PENDING):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=len(number),
+        )
+
+        return WorkOrder.objects.create(
+            order_number=number,
+            subscription=subscription,
+            order_type=self.order_type,
+            branch=self.branch,
+            zone=self.zone,
+            status=status,
+            created_by=self.user,
+        )
+
+    def test_evento_creacion_de_ot_aparece_en_actividad_reciente(self):
+        order = self._crear_orden()
+
+        response = self.client.get(self.detail_url)
+
+        created_events = [
+            event
+            for event in response.context["recent_activity"]
+            if event.event_type == "WORK_ORDER_CREATED"
+        ]
+        self.assertEqual(len(created_events), 1)
+        self.assertEqual(created_events[0].reference, order.order_number)
+
+    def test_evento_de_asignacion_aparece_con_tecnico_y_fecha(self):
+        order = self._crear_orden(status=WorkOrder.Status.ASSIGNED)
+
+        WorkOrderAssignment.objects.create(
+            work_order=order,
+            technician=self.technician,
+            assigned_by=self.user,
+            assigned_at=timezone.now(),
+        )
+
+        response = self.client.get(self.detail_url)
+
+        assignment_events = [
+            event
+            for event in response.context["recent_activity"]
+            if event.event_type == "WORK_ORDER_ASSIGNMENT"
+        ]
+        self.assertEqual(len(assignment_events), 1)
+        self.assertIn(str(self.technician), assignment_events[0].detail)
+
+    def test_cambio_de_estado_aparece_con_la_transicion_correspondiente(self):
+        order = self._crear_orden(status=WorkOrder.Status.ATTENDED)
+
+        WorkOrderStatusHistory.objects.create(
+            work_order=order,
+            previous_status=WorkOrder.Status.IN_PROGRESS,
+            new_status=WorkOrder.Status.ATTENDED,
+            changed_by=self.user,
+        )
+
+        response = self.client.get(self.detail_url)
+
+        status_events = [
+            event
+            for event in response.context["recent_activity"]
+            if event.event_type == "WORK_ORDER_STATUS"
+        ]
+        self.assertEqual(len(status_events), 1)
+        self.assertIn("→", status_events[0].detail)
+
+    # ------------------------------------------------------------------
+    # ORDEN TEMPORAL Y LÍMITE (escenarios 14, 15)
+    # ------------------------------------------------------------------
+
+    def test_eventos_se_muestran_del_mas_reciente_al_mas_antiguo(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=40,
+        )
+
+        older = WorkOrder.objects.create(
+            order_number="OT-OLD",
+            subscription=subscription,
+            order_type=self.order_type,
+            branch=self.branch,
+            zone=self.zone,
+            status=WorkOrder.Status.PENDING,
+            created_by=self.user,
+        )
+        older.created_at = timezone.now() - timedelta(days=2)
+        older.save(update_fields=["created_at"])
+
+        newer = WorkOrder.objects.create(
+            order_number="OT-NEW",
+            subscription=subscription,
+            order_type=self.order_type,
+            branch=self.branch,
+            zone=self.zone,
+            status=WorkOrder.Status.PENDING,
+            created_by=self.user,
+        )
+        newer.created_at = timezone.now()
+        newer.save(update_fields=["created_at"])
+
+        response = self.client.get(self.detail_url)
+
+        events = response.context["recent_activity"]
+        references = [event.reference for event in events]
+
+        self.assertLess(
+            references.index("OT-NEW"),
+            references.index("OT-OLD"),
+        )
+
+    def test_actividad_reciente_no_supera_el_limite_definido(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=50,
+        )
+
+        # Genera más eventos que el límite (MAX_RECENT_EVENTS) combinando
+        # dos fuentes distintas para superar el tope de 20.
+        for index in range(15):
+            WorkOrder.objects.create(
+                order_number=f"OT-LIM-{index:03d}",
+                subscription=subscription,
+                order_type=self.order_type,
+                branch=self.branch,
+                zone=self.zone,
+                status=WorkOrder.Status.PENDING,
+                created_by=self.user,
+            )
+
+        for index in range(15):
+            Subscription.objects.create(
+                customer=self.customer,
+                address=self.address,
+                service_type=self.service_type,
+                plan=self.plan,
+                status=Subscription.Status.ACTIVE,
+                service_number=100 + index,
+            )
+
+        response = self.client.get(self.detail_url)
+
+        self.assertLessEqual(len(response.context["recent_activity"]), MAX_RECENT_EVENTS)
+
+    # ------------------------------------------------------------------
+    # SIN ACTIVIDAD (escenario 16, distinto de "sin ninguna fuente")
+    # ------------------------------------------------------------------
+
+    def test_cliente_sin_eventos_muestra_estado_vacio_sin_error(self):
+        # Cliente sin suscripciones, contratos ni órdenes de trabajo.
+        otro_cliente = Customer.objects.create(
+            code="CLI-HIST-02",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="55667788",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Luis",
+            paternal_surname="Ramos",
+            maternal_surname="Diaz",
+        )
+
+        url = reverse("customers:detail", kwargs={"pk": otro_cliente.pk})
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["recent_activity"], [])
+        self.assertContains(
+            response,
+            "No se registran actividades recientes para este cliente.",
+        )
+
+    # ------------------------------------------------------------------
+    # PERMISOS DE NUEVA OT Y ASIGNACIÓN (escenarios 17, 18, 19)
+    # ------------------------------------------------------------------
+
+    def test_usuario_con_permiso_ve_accion_nueva_ot(self):
+        permission = Permission.objects.get(codename="add_workorder")
+        self.user.user_permissions.add(permission)
+
+        response = self.client.get(self.detail_url)
+
+        self.assertContains(response, "Nueva orden de trabajo")
+
+    def test_usuario_sin_permiso_no_ve_accion_nueva_ot(self):
+        response = self.client.get(self.detail_url)
+
+        self.assertNotContains(response, "Nueva orden de trabajo")
+
+    def test_usuario_sin_permiso_de_asignacion_no_ve_accion_restringida(self):
+        order = self._crear_orden(status=WorkOrder.Status.PENDING)
+
+        response = self.client.get(self.detail_url)
+
+        self.assertContains(response, order.order_number)
+        self.assertNotContains(response, "Asignar</a>")
+        self.assertNotContains(response, "Reasignar</a>")
+
+    def test_usuario_con_permiso_de_asignacion_ve_accion(self):
+        permission = Permission.objects.get(codename="assign_workorder")
+        self.user.user_permissions.add(permission)
+
+        self._crear_orden(status=WorkOrder.Status.PENDING)
+
+        response = self.client.get(self.detail_url)
+
+        self.assertContains(response, "Asignar")
+
+    # ------------------------------------------------------------------
+    # CONSULTAS SIN N+1 EVIDENTE (escenario 20)
+    # ------------------------------------------------------------------
+
+    def test_ficha_no_genera_n_mas_1_evidente_con_varias_fuentes(self):
+        for index in range(5):
+            subscription = Subscription.objects.create(
+                customer=self.customer,
+                address=self.address,
+                service_type=self.service_type,
+                plan=self.plan,
+                status=Subscription.Status.ACTIVE,
+                service_number=200 + index,
+            )
+
+            Contract.objects.create(
+                contract_number=f"CTR-N1-{index:03d}",
+                customer=self.customer,
+                subscription=subscription,
+                start_date=date(2026, 1, 1),
+                status=Contract.Status.ACTIVE,
+            )
+
+            order = WorkOrder.objects.create(
+                order_number=f"OT-N1-{index:03d}",
+                subscription=subscription,
+                order_type=self.order_type,
+                branch=self.branch,
+                zone=self.zone,
+                status=WorkOrder.Status.ASSIGNED,
+                assigned_technician=self.technician,
+                created_by=self.user,
+            )
+
+            WorkOrderAssignment.objects.create(
+                work_order=order,
+                technician=self.technician,
+                assigned_by=self.user,
+                assigned_at=timezone.now(),
+            )
+
+            WorkOrderStatusHistory.objects.create(
+                work_order=order,
+                previous_status=WorkOrder.Status.PENDING,
+                new_status=WorkOrder.Status.ASSIGNED,
+                changed_by=self.user,
+            )
+
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        # Límite generoso pero acotado: evita que la ficha vuelva a crecer
+        # linealmente con la cantidad de suscripciones/contratos/OT
+        # (regresión de N+1). No es un conteo exacto de queries, sino un
+        # techo razonable acorde a la sección 7 del PDF de actividad.
+        self.assertLess(len(ctx.captured_queries), 40)
