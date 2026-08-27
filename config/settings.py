@@ -124,6 +124,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    # Terceros
+    'rest_framework',
+    'rest_framework.authtoken',
+
     # SICV
     'apps.accounts',
     'apps.organization',
@@ -235,3 +239,39 @@ AUTH_USER_MODEL = "accounts.User"
 # Redirecciones de autenticación
 LOGIN_REDIRECT_URL = '/customers/search/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+
+# ---------------------------------------------------------------------
+# API REST (Django REST Framework)
+#
+# Canal exclusivo de la app/PWA del técnico. Es independiente del login
+# web de sesión que usa ATC/despacho: aquí no hay cookies ni CSRF, la
+# identidad viaja en el header Authorization.
+#
+# DEFAULT_AUTHENTICATION_CLASSES — solo TokenAuthentication:
+#   No se incluye SessionAuthentication a propósito. Si estuviera, una
+#   sesión web abierta en el navegador autenticaría llamadas a la API sin
+#   token y los dos canales quedarían mezclados.
+#
+# DEFAULT_PERMISSION_CLASSES — IsAuthenticated por defecto:
+#   Ningún endpoint queda abierto por olvido. Abrir uno es una decisión
+#   explícita en la vista (permission_classes = [AllowAny]).
+#
+# Decisión sobre JWT: se evaluó y se descarta por ahora. El token opaco de
+# DRF se revoca borrando una fila; un JWT sigue siendo válido hasta expirar
+# y exigiría lista de revocación y refresh tokens sin beneficio real a esta
+# escala. Ver docs/api_technician_auth.md.
+#
+# Decisión sobre expiración: el token de DRF NO expira. Se documenta y se
+# asume conscientemente; la revocación es del lado del servidor (borrar el
+# token). Ver docs/api_technician_auth.md, sección de decisiones.
+# ---------------------------------------------------------------------
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
