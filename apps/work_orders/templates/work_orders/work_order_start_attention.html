@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% load work_order_tags %}
+
+{% block title %}Iniciar atención de la orden {{ order.order_number }}{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <!-- ENCABEZADO -->
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+
+        <div>
+            <h1 class="h3 mb-1">
+                Iniciar atención
+            </h1>
+
+            <p class="text-muted mb-0">
+                Iniciar la atención declara que el técnico ya empezó a
+                trabajar la orden. No la atiende ni la liquida: esas etapas
+                se registran después, desde el flujo del técnico.
+            </p>
+        </div>
+
+        <a
+            href="{% url 'customers:detail' customer.pk %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la ficha
+        </a>
+
+    </div>
+
+
+    <!-- ========================================================= -->
+    <!-- CONTEXTO DE LA ORDEN (SOLO LECTURA) -->
+    <!-- ========================================================= -->
+
+    <div class="card card-custom shadow-sm mb-4">
+
+        <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+
+            <span>
+                Orden {{ order.order_number }}
+            </span>
+
+            <span class="badge {{ order.status|status_css }}">
+                {{ order.get_status_display }}
+            </span>
+
+        </div>
+
+        <div class="card-body">
+
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <div class="text-muted small">Cliente</div>
+                    <div class="fw-semibold">
+                        {{ customer.code }} - {{ customer }}
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="text-muted small">Servicio / Suscripción</div>
+                    <div class="fw-semibold">
+                        #{{ order.subscription.service_number }}
+                        - {{ order.subscription.service_type.name }}
+                        ({{ order.subscription.plan.name }})
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="text-muted small">Dirección de atención</div>
+                    <div class="fw-semibold">
+                        {{ order.subscription.address.address }}
+                        {% if order.subscription.address.district %}
+                            - {{ order.subscription.address.district }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="text-muted small">Sede</div>
+                    <div class="fw-semibold">
+                        {{ order.branch }}
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <div class="text-muted small">Zona</div>
+                    <div class="fw-semibold">
+                        {% if order.zone %}
+                            {{ order.zone.name }}
+                        {% else %}
+                            <span class="text-muted">Sin zona</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="text-muted small">Tipo de orden</div>
+                    <div class="fw-semibold">
+                        {{ order.order_type.name }}
+                        {% if order.subtype %}
+                            - {{ order.subtype.name }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="text-muted small">Prioridad</div>
+                    <div class="fw-semibold">
+                        <span class="badge {{ order.priority|priority_css }}">
+                            {{ order.get_priority_display }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="text-muted small">Fecha programada</div>
+                    <div class="fw-semibold">
+                        {% if order.scheduled_at %}
+                            {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                        {% else %}
+                            <span class="text-muted">Sin programar</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="text-muted small">Técnico responsable</div>
+                    <div class="fw-semibold">
+                        {% if order.assigned_technician %}
+                            {{ order.assigned_technician }}
+                            {% if order.assigned_technician.branch %}
+                                <span class="text-muted small">
+                                    ({{ order.assigned_technician.branch }})
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">Sin técnico asignado</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="text-muted small">Inicio real de atención</div>
+                    <div class="fw-semibold">
+                        {% if order.started_at %}
+                            {{ order.started_at|date:"d/m/Y H:i" }}
+                        {% else %}
+                            <span class="text-muted">Todavía no iniciada</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if order.detail %}
+                    <div class="col-12">
+                        <div class="text-muted small">
+                            Detalle de la solicitud
+                        </div>
+                        <div>
+                            {{ order.detail|linebreaksbr }}
+                        </div>
+                    </div>
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ========================================================= -->
+    <!-- CONFIRMACIÓN DEL INICIO -->
+    <!-- ========================================================= -->
+
+    <div class="card card-custom shadow-sm">
+
+        <div class="card-header bg-primary text-white fw-bold">
+            Confirmar inicio de atención
+        </div>
+
+        <div class="card-body">
+
+            {# El rechazo del dominio se pinta antes de decidir si se ofrece  #}
+            {# el formulario: una orden que dejo de ser iniciable entre el    #}
+            {# GET y el POST cae en la rama de abajo, y su mensaje tiene que  #}
+            {# llegar igual a pantalla en lugar de perderse.                  #}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {% for error in form.non_field_errors %}
+                        <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% if not can_start_attention %}
+
+                {# El estado -o la falta de tecnico- ya cierra la accion. Se  #}
+                {# explica en pantalla en lugar de ofrecer un boton que el    #}
+                {# dominio va a rechazar. Se comprueba primero el estado:     #}
+                {# una OT pendiente tampoco tiene tecnico, y decir que le     #}
+                {# falta el tecnico ocultaria la razon real del rechazo. La   #}
+                {# barrera real sigue siendo el servicio, no este bloque.     #}
+                {% if not is_startable_status %}
+
+                    <div class="alert alert-warning mb-0">
+                        Una orden en estado
+                        <strong>{{ order.get_status_display }}</strong>
+                        no admite iniciar la atención.
+                    </div>
+
+                {% else %}
+
+                    <div class="alert alert-warning mb-0">
+                        Esta orden todavía no tiene técnico asignado. Debe
+                        despacharse antes de poder iniciar la atención.
+                    </div>
+
+                {% endif %}
+
+            {% else %}
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+
+                <div class="alert alert-info">
+                    Al confirmar, la orden pasará de
+                    <strong>{{ order.get_status_display }}</strong>
+                    a <strong>En atención</strong> y se registrará la
+                    <strong>hora real de inicio</strong> con la fecha y hora
+                    de este momento. La acción queda en el historial de la
+                    orden a nombre de {{ request.user }}.
+                </div>
+
+
+                <div class="row g-3">
+
+                    <!-- OBSERVACIÓN -->
+
+                    <div class="col-md-8">
+
+                        <label
+                            for="{{ form.remarks.id_for_label }}"
+                            class="form-label fw-semibold"
+                        >
+                            {{ form.remarks.label }}
+                        </label>
+
+                        {{ form.remarks }}
+
+                        {% for error in form.remarks.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+
+                        <div class="form-text">
+                            {{ form.remarks.help_text }}
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- ACCIONES -->
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+
+                    <a
+                        href="{% url 'customers:detail' customer.pk %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-primary">
+                        Iniciar atención
+                    </button>
+
+                </div>
+
+            </form>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <p class="text-muted small mt-3 mb-0">
+        Tras el inicio la orden queda en estado <strong>En atención</strong>.
+        El registro del resultado y la liquidación técnica son etapas
+        posteriores y no se ejecutan desde esta pantalla.
+    </p>
+
+</div>
+
+{% endblock %}

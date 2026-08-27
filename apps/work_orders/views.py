@@ -4,14 +4,16 @@ Vistas web del módulo de órdenes de trabajo.
 Capa delgada: la vista resuelve el contexto (qué cliente se está atendiendo,
 qué orden se despacha, qué usuario opera), entrega el formulario y delega la
 operación en el dominio -create_work_order() para registrar,
-assign_technician() para asignar-. No construye WorkOrder, no genera
-correlativos, no cambia status a mano y no duplica las reglas del dominio.
+assign_technician() para asignar, start_order_attention() para iniciar la
+atención-. No construye WorkOrder, no genera correlativos, no cambia status a
+mano y no duplica las reglas del dominio.
 """
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.views.generic import FormView, ListView
 
 from apps.customers.models import Customer
@@ -20,9 +22,10 @@ from apps.work_orders.forms import (
     WorkOrderAssignForm,
     WorkOrderCreateForm,
     WorkOrderDispatchFilterForm,
+    WorkOrderStartAttentionForm,
 )
 from apps.work_orders.models import WorkOrder
-from apps.work_orders.services import create_work_order
+from apps.work_orders.services import create_work_order, start_order_attention
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 
 
@@ -237,6 +240,143 @@ class WorkOrderAssignView(
         return redirect(self.get_success_url())
 
     def get_success_url(self):
+        return reverse(
+            "customers:detail",
+            kwargs={"pk": self.get_work_order().subscription.customer_id},
+        )
+
+
+class WorkOrderStartAttentionView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    """
+    Inicio web de la atención de una orden ya despachada.
+
+    Es la pantalla de confirmación del paso ASSIGNED -> IN_PROGRESS: muestra
+    contra qué orden se va a operar y ejecuta la transición por POST.
+
+    Decisiones deliberadas:
+
+    - El permiso es funcional y propio (start_workorder). Iniciar la atención
+      no es despachar: assign_workorder decide a quién le toca la orden, y
+      start_workorder declara que la atención empezó de verdad. Separarlos
+      permite que la futura app/PWA del técnico reciba solo el segundo.
+    - La operación la ejecuta start_order_attention(), el servicio del módulo,
+      que internamente llama a WorkOrder.start_attention() y además mantiene
+      coherente la suscripción -una instalación en preventa pasa a
+      instalación-. La vista no reimplementa ninguna de las dos cosas: llamar
+      al modelo directamente dejaría a la suscripción sin ese efecto.
+    - La vista no conoce la matriz de estados. No comprueba si la orden es
+      iniciable antes de operar: lo intenta y deja que el dominio acepte o
+      rechace. can_start_attention solo decide si se pinta el botón.
+    - El formulario únicamente lleva la observación. started_at, el estado
+      destino y el técnico no son campos, así que no hay POST capaz de
+      forzarlos: la hora la pone timezone.now() dentro del dominio.
+    - La orden se resuelve desde la URL y solo después del control de
+      permiso, igual que en la asignación: quien no puede iniciar recibe 403
+      sin poder usar los 404 para sondear qué órdenes existen.
+    - Un GET nunca cambia estado: FormView solo renderiza. La transición vive
+      en form_valid(), que únicamente corre por POST.
+    """
+
+    permission_required = "work_orders.start_workorder"
+
+    form_class = WorkOrderStartAttentionForm
+    template_name = "work_orders/work_order_start_attention.html"
+
+    def get_work_order(self):
+        """Orden a iniciar, resuelta una sola vez por petición."""
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "subscription__address",
+                    "subscription__address__zone",
+                    "subscription__service_type",
+                    "subscription__plan",
+                    "branch",
+                    "zone",
+                    "order_type",
+                    "subtype",
+                    "assigned_technician",
+                ),
+                pk=self.kwargs["pk"],
+            )
+
+        return self._work_order
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        order = self.get_work_order()
+
+        context["order"] = order
+        context["customer"] = order.subscription.customer
+
+        # Si la orden no admite inicio se muestra el contexto pero no se
+        # ofrece el envío. La regla se consulta al modelo, no se reescribe
+        # aquí, y la comprobación real la sigue haciendo el dominio.
+        context["can_start_attention"] = order.can_start_attention
+
+        # Cuál de las dos condiciones falló, para explicar en pantalla la
+        # razón correcta. Se lee la misma lista del dominio que consulta
+        # can_start_attention: no es una matriz de estados propia.
+        context["is_startable_status"] = (
+            order.status in WorkOrder.STARTABLE_STATUSES
+        )
+
+        return context
+
+    def form_valid(self, form):
+        order = self.get_work_order()
+
+        try:
+            start_order_attention(
+                order,
+                user=self.request.user,
+                remarks=form.cleaned_data.get("remarks", ""),
+            )
+
+        except ValidationError as exc:
+            # El dominio rechazó el inicio (estado no iniciable, orden sin
+            # técnico). El servicio es atómico: no quedó ni started_at ni
+            # historial a medias. Se relee la orden para no pintar en
+            # pantalla datos que no llegaron a persistirse, y el mensaje del
+            # dominio se muestra tal cual: ya está redactado para el operador
+            # y no expone trazas internas.
+            order.refresh_from_db()
+
+            form.add_error(None, exc.messages)
+
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            (
+                f"Atención de la orden {order.order_number} iniciada. "
+                f"Estado actual: {order.get_status_display()}. "
+                f"Inicio registrado: "
+                f"{timezone.localtime(order.started_at):%d/%m/%Y %H:%M}."
+            ),
+        )
+
+        return redirect(self.get_success_url())
+
+    def get_success_url(self):
+        """
+        Vuelta a la bandeja de despacho, que es de donde se lanza la acción.
+
+        Quien puede iniciar una atención no necesariamente puede ver la
+        bandeja -son permisos distintos-, así que sin view_workorder se
+        redirige a la ficha del cliente, que solo exige estar autenticado.
+        Redirigir a una pantalla prohibida convertiría un éxito en un 403.
+        """
+        if self.request.user.has_perm("work_orders.view_workorder"):
+            return reverse("work_orders:dispatch")
+
         return reverse(
             "customers:detail",
             kwargs={"pk": self.get_work_order().subscription.customer_id},

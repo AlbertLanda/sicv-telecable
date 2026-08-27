@@ -37,4 +37,15 @@ urlpatterns = [
         views.WorkOrderAssignView.as_view(),
         name="assign",
     ),
+
+    # Iniciar la atención de una orden ya despachada.
+    #
+    # La orden viaja en la ruta y el POST solo lleva una observación: el
+    # estado destino y la hora real de inicio los pone el dominio, no el
+    # navegador. El GET únicamente confirma; nada cambia hasta el POST.
+    path(
+        "<int:pk>/start/",
+        views.WorkOrderStartAttentionView.as_view(),
+        name="start",
+    ),
 ]

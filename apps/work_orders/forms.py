@@ -297,6 +297,41 @@ class WorkOrderAssignForm(forms.Form):
         )
 
 
+class WorkOrderStartAttentionForm(forms.Form):
+    """
+    Confirmación del inicio de atención de una orden ya despachada.
+
+    Decisiones deliberadas:
+
+    - Es un forms.Form y no un ModelForm: no describe la orden ni la edita.
+      Solo transporta la observación con la que el operador confirma.
+    - Tiene un único campo, y es opcional. El estado destino, la hora real de
+      inicio y el técnico responsable NO son campos del formulario: los pone
+      el dominio. Al no existir, ningún POST manipulado puede influir en la
+      transición, ni siquiera enviando esos nombres a mano.
+    - La misma forma -una observación y nada más- es la que deberá aceptar la
+      futura API del técnico: el contrato de entrada del inicio de atención se
+      define aquí una sola vez.
+    """
+
+    remarks = forms.CharField(
+        required=False,
+        label="Observación del inicio",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 2,
+                "placeholder": (
+                    "Observación breve del inicio de atención (opcional)..."
+                ),
+            }
+        ),
+        help_text=(
+            "Opcional. Queda registrada en el historial de estados de la orden."
+        ),
+    )
+
+
 class WorkOrderDispatchFilterForm(forms.Form):
     """
     Filtros de la bandeja operativa de despacho.

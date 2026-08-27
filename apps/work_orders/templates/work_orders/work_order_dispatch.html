@@ -260,22 +260,39 @@
 
                                 <td class="text-end text-nowrap">
 
-                                    {# La accion se ofrece solo a quien puede despachar y solo si #}
-                                    {# el estado admite asignacion. Ocultarla es comodidad de la  #}
-                                    {# interfaz: la barrera real es el permiso de la vista de     #}
-                                    {# asignacion, que responde 403 aunque se escriba la URL.     #}
-                                    {% if perms.work_orders.assign_workorder and order.can_be_assigned %}
+                                    {# Cada accion se ofrece solo a quien tiene su permiso y solo  #}
+                                    {# si el estado la admite. Despachar e iniciar son permisos    #}
+                                    {# distintos, asi que un usuario puede ver una y no la otra.   #}
+                                    {# Ocultarlas es comodidad de la interfaz: la barrera real es  #}
+                                    {# el permiso de cada vista, que responde 403 aunque se        #}
+                                    {# escriba la URL a mano.                                      #}
+                                    {% if perms.work_orders.assign_workorder and order.can_be_assigned or perms.work_orders.start_workorder and order.can_start_attention %}
 
-                                        <a
-                                            href="{% url 'work_orders:assign' order.pk %}"
-                                            class="btn btn-sm btn-outline-primary"
-                                        >
-                                            {% if order.assigned_technician %}
-                                                Reasignar
-                                            {% else %}
-                                                Asignar
-                                            {% endif %}
-                                        </a>
+                                        {% if perms.work_orders.assign_workorder and order.can_be_assigned %}
+
+                                            <a
+                                                href="{% url 'work_orders:assign' order.pk %}"
+                                                class="btn btn-sm btn-outline-primary"
+                                            >
+                                                {% if order.assigned_technician %}
+                                                    Reasignar
+                                                {% else %}
+                                                    Asignar
+                                                {% endif %}
+                                            </a>
+
+                                        {% endif %}
+
+                                        {% if perms.work_orders.start_workorder and order.can_start_attention %}
+
+                                            <a
+                                                href="{% url 'work_orders:start' order.pk %}"
+                                                class="btn btn-sm btn-outline-success"
+                                            >
+                                                Iniciar atención
+                                            </a>
+
+                                        {% endif %}
 
                                     {% else %}
                                         <span class="text-muted small">&mdash;</span>

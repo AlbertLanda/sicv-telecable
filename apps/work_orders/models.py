@@ -606,10 +606,20 @@ class WorkOrder(models.Model):
         # editar una orden: quien asigna decide qué técnico atiende. Se
         # declara como permiso funcional para no tener que conceder
         # change_workorder -que habilita mucho más- solo para despachar.
+        #
+        # Iniciar la atención es una tercera atribución, y tampoco coincide
+        # con las anteriores: quien despacha decide a quién le toca la orden,
+        # pero el inicio declara que la atención empezó de verdad y estampa
+        # la hora real. Se separa para que la futura app/PWA del técnico
+        # pueda conceder start_workorder sin arrastrar assign_workorder.
         permissions = [
             (
                 "assign_workorder",
                 "Puede asignar órdenes de trabajo a un técnico",
+            ),
+            (
+                "start_workorder",
+                "Puede iniciar la atención de órdenes de trabajo",
             ),
         ]
 
@@ -683,6 +693,25 @@ class WorkOrder(models.Model):
         solo evita ofrecer una acción que el dominio va a rechazar.
         """
         return self.status in self.ASSIGNABLE_STATUSES
+
+    @property
+    def can_start_attention(self):
+        """
+        La orden admite iniciar la atención.
+
+        Mismo propósito que can_be_assigned: la interfaz consulta, no decide.
+        Las dos condiciones se leen de donde ya viven -STARTABLE_STATUSES y
+        el técnico asignado-, que son exactamente las que start_attention()
+        verifica antes de estampar la hora. No es una segunda matriz de
+        estados: si mañana cambia la lista, esta propiedad cambia con ella.
+
+        Sirve para no ofrecer en pantalla una acción condenada a fallar. La
+        comprobación que manda sigue siendo la del dominio en cada POST.
+        """
+        return (
+            self.status in self.STARTABLE_STATUSES
+            and self.assigned_technician_id is not None
+        )
 
     @property
     def is_liquidated(self):
