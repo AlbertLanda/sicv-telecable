@@ -29,6 +29,25 @@ class NotATechnician(AuthenticationError):
     """Credenciales correctas, pero el usuario no tiene rol técnico."""
 
 
+def is_active_technician(user):
+    """¿Este usuario es un técnico activo?
+
+    Única definición de «técnico activo» del sistema. La consumen tanto el
+    login del canal técnico (`authenticate_technician()`) como la permission
+    class `IsActiveTechnician` de la API, para que la condición viva en un
+    solo lugar: si mañana cambia (por ejemplo, exigir sede asignada), cambia
+    aquí y los dos caminos quedan alineados sin tocarlos.
+
+    Acepta cualquier objeto usuario, incluido `AnonymousUser`, y devuelve
+    False para él: no asume que quien llama ya validó la autenticación.
+    """
+    return bool(
+        getattr(user, "is_authenticated", False)
+        and user.is_active
+        and user.role == User.Role.TECHNICIAN
+    )
+
+
 def authenticate_technician(username, password, request=None):
     """Autentica a un técnico activo y devuelve el `User`.
 
@@ -47,7 +66,12 @@ def authenticate_technician(username, password, request=None):
     if user is None or not user.is_active:
         raise InvalidCredentials
 
-    if user.role != User.Role.TECHNICIAN:
+    # La condición de «técnico activo» no se reescribe aquí: se delega en el
+    # predicado, que es la misma regla que aplica la API en cada petición.
+    # El estado de la cuenta se comprobó arriba porque pertenece a la validez
+    # de la credencial (401), mientras que el rol es una cuestión de
+    # autorización (403); son rechazos distintos y no deben confundirse.
+    if not is_active_technician(user):
         raise NotATechnician
 
     return user

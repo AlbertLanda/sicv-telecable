@@ -8,10 +8,11 @@ decide. La vista no compara contraseñas ni consulta roles por su cuenta.
 
 from rest_framework import status
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.api.permissions import IsActiveTechnician
 from apps.accounts.api.serializers import (
     TechnicianIdentitySerializer,
     TechnicianLoginSerializer,
@@ -72,10 +73,16 @@ class TechnicianLoginView(APIView):
 class TechnicianMeView(APIView):
     """GET /api/technicians/me/ — identidad del técnico autenticado.
 
-    Endpoint protegido de referencia: hereda `TokenAuthentication` +
-    `IsAuthenticated` de los ajustes globales, sin declarar nada. Devuelve
-    identidad, no datos operativos: el token identifica, no autoriza.
+    Devuelve identidad, no datos operativos: el token identifica, no autoriza.
+
+    Lleva `IsActiveTechnician` por decisión explícita: es un endpoint del canal
+    técnico, y el token no caduca, así que sin este permiso un usuario
+    desactivado o movido a otro rol después de autenticarse seguiría
+    respondiendo con su token viejo. Con el permiso, rol y estado se reevalúan
+    en cada petición. Ver docs/api_technician_auth.md.
     """
+
+    permission_classes = [IsAuthenticated, IsActiveTechnician]
 
     def get(self, request):
         return Response(TechnicianIdentitySerializer(request.user).data)

@@ -129,9 +129,15 @@ mensaje solo revela un rol, no una credencial.
 
 ### `GET /api/technicians/me/`
 
-Endpoint protegido de referencia. No declara autenticación ni permisos: los
-hereda de los ajustes globales, y por eso sirve para verificar que la
-configuración por defecto realmente cierra la API.
+Endpoint protegido de referencia: hereda `TokenAuthentication` de los ajustes
+globales, y por eso sirve para verificar que la configuración por defecto
+realmente cierra la API.
+
+> **Actualización del día 2.** Además de `IsAuthenticated`, este endpoint pasa
+> a exigir la permission class `IsActiveTechnician`, para que el rol y el
+> estado de la cuenta se reevalúen en cada petición y no solo al emitir el
+> token. La decisión, con su tabla de casos, está en
+> [`api_technician_work_orders.md`](api_technician_work_orders.md) §3.1.
 
 ```
 GET /api/technicians/me/
@@ -197,6 +203,12 @@ Es una decisión, no un olvido:
   (`is_active=False`) impide emitir uno nuevo.
 - Volver a autenticarse **no** rota el token (`get_or_create`): la app puede
   reintentar el login sin invalidar la sesión que ya tenía abierta.
+
+> **Actualización del día 2.** Que el token no caduque es precisamente la
+> razón por la que los endpoints del canal técnico verifican rol y estado en
+> cada petición mediante `IsActiveTechnician`: desactivar al usuario o
+> cambiarle el rol revoca el acceso de inmediato, sin esperar a que el token
+> venza. Ver [`api_technician_work_orders.md`](api_technician_work_orders.md).
 
 Riesgo asumido: un token filtrado es válido hasta que alguien lo borra.
 Mitigaciones pendientes, fuera del alcance de hoy y a evaluar en el bloque de

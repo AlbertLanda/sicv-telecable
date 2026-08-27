@@ -61,6 +61,13 @@ urlpatterns = [
     #
     # Canal separado del login web de sesión: autenticación por token, sin
     # cookies ni plantillas. Ver docs/api_technician_auth.md.
+    #
+    # La ruta de órdenes va primero por ser la más específica: así el prefijo
+    # de autenticación no compite con ella al resolver.
+    path(
+        "api/technicians/work-orders/",
+        include("apps.work_orders.api.urls"),
+    ),
     path(
         "api/technicians/",
         include("apps.accounts.api.urls"),
