@@ -443,6 +443,16 @@ class CustomerUIConsultaTests(TestCase):
         self.assertContains(response, "OT-0001")
         self.assertNotContains(response, "OT-0002")
 
+    def test_ficha_muestra_estado_atendida_de_orden(self):
+
+        self.assertEqual(self.work_order.status, WorkOrder.Status.ATTENDED)
+
+        response = self.client.get(self.detail_url)
+
+        work_orders = list(response.context["work_orders"])
+        self.assertIn(self.work_order, work_orders)
+        self.assertContains(response, "Atendida")
+
     # ------------------------------------------------------------------
     # CASOS ESPECIALES
     # ------------------------------------------------------------------
