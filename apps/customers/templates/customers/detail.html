@@ -79,6 +79,7 @@
             <a href="#bloque-c" class="btn btn-sm btn-outline-info">Suscripciones</a>
             <a href="#bloque-d" class="btn btn-sm btn-outline-dark">Contratos</a>
             <a href="#bloque-e" class="btn btn-sm btn-outline-primary">Órdenes de trabajo</a>
+            <a href="#bloque-f" class="btn btn-sm btn-outline-dark">Actividad reciente</a>
         </div>
     </div>
 </nav>
@@ -781,6 +782,7 @@
         </span>
 
         {% if perms.work_orders.add_workorder %}
+
             <a
                 href="{% url 'work_orders:create' customer.pk %}"
                 class="btn btn-light btn-sm"
@@ -788,6 +790,7 @@
             >
                 + Nueva orden de trabajo
             </a>
+
         {% endif %}
 
     </div>
@@ -1082,6 +1085,111 @@
                     El cliente no tiene órdenes de trabajo registradas.
                 </p>
 
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+<!-- ========================================================= -->
+<!-- BLOQUE F - RESUMEN OPERATIVO Y ACTIVIDAD RECIENTE
+
+     Consolida en un solo lugar lo que le ocurrió recientemente al
+     abonado, a partir de las fuentes reales del SICV (servicios,
+     contratos y órdenes de trabajo). Es de solo consulta: no
+     permite editar estados, asignaciones, contratos ni
+     suscripciones desde aquí.
+-->
+<!-- ========================================================= -->
+
+<div id="bloque-f" class="card card-custom mb-5">
+
+    <div class="card-header bg-dark text-white fw-bold">
+        Bloque F - Actividad Reciente
+    </div>
+
+    <div class="card-body">
+
+        <div class="row g-3 mb-4">
+
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Suscripciones</small>
+                    <span class="fs-4 fw-bold text-primary">
+                        {{ operational_summary.total_subscriptions }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">Contratos</small>
+                    <span class="fs-4 fw-bold text-primary">
+                        {{ operational_summary.total_contracts }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">OT totales</small>
+                    <span class="fs-4 fw-bold text-primary">
+                        {{ operational_summary.total_work_orders }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="col-6 col-md-3">
+                <div class="border rounded p-3 text-center h-100">
+                    <small class="text-muted d-block">OT abiertas</small>
+                    <span class="fs-4 fw-bold text-warning">
+                        {{ operational_summary.open_work_orders }}
+                    </span>
+                </div>
+            </div>
+
+        </div>
+
+        {% if recent_activity %}
+
+            <ul class="list-group list-group-flush">
+
+                {% for event in recent_activity %}
+
+                    <li class="list-group-item d-flex justify-content-between align-items-start flex-wrap gap-2 px-0">
+
+                        <div>
+                            <span class="badge {{ event.badge_class }} me-2">
+                                {{ event.title }}
+                            </span>
+
+                            <strong>
+                                {{ event.reference }}
+                            </strong>
+
+                            {% if event.detail %}
+                                <span class="text-muted">
+                                    — {{ event.detail }}
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        <small class="text-muted text-nowrap">
+                            {{ event.timestamp|date:"d/m/Y H:i" }}
+                        </small>
+
+                    </li>
+
+                {% endfor %}
+
+            </ul>
+
+        {% else %}
+
+            <div class="alert alert-secondary mb-0">
+                No se registran actividades recientes para este cliente.
             </div>
 
         {% endif %}
