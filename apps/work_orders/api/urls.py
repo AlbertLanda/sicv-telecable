@@ -30,4 +30,15 @@ urlpatterns = [
         name="my_order_detail",
     ),
 
+    # Inicio de atención: primera acción de escritura del canal.
+    #
+    # Verbo en la ruta y no un PATCH sobre el detalle: iniciar la atención es
+    # una transición del proceso con su propio permiso, no la edición de un
+    # campo. El cliente no envía el estado destino; lo decide el dominio.
+    path(
+        "<int:pk>/start/",
+        views.StartWorkOrderAttentionView.as_view(),
+        name="start_attention",
+    ),
+
 ]

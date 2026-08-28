@@ -1,23 +1,30 @@
 """
 Vistas de API de órdenes de trabajo del canal técnico.
 
-Hoy solo lectura: «Mis órdenes» (lista) y la ficha de una orden (detalle). Las
-acciones de transición llegan los días 4 a 6, delegando siempre en los
-servicios de dominio que ya usa la web.
+Lectura —«Mis órdenes» y la ficha de una orden— e inicio de atención, que es la
+primera acción de escritura del canal. Atender y liquidar llegan los días 5 y
+6. Ninguna vista de este módulo decide reglas de negocio: las acciones delegan
+en los servicios de dominio que ya usa la web.
 """
 
+from django.core.exceptions import ValidationError
 from django.db.models import F
 from django.http import Http404
+from rest_framework import status as http_status
 from rest_framework.exceptions import NotFound
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.accounts.api.permissions import IsActiveTechnician
+from apps.work_orders.api.permissions import CanStartWorkOrder
 from apps.work_orders.api.serializers import (
     WorkOrderDetailSerializer,
     WorkOrderListSerializer,
+    WorkOrderStartAttentionSerializer,
 )
 from apps.work_orders.models import WorkOrder
+from apps.work_orders.services import start_order_attention
 
 
 class TechnicianWorkOrdersMixin:
@@ -77,8 +84,8 @@ class MyWorkOrderListView(TechnicianWorkOrdersMixin, ListAPIView):
       asignación), así que se lista todo lo asignado. El filtro por sede/zona
       es alcance del bloque 2 (App del técnico), y queda documentado como
       pendiente, no como olvido.
-    - **Solo lectura.** No hay acciones de transición: los días 4 a 6 las
-      montan sobre los servicios de dominio.
+    - **Solo lectura.** El listado no expone acciones: iniciar, atender y
+      liquidar se piden sobre una orden concreta, no sobre la bandeja.
     """
 
     serializer_class = WorkOrderListSerializer
@@ -103,34 +110,20 @@ class MyWorkOrderListView(TechnicianWorkOrdersMixin, ListAPIView):
         )
 
 
-class MyWorkOrderDetailView(TechnicianWorkOrdersMixin, RetrieveAPIView):
-    """GET /api/technicians/work-orders/<id>/ — ficha de una OT propia.
+class TechnicianWorkOrderObjectMixin(TechnicianWorkOrdersMixin):
+    """Resuelve **una** OT propia por id: la ficha y las acciones sobre ella.
 
-    **El 404 uniforme no se programa: se hereda del queryset.**
-    `RetrieveAPIView` resuelve el objeto con `get_object_or_404` sobre el
-    queryset que devuelve el mixin, que ya está filtrado por técnico. Por eso
-    «no existe» y «es de otro técnico» recorren exactamente el mismo camino de
-    código y producen la misma respuesta: para esta vista la orden ajena
-    sencillamente no está en el universo consultado.
+    Añade a la base las relaciones que solo hacen falta al operar sobre una
+    orden concreta —y que no se le cobran al listado— y unifica el 404.
 
-    Deliberadamente **no** hay `has_object_permission` ni ninguna comprobación
-    posterior sobre el objeto ya resuelto. Un chequeo así devolvería 403, que
-    confirmaría al que pregunta que la orden existe y es de otro — justo lo que
-    el principio de no enumerar del día 1 evita. La seguridad vive en el
-    queryset, no en un permiso que llega tarde.
-
-    Lo único que se ajusta a mano es el **texto** del 404 (ver `get_object`),
-    no cuándo se emite.
-
-    Solo lectura: `RetrieveAPIView` no expone POST, PATCH ni DELETE, así que
-    ninguna acción de transición queda alcanzable desde este endpoint.
+    Es el punto donde el «no enumerar» deja de ser una decisión por vista y
+    pasa a ser una propiedad del canal: cualquier endpoint que herede de aquí
+    responde igual ante una orden ajena y una inexistente, sin tener que
+    acordarse de implementarlo.
     """
 
-    serializer_class = WorkOrderDetailSerializer
-
     def get_queryset(self):
-        # Encadenar `select_related` acumula sobre el del mixin: estas son las
-        # relaciones que solo la ficha necesita, y no se le cobran al listado.
+        # Encadenar `select_related` acumula sobre el del mixin base.
         return super().get_queryset().select_related(
             "subscription__address",
             "branch",
@@ -150,3 +143,101 @@ class MyWorkOrderDetailView(TechnicianWorkOrdersMixin, RetrieveAPIView):
             # continúan siendo indistinguibles. Lo que se corrige es qué
             # cuenta el mensaje al cliente, no cuándo se emite.
             raise NotFound()
+
+
+class MyWorkOrderDetailView(TechnicianWorkOrderObjectMixin, RetrieveAPIView):
+    """GET /api/technicians/work-orders/<id>/ — ficha de una OT propia.
+
+    **El 404 uniforme no se programa: se hereda del queryset.**
+    `RetrieveAPIView` resuelve el objeto con `get_object_or_404` sobre el
+    queryset que devuelve el mixin, que ya está filtrado por técnico. Por eso
+    «no existe» y «es de otro técnico» recorren exactamente el mismo camino de
+    código y producen la misma respuesta: para esta vista la orden ajena
+    sencillamente no está en el universo consultado.
+
+    Deliberadamente **no** hay `has_object_permission` ni ninguna comprobación
+    posterior sobre el objeto ya resuelto. Un chequeo así devolvería 403, que
+    confirmaría al que pregunta que la orden existe y es de otro — justo lo que
+    el principio de no enumerar del día 1 evita. La seguridad vive en el
+    queryset, no en un permiso que llega tarde.
+
+    Solo lectura: `RetrieveAPIView` no expone POST, PATCH ni DELETE, así que
+    ninguna acción de transición queda alcanzable desde este endpoint.
+    """
+
+    serializer_class = WorkOrderDetailSerializer
+
+
+class StartWorkOrderAttentionView(TechnicianWorkOrderObjectMixin, GenericAPIView):
+    """POST /api/technicians/work-orders/<id>/start/ — inicia la atención.
+
+    Primera acción de escritura del canal técnico. **No implementa ninguna
+    regla de transición**: llama a `start_order_attention()`, exactamente la
+    misma función que ejecuta la vista web, que a su vez usa
+    `WorkOrder.start_attention()` y mantiene coherente la suscripción —una
+    instalación en preventa pasa a instalación—. Llamar al modelo directamente
+    dejaría ese segundo efecto fuera, y reimplementar la comprobación de
+    estados crearía una segunda matriz que podría desalinearse de la del
+    dominio.
+
+    La vista tampoco pregunta si la orden es iniciable: lo intenta y deja que
+    el dominio acepte o rechace, igual que la web. Una comprobación previa
+    aquí sería una regla duplicada con fecha de caducidad.
+
+    **Tres capas, evaluadas en este orden y por separado:**
+
+    1. `IsActiveTechnician` — ¿puedes operar en este canal?
+    2. `CanStartWorkOrder` — ¿puedes ejecutar *esta acción*? Un técnico puede
+       ver su OT y aun así no tener `start_workorder`: son preguntas distintas
+       y ninguna suple a la otra.
+    3. El queryset filtrado — ¿es tuya esta orden? 404 uniforme si no.
+
+    El permiso de acción se evalúa **antes** de resolver la orden, igual que en
+    la web: si el orden fuera el inverso, un técnico sin el permiso recibiría
+    404 en la OT ajena y 403 en la propia, y esa diferencia le diría cuáles
+    existen. Con este orden recibe 403 para cualquier id y no aprende nada.
+    """
+
+    permission_classes = [
+        IsAuthenticated,
+        IsActiveTechnician,
+        CanStartWorkOrder,
+    ]
+
+    serializer_class = WorkOrderStartAttentionSerializer
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_object()
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            start_order_attention(
+                order,
+                user=request.user,
+                remarks=serializer.validated_data["remarks"],
+            )
+
+        except ValidationError as exc:
+            # El dominio rechazó el inicio (estado no iniciable, orden sin
+            # técnico). El servicio es atómico: no quedó ni `started_at` ni
+            # historial a medias. Se relee la orden para no serializar un
+            # objeto en memoria que no refleje la base de datos.
+            order.refresh_from_db()
+
+            # El mensaje del dominio se devuelve tal cual: ya está redactado
+            # para el operador y no expone trazas internas. Se unen en una
+            # cadena para que `detail` tenga el mismo tipo que en el resto de
+            # los errores del canal (401, 403, 404) y el cliente no tenga que
+            # distinguir entre texto y lista según el código.
+            return Response(
+                {"detail": " ".join(exc.messages)},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # La respuesta es la ficha ya actualizada, con el serializador del día
+        # 3: el cliente que acaba de iniciar no necesita una segunda petición
+        # para refrescar la pantalla, y no se inventa una forma de respuesta
+        # distinta para la misma orden.
+        return Response(WorkOrderDetailSerializer(order).data)

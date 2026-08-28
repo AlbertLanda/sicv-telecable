@@ -5,7 +5,10 @@ de lectura del canal de API del técnico en SICV (SICV — Telecable / Fiber The
 Andes): el listado de órdenes asignadas y la ficha de una orden concreta.
 
 Continúa el cimiento del día anterior, documentado en
-[`api_technician_auth.md`](api_technician_auth.md). El dominio de las órdenes
+[`api_technician_auth.md`](api_technician_auth.md). La primera acción de
+escritura del canal —el inicio de atención, que reutiliza el queryset y el
+serializador de aquí— está en
+[`api_technician_start_attention.md`](api_technician_start_attention.md). El dominio de las órdenes
 —estados, transiciones e historial— está en
 [`work_orders_workflow.md`](work_orders_workflow.md); la bandeja web
 equivalente, en
@@ -48,7 +51,7 @@ tres tienen prueba propia.
 | `apps/accounts/api/permissions.py` | `IsActiveTechnician` |
 | `apps/accounts/api/views.py` | `TechnicianMeView` pasa a exigir el permiso |
 | `apps/work_orders/api/serializers.py` | `WorkOrderListSerializer`, `WorkOrderDetailSerializer`, `WorkOrderCustomerSerializer`, `WorkOrderAddressSerializer` |
-| `apps/work_orders/api/views.py` | `TechnicianWorkOrdersMixin`, `MyWorkOrderListView`, `MyWorkOrderDetailView` |
+| `apps/work_orders/api/views.py` | `TechnicianWorkOrdersMixin`, `TechnicianWorkOrderObjectMixin`, `MyWorkOrderListView`, `MyWorkOrderDetailView` |
 | `apps/work_orders/api/urls.py` | Rutas `work_orders_api:my_orders` y `work_orders_api:my_order_detail` |
 | `config/urls.py` | Prefijo `api/technicians/work-orders/` |
 | `apps/work_orders/tests/test_api_my_orders.py` | Pruebas del listado |
@@ -288,6 +291,12 @@ La prueba que fija el criterio de aceptación no compara solo códigos:
 `test_foreign_order_and_unknown_id_are_indistinguishable` exige **mismo código
 y mismo cuerpo**. Si mañana alguien agregara un mensaje del tipo «no tienes
 acceso a esta orden», la prueba lo detiene.
+
+Desde el día 4, el `select_related` de ficha y este 404 viven en
+`TechnicianWorkOrderObjectMixin`, un mixin intermedio entre el base y las
+vistas que operan sobre **una** orden. Así el endpoint de inicio de atención
+hereda el mismo 404 en lugar de copiarlo, y el «no enumerar» pasa a ser una
+propiedad del canal en vez de una decisión que cada vista nueva deba recordar.
 
 ### 6.1 Lo único que se ajusta a mano: el texto del 404
 

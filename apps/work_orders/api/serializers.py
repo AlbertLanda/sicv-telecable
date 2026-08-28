@@ -179,3 +179,29 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
             "zone",
         ]
         read_only_fields = fields
+
+
+class WorkOrderStartAttentionSerializer(serializers.Serializer):
+    """Contrato de entrada del inicio de atención: una observación y nada más.
+
+    Es el mismo contrato que `WorkOrderStartAttentionForm` ya define para la
+    web, que lo documenta como el que «deberá aceptar la futura API del
+    técnico». No se amplía aquí.
+
+    **Lo que este serializador no declara es tan importante como lo que
+    declara.** `status`, `started_at` y `assigned_technician` no son campos, de
+    modo que un POST que los incluya no los cuela: DRF los descarta al validar
+    y `start_order_attention()` nunca los ve. El estado destino lo decide la
+    matriz de transiciones y la hora la pone `timezone.now()` dentro del
+    dominio; ningún valor del cliente participa en esa decisión.
+
+    Es un `Serializer` plano y no un `ModelSerializer`: no describe ni edita la
+    orden, solo transporta la observación con la que el técnico confirma.
+    """
+
+    remarks = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Opcional. Queda registrada en el historial de estados.",
+    )
