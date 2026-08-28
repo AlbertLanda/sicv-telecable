@@ -44,3 +44,10 @@ corresponde a qué servicio cuando el cliente tiene más de una suscripción.
 Día 2 del bloque: crear el modelo `Equipment` (tipo, marca/modelo,
 número de serie, estado) y su migración correspondiente, en la rama
 `feature/equipos-base`, a partir de este diseño aprobado.
+
+## Decisión — Día 2: ubicación del modelo
+
+`Equipment` se implementa en `apps/inventory`. La app ya existe, está
+registrada en `INSTALLED_APPS` y no tiene modelos aún; "inventario de
+equipos" es semánticamente el lugar correcto en vez de crear un módulo
+nuevo solo para esta entidad.
