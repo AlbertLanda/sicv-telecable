@@ -28,6 +28,7 @@ from .services.activity import (
 )
 from .services.sunat import consultar_documento, DocumentLookupError
 
+from apps.organization.context_processors import get_active_branch
 from apps.organization.models import Zone
 from apps.services.models import Subscription
 from apps.contracts.models import Contract
@@ -64,6 +65,20 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         queryset = Customer.objects.filter(
             is_active=True
         )
+
+        # ---------------------------------------------------------
+        # ÁMBITO DE LA SEDE ACTIVA
+        #
+        # La búsqueda se acota a la sede desde la que se consulta, no a
+        # la sede asignada al operador: ATC de Huancayo atiende a un
+        # abonado de Oroya cambiando de sede en la barra, sin derivar la
+        # llamada. Si no hay sede activa resoluble, no se acota.
+        # ---------------------------------------------------------
+
+        active_branch = get_active_branch(self.request)
+
+        if active_branch:
+            queryset = queryset.filter(branch=active_branch)
 
         # ---------------------------------------------------------
         # BÚSQUEDA POR TIPO Y NÚMERO DE DOCUMENTO

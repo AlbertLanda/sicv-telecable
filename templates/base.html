@@ -131,6 +131,26 @@
         }
 
         .lock-icon { width: 13px; height: 13px; vertical-align: -2px; }
+        .branch-icon { width: 15px; height: 15px; vertical-align: -3px; }
+
+        .branch-switch .dropdown-toggle {
+            color: var(--sicv-tinta-suave);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .branch-switch .dropdown-toggle:hover {
+            color: var(--sicv-azul);
+        }
+        .branch-switch .dropdown-menu {
+            border-color: var(--sicv-linea);
+            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
+        }
+        .branch-switch .dropdown-item.active {
+            background-color: var(--sicv-superficie-azul);
+            color: var(--sicv-azul);
+            font-weight: 700;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -176,6 +196,45 @@
                         </li>
                     {% endif %}
                 </ul>
+
+                {# Sede activa: desde qué sede se consulta ahora, no la sede #}
+                {# asignada al usuario. ATC atiende a un abonado de otra     #}
+                {# sede cambiando aquí, sin derivar la llamada.              #}
+                {% if available_branches %}
+                    <div class="dropdown branch-switch me-3">
+                        <a
+                            href="#"
+                            class="dropdown-toggle d-inline-flex align-items-center"
+                            id="branchMenuToggle"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                        >
+                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5"/></svg>
+                            {{ active_branch.name|default:"Sede" }}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="branchMenuToggle">
+                            {% for branch in available_branches %}
+                                <li>
+                                    <form
+                                        method="post"
+                                        action="{% url 'organization:set_active_branch' %}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="branch" value="{{ branch.pk }}">
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button
+                                            type="submit"
+                                            class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}"
+                                        >
+                                            {{ branch.name }}
+                                        </button>
+                                    </form>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
 
                 <!-- Usuario autenticado: identidad + menú de cuenta -->
                 <span class="role-chip me-2"><span class="pip"></span>{{ user.get_role_display }}</span>

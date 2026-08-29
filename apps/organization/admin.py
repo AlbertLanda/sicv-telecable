@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.organization.models import Branch, Office, Zone
+from apps.organization.models import Branch, Office
 
 
 @admin.register(Branch)
@@ -17,8 +17,6 @@ class OfficeAdmin(admin.ModelAdmin):
     search_fields = ("code", "name")
 
 
-@admin.register(Zone)
-class ZoneAdmin(admin.ModelAdmin):
-    list_display = ("name", "branch", "is_active")
-    list_filter = ("branch", "is_active")
-    search_fields = ("name",)
+# Zone no se registra a propósito. El modelo sigue existiendo porque es
+# llave foránea de CustomerAddress y WorkOrder, y retirarlo del esquema
+# es un refactor aparte, no una decisión de esta pantalla.

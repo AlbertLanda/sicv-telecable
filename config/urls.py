@@ -40,6 +40,12 @@ urlpatterns = [
         include("apps.accounts.urls"),
     ),
 
+    # Organización: sede activa de la sesión.
+    path(
+        "organizacion/",
+        include("apps.organization.urls"),
+    ),
+
     # Clientes
     path(
         "customers/",
