@@ -1,0 +1,68 @@
+{% comment %}
+Menú lateral del SICV.
+
+Réplica de la estructura del sistema anterior. Hoy solo "Clientes" tiene
+enlaces reales; el resto son secciones anunciadas que se irán llenando
+conforme se construyan sus módulos, y por eso se muestran deshabilitadas
+en lugar de enlazar a una pantalla que todavía no existe.
+{% endcomment %}
+
+<aside class="sicv-sidebar">
+
+    <div class="sidebar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input
+            type="text"
+            id="sidebarFilter"
+            class="form-control"
+            placeholder="Buscar opción..."
+            autocomplete="off"
+        >
+    </div>
+
+    <div class="accordion" id="sidebarAccordion">
+
+        <div class="accordion-item sidebar-box" data-section="clientes">
+            <h2 class="accordion-header">
+                <button
+                    class="accordion-button collapsed"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#sec-clientes"
+                >
+                    Clientes
+                </button>
+            </h2>
+            <div id="sec-clientes" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
+                <div class="accordion-body">
+                    <a class="sidebar-link" href="{% url 'customers:search' %}">Buscar cliente</a>
+                    {% if perms.customers.add_customer %}
+                        <a class="sidebar-link" href="{% url 'customers:create' %}">Nuevo cliente</a>
+                    {% endif %}
+                    {% if perms.work_orders.view_workorder %}
+                        <a class="sidebar-link" href="{% url 'work_orders:dispatch' %}">Bandeja de despacho</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% comment %}
+        Secciones pendientes. Se listan para que el operador vea el mapa
+        completo del sistema, pero no enlazan a ningún sitio hasta que su
+        módulo exista: un enlace muerto confunde más que una sección
+        anunciada como pendiente.
+        {% endcomment %}
+        {% for section in sidebar_pending_sections %}
+            <div class="accordion-item sidebar-box sidebar-box-pending" data-section="{{ section|lower }}">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed" type="button" disabled>
+                        {{ section }}
+                        <span class="pending-tag">pendiente</span>
+                    </button>
+                </h2>
+            </div>
+        {% endfor %}
+
+    </div>
+
+</aside>

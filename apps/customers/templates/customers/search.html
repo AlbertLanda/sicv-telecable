@@ -1,444 +1,224 @@
 {% extends "base.html" %}
 
 {% block title %}
-SICV - Consulta de Clientes
+SICV - Buscar abonado
 {% endblock %}
 
 {% block content %}
 
-<div class="container-fluid py-4">
+<div class="py-3 pe-2">
 
     <!-- ===================================================== -->
-    <!-- ENCABEZADO -->
+    <!-- BUSCAR ABONADO -->
     <!-- ===================================================== -->
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="card card-custom mb-3">
 
-        <div>
-            <h2 class="fw-bold text-primary mb-1">
-                Consulta de Clientes
-            </h2>
-
-            <p class="text-muted mb-0">
-                Busca por nombre, apellidos, razón social, documento,
-                teléfono, código o dirección.
-            </p>
+        <div class="card-header panel-head">
+            Buscar abonado
         </div>
 
-        <a
-            href="{% url 'customers:create' %}"
-            class="btn btn-success"
-        >
-            + Registrar Cliente
-        </a>
+        <div class="card-body">
+
+            <form method="get" class="d-flex flex-wrap align-items-center gap-2">
+
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ current_query }}"
+                    class="form-control search-field"
+                    placeholder="Código, documento, nombre, teléfono o dirección"
+                    autocomplete="off"
+                    autofocus
+                >
+
+                <button type="submit" class="btn btn-primary">
+                    Buscar
+                </button>
+
+                {% if current_query %}
+                    <a href="{% url 'customers:search' %}" class="btn btn-outline-secondary">
+                        Limpiar
+                    </a>
+                {% endif %}
+
+                {% if perms.customers.add_customer %}
+                    <a href="{% url 'customers:create' %}" class="btn btn-primary">
+                        Nuevo
+                    </a>
+                {% endif %}
+
+            </form>
+
+        </div>
 
     </div>
 
-    <!-- ===================================================== -->
-<!-- BUSCADOR DE CLIENTE -->
-<!-- ===================================================== -->
-
-<div class="card card-custom mb-4">
-
-    <div class="card-header bg-dark text-white">
-        <strong>
-            Buscar cliente
-        </strong>
-    </div>
-
-    <div class="card-body p-4">
-
-        <form
-            method="GET"
-            action="{% url 'customers:search' %}"
-        >
-
-            <div class="row g-3 align-items-end">
-
-                <div class="col-md-10">
-
-                    <label
-                        for="q"
-                        class="form-label fw-semibold"
-                    >
-                        Buscar cliente
-                    </label>
-
-                    <input
-                        id="q"
-                        type="text"
-                        name="q"
-                        class="form-control form-control-lg"
-                        value="{{ current_query }}"
-                        placeholder="Nombre, apellido, DNI, RUC, teléfono, dirección, razón social..."
-                        autocomplete="off"
-                    >
-
-                </div>
-
-                <div class="col-md-2">
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary btn-lg w-100"
-                    >
-                        Buscar
-                    </button>
-
-                </div>
-
-            </div>
-
-        </form>
-
-    </div>
-
-</div>
 
     <!-- ===================================================== -->
-    <!-- RESULTADOS -->
+    <!-- LISTAR -->
     <!-- ===================================================== -->
 
-    {% if customer_search %}
+    <div class="card card-custom">
 
-        {% if customers %}
+        <div class="card-header panel-head d-flex justify-content-between align-items-center">
+            <span>Listar</span>
 
-            <!-- ================================================= -->
-            <!-- CLIENTES ENCONTRADOS -->
-            <!-- ================================================= -->
+            {% if active_branch %}
+                <span class="panel-head-note">{{ active_branch.name }}</span>
+            {% endif %}
+        </div>
 
-            <div class="card card-custom mb-4 border-success">
+        <div class="table-responsive">
 
-                <div class="card-header bg-success text-white">
+            <table class="table table-hover align-middle mb-0 sicv-table">
 
-                    <strong>
-                        ✓ Clientes encontrados
-                    </strong>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Documento</th>
+                        <th>Dirección</th>
+                        <th>Sector</th>
+                        <th>Servicios</th>
+                        <th class="text-end">Núm. Servicio</th>
+                    </tr>
+                </thead>
 
-                </div>
-
-                <div class="card-body p-4">
+                <tbody>
 
                     {% for customer in customers %}
 
-                        <div class="border rounded p-4 mb-3">
-
-                            <div class="row g-4">
-
-                                <!-- CÓDIGO -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Código de abonado
-                                    </small>
-
-                                    <strong class="text-primary">
+                        {% with direccion=customer.addresses.all|first %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'customers:detail' customer.pk %}" class="fw-semibold">
                                         {{ customer.code }}
-                                    </strong>
+                                    </a>
+                                </td>
 
-                                </div>
+                                <td>{{ customer }}</td>
 
+                                <td class="text-nowrap">
+                                    {{ customer.get_document_type_display }}
+                                    {{ customer.document_number }}
+                                </td>
 
-                                <!-- DOCUMENTO -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Documento
-                                    </small>
-
-                                    <strong>
-                                        {{ customer.get_document_type_display }}
-                                        {{ customer.document_number }}
-                                    </strong>
-
-                                </div>
-
-
-                                <!-- CLIENTE -->
-
-                                <div class="col-md-6">
-
-                                    <small class="text-muted d-block">
-                                        Cliente
-                                    </small>
-
-                                    <strong>
-                                        {{ customer }}
-                                    </strong>
-
-                                </div>
-
-
-                                <!-- TIPO PERSONA -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Tipo de persona
-                                    </small>
-
-                                    <span>
-                                        {{ customer.get_person_type_display }}
-                                    </span>
-
-                                </div>
-
-
-                                <!-- SEDE -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Sede
-                                    </small>
-
-                                    <span>
-                                        {{ customer.branch.name }}
-                                    </span>
-
-                                </div>
-
-
-                                <!-- TELÉFONO -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Teléfono
-                                    </small>
-
-                                    {% if customer.phone %}
-
-                                        {{ customer.phone }}
-
+                                <td>
+                                    {% if direccion %}
+                                        {{ direccion.address }}
                                     {% else %}
-
-                                        <span class="text-muted">
-                                            No registrado
-                                        </span>
-
+                                        <span class="text-muted">Sin dirección</span>
                                     {% endif %}
+                                </td>
 
-                                </div>
-
-
-                                <!-- ESTADO -->
-
-                                <div class="col-md-3">
-
-                                    <small class="text-muted d-block">
-                                        Estado
-                                    </small>
-
-                                    {% if customer.is_active %}
-
-                                        <span class="badge bg-success">
-                                            Activo
-                                        </span>
-
+                                <td>
+                                    {% if direccion and direccion.district %}
+                                        {{ direccion.district }}
                                     {% else %}
-
-                                        <span class="badge bg-secondary">
-                                            Inactivo
-                                        </span>
-
+                                        <span class="text-muted">—</span>
                                     {% endif %}
+                                </td>
 
-                                </div>
+                                <td>
+                                    {% for suscripcion in customer.subscriptions.all %}
+                                        <span class="service-tag">
+                                            {{ suscripcion.service_type.name }}
+                                        </span>
+                                    {% empty %}
+                                        <span class="text-muted">Sin servicios</span>
+                                    {% endfor %}
+                                </td>
 
-                            </div>
+                                <td class="text-end tabular">
+                                    {{ customer.subscriptions.all|length }}
+                                </td>
+                            </tr>
+                        {% endwith %}
 
+                    {% empty %}
 
-                            <hr class="my-4">
+                        <tr>
+                            <td colspan="7" class="text-center py-5">
 
+                                {% if current_query %}
+                                    <p class="mb-2 fw-semibold">
+                                        Sin resultados para “{{ current_query }}”.
+                                    </p>
+                                    <p class="text-muted mb-3">
+                                        Revisa el término escrito o registra al abonado.
+                                    </p>
+                                    <a href="{% url 'customers:search' %}" class="btn btn-sm btn-outline-secondary">
+                                        Ver todos
+                                    </a>
+                                {% else %}
+                                    <p class="mb-2 fw-semibold">
+                                        Esta sede todavía no tiene abonados registrados.
+                                    </p>
+                                    {% if perms.customers.add_customer %}
+                                        <a href="{% url 'customers:create' %}" class="btn btn-sm btn-primary mt-1">
+                                            Registrar el primero
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
 
-                            <!-- ACCIONES -->
-
-                            <div class="d-flex justify-content-end gap-2">
-
-                                <a
-                                    href="{% url 'customers:detail' customer.pk %}"
-                                    class="btn btn-outline-primary"
-                                >
-                                    Ver ficha
-                                </a>
-
-                                <a
-                                    href="{% url 'customers:use' customer.pk %}"
-                                    class="btn btn-primary"
-                                >
-                                    Usar cliente existente
-                                </a>
-
-                            </div>
-
-                        </div>
+                            </td>
+                        </tr>
 
                     {% endfor %}
 
-                </div>
+                </tbody>
 
-            </div>
-
-
-            <!-- ================================================= -->
-            <!-- PAGINACIÓN -->
-            <!-- ================================================= -->
-
-            {% if is_paginated %}
-
-                <nav aria-label="Paginación de clientes">
-
-                    <ul class="pagination justify-content-center">
-
-                        {% if page_obj.has_previous %}
-
-                            <li class="page-item">
-
-                                <a
-                                    class="page-link"
-                                    href="?q={{ current_query|urlencode }}&page={{ page_obj.previous_page_number }}"
-                                >
-                                    Anterior
-                                </a>
-
-                            </li>
-
-                        {% endif %}
-
-
-                        <li class="page-item active">
-
-                            <span class="page-link">
-                                Página {{ page_obj.number }}
-                                de {{ page_obj.paginator.num_pages }}
-                            </span>
-
-                        </li>
-
-
-                        {% if page_obj.has_next %}
-
-                            <li class="page-item">
-
-                                <a
-                                    class="page-link"
-                                    href="?q={{ current_query|urlencode }}&page={{ page_obj.next_page_number }}"
-                                >
-                                    Siguiente
-                                </a>
-
-                            </li>
-
-                        {% endif %}
-
-                    </ul>
-
-                </nav>
-
-            {% endif %}
-
-
-        {% else %}
-
-            <!-- ================================================= -->
-            <!-- SIN RESULTADOS -->
-            <!-- ================================================= -->
-
-            <div class="card card-custom mb-4 border-warning">
-
-                <div class="card-header bg-warning">
-
-                    <strong>
-                        Cliente no encontrado
-                    </strong>
-
-                </div>
-
-                <div class="card-body p-4">
-
-                    <div class="row align-items-center">
-
-                        <div class="col-md-9">
-
-                            <h5 class="fw-bold">
-                                No se encontraron clientes.
-                            </h5>
-
-                            <p class="text-muted mb-0">
-
-                                Búsqueda realizada:
-
-                                <strong>
-                                    "{{ current_query }}"
-                                </strong>
-
-                            </p>
-
-                            <p class="text-muted mt-2 mb-0">
-
-                                Puedes verificar los datos ingresados
-                                o registrar un nuevo cliente.
-
-                            </p>
-
-                        </div>
-
-
-                        <div class="col-md-3 text-md-end mt-3 mt-md-0">
-
-                            <a
-                                href="{% url 'customers:create' %}"
-                                class="btn btn-success"
-                            >
-                                Registrar Cliente
-                            </a>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        {% endif %}
-
-    {% else %}
-
-        <!-- ================================================= -->
-        <!-- ESTADO INICIAL -->
-        <!-- ================================================= -->
-
-        <div class="card card-custom">
-
-            <div class="card-body p-5 text-center">
-
-                <div class="mb-3">
-
-                    <span class="fs-1">
-                        🔎
-                    </span>
-
-                </div>
-
-                <h5 class="fw-bold">
-                    Consulta de clientes
-                </h5>
-
-                <p class="text-muted mb-0">
-                    Ingresa un nombre, apellido, razón social,
-                    documento, teléfono, código o dirección
-                    para buscar un cliente.
-                </p>
-
-            </div>
+            </table>
 
         </div>
 
-    {% endif %}
+        {% if customers %}
+            <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+
+                <span class="text-muted small">
+                    {% if is_paginated %}
+                        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                        · {{ page_obj.paginator.count }} abonado{{ page_obj.paginator.count|pluralize }}
+                    {% else %}
+                        {{ customers|length }} abonado{{ customers|length|pluralize }}
+                    {% endif %}
+                </span>
+
+                {% if is_paginated %}
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page=1">&laquo;</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">&lsaquo;</a>
+                                </li>
+                            {% endif %}
+
+                            <li class="page-item active">
+                                <span class="page-link">{{ page_obj.number }}</span>
+                            </li>
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">&rsaquo;</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}">&raquo;</a>
+                                </li>
+                            {% endif %}
+
+                        </ul>
+                    </nav>
+                {% endif %}
+
+            </div>
+        {% endif %}
+
+    </div>
 
 </div>
 

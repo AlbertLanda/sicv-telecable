@@ -75,6 +75,20 @@ def get_active_office(request, branch=None):
     return None
 
 
+# Secciones del menú lateral que todavía no tienen módulo. Se anuncian
+# para que el operador vea el mapa completo del sistema -es el mismo que
+# conoce del sistema anterior-, pero se pintan deshabilitadas: un enlace
+# muerto confunde más que una sección marcada como pendiente. Cada una
+# sale de esta lista en cuanto su módulo exista.
+SIDEBAR_PENDING_SECTIONS = [
+    "Caja",
+    "Reportes",
+    "Programar",
+    "Soporte",
+    "Configurar",
+]
+
+
 def organization(request):
     """Sede y oficina activas, con sus opciones, para la barra de navegación."""
     if not request.user.is_authenticated:
@@ -93,4 +107,5 @@ def organization(request):
         "available_branches": Branch.objects.filter(is_active=True),
         "active_office": get_active_office(request, branch=active_branch),
         "available_offices": offices,
+        "sidebar_pending_sections": SIDEBAR_PENDING_SECTIONS,
     }

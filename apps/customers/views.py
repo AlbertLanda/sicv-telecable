@@ -102,6 +102,10 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
             return (
                 queryset
                 .select_related("branch")
+                .prefetch_related(
+                    "addresses",
+                    "subscriptions__service_type",
+                )
                 .distinct()
                 .order_by(
                     "paternal_surname",
@@ -129,8 +133,25 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         # - Número de medidor
         # ---------------------------------------------------------
 
+        # Sin término de búsqueda se listan todos los abonados de la sede
+        # activa, paginados. La pantalla es el padrón de la sede: se abre
+        # mostrando lo que hay, y escribir en el buscador lo acota. Antes
+        # devolvía una lista vacía y obligaba a buscar para ver algo.
         if not query:
-            return Customer.objects.none()
+            return (
+                queryset
+                .select_related("branch")
+                .prefetch_related(
+                    "addresses",
+                    "subscriptions__service_type",
+                )
+                .order_by(
+                    "paternal_surname",
+                    "maternal_surname",
+                    "first_name",
+                    "business_name",
+                )
+            )
 
         words = query.split()
 
@@ -155,6 +176,10 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         return (
             queryset
             .select_related("branch")
+            .prefetch_related(
+                "addresses",
+                "subscriptions__service_type",
+            )
             .distinct()
             .order_by(
                 "paternal_surname",
