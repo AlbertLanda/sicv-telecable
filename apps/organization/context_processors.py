@@ -75,17 +75,74 @@ def get_active_office(request, branch=None):
     return None
 
 
-# Secciones del menú lateral que todavía no tienen módulo. Se anuncian
-# para que el operador vea el mapa completo del sistema -es el mismo que
-# conoce del sistema anterior-, pero se pintan deshabilitadas: un enlace
-# muerto confunde más que una sección marcada como pendiente. Cada una
-# sale de esta lista en cuanto su módulo exista.
+# Ítems de "Clientes" que existían en el sistema anterior y todavía no
+# tienen pantalla propia. "Clientes" ya tiene enlaces reales (Buscar
+# cliente, Nuevo cliente, Bandeja de despacho), así que estos se agregan
+# a esa misma caja del menú como filas pendientes, en lugar de abrir una
+# sección aparte -es una sola sección, como en el sistema anterior.
+CLIENTES_PENDING_ITEMS = [
+    "Datos",
+    "Deuda",
+    "Historial de pagos",
+    "Comprobantes de pago",
+    "Contrato cable",
+    "Contrato",
+    "Orden",
+    "Equipos",
+    "Compromiso de pago",
+    "Suscripción",
+    "Equipo Susc.",
+    "Planta externa",
+]
+
+
+# Secciones del menú lateral que todavía no tienen módulo propio, con sus
+# ítems tal como existían en el sistema anterior. Se anuncian para que el
+# operador vea el mapa completo del sistema -es el mismo que ya conoce-,
+# pero se pintan deshabilitadas: un enlace muerto confunde más que un
+# ítem marcado como pendiente. Cada ítem sale de esta lista en cuanto su
+# pantalla exista de verdad (y pasa a construirse como enlace real, igual
+# que "Buscar cliente" o "Nuevo cliente").
+#
+# "Soporte" del sistema anterior no se replica: ahí el proveedor
+# gestionaba sus propias incidencias técnicas, y ese rol ya no existe -el
+# soporte del sistema ahora lo damos nosotros mismos, no un módulo aparte.
 SIDEBAR_PENDING_SECTIONS = [
-    "Caja",
-    "Reportes",
-    "Programar",
-    "Soporte",
-    "Configurar",
+    {
+        "name": "Cliente2",
+        "items": [],
+    },
+    {
+        "name": "Caja",
+        "items": [
+            "Control de comprobantes",
+            "Buscar comprobante",
+            "Listar comprobantes",
+            "Nota de crédito",
+            "Nota de crédito2",
+            "Gastos",
+            "Depósitos",
+            "Composición",
+        ],
+    },
+    {
+        "name": "Reportes",
+        "items": [
+            "Cierre de caja",
+            "Abonados",
+            "Servicios",
+            "Cobranza",
+            "Contratos",
+        ],
+    },
+    {
+        "name": "Programar",
+        "items": [],
+    },
+    {
+        "name": "Configurar",
+        "items": [],
+    },
 ]
 
 
@@ -107,5 +164,6 @@ def organization(request):
         "available_branches": Branch.objects.filter(is_active=True),
         "active_office": get_active_office(request, branch=active_branch),
         "available_offices": offices,
+        "sidebar_clientes_pending_items": CLIENTES_PENDING_ITEMS,
         "sidebar_pending_sections": SIDEBAR_PENDING_SECTIONS,
     }

@@ -92,6 +92,36 @@
             border-bottom-color: var(--sicv-azul);
         }
 
+        /* Botón para mostrar/ocultar el menú lateral. */
+        .sidebar-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--sicv-linea);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--sicv-tinta);
+            margin-right: 14px;
+        }
+        .sidebar-toggle-btn:hover {
+            background: var(--sicv-fondo);
+            color: var(--sicv-azul);
+        }
+        .sidebar-toggle-btn svg {
+            width: 19px;
+            height: 19px;
+        }
+
+        /* Oculta el menú lateral y le devuelve el ancho al contenido. */
+        body.sidebar-collapsed .sicv-sidebar {
+            display: none;
+        }
+        body.sidebar-collapsed .sicv-main {
+            margin-left: 0;
+        }
+
         .role-chip {
             display: inline-flex;
             align-items: center;
@@ -265,6 +295,23 @@
         .sidebar-box-pending .accordion-button::after {
             opacity: .35;
         }
+        .sidebar-box-pending .accordion-button .pending-tag {
+            margin-left: auto;
+        }
+
+        /* Ítem anunciado dentro de una sección con enlaces reales (p. ej.
+           "Clientes"): mismo lugar que un enlace, pero sin acción todavía. */
+        .sidebar-link-pending {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-radius: 7px;
+            color: var(--sicv-tinta-tenue);
+            font-size: .875rem;
+            font-weight: 500;
+            cursor: default;
+        }
         /* ---------- Paneles y tablas del sistema ---------- */
 
         /* Cabecera azul del panel, como en el sistema anterior. */
@@ -337,7 +384,18 @@
     {% if user.is_authenticated %}
     <!-- Navegación del sistema -->
     <nav class="navbar navbar-expand-lg navbar-sicv mb-4">
-        <div class="container">
+        <div class="container-fluid px-4">
+
+            {% if not hide_sidebar %}
+                <button
+                    type="button"
+                    id="sidebarToggleBtn"
+                    class="sidebar-toggle-btn"
+                    aria-label="Mostrar u ocultar el menú lateral"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            {% endif %}
 
             <a
                 class="navbar-brand"
@@ -349,15 +407,6 @@
             <div class="collapse navbar-collapse">
 
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a
-                            class="nav-link"
-                            href="{% url 'customers:search' %}"
-                        >
-                            Búsqueda de Clientes
-                        </a>
-                    </li>
-
                     {# La bandeja solo se ofrece a quien puede verla. Ocultar #}
                     {# el enlace es comodidad: el control real es el permiso  #}
                     {# de la vista, que responde 403 si se escribe la URL.    #}
@@ -374,13 +423,13 @@
                 </ul>
 
                 <!-- Rol del usuario autenticado -->
-                <span class="role-chip me-3"><span class="pip"></span>{{ user.get_role_display }}</span>
+                <span class="role-chip me-4"><span class="pip"></span>{{ user.get_role_display }}</span>
 
                 {# Oficina activa: desde qué local se atiende. Hoy es solo    #}
                 {# contexto visible; la necesitará el flujo de caja, donde    #}
                 {# cada cobro se hace en una oficina concreta.                #}
                 {% if available_offices %}
-                    <div class="dropdown branch-switch me-3">
+                    <div class="dropdown branch-switch me-4">
                         <a
                             href="#"
                             class="dropdown-toggle d-inline-flex align-items-center"
@@ -419,7 +468,7 @@
                 {# asignada al usuario. ATC atiende a un abonado de otra     #}
                 {# sede cambiando aquí, sin derivar la llamada.              #}
                 {% if available_branches %}
-                    <div class="dropdown branch-switch me-3">
+                    <div class="dropdown branch-switch me-4">
                         <a
                             href="#"
                             class="dropdown-toggle d-inline-flex align-items-center"
@@ -540,6 +589,48 @@
                     var name = (box.dataset.section || "").toLowerCase();
                     box.hidden = term !== "" && name.indexOf(term) === -1;
                 });
+            });
+        })();
+    </script>
+
+    <script>
+        /*
+         * Mostrar/ocultar el menú lateral.
+         *
+         * Comodidad de pantalla, no una preferencia del sistema: se recuerda
+         * en este navegador (localStorage) para que no vuelva a expandirse
+         * en cada carga, pero no viaja al servidor ni afecta a otro usuario.
+         */
+        (function () {
+            var toggle = document.getElementById("sidebarToggleBtn");
+
+            if (!toggle) {
+                return;
+            }
+
+            var STORAGE_KEY = "sicv-sidebar-collapsed";
+
+            function apply(collapsed) {
+                document.body.classList.toggle("sidebar-collapsed", collapsed);
+            }
+
+            var stored = null;
+            try {
+                stored = localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                // Almacenamiento no disponible (navegación privada, etc.): se
+                // ignora y el menú simplemente no recuerda su estado.
+            }
+            apply(stored === "1");
+
+            toggle.addEventListener("click", function () {
+                var collapsed = !document.body.classList.contains("sidebar-collapsed");
+                apply(collapsed);
+                try {
+                    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+                } catch (e) {
+                    // Igual que arriba: sin almacenamiento, solo no persiste.
+                }
             });
         })();
     </script>

@@ -1,10 +1,16 @@
 {% comment %}
 Menú lateral del SICV.
 
-Réplica de la estructura del sistema anterior. Hoy solo "Clientes" tiene
-enlaces reales; el resto son secciones anunciadas que se irán llenando
-conforme se construyan sus módulos, y por eso se muestran deshabilitadas
-en lugar de enlazar a una pantalla que todavía no existe.
+Réplica de la estructura del sistema anterior. "Clientes" tiene enlaces
+reales (Buscar cliente, Nuevo cliente, Bandeja de despacho) más los ítems
+de esa misma sección que el sistema anterior tenía y todavía no
+construimos, mostrados como filas pendientes en la misma caja. El resto
+de secciones se anuncian completas -con sus ítems, si los tenían- pero
+deshabilitadas, y se van llenando conforme se construye cada módulo.
+
+"Soporte" del sistema anterior no se replica: ahí el proveedor resolvía
+sus propias incidencias técnicas: ese rol ya no existe, el soporte del
+sistema lo damos ahora nosotros mismos.
 {% endcomment %}
 
 <aside class="sicv-sidebar">
@@ -42,24 +48,50 @@ en lugar de enlazar a una pantalla que todavía no existe.
                     {% if perms.work_orders.view_workorder %}
                         <a class="sidebar-link" href="{% url 'work_orders:dispatch' %}">Bandeja de despacho</a>
                     {% endif %}
+
+                    {% for item in sidebar_clientes_pending_items %}
+                        <span class="sidebar-link sidebar-link-pending">
+                            {{ item }}
+                            <span class="pending-tag">pendiente</span>
+                        </span>
+                    {% endfor %}
                 </div>
             </div>
         </div>
 
         {% comment %}
-        Secciones pendientes. Se listan para que el operador vea el mapa
-        completo del sistema, pero no enlazan a ningún sitio hasta que su
-        módulo exista: un enlace muerto confunde más que una sección
-        anunciada como pendiente.
+        Secciones pendientes. Se listan -con sus ítems, si los tenían en el
+        sistema anterior- para que el operador vea el mapa completo del
+        sistema, pero no enlazan a ningún sitio hasta que su módulo exista:
+        un enlace muerto confunde más que una sección anunciada como
+        pendiente.
         {% endcomment %}
         {% for section in sidebar_pending_sections %}
-            <div class="accordion-item sidebar-box sidebar-box-pending" data-section="{{ section|lower }}">
+            <div class="accordion-item sidebar-box sidebar-box-pending" data-section="{{ section.name|lower }}">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" disabled>
-                        {{ section }}
+                    <button
+                        class="accordion-button collapsed"
+                        type="button"
+                        {% if section.items %}
+                            data-bs-toggle="collapse"
+                            data-bs-target="#sec-pend-{{ forloop.counter }}"
+                        {% else %}
+                            disabled
+                        {% endif %}
+                    >
+                        {{ section.name }}
                         <span class="pending-tag">pendiente</span>
                     </button>
                 </h2>
+                {% if section.items %}
+                    <div id="sec-pend-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
+                        <div class="accordion-body">
+                            {% for item in section.items %}
+                                <span class="sidebar-link sidebar-link-pending">{{ item }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
             </div>
         {% endfor %}
 
