@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
     body {
-        background: var(--sicv-crema);
+        background: var(--sicv-fondo);
     }
 
     .login-page {
@@ -14,18 +14,7 @@
         align-items: center;
         justify-content: center;
         padding: 30px;
-        background:
-            radial-gradient(
-                circle at 10% 20%,
-                rgba(180, 136, 60, 0.09),
-                transparent 30%
-            ),
-            radial-gradient(
-                circle at 90% 80%,
-                rgba(92, 132, 170, 0.10),
-                transparent 30%
-            ),
-            var(--sicv-crema);
+        background: var(--sicv-fondo);
     }
 
     .login-container {
@@ -52,10 +41,10 @@
         background:
             linear-gradient(
                 145deg,
-                rgba(47, 74, 96, 0.98),
-                rgba(63, 100, 132, 0.96)
+                var(--sicv-azul),
+                var(--sicv-azul-oscuro)
             ),
-            #2F4A60;
+            var(--sicv-azul);
         overflow: hidden;
     }
 
@@ -104,15 +93,14 @@
 
     .brand-content h1 {
         margin: 0 0 15px;
-        font-family: 'Cormorant', serif;
-        font-size: 46px;
+        font-size: 42px;
         line-height: 1.1;
-        font-weight: 600;
-        letter-spacing: 0;
+        font-weight: 800;
+        letter-spacing: -1px;
     }
 
     .brand-content h1 span {
-        color: var(--sicv-oro);
+        color: #9DBBD6;
     }
 
     .brand-description {
@@ -183,10 +171,9 @@
     .login-header h2 {
         margin: 0 0 8px;
         color: var(--sicv-tinta);
-        font-family: 'Cormorant', serif;
-        font-size: 34px;
-        font-weight: 600;
-        letter-spacing: 0;
+        font-size: 30px;
+        font-weight: 750;
+        letter-spacing: -0.5px;
     }
 
     .login-header p {
@@ -262,16 +249,16 @@
     }
 
     .form-input::placeholder {
-        color: var(--sicv-plomo-ink);
+        color: var(--sicv-tinta-tenue);
     }
 
     .form-input:hover {
-        border-color: var(--sicv-plomo-line);
+        border-color: #C7CFD7;
     }
 
     .form-input:focus {
         border-color: var(--sicv-azul);
-        box-shadow: 0 0 0 4px var(--sicv-azul-pastel);
+        box-shadow: 0 0 0 4px var(--sicv-superficie-azul);
     }
 
     .input-wrapper:focus-within .input-icon {
@@ -336,7 +323,7 @@
         cursor: pointer;
         font-size: 14px;
         font-weight: 700;
-        box-shadow: 0 8px 18px rgba(92, 132, 170, 0.30);
+        box-shadow: 0 8px 18px rgba(27, 58, 92, 0.28);
         transition:
             transform 0.2s ease,
             box-shadow 0.2s ease,
@@ -346,7 +333,7 @@
     .login-button:hover {
         background: var(--sicv-azul-oscuro);
         transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(63, 100, 132, 0.32);
+        box-shadow: 0 12px 24px rgba(20, 41, 63, 0.32);
     }
 
     .login-button:active {

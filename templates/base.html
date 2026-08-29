@@ -14,54 +14,49 @@
 
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
         rel="stylesheet"
     >
 
     <style>
         /*
-         * Paleta SICV — piedra clara, azul sereno, oro templado.
+         * Paleta SICV — Opción A: azul corporativo.
          * Se define una vez aquí y se aplica a todo el sitio sobreescribiendo
          * las variables de Bootstrap 5, no reescribiendo cada plantilla.
          */
         :root {
-            --sicv-crema: #FAF6EF;
-            --sicv-plomo: #E4E7E9;
-            --sicv-plomo-line: #CBD2D5;
-            --sicv-plomo-ink: #5B6B72;
-            --sicv-azul: #5C84AA;
-            --sicv-azul-oscuro: #3F6484;
-            --sicv-azul-pastel: #E7EFF6;
-            --sicv-oro: #B4883C;
-            --sicv-oro-oscuro: #8E6A2C;
-            --sicv-oro-pastel: #F3E8CC;
-            --sicv-tinta: #2B3A4A;
-            --sicv-tinta-suave: #68798B;
-            --sicv-linea: #E6DDC8;
-            --sicv-salvia: #5E9E7C;
+            --sicv-fondo: #F4F6F8;
+            --sicv-superficie: #FFFFFF;
+            --sicv-superficie-azul: #EAF0F5;
+            --sicv-azul: #1B3A5C;
+            --sicv-azul-oscuro: #14293F;
+            --sicv-tinta: #1F2937;
+            --sicv-tinta-suave: #4B5563;
+            --sicv-tinta-tenue: #6B7280;
+            --sicv-linea: #DCE1E6;
 
             /* Overrides de Bootstrap: el resto del sitio hereda la paleta
                sin que cada plantilla tenga que cambiar sus clases. */
-            --bs-body-bg: var(--sicv-crema);
+            --bs-body-bg: var(--sicv-fondo);
             --bs-body-color: var(--sicv-tinta);
             --bs-primary: var(--sicv-azul);
-            --bs-primary-rgb: 92, 132, 170;
+            --bs-primary-rgb: 27, 58, 92;
             --bs-border-color: var(--sicv-linea);
-            --bs-font-sans-serif: 'Manrope', system-ui, -apple-system, sans-serif;
+            --bs-font-sans-serif: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
         body {
-            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
-        h1, h2, h3, .navbar-brand {
-            font-family: 'Cormorant', serif;
+        h1, h2, h3 {
+            font-weight: 700;
         }
 
         .card-custom {
             border: none;
             border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(43,58,74,0.05), 0 16px 32px -20px rgba(43,58,74,0.22);
+            box-shadow: 0 1px 2px rgba(31,41,55,0.05), 0 16px 32px -20px rgba(31,41,55,0.22);
         }
 
         .btn-primary {
@@ -73,22 +68,22 @@
             border-color: var(--sicv-azul-oscuro);
         }
 
-        /* Barra de navegación: piedra clara con acento dorado, no oscura. */
+        /* Barra de navegación: blanca con acento azul marino, no oscura. */
         .navbar.navbar-sicv {
             background-color: #FFFFFF;
             border-bottom: 1px solid var(--sicv-linea);
         }
         .navbar-sicv .navbar-brand {
-            color: var(--sicv-oro-oscuro);
-            font-weight: 600;
-            font-size: 1.35rem;
+            color: var(--sicv-azul);
+            font-weight: 800;
+            font-size: 1.25rem;
         }
         .navbar-sicv .nav-link {
             color: var(--sicv-tinta-suave);
         }
         .navbar-sicv .nav-link:hover,
         .navbar-sicv .nav-link.active {
-            color: var(--sicv-azul-oscuro);
+            color: var(--sicv-azul);
         }
 
         .role-chip {
@@ -100,13 +95,13 @@
             font-size: 11px;
             font-weight: 700;
             letter-spacing: .02em;
-            background: var(--sicv-oro-pastel);
-            color: var(--sicv-oro-oscuro);
-            border: 1px solid rgba(180,136,60,.28);
+            background: var(--sicv-superficie-azul);
+            color: var(--sicv-azul);
+            border: 1px solid rgba(27,58,92,.18);
         }
         .role-chip .pip {
             width: 6px; height: 6px; border-radius: 50%;
-            background: var(--sicv-oro);
+            background: var(--sicv-azul);
             display: inline-block;
         }
 
@@ -116,62 +111,26 @@
         }
         .account-menu .dropdown-menu {
             border-color: var(--sicv-linea);
-            box-shadow: 0 12px 28px -18px rgba(43,58,74,0.35);
+            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
         }
 
         .field-readonly {
-            background: var(--sicv-plomo);
-            border: 1px solid var(--sicv-plomo-line);
+            background: var(--sicv-fondo);
+            border: 1px solid var(--sicv-linea);
             border-radius: 8px;
             padding: 8px 12px;
-            color: var(--sicv-plomo-ink);
+            color: var(--sicv-tinta-suave);
         }
 
         .identity-note {
-            background: var(--sicv-plomo);
+            background: var(--sicv-fondo);
             border-radius: 8px;
             padding: 10px 12px;
             font-size: 0.85rem;
-            color: var(--sicv-plomo-ink);
+            color: var(--sicv-tinta-tenue);
         }
 
         .lock-icon { width: 13px; height: 13px; vertical-align: -2px; }
-
-        .btn-gold {
-            background-color: var(--sicv-oro);
-            border-color: var(--sicv-oro);
-            color: #FFFBF2;
-        }
-        .btn-gold:hover {
-            background-color: var(--sicv-oro-oscuro);
-            border-color: var(--sicv-oro-oscuro);
-            color: #FFFBF2;
-        }
-
-        .auth-shell {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background:
-                radial-gradient(900px 480px at 10% -10%, rgba(180,136,60,0.07), transparent 60%),
-                radial-gradient(900px 520px at 95% 6%, rgba(92,132,170,0.08), transparent 58%),
-                var(--sicv-crema);
-        }
-        .auth-card {
-            width: 100%;
-            max-width: 380px;
-        }
-        .auth-title {
-            font-family: 'Cormorant', serif;
-            font-weight: 600;
-            font-size: 1.8rem;
-            text-align: center;
-        }
-        .auth-title em {
-            font-style: normal;
-            color: var(--sicv-oro-oscuro);
-        }
     </style>
 
     {% block extra_css %}{% endblock %}
