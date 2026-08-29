@@ -18,4 +18,14 @@ urlpatterns = [
         name="set_active_branch",
     ),
 
+    # Cambiar la oficina desde la que se atiende.
+    #
+    # Hoy solo contexto visible en la barra. La necesitará el flujo de caja,
+    # donde cada cobro se hace en una oficina concreta.
+    path(
+        "oficina-activa/",
+        views.set_active_office,
+        name="set_active_office",
+    ),
+
 ]

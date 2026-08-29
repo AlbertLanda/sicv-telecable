@@ -76,14 +76,20 @@
         .navbar-sicv .navbar-brand {
             color: var(--sicv-azul);
             font-weight: 800;
-            font-size: 1.25rem;
+            font-size: 1.4rem;
+            letter-spacing: .07em;
         }
         .navbar-sicv .nav-link {
-            color: var(--sicv-tinta-suave);
+            color: var(--sicv-tinta);
+            font-weight: 600;
+            padding-left: .9rem;
+            padding-right: .9rem;
+            border-bottom: 2px solid transparent;
         }
         .navbar-sicv .nav-link:hover,
         .navbar-sicv .nav-link.active {
             color: var(--sicv-azul);
+            border-bottom-color: var(--sicv-azul);
         }
 
         .role-chip {
@@ -167,7 +173,7 @@
                 class="navbar-brand"
                 href="{% url 'customers:search' %}"
             >
-                SICV Telecable
+                TELECABLE
             </a>
 
             <div class="collapse navbar-collapse">
@@ -196,6 +202,48 @@
                         </li>
                     {% endif %}
                 </ul>
+
+                <!-- Rol del usuario autenticado -->
+                <span class="role-chip me-3"><span class="pip"></span>{{ user.get_role_display }}</span>
+
+                {# Oficina activa: desde qué local se atiende. Hoy es solo    #}
+                {# contexto visible; la necesitará el flujo de caja, donde    #}
+                {# cada cobro se hace en una oficina concreta.                #}
+                {% if available_offices %}
+                    <div class="dropdown branch-switch me-3">
+                        <a
+                            href="#"
+                            class="dropdown-toggle d-inline-flex align-items-center"
+                            id="officeMenuToggle"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                        >
+                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            {{ active_office.name|default:"Oficina" }}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="officeMenuToggle">
+                            {% for office in available_offices %}
+                                <li>
+                                    <form
+                                        method="post"
+                                        action="{% url 'organization:set_active_office' %}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="office" value="{{ office.pk }}">
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button
+                                            type="submit"
+                                            class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}"
+                                        >
+                                            {{ office.name }}
+                                        </button>
+                                    </form>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
 
                 {# Sede activa: desde qué sede se consulta ahora, no la sede #}
                 {# asignada al usuario. ATC atiende a un abonado de otra     #}
@@ -236,8 +284,7 @@
                     </div>
                 {% endif %}
 
-                <!-- Usuario autenticado: identidad + menú de cuenta -->
-                <span class="role-chip me-2"><span class="pip"></span>{{ user.get_role_display }}</span>
+                <!-- Menú de cuenta -->
 
                 <div class="dropdown account-menu">
                     <a

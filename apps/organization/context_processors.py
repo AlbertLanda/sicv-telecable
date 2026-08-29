@@ -1,4 +1,4 @@
-from apps.organization.models import Branch
+from apps.organization.models import Branch, Office
 
 
 # Clave de sesión donde vive la sede activa. La sede activa NO es la sede
@@ -6,6 +6,13 @@ from apps.organization.models import Branch
 # de Huancayo atiende la llamada de un abonado de Oroya cambiando de sede
 # aquí, sin que su asignación (user.branch) cambie nunca.
 ACTIVE_BRANCH_SESSION_KEY = "active_branch_id"
+
+
+# Oficina activa. Hoy es solo contexto visible en la barra: no acota
+# ninguna consulta. Se registra desde ahora porque el flujo de caja la
+# va a necesitar -cada cobro se hace en una oficina concreta-, y así el
+# operador ya la tiene elegida cuando esa pantalla exista.
+ACTIVE_OFFICE_SESSION_KEY = "active_office_id"
 
 
 def get_active_branch(request):
@@ -31,12 +38,59 @@ def get_active_branch(request):
     return request.user.branch
 
 
+def get_active_office(request, branch=None):
+    """
+    Oficina desde la que se está atendiendo ahora.
+
+    Siempre se valida contra la sede activa: si el operador cambia de
+    sede, la oficina elegida antes deja de pertenecer a esa sede y se
+    descarta, en lugar de quedar mostrando una oficina de otra ciudad.
+    """
+    if not request.user.is_authenticated:
+        return None
+
+    if branch is None:
+        branch = get_active_branch(request)
+
+    if branch is None:
+        return None
+
+    office_id = request.session.get(ACTIVE_OFFICE_SESSION_KEY)
+
+    if office_id:
+        office = Office.objects.filter(
+            pk=office_id,
+            branch=branch,
+            is_active=True,
+        ).first()
+
+        if office:
+            return office
+
+    # Sin elección válida se cae a la oficina asignada al usuario, y solo
+    # si pertenece a la sede activa.
+    if request.user.office_id and request.user.office.branch_id == branch.pk:
+        return request.user.office
+
+    return None
+
+
 def organization(request):
-    """Sede activa y sedes disponibles, para la barra de navegación."""
+    """Sede y oficina activas, con sus opciones, para la barra de navegación."""
     if not request.user.is_authenticated:
         return {}
 
+    active_branch = get_active_branch(request)
+
+    offices = (
+        Office.objects.filter(branch=active_branch, is_active=True)
+        if active_branch
+        else Office.objects.none()
+    )
+
     return {
-        "active_branch": get_active_branch(request),
+        "active_branch": active_branch,
         "available_branches": Branch.objects.filter(is_active=True),
+        "active_office": get_active_office(request, branch=active_branch),
+        "available_offices": offices,
     }
