@@ -96,22 +96,19 @@ CLIENTES_PENDING_ITEMS = [
 ]
 
 
-# Secciones del menú lateral que todavía no tienen módulo propio, con sus
-# ítems tal como existían en el sistema anterior. Se anuncian para que el
-# operador vea el mapa completo del sistema -es el mismo que ya conoce-,
-# pero se pintan deshabilitadas: un enlace muerto confunde más que un
-# ítem marcado como pendiente. Cada ítem sale de esta lista en cuanto su
-# pantalla exista de verdad (y pasa a construirse como enlace real, igual
-# que "Buscar cliente" o "Nuevo cliente").
+# El resto de secciones del menú, con los ítems que tenían en el sistema
+# anterior. La sección se abre y se recorre con normalidad; lo que está
+# marcado como pendiente es cada ítem, porque es el ítem el que todavía
+# no tiene pantalla. Cada uno sale de aquí en cuanto se construya y pasa
+# a ser un enlace real, igual que "Buscar cliente".
 #
-# "Soporte" del sistema anterior no se replica: ahí el proveedor
-# gestionaba sus propias incidencias técnicas, y ese rol ya no existe -el
-# soporte del sistema ahora lo damos nosotros mismos, no un módulo aparte.
+# El menú se queda en Clientes, Caja y Reportes. No se replican del
+# sistema anterior:
+#   - "Soporte": ahí el proveedor atendía sus propias incidencias
+#     técnicas, y ese rol ya no existe -el soporte lo damos nosotros.
+#   - "Cliente2", "Programar" y "Configurar": no aportan nada que no
+#     esté ya en las tres secciones de arriba.
 SIDEBAR_PENDING_SECTIONS = [
-    {
-        "name": "Cliente2",
-        "items": [],
-    },
     {
         "name": "Caja",
         "items": [
@@ -134,14 +131,6 @@ SIDEBAR_PENDING_SECTIONS = [
             "Cobranza",
             "Contratos",
         ],
-    },
-    {
-        "name": "Programar",
-        "items": [],
-    },
-    {
-        "name": "Configurar",
-        "items": [],
     },
 ]
 

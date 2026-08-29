@@ -1,16 +1,16 @@
 {% comment %}
 Menú lateral del SICV.
 
-Réplica de la estructura del sistema anterior. "Clientes" tiene enlaces
-reales (Buscar cliente, Nuevo cliente, Bandeja de despacho) más los ítems
-de esa misma sección que el sistema anterior tenía y todavía no
-construimos, mostrados como filas pendientes en la misma caja. El resto
-de secciones se anuncian completas -con sus ítems, si los tenían- pero
-deshabilitadas, y se van llenando conforme se construye cada módulo.
+Tres secciones, las mismas del sistema anterior: Clientes, Caja y
+Reportes. Todas se abren y se recorren con normalidad; lo que está
+marcado como pendiente es cada opción, porque es la opción la que
+todavía no tiene pantalla. Cada una deja de estar pendiente en cuanto se
+construye y pasa a ser un enlace real, como "Buscar cliente".
 
-"Soporte" del sistema anterior no se replica: ahí el proveedor resolvía
-sus propias incidencias técnicas: ese rol ya no existe, el soporte del
-sistema lo damos ahora nosotros mismos.
+No se replican del sistema anterior "Soporte" -ahí el proveedor atendía
+sus propias incidencias técnicas y ese rol ya no existe: el soporte lo
+damos nosotros-, ni "Cliente2", "Programar" y "Configurar", que no
+aportan nada que no esté ya en estas tres secciones.
 {% endcomment %}
 
 <aside class="sicv-sidebar">
@@ -28,10 +28,17 @@ sistema lo damos ahora nosotros mismos.
 
     <div class="accordion" id="sidebarAccordion">
 
-        <div class="accordion-item sidebar-box" data-section="clientes">
+        {% comment %}
+        Clientes abre por defecto: es la sección desde la que se trabaja
+        todo el día, y es donde vive la pantalla que se ve al entrar.
+        {% endcomment %}
+        <div
+            class="accordion-item sidebar-box"
+            data-section="clientes buscar cliente nuevo cliente bandeja de despacho {{ sidebar_clientes_pending_items|join:" " }}"
+        >
             <h2 class="accordion-header">
                 <button
-                    class="accordion-button collapsed"
+                    class="accordion-button"
                     type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#sec-clientes"
@@ -39,7 +46,7 @@ sistema lo damos ahora nosotros mismos.
                     Clientes
                 </button>
             </h2>
-            <div id="sec-clientes" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
+            <div id="sec-clientes" class="accordion-collapse collapse show" data-bs-parent="#sidebarAccordion">
                 <div class="accordion-body">
                     <a class="sidebar-link" href="{% url 'customers:search' %}">Buscar cliente</a>
                     {% if perms.customers.add_customer %}
@@ -50,8 +57,8 @@ sistema lo damos ahora nosotros mismos.
                     {% endif %}
 
                     {% for item in sidebar_clientes_pending_items %}
-                        <span class="sidebar-link sidebar-link-pending">
-                            {{ item }}
+                        <span class="sidebar-link-pending">
+                            <span>{{ item }}</span>
                             <span class="pending-tag">pendiente</span>
                         </span>
                     {% endfor %}
@@ -59,39 +66,31 @@ sistema lo damos ahora nosotros mismos.
             </div>
         </div>
 
-        {% comment %}
-        Secciones pendientes. Se listan -con sus ítems, si los tenían en el
-        sistema anterior- para que el operador vea el mapa completo del
-        sistema, pero no enlazan a ningún sitio hasta que su módulo exista:
-        un enlace muerto confunde más que una sección anunciada como
-        pendiente.
-        {% endcomment %}
         {% for section in sidebar_pending_sections %}
-            <div class="accordion-item sidebar-box sidebar-box-pending" data-section="{{ section.name|lower }}">
+            <div
+                class="accordion-item sidebar-box"
+                data-section="{{ section.name }} {{ section.items|join:" " }}"
+            >
                 <h2 class="accordion-header">
                     <button
                         class="accordion-button collapsed"
                         type="button"
-                        {% if section.items %}
-                            data-bs-toggle="collapse"
-                            data-bs-target="#sec-pend-{{ forloop.counter }}"
-                        {% else %}
-                            disabled
-                        {% endif %}
+                        data-bs-toggle="collapse"
+                        data-bs-target="#sec-{{ section.name|slugify }}"
                     >
                         {{ section.name }}
-                        <span class="pending-tag">pendiente</span>
                     </button>
                 </h2>
-                {% if section.items %}
-                    <div id="sec-pend-{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
-                        <div class="accordion-body">
-                            {% for item in section.items %}
-                                <span class="sidebar-link sidebar-link-pending">{{ item }}</span>
-                            {% endfor %}
-                        </div>
+                <div id="sec-{{ section.name|slugify }}" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body">
+                        {% for item in section.items %}
+                            <span class="sidebar-link-pending">
+                                <span>{{ item }}</span>
+                                <span class="pending-tag">pendiente</span>
+                            </span>
+                        {% endfor %}
                     </div>
-                {% endif %}
+                </div>
             </div>
         {% endfor %}
 

@@ -114,12 +114,10 @@
             height: 19px;
         }
 
-        /* Oculta el menú lateral y le devuelve el ancho al contenido. */
+        /* Oculta el menú lateral; el ancho que libera lo recupera
+           .sicv-main más abajo, junto al resto del layout. */
         body.sidebar-collapsed .sicv-sidebar {
             display: none;
-        }
-        body.sidebar-collapsed .sicv-main {
-            margin-left: 0;
         }
 
         .role-chip {
@@ -190,19 +188,32 @@
 
         /* ---------- Menú lateral ---------- */
 
+        /*
+         * El lateral abre en el mismo margen que la barra superior (24px,
+         * el px-4 del navbar) y reserva a su derecha el aire que separa el
+         * menú del contenido. El contenido nunca queda pegado al borde:
+         * su padding lo pone esta plantilla, no cada pantalla -las hay que
+         * usan .container, otras container-fluid y otras nada.
+         */
         .sicv-sidebar {
             position: fixed;
             top: 74px;
             left: 0;
             bottom: 0;
-            width: 250px;
-            padding: 16px 14px 24px;
+            width: 320px;
+            padding: 18px 20px 28px 24px;
             overflow-y: auto;
         }
 
         .sicv-main {
-            margin-left: 250px;
-            padding-right: 12px;
+            margin-left: 320px;
+            padding: 0 24px 40px;
+        }
+
+        /* Con el menú oculto el contenido recupera el ancho, pero conserva
+           el mismo margen lateral: pegarlo al borde recorta el texto. */
+        body.sidebar-collapsed .sicv-main {
+            margin-left: 0;
         }
 
         /* Bajo 992px el lateral pasa a ser una franja normal sobre el
@@ -211,7 +222,7 @@
             .sicv-sidebar {
                 position: static;
                 width: auto;
-                padding: 0 12px 8px;
+                padding: 0 24px 12px;
             }
             .sicv-main {
                 margin-left: 0;
@@ -287,30 +298,35 @@
             color: var(--sicv-azul);
         }
 
-        /* Sección anunciada pero sin módulo todavía: se ve, no se usa. */
-        .sidebar-box-pending .accordion-button {
-            color: var(--sicv-tinta-tenue);
-            font-weight: 600;
-        }
-        .sidebar-box-pending .accordion-button::after {
-            opacity: .35;
-        }
-        .sidebar-box-pending .accordion-button .pending-tag {
-            margin-left: auto;
-        }
-
-        /* Ítem anunciado dentro de una sección con enlaces reales (p. ej.
-           "Clientes"): mismo lugar que un enlace, pero sin acción todavía. */
+        /*
+         * Opción que el sistema anterior tenía y que todavía no
+         * construimos. Se muestra en su sitio, dentro de su sección, para
+         * que el operador reconozca el menú que ya conoce, pero apagada y
+         * marcada: así se ve qué falta sin ofrecer un enlace muerto.
+         */
         .sidebar-link-pending {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 8px 12px;
+            gap: 6px;
+            padding: 8px 10px;
             border-radius: 7px;
             color: var(--sicv-tinta-tenue);
-            font-size: .875rem;
+            font-size: .84rem;
             font-weight: 500;
             cursor: default;
+        }
+        /* En el lateral la etiqueta va en minúscula y estrecha: con una
+           versalita por fila los nombres largos -"Comprobantes de pago"-
+           se parten en dos líneas y la columna queda ilegible. */
+        .sidebar-link-pending .pending-tag {
+            flex: none;
+            margin-left: 0;
+            font-size: .58rem;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0;
+            padding: 1px 5px;
         }
         /* ---------- Paneles y tablas del sistema ---------- */
 
@@ -406,7 +422,7 @@
 
             <div class="collapse navbar-collapse">
 
-                <ul class="navbar-nav me-auto">
+                <ul class="navbar-nav me-auto ms-5">
                     {# La bandeja solo se ofrece a quien puede verla. Ocultar #}
                     {# el enlace es comodidad: el control real es el permiso  #}
                     {# de la vista, que responde 403 si se escribe la URL.    #}
@@ -569,9 +585,11 @@
         /*
          * Filtro del menú lateral.
          *
-         * Oculta las cajas cuyo nombre no coincide con lo escrito. Es
-         * comodidad de navegación, no una búsqueda de datos: no consulta
-         * al servidor ni cambia lo que el usuario puede abrir.
+         * Oculta las cajas que no coinciden con lo escrito -busca tanto en
+         * el nombre de la sección como en sus opciones- y abre las que sí,
+         * para que la coincidencia se vea sin tener que desplegarla a
+         * mano. Es comodidad de navegación, no una búsqueda de datos: no
+         * consulta al servidor ni cambia lo que el usuario puede abrir.
          */
         (function () {
             var filter = document.getElementById("sidebarFilter");
@@ -580,14 +598,46 @@
                 return;
             }
 
-            var boxes = document.querySelectorAll(".sidebar-box");
+            var boxes = Array.prototype.map.call(
+                document.querySelectorAll(".sidebar-box"),
+                function (box) {
+                    var panel = box.querySelector(".accordion-collapse");
+
+                    return {
+                        el: box,
+                        panel: panel,
+                        button: box.querySelector(".accordion-button"),
+                        text: (box.dataset.section || "").toLowerCase(),
+                        // Estado con el que se pintó la página: al borrar
+                        // el filtro se vuelve a él, no a uno inventado.
+                        openByDefault: panel ? panel.classList.contains("show") : false,
+                    };
+                }
+            );
+
+            function setOpen(box, open) {
+                if (!box.panel) {
+                    return;
+                }
+                box.panel.classList.toggle("show", open);
+                if (box.button) {
+                    box.button.classList.toggle("collapsed", !open);
+                }
+            }
 
             filter.addEventListener("input", function () {
                 var term = filter.value.trim().toLowerCase();
 
                 boxes.forEach(function (box) {
-                    var name = (box.dataset.section || "").toLowerCase();
-                    box.hidden = term !== "" && name.indexOf(term) === -1;
+                    if (term === "") {
+                        box.el.hidden = false;
+                        setOpen(box, box.openByDefault);
+                        return;
+                    }
+
+                    var matches = box.text.indexOf(term) !== -1;
+                    box.el.hidden = !matches;
+                    setOpen(box, matches);
                 });
             });
         })();
