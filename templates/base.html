@@ -12,15 +12,165 @@
         rel="stylesheet"
     >
 
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
     <style>
+        /*
+         * Paleta SICV — piedra clara, azul sereno, oro templado.
+         * Se define una vez aquí y se aplica a todo el sitio sobreescribiendo
+         * las variables de Bootstrap 5, no reescribiendo cada plantilla.
+         */
+        :root {
+            --sicv-crema: #FAF6EF;
+            --sicv-plomo: #E4E7E9;
+            --sicv-plomo-line: #CBD2D5;
+            --sicv-plomo-ink: #5B6B72;
+            --sicv-azul: #5C84AA;
+            --sicv-azul-oscuro: #3F6484;
+            --sicv-azul-pastel: #E7EFF6;
+            --sicv-oro: #B4883C;
+            --sicv-oro-oscuro: #8E6A2C;
+            --sicv-oro-pastel: #F3E8CC;
+            --sicv-tinta: #2B3A4A;
+            --sicv-tinta-suave: #68798B;
+            --sicv-linea: #E6DDC8;
+            --sicv-salvia: #5E9E7C;
+
+            /* Overrides de Bootstrap: el resto del sitio hereda la paleta
+               sin que cada plantilla tenga que cambiar sus clases. */
+            --bs-body-bg: var(--sicv-crema);
+            --bs-body-color: var(--sicv-tinta);
+            --bs-primary: var(--sicv-azul);
+            --bs-primary-rgb: 92, 132, 170;
+            --bs-border-color: var(--sicv-linea);
+            --bs-font-sans-serif: 'Manrope', system-ui, -apple-system, sans-serif;
+        }
+
         body {
-            background-color: #f8f9fa;
+            font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+        }
+
+        h1, h2, h3, .navbar-brand {
+            font-family: 'Cormorant', serif;
         }
 
         .card-custom {
             border: none;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(43,58,74,0.05), 0 16px 32px -20px rgba(43,58,74,0.22);
+        }
+
+        .btn-primary {
+            background-color: var(--sicv-azul);
+            border-color: var(--sicv-azul);
+        }
+        .btn-primary:hover, .btn-primary:focus {
+            background-color: var(--sicv-azul-oscuro);
+            border-color: var(--sicv-azul-oscuro);
+        }
+
+        /* Barra de navegación: piedra clara con acento dorado, no oscura. */
+        .navbar.navbar-sicv {
+            background-color: #FFFFFF;
+            border-bottom: 1px solid var(--sicv-linea);
+        }
+        .navbar-sicv .navbar-brand {
+            color: var(--sicv-oro-oscuro);
+            font-weight: 600;
+            font-size: 1.35rem;
+        }
+        .navbar-sicv .nav-link {
+            color: var(--sicv-tinta-suave);
+        }
+        .navbar-sicv .nav-link:hover,
+        .navbar-sicv .nav-link.active {
+            color: var(--sicv-azul-oscuro);
+        }
+
+        .role-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 10px 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .02em;
+            background: var(--sicv-oro-pastel);
+            color: var(--sicv-oro-oscuro);
+            border: 1px solid rgba(180,136,60,.28);
+        }
+        .role-chip .pip {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--sicv-oro);
+            display: inline-block;
+        }
+
+        .account-menu .dropdown-toggle {
+            color: var(--sicv-tinta);
+            text-decoration: none;
+        }
+        .account-menu .dropdown-menu {
+            border-color: var(--sicv-linea);
+            box-shadow: 0 12px 28px -18px rgba(43,58,74,0.35);
+        }
+
+        .field-readonly {
+            background: var(--sicv-plomo);
+            border: 1px solid var(--sicv-plomo-line);
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 8px 12px;
+            color: var(--sicv-plomo-ink);
+        }
+
+        .identity-note {
+            background: var(--sicv-plomo);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: var(--sicv-plomo-ink);
+        }
+
+        .lock-icon { width: 13px; height: 13px; vertical-align: -2px; }
+
+        .btn-gold {
+            background-color: var(--sicv-oro);
+            border-color: var(--sicv-oro);
+            color: #FFFBF2;
+        }
+        .btn-gold:hover {
+            background-color: var(--sicv-oro-oscuro);
+            border-color: var(--sicv-oro-oscuro);
+            color: #FFFBF2;
+        }
+
+        .auth-shell {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                radial-gradient(900px 480px at 10% -10%, rgba(180,136,60,0.07), transparent 60%),
+                radial-gradient(900px 520px at 95% 6%, rgba(92,132,170,0.08), transparent 58%),
+                var(--sicv-crema);
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 380px;
+        }
+        .auth-title {
+            font-family: 'Cormorant', serif;
+            font-weight: 600;
+            font-size: 1.8rem;
+            text-align: center;
+        }
+        .auth-title em {
+            font-style: normal;
+            color: var(--sicv-oro-oscuro);
         }
     </style>
 
@@ -31,11 +181,11 @@
 
     {% if user.is_authenticated %}
     <!-- Navegación del sistema -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <nav class="navbar navbar-expand-lg navbar-sicv mb-4">
         <div class="container">
 
             <a
-                class="navbar-brand fw-bold"
+                class="navbar-brand"
                 href="{% url 'customers:search' %}"
             >
                 SICV Telecable
@@ -68,25 +218,38 @@
                     {% endif %}
                 </ul>
 
-                <!-- Usuario autenticado -->
-                <span class="navbar-text text-light me-3">
-                    Hola, {{ user.username }}
-                </span>
+                <!-- Usuario autenticado: identidad + menú de cuenta -->
+                <span class="role-chip me-2"><span class="pip"></span>{{ user.get_role_display }}</span>
 
-                <form
-                    method="post"
-                    action="{% url 'logout' %}"
-                    class="d-inline"
-                >
-                    {% csrf_token %}
-
-                    <button
-                        type="submit"
-                        class="btn btn-sm btn-outline-danger"
+                <div class="dropdown account-menu">
+                    <a
+                        href="#"
+                        class="dropdown-toggle d-inline-flex align-items-center"
+                        id="accountMenuToggle"
+                        role="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
                     >
-                        Salir
-                    </button>
-                </form>
+                        {{ user.get_full_name|default:user.username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountMenuToggle">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'accounts:profile' %}">Mi perfil</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'accounts:password_change' %}">Cambiar clave</a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="post" action="{% url 'logout' %}" class="px-3">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    Cerrar sesión
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
 
             </div>
         </div>

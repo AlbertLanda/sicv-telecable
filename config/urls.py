@@ -33,6 +33,12 @@ urlpatterns = [
         name="logout",
     ),
 
+    # Mi perfil y cambio de clave del propio usuario.
+    path(
+        "accounts/",
+        include("apps.accounts.urls"),
+    ),
+
     # Clientes
     path(
         "customers/",

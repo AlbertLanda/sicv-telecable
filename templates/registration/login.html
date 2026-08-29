@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
     body {
-        background: #f4f6fb;
+        background: var(--sicv-crema);
     }
 
     .login-page {
@@ -17,15 +17,15 @@
         background:
             radial-gradient(
                 circle at 10% 20%,
-                rgba(1, 7, 107, 0.08),
+                rgba(180, 136, 60, 0.09),
                 transparent 30%
             ),
             radial-gradient(
                 circle at 90% 80%,
-                rgba(0, 102, 204, 0.08),
+                rgba(92, 132, 170, 0.10),
                 transparent 30%
             ),
-            #f4f6fb;
+            var(--sicv-crema);
     }
 
     .login-container {
@@ -52,10 +52,10 @@
         background:
             linear-gradient(
                 145deg,
-                rgba(1, 7, 107, 0.98),
-                rgba(0, 49, 140, 0.96)
+                rgba(47, 74, 96, 0.98),
+                rgba(63, 100, 132, 0.96)
             ),
-            #01076B;
+            #2F4A60;
         overflow: hidden;
     }
 
@@ -104,14 +104,15 @@
 
     .brand-content h1 {
         margin: 0 0 15px;
-        font-size: 42px;
+        font-family: 'Cormorant', serif;
+        font-size: 46px;
         line-height: 1.1;
-        font-weight: 800;
-        letter-spacing: -1px;
+        font-weight: 600;
+        letter-spacing: 0;
     }
 
     .brand-content h1 span {
-        color: #7db7ff;
+        color: var(--sicv-oro);
     }
 
     .brand-description {
@@ -174,22 +175,23 @@
 
     .login-header .welcome {
         margin-bottom: 8px;
-        color: #6b7280;
+        color: var(--sicv-tinta-suave);
         font-size: 14px;
         font-weight: 500;
     }
 
     .login-header h2 {
         margin: 0 0 8px;
-        color: #111827;
-        font-size: 30px;
-        font-weight: 750;
-        letter-spacing: -0.5px;
+        color: var(--sicv-tinta);
+        font-family: 'Cormorant', serif;
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: 0;
     }
 
     .login-header p {
         margin: 0;
-        color: #6b7280;
+        color: var(--sicv-tinta-suave);
         font-size: 14px;
     }
 
@@ -223,7 +225,7 @@
     .form-label {
         display: block;
         margin-bottom: 8px;
-        color: #374151;
+        color: var(--sicv-tinta);
         font-size: 13px;
         font-weight: 650;
     }
@@ -248,11 +250,11 @@
         height: 52px;
         box-sizing: border-box;
         padding: 0 48px 0 45px;
-        border: 1px solid #d9dee8;
+        border: 1px solid var(--sicv-linea);
         border-radius: 12px;
         outline: none;
         background: #ffffff;
-        color: #111827;
+        color: var(--sicv-tinta);
         font-size: 14px;
         transition:
             border-color 0.2s ease,
@@ -260,20 +262,20 @@
     }
 
     .form-input::placeholder {
-        color: #adb5c1;
+        color: var(--sicv-plomo-ink);
     }
 
     .form-input:hover {
-        border-color: #b9c1d0;
+        border-color: var(--sicv-plomo-line);
     }
 
     .form-input:focus {
-        border-color: #01076B;
-        box-shadow: 0 0 0 4px rgba(1, 7, 107, 0.08);
+        border-color: var(--sicv-azul);
+        box-shadow: 0 0 0 4px var(--sicv-azul-pastel);
     }
 
     .input-wrapper:focus-within .input-icon {
-        color: #01076B;
+        color: var(--sicv-azul);
     }
 
     .password-toggle {
@@ -283,14 +285,14 @@
         transform: translateY(-50%);
         border: none;
         background: transparent;
-        color: #6b7280;
+        color: var(--sicv-tinta-suave);
         cursor: pointer;
         font-size: 15px;
         padding: 5px;
     }
 
     .password-toggle:hover {
-        color: #01076B;
+        color: var(--sicv-azul);
     }
 
     /* OPCIONES */
@@ -307,14 +309,14 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        color: #6b7280;
+        color: var(--sicv-tinta-suave);
         cursor: pointer;
     }
 
     .remember-user input {
         width: 15px;
         height: 15px;
-        accent-color: #01076B;
+        accent-color: var(--sicv-azul);
         cursor: pointer;
     }
 
@@ -329,12 +331,12 @@
         gap: 10px;
         border: none;
         border-radius: 12px;
-        background: #01076B;
+        background: var(--sicv-azul);
         color: #ffffff;
         cursor: pointer;
         font-size: 14px;
         font-weight: 700;
-        box-shadow: 0 8px 18px rgba(1, 7, 107, 0.20);
+        box-shadow: 0 8px 18px rgba(92, 132, 170, 0.30);
         transition:
             transform 0.2s ease,
             box-shadow 0.2s ease,
@@ -342,9 +344,9 @@
     }
 
     .login-button:hover {
-        background: #020b91;
+        background: var(--sicv-azul-oscuro);
         transform: translateY(-1px);
-        box-shadow: 0 12px 24px rgba(1, 7, 107, 0.25);
+        box-shadow: 0 12px 24px rgba(63, 100, 132, 0.32);
     }
 
     .login-button:active {

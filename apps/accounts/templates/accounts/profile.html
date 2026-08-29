@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}SICV - Mi perfil{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 720px;">
+
+    <div class="card card-custom mb-4">
+
+        <div class="card-header bg-white border-0 pt-4 px-4">
+            <h2 class="mb-1">Mi perfil</h2>
+            <span class="role-chip"><span class="pip"></span>{{ user.get_role_display }}</span>
+        </div>
+
+        <div class="card-body px-4 pb-4">
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-success">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+
+            <h6 class="text-uppercase text-muted small fw-bold mb-3">
+                <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                Identidad — solo el administrador la modifica
+            </h6>
+
+            <div class="row g-3 mb-2">
+                <div class="col-md-6">
+                    <label class="form-label small text-muted">Usuario</label>
+                    <div class="field-readonly">{{ user.username }}</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted">Nombre completo</label>
+                    <div class="field-readonly">{{ user.get_full_name|default:"—" }}</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted">Sede</label>
+                    <div class="field-readonly">{{ user.branch.name|default:"Sin asignar" }}</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small text-muted">Oficina</label>
+                    <div class="field-readonly">{{ user.office.name|default:"Sin asignar" }}</div>
+                </div>
+            </div>
+
+            <p class="identity-note">
+                Si alguno de estos datos está mal, pide la corrección a un administrador — no se editan desde tu propia cuenta.
+            </p>
+
+            <hr class="my-4">
+
+            <h6 class="text-uppercase text-muted small fw-bold mb-3">
+                Contacto — esto sí lo mantienes tú
+            </h6>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="{{ form.phone.id_for_label }}" class="form-label">{{ form.phone.label }}</label>
+                        {{ form.phone }}
+                        {% for error in form.phone.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.email.id_for_label }}" class="form-label">{{ form.email.label }}</label>
+                        {{ form.email }}
+                        {% for error in form.email.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-gold">Guardar cambios</button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
