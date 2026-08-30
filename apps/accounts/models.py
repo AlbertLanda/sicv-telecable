@@ -15,6 +15,7 @@ class User(AbstractUser):
         WAREHOUSE = "WAREHOUSE", "Almacén"
         SUPERVISOR = "SUPERVISOR", "Supervisor"
         RETENTION = "RETENTION", "Retenciones"
+        ACCOUNTING = "ACCOUNTING", "Contabilidad"
 
     role = models.CharField(
         max_length=20,
@@ -39,6 +40,14 @@ class User(AbstractUser):
         null=True,
         blank=True,
         verbose_name="Oficina"
+    )
+
+    # Dato de contacto, no de identidad: a diferencia de username/nombres,
+    # el propio usuario sí puede mantenerlo actualizado desde su perfil.
+    phone = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="Teléfono"
     )
 
     created_at = models.DateTimeField(

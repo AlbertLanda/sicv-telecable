@@ -12,15 +12,383 @@
         rel="stylesheet"
     >
 
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
     <style>
+        /*
+         * Paleta SICV — Opción A: azul corporativo.
+         * Se define una vez aquí y se aplica a todo el sitio sobreescribiendo
+         * las variables de Bootstrap 5, no reescribiendo cada plantilla.
+         */
+        :root {
+            --sicv-fondo: #F4F6F8;
+            --sicv-superficie: #FFFFFF;
+            --sicv-superficie-azul: #EAF0F5;
+            --sicv-azul: #1B3A5C;
+            --sicv-azul-oscuro: #14293F;
+            --sicv-tinta: #1F2937;
+            --sicv-tinta-suave: #4B5563;
+            --sicv-tinta-tenue: #6B7280;
+            --sicv-linea: #DCE1E6;
+
+            /* Overrides de Bootstrap: el resto del sitio hereda la paleta
+               sin que cada plantilla tenga que cambiar sus clases. */
+            --bs-body-bg: var(--sicv-fondo);
+            --bs-body-color: var(--sicv-tinta);
+            --bs-primary: var(--sicv-azul);
+            --bs-primary-rgb: 27, 58, 92;
+            --bs-border-color: var(--sicv-linea);
+            --bs-font-sans-serif: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
         body {
-            background-color: #f8f9fa;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        h1, h2, h3 {
+            font-weight: 700;
         }
 
         .card-custom {
             border: none;
+            border-radius: 10px;
+            box-shadow: 0 1px 2px rgba(31,41,55,0.05), 0 16px 32px -20px rgba(31,41,55,0.22);
+        }
+
+        .btn-primary {
+            background-color: var(--sicv-azul);
+            border-color: var(--sicv-azul);
+        }
+        .btn-primary:hover, .btn-primary:focus {
+            background-color: var(--sicv-azul-oscuro);
+            border-color: var(--sicv-azul-oscuro);
+        }
+
+        /* Barra de navegación: blanca con acento azul marino, no oscura. */
+        .navbar.navbar-sicv {
+            background-color: #FFFFFF;
+            border-bottom: 1px solid var(--sicv-linea);
+        }
+        .navbar-sicv .navbar-brand {
+            color: var(--sicv-azul);
+            font-weight: 800;
+            font-size: 1.4rem;
+            letter-spacing: .07em;
+        }
+        .navbar-sicv .nav-link {
+            color: var(--sicv-tinta);
+            font-weight: 600;
+            padding-left: .9rem;
+            padding-right: .9rem;
+            border-bottom: 2px solid transparent;
+        }
+        .navbar-sicv .nav-link:hover,
+        .navbar-sicv .nav-link.active {
+            color: var(--sicv-azul);
+            border-bottom-color: var(--sicv-azul);
+        }
+
+        /* Botón para mostrar/ocultar el menú lateral. */
+        .sidebar-toggle-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--sicv-linea);
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            background: transparent;
+            color: var(--sicv-tinta);
+            margin-right: 14px;
+        }
+        .sidebar-toggle-btn:hover {
+            background: var(--sicv-fondo);
+            color: var(--sicv-azul);
+        }
+        .sidebar-toggle-btn svg {
+            width: 19px;
+            height: 19px;
+        }
+
+        /* Oculta el menú lateral; el ancho que libera lo recupera
+           .sicv-main más abajo, junto al resto del layout. */
+        body.sidebar-collapsed .sicv-sidebar {
+            display: none;
+        }
+
+        .role-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 2px 10px 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .02em;
+            background: var(--sicv-superficie-azul);
+            color: var(--sicv-azul);
+            border: 1px solid rgba(27,58,92,.18);
+        }
+        .role-chip .pip {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--sicv-azul);
+            display: inline-block;
+        }
+
+        .account-menu .dropdown-toggle {
+            color: var(--sicv-tinta);
+            text-decoration: none;
+        }
+        .account-menu .dropdown-menu {
+            border-color: var(--sicv-linea);
+            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
+        }
+
+        .field-readonly {
+            background: var(--sicv-fondo);
+            border: 1px solid var(--sicv-linea);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--sicv-tinta-suave);
+        }
+
+        .identity-note {
+            background: var(--sicv-fondo);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: var(--sicv-tinta-tenue);
+        }
+
+        .lock-icon { width: 13px; height: 13px; vertical-align: -2px; }
+        .branch-icon { width: 15px; height: 15px; vertical-align: -3px; }
+
+        .branch-switch .dropdown-toggle {
+            color: var(--sicv-tinta-suave);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .branch-switch .dropdown-toggle:hover {
+            color: var(--sicv-azul);
+        }
+        .branch-switch .dropdown-menu {
+            border-color: var(--sicv-linea);
+            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
+        }
+        .branch-switch .dropdown-item.active {
+            background-color: var(--sicv-superficie-azul);
+            color: var(--sicv-azul);
+            font-weight: 700;
+        }
+
+        /* ---------- Menú lateral ---------- */
+
+        /*
+         * El lateral abre en el mismo margen que la barra superior (24px,
+         * el px-4 del navbar) y reserva a su derecha el aire que separa el
+         * menú del contenido. El contenido nunca queda pegado al borde:
+         * su padding lo pone esta plantilla, no cada pantalla -las hay que
+         * usan .container, otras container-fluid y otras nada.
+         */
+        .sicv-sidebar {
+            position: fixed;
+            top: 74px;
+            left: 0;
+            bottom: 0;
+            width: 320px;
+            padding: 18px 20px 28px 24px;
+            overflow-y: auto;
+        }
+
+        .sicv-main {
+            margin-left: 320px;
+            padding: 0 24px 40px;
+        }
+
+        /* Con el menú oculto el contenido recupera el ancho, pero conserva
+           el mismo margen lateral: pegarlo al borde recorta el texto. */
+        body.sidebar-collapsed .sicv-main {
+            margin-left: 0;
+        }
+
+        /* Bajo 992px el lateral pasa a ser una franja normal sobre el
+           contenido, en lugar de comerse la mitad de la pantalla. */
+        @media (max-width: 991.98px) {
+            .sicv-sidebar {
+                position: static;
+                width: auto;
+                padding: 0 24px 12px;
+            }
+            .sicv-main {
+                margin-left: 0;
+            }
+        }
+
+        .sidebar-search {
+            position: relative;
+            margin-bottom: 14px;
+        }
+        .sidebar-search svg {
+            position: absolute;
+            left: 11px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 15px;
+            height: 15px;
+            color: var(--sicv-tinta-tenue);
+            pointer-events: none;
+        }
+        .sidebar-search .form-control {
+            padding-left: 33px;
+            border-radius: 8px;
+            border-color: var(--sicv-linea);
+            font-size: .875rem;
+        }
+        .sidebar-search .form-control:focus {
+            border-color: var(--sicv-azul);
+            box-shadow: 0 0 0 3px var(--sicv-superficie-azul);
+        }
+
+        .sidebar-box {
+            background: var(--sicv-superficie);
+            border: 1px solid var(--sicv-linea);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 2px rgba(31,41,55,0.04);
+        }
+        .sidebar-box .accordion-button {
+            background: var(--sicv-superficie);
+            color: var(--sicv-tinta);
+            font-weight: 700;
+            font-size: .9rem;
+            padding: 13px 16px;
+            box-shadow: none;
+        }
+        .sidebar-box .accordion-button:not(.collapsed) {
+            color: var(--sicv-azul);
+            background: var(--sicv-superficie-azul);
+        }
+        .sidebar-box .accordion-button:focus {
+            box-shadow: 0 0 0 3px var(--sicv-superficie-azul);
+        }
+        .sidebar-box .accordion-body {
+            padding: 6px 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .sidebar-link {
+            display: block;
+            padding: 8px 12px;
+            border-radius: 7px;
+            color: var(--sicv-tinta-suave);
+            text-decoration: none;
+            font-size: .875rem;
+            font-weight: 500;
+        }
+        .sidebar-link:hover {
+            background: var(--sicv-fondo);
+            color: var(--sicv-azul);
+        }
+
+        /*
+         * Opción que el sistema anterior tenía y que todavía no
+         * construimos. Se muestra en su sitio, dentro de su sección, para
+         * que el operador reconozca el menú que ya conoce, pero apagada y
+         * marcada: así se ve qué falta sin ofrecer un enlace muerto.
+         */
+        .sidebar-link-pending {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 8px 10px;
+            border-radius: 7px;
+            color: var(--sicv-tinta-tenue);
+            font-size: .84rem;
+            font-weight: 500;
+            cursor: default;
+        }
+        /* En el lateral la etiqueta va en minúscula y estrecha: con una
+           versalita por fila los nombres largos -"Comprobantes de pago"-
+           se parten en dos líneas y la columna queda ilegible. */
+        .sidebar-link-pending .pending-tag {
+            flex: none;
+            margin-left: 0;
+            font-size: .58rem;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0;
+            padding: 1px 5px;
+        }
+        /* ---------- Paneles y tablas del sistema ---------- */
+
+        /* Cabecera azul del panel, como en el sistema anterior. */
+        .panel-head {
+            background-color: var(--sicv-azul);
+            color: #FFFFFF;
+            font-weight: 700;
+            font-size: .95rem;
+            border-bottom: none;
+        }
+        .panel-head-note {
+            font-weight: 500;
+            font-size: .8rem;
+            opacity: .85;
+        }
+
+        .search-field {
+            max-width: 460px;
+        }
+
+        .sicv-table thead th {
+            background: var(--sicv-fondo);
+            color: var(--sicv-azul);
+            font-size: .78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            border-bottom: 1px solid var(--sicv-linea);
+            white-space: nowrap;
+        }
+        .sicv-table tbody td {
+            font-size: .875rem;
+            border-color: var(--sicv-linea);
+        }
+        .tabular {
+            font-variant-numeric: tabular-nums;
+        }
+
+        .service-tag {
+            display: inline-block;
+            font-size: .72rem;
+            font-weight: 700;
+            color: var(--sicv-azul);
+            background: var(--sicv-superficie-azul);
+            border: 1px solid rgba(27,58,92,.15);
+            border-radius: 20px;
+            padding: 1px 9px;
+            margin-right: 3px;
+        }
+
+        .pending-tag {
+            margin-left: 8px;
+            font-size: .65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--sicv-tinta-tenue);
+            background: var(--sicv-fondo);
+            border: 1px solid var(--sicv-linea);
+            border-radius: 20px;
+            padding: 1px 7px;
         }
     </style>
 
@@ -31,28 +399,30 @@
 
     {% if user.is_authenticated %}
     <!-- Navegación del sistema -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-        <div class="container">
+    <nav class="navbar navbar-expand-lg navbar-sicv mb-4">
+        <div class="container-fluid px-4">
+
+            {% if not hide_sidebar %}
+                <button
+                    type="button"
+                    id="sidebarToggleBtn"
+                    class="sidebar-toggle-btn"
+                    aria-label="Mostrar u ocultar el menú lateral"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            {% endif %}
 
             <a
-                class="navbar-brand fw-bold"
+                class="navbar-brand"
                 href="{% url 'customers:search' %}"
             >
-                SICV Telecable
+                TELECABLE
             </a>
 
             <div class="collapse navbar-collapse">
 
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a
-                            class="nav-link"
-                            href="{% url 'customers:search' %}"
-                        >
-                            Búsqueda de Clientes
-                        </a>
-                    </li>
-
+                <ul class="navbar-nav me-auto ms-5">
                     {# La bandeja solo se ofrece a quien puede verla. Ocultar #}
                     {# el enlace es comodidad: el control real es el permiso  #}
                     {# de la vista, que responde 403 si se escribe la URL.    #}
@@ -68,39 +438,252 @@
                     {% endif %}
                 </ul>
 
-                <!-- Usuario autenticado -->
-                <span class="navbar-text text-light me-3">
-                    Hola, {{ user.username }}
-                </span>
+                <!-- Rol del usuario autenticado -->
+                <span class="role-chip me-4"><span class="pip"></span>{{ user.get_role_display }}</span>
 
-                <form
-                    method="post"
-                    action="{% url 'logout' %}"
-                    class="d-inline"
-                >
-                    {% csrf_token %}
+                {# Oficina activa: desde qué local se atiende. Hoy es solo    #}
+                {# contexto visible; la necesitará el flujo de caja, donde    #}
+                {# cada cobro se hace en una oficina concreta.                #}
+                {% if available_offices %}
+                    <div class="dropdown branch-switch me-4">
+                        <a
+                            href="#"
+                            class="dropdown-toggle d-inline-flex align-items-center"
+                            id="officeMenuToggle"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                        >
+                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                            {{ active_office.name|default:"Oficina" }}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="officeMenuToggle">
+                            {% for office in available_offices %}
+                                <li>
+                                    <form
+                                        method="post"
+                                        action="{% url 'organization:set_active_office' %}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="office" value="{{ office.pk }}">
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button
+                                            type="submit"
+                                            class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}"
+                                        >
+                                            {{ office.name }}
+                                        </button>
+                                    </form>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
 
-                    <button
-                        type="submit"
-                        class="btn btn-sm btn-outline-danger"
+                {# Sede activa: desde qué sede se consulta ahora, no la sede #}
+                {# asignada al usuario. ATC atiende a un abonado de otra     #}
+                {# sede cambiando aquí, sin derivar la llamada.              #}
+                {% if available_branches %}
+                    <div class="dropdown branch-switch me-4">
+                        <a
+                            href="#"
+                            class="dropdown-toggle d-inline-flex align-items-center"
+                            id="branchMenuToggle"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                        >
+                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5"/></svg>
+                            {{ active_branch.name|default:"Sede" }}
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="branchMenuToggle">
+                            {% for branch in available_branches %}
+                                <li>
+                                    <form
+                                        method="post"
+                                        action="{% url 'organization:set_active_branch' %}"
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="branch" value="{{ branch.pk }}">
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button
+                                            type="submit"
+                                            class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}"
+                                        >
+                                            {{ branch.name }}
+                                        </button>
+                                    </form>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+
+                <!-- Menú de cuenta -->
+
+                <div class="dropdown account-menu">
+                    <a
+                        href="#"
+                        class="dropdown-toggle d-inline-flex align-items-center"
+                        id="accountMenuToggle"
+                        role="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
                     >
-                        Salir
-                    </button>
-                </form>
+                        {{ user.get_full_name|default:user.username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountMenuToggle">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'accounts:profile' %}">Mi perfil</a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="{% url 'accounts:password_change' %}">Cambiar clave</a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form
+                                method="post"
+                                action="{% url 'logout' %}"
+                                class="px-3"
+                            >
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    Cerrar sesión
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
 
             </div>
         </div>
     </nav>
     {% endif %}
 
-    <!-- Contenido de cada pantalla -->
-    <main>
+    {% comment %}
+    Contenido de cada pantalla.
+
+    El menú lateral acompaña a las pantallas del sistema, pero no al login
+    ni a ninguna pantalla que pida ocupar todo el ancho (`hide_sidebar`).
+    El bloque `content` se define una sola vez y son las clases del
+    contenedor las que cambian: definirlo dos veces, una por rama, es un
+    error de plantilla en Django.
+    {% endcomment %}
+    {% if user.is_authenticated and not hide_sidebar %}
+        {% include "_sidebar.html" %}
+    {% endif %}
+
+    <main class="{% if user.is_authenticated and not hide_sidebar %}sicv-main{% endif %}">
         {% block content %}
         {% endblock %}
     </main>
 
     <!-- Bootstrap 5 -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        /*
+         * Filtro del menú lateral.
+         *
+         * Oculta las cajas que no coinciden con lo escrito -busca tanto en
+         * el nombre de la sección como en sus opciones- y abre las que sí,
+         * para que la coincidencia se vea sin tener que desplegarla a
+         * mano. Es comodidad de navegación, no una búsqueda de datos: no
+         * consulta al servidor ni cambia lo que el usuario puede abrir.
+         */
+        (function () {
+            var filter = document.getElementById("sidebarFilter");
+
+            if (!filter) {
+                return;
+            }
+
+            var boxes = Array.prototype.map.call(
+                document.querySelectorAll(".sidebar-box"),
+                function (box) {
+                    var panel = box.querySelector(".accordion-collapse");
+
+                    return {
+                        el: box,
+                        panel: panel,
+                        button: box.querySelector(".accordion-button"),
+                        text: (box.dataset.section || "").toLowerCase(),
+                        // Estado con el que se pintó la página: al borrar
+                        // el filtro se vuelve a él, no a uno inventado.
+                        openByDefault: panel ? panel.classList.contains("show") : false,
+                    };
+                }
+            );
+
+            function setOpen(box, open) {
+                if (!box.panel) {
+                    return;
+                }
+                box.panel.classList.toggle("show", open);
+                if (box.button) {
+                    box.button.classList.toggle("collapsed", !open);
+                }
+            }
+
+            filter.addEventListener("input", function () {
+                var term = filter.value.trim().toLowerCase();
+
+                boxes.forEach(function (box) {
+                    if (term === "") {
+                        box.el.hidden = false;
+                        setOpen(box, box.openByDefault);
+                        return;
+                    }
+
+                    var matches = box.text.indexOf(term) !== -1;
+                    box.el.hidden = !matches;
+                    setOpen(box, matches);
+                });
+            });
+        })();
+    </script>
+
+    <script>
+        /*
+         * Mostrar/ocultar el menú lateral.
+         *
+         * Comodidad de pantalla, no una preferencia del sistema: se recuerda
+         * en este navegador (localStorage) para que no vuelva a expandirse
+         * en cada carga, pero no viaja al servidor ni afecta a otro usuario.
+         */
+        (function () {
+            var toggle = document.getElementById("sidebarToggleBtn");
+
+            if (!toggle) {
+                return;
+            }
+
+            var STORAGE_KEY = "sicv-sidebar-collapsed";
+
+            function apply(collapsed) {
+                document.body.classList.toggle("sidebar-collapsed", collapsed);
+            }
+
+            var stored = null;
+            try {
+                stored = localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                // Almacenamiento no disponible (navegación privada, etc.): se
+                // ignora y el menú simplemente no recuerda su estado.
+            }
+            apply(stored === "1");
+
+            toggle.addEventListener("click", function () {
+                var collapsed = !document.body.classList.contains("sidebar-collapsed");
+                apply(collapsed);
+                try {
+                    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
+                } catch (e) {
+                    // Igual que arriba: sin almacenamiento, solo no persiste.
+                }
+            });
+        })();
+    </script>
 
     {% block extra_js %}{% endblock %}
 

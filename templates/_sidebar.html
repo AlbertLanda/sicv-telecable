@@ -1,0 +1,99 @@
+{% comment %}
+Menú lateral del SICV.
+
+Tres secciones, las mismas del sistema anterior: Clientes, Caja y
+Reportes. Todas se abren y se recorren con normalidad; lo que está
+marcado como pendiente es cada opción, porque es la opción la que
+todavía no tiene pantalla. Cada una deja de estar pendiente en cuanto se
+construye y pasa a ser un enlace real, como "Buscar cliente".
+
+No se replican del sistema anterior "Soporte" -ahí el proveedor atendía
+sus propias incidencias técnicas y ese rol ya no existe: el soporte lo
+damos nosotros-, ni "Cliente2", "Programar" y "Configurar", que no
+aportan nada que no esté ya en estas tres secciones.
+{% endcomment %}
+
+<aside class="sicv-sidebar">
+
+    <div class="sidebar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input
+            type="text"
+            id="sidebarFilter"
+            class="form-control"
+            placeholder="Buscar opción..."
+            autocomplete="off"
+        >
+    </div>
+
+    <div class="accordion" id="sidebarAccordion">
+
+        {% comment %}
+        Clientes abre por defecto: es la sección desde la que se trabaja
+        todo el día, y es donde vive la pantalla que se ve al entrar.
+        {% endcomment %}
+        <div
+            class="accordion-item sidebar-box"
+            data-section="clientes buscar cliente nuevo cliente bandeja de despacho {{ sidebar_clientes_pending_items|join:" " }}"
+        >
+            <h2 class="accordion-header">
+                <button
+                    class="accordion-button"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#sec-clientes"
+                >
+                    Clientes
+                </button>
+            </h2>
+            <div id="sec-clientes" class="accordion-collapse collapse show" data-bs-parent="#sidebarAccordion">
+                <div class="accordion-body">
+                    <a class="sidebar-link" href="{% url 'customers:search' %}">Buscar cliente</a>
+                    {% if perms.customers.add_customer %}
+                        <a class="sidebar-link" href="{% url 'customers:create' %}">Nuevo cliente</a>
+                    {% endif %}
+                    {% if perms.work_orders.view_workorder %}
+                        <a class="sidebar-link" href="{% url 'work_orders:dispatch' %}">Bandeja de despacho</a>
+                    {% endif %}
+
+                    {% for item in sidebar_clientes_pending_items %}
+                        <span class="sidebar-link-pending">
+                            <span>{{ item }}</span>
+                            <span class="pending-tag">pendiente</span>
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% for section in sidebar_pending_sections %}
+            <div
+                class="accordion-item sidebar-box"
+                data-section="{{ section.name }} {{ section.items|join:" " }}"
+            >
+                <h2 class="accordion-header">
+                    <button
+                        class="accordion-button collapsed"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#sec-{{ section.name|slugify }}"
+                    >
+                        {{ section.name }}
+                    </button>
+                </h2>
+                <div id="sec-{{ section.name|slugify }}" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
+                    <div class="accordion-body">
+                        {% for item in section.items %}
+                            <span class="sidebar-link-pending">
+                                <span>{{ item }}</span>
+                                <span class="pending-tag">pendiente</span>
+                            </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+
+    </div>
+
+</aside>

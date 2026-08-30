@@ -28,6 +28,7 @@ from .services.activity import (
 )
 from .services.sunat import consultar_documento, DocumentLookupError
 
+from apps.organization.context_processors import get_active_branch
 from apps.organization.models import Zone
 from apps.services.models import Subscription
 from apps.contracts.models import Contract
@@ -66,6 +67,20 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         )
 
         # ---------------------------------------------------------
+        # ÁMBITO DE LA SEDE ACTIVA
+        #
+        # La búsqueda se acota a la sede desde la que se consulta, no a
+        # la sede asignada al operador: ATC de Huancayo atiende a un
+        # abonado de Oroya cambiando de sede en la barra, sin derivar la
+        # llamada. Si no hay sede activa resoluble, no se acota.
+        # ---------------------------------------------------------
+
+        active_branch = get_active_branch(self.request)
+
+        if active_branch:
+            queryset = queryset.filter(branch=active_branch)
+
+        # ---------------------------------------------------------
         # BÚSQUEDA POR TIPO Y NÚMERO DE DOCUMENTO
         #
         # Se conserva por compatibilidad con el flujo anterior
@@ -87,6 +102,10 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
             return (
                 queryset
                 .select_related("branch")
+                .prefetch_related(
+                    "addresses",
+                    "subscriptions__service_type",
+                )
                 .distinct()
                 .order_by(
                     "paternal_surname",
@@ -114,8 +133,25 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         # - Número de medidor
         # ---------------------------------------------------------
 
+        # Sin término de búsqueda se listan todos los abonados de la sede
+        # activa, paginados. La pantalla es el padrón de la sede: se abre
+        # mostrando lo que hay, y escribir en el buscador lo acota. Antes
+        # devolvía una lista vacía y obligaba a buscar para ver algo.
         if not query:
-            return Customer.objects.none()
+            return (
+                queryset
+                .select_related("branch")
+                .prefetch_related(
+                    "addresses",
+                    "subscriptions__service_type",
+                )
+                .order_by(
+                    "paternal_surname",
+                    "maternal_surname",
+                    "first_name",
+                    "business_name",
+                )
+            )
 
         words = query.split()
 
@@ -140,6 +176,10 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         return (
             queryset
             .select_related("branch")
+            .prefetch_related(
+                "addresses",
+                "subscriptions__service_type",
+            )
             .distinct()
             .order_by(
                 "paternal_surname",

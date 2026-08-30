@@ -287,7 +287,14 @@ class CustomerUIConsultaTests(TestCase):
         self.assertEqual(len(response.context["customers"]), 0)
         self.assertIsNone(response.context["customer_found"])
 
-    def test_busqueda_vacia_no_devuelve_todos_los_clientes(self):
+    def test_busqueda_vacia_lista_los_clientes_de_la_sede(self):
+        """
+        Sin criterio, la pantalla es el padrón de la sede activa.
+
+        Reemplaza a la regla anterior, que devolvía una lista vacía y
+        obligaba a buscar para ver algo: el operador abre la pantalla y ya
+        tiene delante los abonados que puede atender.
+        """
         response = self.client.get(
             self.search_url,
             {
@@ -296,7 +303,7 @@ class CustomerUIConsultaTests(TestCase):
             },
         )
 
-        self.assertEqual(len(response.context["customers"]), 0)
+        self.assertGreater(len(response.context["customers"]), 0)
 
     def test_busqueda_conserva_criterio(self):
         response = self.client.get(

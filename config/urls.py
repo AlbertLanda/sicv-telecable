@@ -24,6 +24,7 @@ urlpatterns = [
         "accounts/login/",
         auth_views.LoginView.as_view(
             template_name="registration/login.html",
+            redirect_authenticated_user=True,
         ),
         name="login",
     ),
@@ -31,6 +32,18 @@ urlpatterns = [
         "accounts/logout/",
         auth_views.LogoutView.as_view(),
         name="logout",
+    ),
+
+    # Mi perfil y cambio de clave del propio usuario.
+    path(
+        "accounts/",
+        include("apps.accounts.urls"),
+    ),
+
+    # Organización: sede activa de la sesión.
+    path(
+        "organizacion/",
+        include("apps.organization.urls"),
     ),
 
     # Clientes
