@@ -199,6 +199,12 @@ class CustomerAddress(models.Model):
         verbose_name="Número de medidor"
     )
 
+    electrical_supply_number = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Número de suministro eléctrico"
+    )
+
     latitude = models.DecimalField(
         max_digits=10,
         decimal_places=7,
