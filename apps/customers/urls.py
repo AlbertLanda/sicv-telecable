@@ -30,6 +30,13 @@ urlpatterns = [
         name="lookup_document",
     ),
 
+    # Consulta AJAX de suministro eléctrico
+    path(
+        "lookup-supply/",
+        views.SupplyLookupView.as_view(),
+        name="lookup_supply",
+    ),
+
     # Registrar datos generales del cliente
     path(
         "create/general/",

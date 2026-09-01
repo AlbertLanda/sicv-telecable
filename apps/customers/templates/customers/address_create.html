@@ -177,7 +177,24 @@
                             {{ form.electrical_supply_number.label }}
                         </label>
 
-                        {{ form.electrical_supply_number }}
+                        <div class="input-group">
+
+                            {{ form.electrical_supply_number }}
+
+                            <button
+                                type="button"
+                                id="btn-consultar-suministro"
+                                class="btn btn-outline-primary"
+                            >
+                                Consultar
+                            </button>
+
+                        </div>
+
+                        <div
+                            id="suministro-mensaje"
+                            class="small mt-1"
+                        ></div>
 
                         {% for error in form.electrical_supply_number.errors %}
                             <div class="text-danger small mt-1">
@@ -314,5 +331,234 @@
     </div>
 
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
 
+    const supplyInput = document.getElementById(
+        "{{ form.electrical_supply_number.id_for_label }}"
+    );
+
+    const addressInput = document.getElementById(
+        "{{ form.address.id_for_label }}"
+    );
+
+    const districtInput = document.getElementById(
+        "{{ form.district.id_for_label }}"
+    );
+
+    const latitudeInput = document.getElementById(
+        "{{ form.latitude.id_for_label }}"
+    );
+
+    const longitudeInput = document.getElementById(
+        "{{ form.longitude.id_for_label }}"
+    );
+
+    const gpsLinkInput = document.getElementById(
+        "{{ form.gps_link.id_for_label }}"
+    );
+
+    const button = document.getElementById(
+        "btn-consultar-suministro"
+    );
+
+    const message = document.getElementById(
+        "suministro-mensaje"
+    );
+
+
+    // Verificar que los elementos existan
+    if (!supplyInput || !button) {
+        console.error(
+            "No se encontró el campo de suministro o el botón."
+        );
+        return;
+    }
+
+
+    button.addEventListener("click", async function () {
+
+        const supplyNumber = supplyInput.value.trim();
+
+
+        // ---------------------------------------------------------
+        // VALIDAR SUMINISTRO
+        // ---------------------------------------------------------
+
+        if (!supplyNumber) {
+
+            message.textContent =
+                "Ingrese un número de suministro.";
+
+            message.className =
+                "text-danger small mt-1";
+
+            supplyInput.focus();
+
+            return;
+        }
+
+
+        // ---------------------------------------------------------
+        // ESTADO: CONSULTANDO
+        // ---------------------------------------------------------
+
+        button.disabled = true;
+        button.textContent = "Consultando...";
+
+        message.textContent =
+            "Consultando información del suministro...";
+
+        message.className =
+            "text-muted small mt-1";
+
+
+        try {
+
+            // -----------------------------------------------------
+            // CONSULTAR BACKEND
+            // -----------------------------------------------------
+
+            const response = await fetch(
+                "{% url 'customers:lookup_supply' %}?supply_number="
+                + encodeURIComponent(supplyNumber),
+                {
+                    method: "GET",
+
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+
+            // Intentar obtener JSON
+            const result = await response.json();
+
+
+            // -----------------------------------------------------
+            // VALIDAR RESPUESTA
+            // -----------------------------------------------------
+
+            if (!response.ok || !result.ok) {
+
+                throw new Error(
+                    result.message ||
+                    "No fue posible consultar el suministro."
+                );
+            }
+
+
+            const data = result.data || {};
+
+
+            // -----------------------------------------------------
+            // DIRECCIÓN
+            // -----------------------------------------------------
+
+            if (addressInput && data.address) {
+
+                addressInput.value =
+                    data.address;
+            }
+
+
+            // -----------------------------------------------------
+            // DISTRITO
+            // -----------------------------------------------------
+
+            if (districtInput && data.district) {
+
+                districtInput.value =
+                    data.district;
+            }
+
+
+            // -----------------------------------------------------
+            // LATITUD
+            // -----------------------------------------------------
+
+            if (latitudeInput && data.latitude) {
+
+                latitudeInput.value =
+                    data.latitude;
+            }
+
+
+            // -----------------------------------------------------
+            // LONGITUD
+            // -----------------------------------------------------
+
+            if (longitudeInput && data.longitude) {
+
+                longitudeInput.value =
+                    data.longitude;
+            }
+
+
+            // -----------------------------------------------------
+            // ENLACE GPS
+            // -----------------------------------------------------
+
+            if (gpsLinkInput && data.gps_link) {
+
+                gpsLinkInput.value =
+                    data.gps_link;
+            }
+
+
+            // -----------------------------------------------------
+            // MENSAJE FINAL
+            // -----------------------------------------------------
+
+            let mensaje =
+                "Suministro encontrado correctamente.";
+
+            if (data.latitude && data.longitude) {
+
+                mensaje +=
+                    " Ubicación GPS obtenida.";
+            } else {
+
+                mensaje +=
+                    " No se encontraron coordenadas exactas.";
+            }
+
+
+            message.textContent = mensaje;
+
+            message.className =
+                "text-success small mt-1";
+
+
+        } catch (error) {
+
+            console.error(
+                "Error al consultar suministro:",
+                error
+            );
+
+
+            message.textContent =
+                error.message ||
+                "Ocurrió un error al consultar el suministro.";
+
+            message.className =
+                "text-danger small mt-1";
+
+
+        } finally {
+
+            button.disabled = false;
+
+            button.textContent =
+                "Consultar";
+        }
+    });
+
+});
+</script>
 {% endblock %}
+
+

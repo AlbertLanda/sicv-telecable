@@ -1,3 +1,4 @@
+from email.quoprimime import quote
 from uuid import uuid4
 
 from django.contrib import messages
@@ -27,6 +28,20 @@ from .services.activity import (
     build_customer_recent_activity,
 )
 from .services.sunat import consultar_documento, DocumentLookupError
+
+from .services.distriluz import (
+    SupplyLookupError,
+)
+
+from apps.customers.services.distriluz import (
+    SupplyLookupError,
+)
+
+from apps.customers.services.distriluz_gps import (
+    consultar_suministro_gps,
+)
+
+from urllib.parse import quote
 
 from apps.organization.context_processors import get_active_branch
 from apps.organization.models import Zone
@@ -277,6 +292,39 @@ class CustomerDocumentLookupView(LoginRequiredMixin, View):
 
         return JsonResponse({"ok": True, "data": data})
 
+class SupplyLookupView(LoginRequiredMixin, View):
+    """
+    Endpoint AJAX para consultar un suministro eléctrico.
+
+    Consulta el servicio móvil de Distriluz (ConsultaGeneral), que
+    devuelve en una sola llamada dirección, distrito y coordenadas
+    GPS oficiales del suministro.
+    """
+
+    def get(self, request, *args, **kwargs):
+        supply_number = (
+            request.GET.get("supply_number", "")
+            .strip()
+        )
+
+        try:
+            data = consultar_suministro_gps(supply_number)
+
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "data": data,
+                }
+            )
+
+        except SupplyLookupError as exc:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": exc.message,
+                },
+                status=exc.status_code,
+            )
 
 class CustomerInitialCreateView(LoginRequiredMixin, FormView):
     """
