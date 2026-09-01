@@ -71,9 +71,18 @@ urlpatterns = [
     ),
 
     # API del técnico (app/PWA) — canal separado del login web de sesión:
-    # autenticación por token, sin cookies ni plantillas. Hoy expone
-    # autenticación e identidad (login, me); los endpoints de órdenes se
-    # agregan en la siguiente jornada. Ver docs/api_technician_auth.md.
+    # autenticación por token, sin cookies ni plantillas.
+    #
+    # Órdenes de trabajo del canal técnico: disponibles, mis órdenes y
+    # detalle. Se declara antes que el include de identidad porque su prefijo
+    # es más específico. Ver docs/api_technician_work_orders.md.
+    path(
+        "api/technicians/work-orders/",
+        include("apps.work_orders.api.urls"),
+    ),
+
+    # Autenticación e identidad del técnico (login, me).
+    # Ver docs/api_technician_auth.md.
     path(
         "api/technicians/",
         include("apps.accounts.api.urls"),
