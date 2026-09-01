@@ -1,0 +1,158 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+
+        <div>
+            <h2 class="fw-bold mb-1">
+                Resumen previo a la contratación
+            </h2>
+
+            <p class="text-muted mb-0">
+                Verifique los datos antes de generar el contrato
+            </p>
+        </div>
+
+        <a
+            href="{% url 'customers:detail' customer.pk %}#bloque-c"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la ficha del cliente
+        </a>
+
+    </div>
+
+    {% if messages %}
+
+        {% for message in messages %}
+
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+
+                {{ message }}
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                ></button>
+
+            </div>
+
+        {% endfor %}
+
+    {% endif %}
+
+
+    <div class="card shadow-sm border-0 mb-4">
+
+        <div class="card-header bg-light">
+            <strong>
+                Suscripción registrada — Estado: {{ subscription.get_status_display }}
+            </strong>
+        </div>
+
+        <div class="card-body">
+
+            <div class="row g-4">
+
+                <div class="col-md-6">
+                    <small class="text-muted d-block">Cliente</small>
+                    <strong>{{ customer }}</strong>
+                    {% if customer.document_number %}
+                        <div class="small text-muted">
+                            {{ customer.document_type }} {{ customer.document_number }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-6">
+                    <small class="text-muted d-block">Domicilio del servicio</small>
+                    <strong>{{ subscription.address.address }}</strong>
+                    <div class="small text-muted">
+                        {{ subscription.address.district }}
+                        {% if subscription.address.zone %}
+                            · {{ subscription.address.zone }}
+                        {% endif %}
+                    </div>
+                    {% if subscription.address.reference %}
+                        <div class="small text-muted">
+                            Referencia: {{ subscription.address.reference }}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Tipo de servicio</small>
+                    <strong>{{ subscription.service_type }}</strong>
+                </div>
+
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Plan</small>
+                    <strong>{{ subscription.plan }}</strong>
+                </div>
+
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Número de servicio</small>
+                    <strong>{{ subscription.service_number }}</strong>
+                </div>
+
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Ciclo de facturación</small>
+                    <strong>{{ subscription.billing_cycle|default:"—" }}</strong>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    {% if existing_contract %}
+
+        <div class="alert alert-info">
+            Esta suscripción ya tiene un contrato registrado:
+            <strong>{{ existing_contract.contract_number }}</strong>.
+
+            <a
+                href="{% url 'contracts:contract_summary' customer.pk existing_contract.pk %}"
+                class="alert-link"
+            >
+                Ver resumen del contrato
+            </a>
+        </div>
+
+    {% else %}
+
+        <div class="alert alert-secondary">
+            Aún no se ha generado la Orden de Trabajo. La instalación
+            se solicitará en una etapa posterior del sprint, una vez
+            registrado el contrato.
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+
+            <a
+                href="{% url 'customers:detail' customer.pk %}#bloque-c"
+                class="btn btn-outline-secondary"
+            >
+                Cancelar
+            </a>
+
+            <a
+                href="{% url 'contracts:contract_create' customer.pk %}?subscription={{ subscription.pk }}"
+                class="btn btn-primary"
+            >
+                Generar contrato
+            </a>
+
+        </div>
+
+    {% endif %}
+
+</div>
+
+{% endblock %}

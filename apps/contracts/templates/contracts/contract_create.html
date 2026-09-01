@@ -54,6 +54,50 @@
             </div>
 
 
+            {% if preselected_subscription %}
+
+                <!-- ================================================= -->
+                <!-- RESUMEN PREVIO A LA CONTRATACIÓN
+
+                     Se muestra cuando se llega desde el resumen de
+                     suscripción (services:subscription_summary), que
+                     enlaza aquí con ?subscription=<id>. Confirma
+                     domicilio, servicio y plan antes de generar el
+                     contrato.
+                -->
+                <!-- ================================================= -->
+
+                <div class="alert alert-secondary">
+
+                    <strong class="d-block mb-2">
+                        Resumen de la suscripción seleccionada
+                    </strong>
+
+                    <div class="row g-2 small">
+
+                        <div class="col-md-6">
+                            <span class="text-muted">Domicilio:</span>
+                            {{ preselected_subscription.address.address }}
+                            ({{ preselected_subscription.address.district }})
+                        </div>
+
+                        <div class="col-md-3">
+                            <span class="text-muted">Servicio:</span>
+                            {{ preselected_subscription.service_type }}
+                        </div>
+
+                        <div class="col-md-3">
+                            <span class="text-muted">Plan:</span>
+                            {{ preselected_subscription.plan }}
+                        </div>
+
+                    </div>
+
+                </div>
+
+            {% endif %}
+
+
             <form method="post">
 
                 {% csrf_token %}

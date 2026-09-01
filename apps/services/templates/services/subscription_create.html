@@ -125,6 +125,11 @@
                             </div>
                         {% endfor %}
 
+                        <div class="form-text">
+                            El listado de planes se filtra según el
+                            tipo de servicio elegido.
+                        </div>
+
                     </div>
 
 
@@ -198,5 +203,78 @@
     </div>
 
 </div>
+
+{{ plans_by_service_type|json_script:"plans-by-service-type" }}
+
+<script>
+(function () {
+    "use strict";
+
+    // ---------------------------------------------------------------
+    // SELECTOR SERVICIO -> PLAN
+    //
+    // Filtra en el propio navegador las opciones de "Plan" según el
+    // "Tipo de servicio" elegido, para que el operador no pueda dejar
+    // seleccionada en pantalla una combinación que el servidor de
+    // todas formas rechazaría (ver SubscriptionCreateForm.clean()).
+    // Es una mejora de UI: la validación real sigue siendo la del
+    // formulario en el servidor.
+    // ---------------------------------------------------------------
+
+    var plansByServiceType = JSON.parse(
+        document.getElementById("plans-by-service-type").textContent
+    );
+
+    var serviceTypeField = document.getElementById(
+        "{{ form.service_type.id_for_label }}"
+    );
+
+    var planField = document.getElementById(
+        "{{ form.plan.id_for_label }}"
+    );
+
+    if (!serviceTypeField || !planField) {
+        return;
+    }
+
+    var initialPlanValue = "{{ form.plan.value|default_if_none:'' }}";
+
+    function renderPlanOptions(selectedServiceTypeId, selectedPlanId) {
+        var plans = plansByServiceType[selectedServiceTypeId] || [];
+
+        planField.innerHTML = "";
+
+        var placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = selectedServiceTypeId
+            ? "Seleccione un plan"
+            : "Seleccione primero un tipo de servicio";
+        planField.appendChild(placeholder);
+
+        plans.forEach(function (plan) {
+            var option = document.createElement("option");
+            option.value = plan.id;
+            option.textContent = plan.label;
+
+            if (
+                selectedPlanId &&
+                String(plan.id) === String(selectedPlanId)
+            ) {
+                option.selected = true;
+            }
+
+            planField.appendChild(option);
+        });
+    }
+
+    // Estado inicial: respeta el plan ya elegido (por ejemplo, al
+    // volver a mostrar el formulario tras un error de validación).
+    renderPlanOptions(serviceTypeField.value, initialPlanValue);
+
+    serviceTypeField.addEventListener("change", function () {
+        renderPlanOptions(serviceTypeField.value, null);
+    });
+})();
+</script>
 
 {% endblock %}
