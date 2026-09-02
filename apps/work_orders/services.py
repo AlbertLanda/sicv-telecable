@@ -289,44 +289,34 @@ def create_installation_work_order(
     """
     Registra la OT de instalación que produce el alta comercial FTTH.
 
-    Punto de entrada del flujo comercial hacia el dominio de órdenes. **No
-    añade ninguna regla de negocio**: resuelve el tipo de orden y delega en
-    create_work_order(), que sigue siendo el único camino que emite el
-    correlativo, valida la suscripción y persiste la orden. Si mañana cambia
-    una regla de creación, cambia en un sitio y esta función la hereda.
+    Punto de entrada del flujo comercial hacia el dominio de órdenes. Resuelve
+    el tipo INSTALLATION, fija explícitamente la atención en campo y delega la
+    persistencia en create_work_order(), que sigue siendo el único camino que
+    emite el correlativo, valida la suscripción y persiste la orden.
 
-    Existe porque el paso «Generar Orden de Instalación» del flujo aprobado
-    tiene dos formas documentadas de producir una OT válida pero INVISIBLE
-    para el técnico, y las dos se evitan mejor con una firma que con una
-    advertencia en un manual:
+    La fachada también garantiza idempotencia operativa por suscripción: no se
+    permite crear una segunda instalación mientras exista otra que todavía no
+    esté en un estado final. Se bloquea la fila de Subscription con
+    select_for_update() antes de comprobarlo, de modo que dos solicitudes
+    concurrentes para la misma alta no puedan publicar dos órdenes abiertas.
 
-    1. **Tipo de orden equivocado.** El catálogo contiene INSTALLATION y
-       también un DEMO-INSTALLATION de datos de prueba. Resolverlo por
-       nombre, por coincidencia parcial o tomando el primer resultado puede
-       devolver el de demo, y el canal técnico no lo publica. Aquí se resuelve
-       por código exacto y el llamador no elige.
+    Una instalación previa en LIQUIDATED, REJECTED, NOT_FEASIBLE o CANCELLED
+    no bloquea un nuevo intento; ATTENDED sí bloquea porque aún falta la
+    liquidación técnica.
 
-    2. **Canal de atención equivocado.** attention_type decide si la orden
-       pertenece al técnico de campo (FIELD) o a NOC (SYSTEM); el canal
-       técnico solo publica FIELD. Una instalación es siempre trabajo de
-       campo, así que este servicio **no acepta el argumento**: aplica el
-       valor por defecto del modelo. Un POST que lo incluya no tiene por
-       dónde entrar.
+    No se exponen `subtype` —la instalación no tiene subtipos en el catálogo,
+    solo corte y traslado los usan— ni `cause`, que se registra durante la
+    atención y no al crear la orden. `attention_type` tampoco es argumento:
+    la fachada lo fija a FIELD de forma explícita.
 
-    Tampoco se exponen `subtype` —la instalación no tiene subtipos en el
-    catálogo, solo corte y traslado los usan— ni `cause`, que se registra
-    durante la atención y no al crear la orden.
-
-    Todo lo demás se pasa tal cual: `created_by` debe salir del usuario
-    ejecutor (`request.user`), nunca de datos enviados por el navegador.
-
-    NOTA (bloqueo B8, abierto): este servicio **no** comprueba si la
-    suscripción ya tiene una instalación abierta. Prohibirlo sería una regla
-    de dominio nueva y aún no está definida por negocio —si el veto es
-    permanente o solo mientras haya una activa, qué ocurre tras una
-    NOT_FEASIBLE, si el bloqueo es duro o un aviso—. Se reporta, no se
-    inventa. Ver docs/ftth_integracion_ot_instalacion.md §6.
+    `created_by` debe salir del usuario ejecutor (`request.user`), nunca de
+    datos enviados por el navegador.
     """
+    if subscription is None or subscription.pk is None:
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
     try:
         order_type = OrderType.objects.get(
             code=INSTALLATION_ORDER_TYPE_CODE,
@@ -341,14 +331,44 @@ def create_installation_work_order(
             "Debe registrarse antes de generar instalaciones."
         )
 
+    try:
+        locked_subscription = (
+            Subscription.objects
+            .select_for_update()
+            .select_related("customer__branch", "address__zone")
+            .get(pk=subscription.pk)
+        )
+    except Subscription.DoesNotExist:
+        raise ValidationError(
+            "La suscripción indicada ya no existe."
+        )
+
+    # Se revalida contra la fila bloqueada, no contra una instancia que pudo
+    # quedar desactualizada antes de entrar en la transacción.
+    _validate_creation_subscription(locked_subscription, customer)
+
+    has_open_installation = (
+        locked_subscription.work_orders
+        .filter(order_type__code=INSTALLATION_ORDER_TYPE_CODE)
+        .exclude(status__in=WorkOrder.FINAL_STATUSES)
+        .exists()
+    )
+
+    if has_open_installation:
+        raise ValidationError(
+            "La suscripción ya tiene una orden de instalación abierta. "
+            "Finalícela o anúlela antes de generar otra."
+        )
+
     return create_work_order(
-        subscription=subscription,
+        subscription=locked_subscription,
         order_type=order_type,
         created_by=created_by,
         customer=customer,
         branch=branch,
         zone=zone,
         reason=reason,
+        attention_type=WorkOrder.AttentionType.FIELD,
         priority=priority,
         detail=detail,
         scheduled_at=scheduled_at,
