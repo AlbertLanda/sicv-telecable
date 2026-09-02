@@ -16,13 +16,28 @@ from rest_framework import serializers
 from apps.work_orders.models import WorkOrder
 
 
-class WorkOrderCustomerSerializer(serializers.Serializer):
-    """Identificación básica del cliente de la orden.
+class AvailableWorkOrderCustomerSerializer(serializers.Serializer):
+    """Identificación mínima del cliente antes de que la OT tenga dueño.
 
-    Lo mínimo para que el técnico sepa a quién va a atender y pueda confirmar
-    identidad en puerta. No expone teléfonos, correo ni el resto de la ficha:
-    esos datos no son necesarios para reconocer la orden en un listado y no
-    deben viajar sin razón.
+    `available/` es visible para todos los técnicos activos del canal. Antes de
+    tomar la orden basta con el código interno y el nombre visible para decidir
+    si corresponde atenderla; DNI/RUC/CE/Pasaporte se reservan para una orden
+    ya asignada y no viajan en la bandeja compartida.
+    """
+
+    code = serializers.CharField(read_only=True)
+    display_name = serializers.SerializerMethodField()
+
+    def get_display_name(self, customer):
+        return str(customer)
+
+
+class WorkOrderCustomerSerializer(serializers.Serializer):
+    """Identificación del cliente en órdenes que ya pertenecen al técnico.
+
+    Se usa en «Mis órdenes» y en el detalle de una OT propia. Aquí sí puede
+    viajar el documento de identificación porque el técnico ya es responsable
+    de esa atención y puede necesitar confirmar identidad en puerta.
 
     `display_name` sale de `str(customer)`, que ya resuelve persona natural
     (nombres y apellidos) y jurídica (razón social) — no se agregan
@@ -144,6 +159,10 @@ class AvailableWorkOrderSerializer(WorkOrderListSerializer):
     que el detalle: un campo que mañana se agregue arriba aparece aquí sin
     tocar dos sitios.
 
+    El cliente se sobrescribe con una versión mínima: código + nombre visible.
+    La bandeja es compartida por todos los técnicos activos y no necesita
+    exponer el documento personal/comercial antes de que alguien tome la OT.
+
     **Lo que añade** es lo que hace falta para *decidir si tomarla*: sede,
     zona y distrito. Sin eso el técnico tendría que tomar la orden a ciegas
     para averiguar dónde queda, y una orden tomada por error ya cambió de
@@ -158,6 +177,11 @@ class AvailableWorkOrderSerializer(WorkOrderListSerializer):
     Tampoco se hereda ninguna acción: es un serializador de lectura y la toma
     se pide sobre `claim/`, no editando esta fila.
     """
+
+    customer = AvailableWorkOrderCustomerSerializer(
+        source="subscription.customer",
+        read_only=True,
+    )
 
     branch = serializers.CharField(
         source="branch.name",
