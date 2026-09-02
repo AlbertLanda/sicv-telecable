@@ -43,7 +43,7 @@ class TechnicianAuthAPITestCase(APITestCase):
         )
 
         # Mismo branch y misma contraseña que el técnico: aísla el rol como
-        # única causa del rechazo.
+        # única causa del rechazo interno, sin exponerlo al cliente anónimo.
         self.atc_user = User.objects.create_user(
             username="atc1",
             password=PASSWORD,
@@ -107,6 +107,7 @@ class TechnicianLoginTests(TechnicianAuthAPITestCase):
         response = self.login("tecnico1", password="incorrecta")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["detail"], "Credenciales inválidas.")
         self.assertNotIn("token", response.data)
         self.assertFalse(Token.objects.filter(user=self.technician).exists())
 
@@ -115,13 +116,20 @@ class TechnicianLoginTests(TechnicianAuthAPITestCase):
         response = self.login("noexiste")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["detail"], "Credenciales inválidas.")
         self.assertNotIn("token", response.data)
 
-    def test_non_technician_is_rejected_even_with_valid_password(self):
-        """3. Usuario válido pero no técnico -> rechazado."""
+    def test_non_technician_is_rejected_without_revealing_valid_password(self):
+        """3. Usuario válido no técnico -> 401 genérico, sin token.
+
+        El endpoint público no debe confirmar que el usuario existe ni que la
+        contraseña ingresada era correcta. La diferencia de rol permanece en
+        el dominio, pero no en la respuesta de autenticación.
+        """
         response = self.login("atc1")
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["detail"], "Credenciales inválidas.")
         self.assertNotIn("token", response.data)
         self.assertFalse(Token.objects.filter(user=self.atc_user).exists())
 
@@ -130,10 +138,21 @@ class TechnicianLoginTests(TechnicianAuthAPITestCase):
         response = self.login("tecnico2")
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data["detail"], "Credenciales inválidas.")
         self.assertNotIn("token", response.data)
         self.assertFalse(
             Token.objects.filter(user=self.inactive_technician).exists()
         )
+
+    def test_rejected_login_cases_are_indistinguishable_publicly(self):
+        """Password malo, usuario inexistente y rol incorrecto responden igual."""
+        wrong_password = self.login("tecnico1", password="incorrecta")
+        unknown_user = self.login("noexiste")
+        wrong_role = self.login("atc1")
+
+        for response in (wrong_password, unknown_user, wrong_role):
+            self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+            self.assertEqual(response.data, {"detail": "Credenciales inválidas."})
 
     def test_missing_fields_are_rejected(self):
         """Petición incompleta -> 400, sin llegar a autenticar."""
