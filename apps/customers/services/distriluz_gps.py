@@ -1,16 +1,14 @@
 """
-Consulta del servicio movil de Distriluz (ConsultaGeneral).
+Consulta del servicio móvil de Distriluz (ConsultaGeneral).
 
-A diferencia de InfoSuministro (services/distriluz.py), que solo
-entrega la direccion asociada a un numero de suministro, este
-servicio SOAP del sistema de consulta movil de Distriluz devuelve en
-una sola llamada: direccion, distrito y coordenadas GPS -- sin
-necesidad de geocodificar la direccion con un servicio externo
-(Nominatim/OpenStreetMap).
+Este cliente se usa únicamente como adaptador de ubicación del domicilio:
+recibe un código de suministro eléctrico y normaliza dirección + coordenadas.
+No expone ni persiste nombre/documento del titular del suministro porque esos
+datos no son necesarios para el flujo comercial de Telecable.
 
-Se reutiliza SupplyLookupError (definida en services/distriluz.py)
-para que las vistas puedan seguir capturando un unico tipo de
-excepcion sin importar qué servicio de Distriluz se haya usado.
+El servicio observado es SOAP/ASMX y legacy. Se mantiene aislado en este
+módulo para que un cambio de proveedor no obligue a modificar formularios,
+modelos ni la API del técnico.
 """
 
 import xml.etree.ElementTree as ET
@@ -20,12 +18,18 @@ from django.conf import settings
 
 from .distriluz import SupplyLookupError
 
-DISTRILUZ_MOVIL_URL = (
+DEFAULT_DISTRILUZ_MOVIL_URL = (
     "http://oficinavirtual.distriluz.com.pe:62150"
     "/wsconsultamovil/servicioconsultas.asmx"
 )
-
 DISTRILUZ_MOVIL_NAMESPACE = "http://www.distriluz.com.pe/"
+
+
+def _get_url():
+    return (
+        getattr(settings, "DISTRILUZ_GPS_URL", DEFAULT_DISTRILUZ_MOVIL_URL)
+        or DEFAULT_DISTRILUZ_MOVIL_URL
+    )
 
 
 def _get_timeout():
@@ -37,7 +41,7 @@ def _get_timeout():
         return 12.0
 
 
-def _build_soap_envelope(numero_suministro):
+def _build_soap_envelope(supply_code):
     return (
         '<?xml version="1.0" encoding="utf-8"?>'
         '<soap:Envelope '
@@ -46,7 +50,7 @@ def _build_soap_envelope(numero_suministro):
         'xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">'
         "<soap:Body>"
         '<ConsultaGeneral xmlns="http://www.distriluz.com.pe/">'
-        f"<idNroServicio>{numero_suministro}</idNroServicio>"
+        f"<idNroServicio>{supply_code}</idNroServicio>"
         "</ConsultaGeneral>"
         "</soap:Body>"
         "</soap:Envelope>"
@@ -54,14 +58,7 @@ def _build_soap_envelope(numero_suministro):
 
 
 def _parse_response(xml_text):
-    """
-    El servicio devuelve un arreglo plano de <string> con pares
-    clave/valor alternados (no un objeto con nombres de campo), por
-    lo que se reconstruye un diccionario dinamico en vez de indexar
-    por posicion fija -- mas tolerante si Distriluz cambia el orden
-    de los campos.
-    """
-
+    """Reconstruye el arreglo plano clave/valor devuelto por el SOAP."""
     root = ET.fromstring(xml_text)
     namespaces = {"ns": DISTRILUZ_MOVIL_NAMESPACE}
 
@@ -70,47 +67,48 @@ def _parse_response(xml_text):
         return {}
 
     strings = [
-        nodo.text for nodo in result.findall("ns:string", namespaces)
+        node.text for node in result.findall("ns:string", namespaces)
     ]
 
-    datos = {}
-    for i in range(0, len(strings), 2):
-        clave = (strings[i] or "").strip().lower()
-        valor = strings[i + 1] if i + 1 < len(strings) else ""
-        datos[clave] = (valor or "").strip()
+    data = {}
+    for index in range(0, len(strings), 2):
+        key = (strings[index] or "").strip().lower()
+        value = strings[index + 1] if index + 1 < len(strings) else ""
 
-    return datos
+        if key:
+            data[key] = (value or "").strip()
+
+    return data
 
 
-def consultar_suministro_gps(numero_suministro):
-    """
-    Consulta el servicio movil de Distriluz (ConsultaGeneral) para
-    un numero de suministro y devuelve:
+def consultar_suministro_gps(supply_code):
+    """Obtiene ubicación del domicilio asociado a un suministro eléctrico.
 
-    - address (direccion)
-    - district (distrito)
-    - province / department
+    Devuelve únicamente los datos que el SICV necesita para localizar el
+    domicilio y que ATC pueda confirmarlos antes de guardarlos:
+
+    - supply_code
+    - address
+    - district / province / department
     - latitude / longitude
-    - gps_link (enlace de Google Maps armado con las coordenadas)
+    - gps_link
 
-    Lanza SupplyLookupError ante cualquier fallo controlado (numero
-    invalido, sin conexion, respuesta invalida o suministro no
-    encontrado), igual que consultar_suministro() en distriluz.py.
+    Nunca inventa coordenadas. Si Distriluz no devuelve GPS, latitude,
+    longitude y gps_link quedan vacíos.
     """
+    supply_code = (supply_code or "").strip()
 
-    numero_suministro = (numero_suministro or "").strip()
-
-    if not numero_suministro:
+    if not supply_code:
         raise SupplyLookupError(
-            "Ingrese un numero de suministro."
+            "Ingrese un código de suministro."
         )
 
-    if not numero_suministro.isdigit():
+    if not supply_code.isdigit():
         raise SupplyLookupError(
-            "El numero de suministro debe contener solo digitos."
+            "El código de suministro debe contener solo dígitos."
         )
 
-    soap_envelope = _build_soap_envelope(numero_suministro)
+    soap_envelope = _build_soap_envelope(supply_code)
 
     headers = {
         "Content-Type": "text/xml; charset=utf-8",
@@ -119,66 +117,63 @@ def consultar_suministro_gps(numero_suministro):
 
     try:
         response = requests.post(
-            DISTRILUZ_MOVIL_URL,
+            _get_url(),
             data=soap_envelope.encode("utf-8"),
             headers=headers,
             timeout=_get_timeout(),
         )
-    except requests.RequestException:
+    except requests.RequestException as exc:
         raise SupplyLookupError(
-            "No fue posible consultar el suministro en el servicio "
-            "de Distriluz. Verifique su conexion e intentelo "
-            "nuevamente.",
+            "No fue posible consultar el suministro en el servicio de "
+            "Distriluz. Inténtelo nuevamente.",
             status_code=502,
-        )
+        ) from exc
 
     if not response.ok:
         raise SupplyLookupError(
-            "Distriluz no respondio correctamente a la consulta.",
+            "Distriluz no respondió correctamente a la consulta.",
             status_code=502,
         )
 
     try:
-        datos = _parse_response(response.text)
-    except ET.ParseError:
+        data = _parse_response(response.text)
+    except ET.ParseError as exc:
         raise SupplyLookupError(
-            "Distriluz devolvio una respuesta invalida.",
+            "Distriluz devolvió una respuesta inválida.",
             status_code=502,
-        )
+        ) from exc
 
-    direccion = datos.get("direccion", "")
+    address = data.get("direccion", "")
 
-    if not direccion:
+    if not address:
         raise SupplyLookupError(
-            "No se encontro informacion para el suministro.",
+            "No se encontró información para el suministro.",
             status_code=404,
         )
 
-    distrito = (
-        datos.get("direccioncomplementaria")
-        or datos.get("distrito")
+    district = (
+        data.get("direccioncomplementaria")
+        or data.get("distrito")
         or ""
     )
 
-    latitud = datos.get("gpsy") or datos.get("latitud") or ""
-    longitud = datos.get("gpsx") or datos.get("longitud") or ""
+    latitude = data.get("gpsy") or data.get("latitud") or ""
+    longitude = data.get("gpsx") or data.get("longitud") or ""
 
     gps_link = ""
-    if latitud and longitud:
+    if latitude and longitude:
         gps_link = (
             "https://www.google.com/maps/search/?api=1"
-            f"&query={latitud},{longitud}"
+            f"&query={latitude},{longitude}"
         )
 
     return {
-        "supply_number": numero_suministro,
-        "address": direccion,
-        "district": distrito,
-        "province": datos.get("provincia", ""),
-        "department": datos.get("departamento", ""),
-        "latitude": latitud,
-        "longitude": longitud,
+        "supply_code": supply_code,
+        "address": address,
+        "district": district,
+        "province": data.get("provincia", ""),
+        "department": data.get("departamento", ""),
+        "latitude": latitude,
+        "longitude": longitude,
         "gps_link": gps_link,
-        "titular_name": datos.get("nombre", ""),
-        "document_number": datos.get("documento", ""),
     }
