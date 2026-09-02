@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+
+{% block title %}Orden {{ order.order_number }} - Comprobante{% endblock %}
+
+{% block extra_css %}
+<style>
+
+    /*
+     * Comprobante de la Orden de Instalación.
+     *
+     * Alcance deliberado (ver InstallationOrderReceiptView): es un
+     * resumen informativo de lo que ya vive en Customer, CustomerAddress,
+     * Subscription, Contract y WorkOrder -nada de NAP, borne, materiales,
+     * fotografías ni firmas-. Esa parte técnica pertenece a la
+     * liquidación de campo, fuera de este sprint.
+     */
+
+    .receipt-toolbar {
+        max-width: 820px;
+        margin: 0 auto 18px;
+    }
+
+    .receipt-sheet {
+        max-width: 820px;
+        margin: 0 auto 40px;
+        background: #FFFFFF;
+        border: 1px solid var(--sicv-linea);
+        border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(31,41,55,0.05), 0 16px 32px -20px rgba(31,41,55,0.22);
+        padding: 32px 38px 28px;
+        color: #1F2937;
+    }
+
+    .receipt-letterhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 3px solid var(--sicv-azul);
+        padding-bottom: 16px;
+        margin-bottom: 18px;
+    }
+
+    .receipt-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .receipt-brand-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--sicv-azul) 0%, #2E8B57 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: .95rem;
+        flex: none;
+    }
+
+    .receipt-brand-name {
+        font-weight: 800;
+        font-size: 1.3rem;
+        letter-spacing: .04em;
+        color: var(--sicv-azul);
+        line-height: 1.1;
+    }
+
+    .receipt-brand-tag {
+        font-size: .78rem;
+        color: var(--sicv-tinta-tenue);
+        font-weight: 500;
+    }
+
+    .receipt-doc-id {
+        text-align: right;
+    }
+
+    .receipt-doc-title {
+        font-size: 1rem;
+        font-weight: 800;
+        color: var(--sicv-azul);
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        margin-bottom: 2px;
+    }
+
+    .receipt-doc-number {
+        display: inline-block;
+        border: 2px solid var(--sicv-azul);
+        border-radius: 8px;
+        padding: 4px 14px;
+        font-size: 1.1rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: var(--sicv-azul);
+    }
+
+    .receipt-doc-status {
+        margin-top: 6px;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .receipt-section {
+        margin-bottom: 16px;
+    }
+
+    .receipt-section-title {
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #FFFFFF;
+        background: var(--sicv-azul);
+        padding: 5px 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        display: inline-block;
+    }
+
+    .receipt-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px 18px;
+    }
+
+    .receipt-field-full {
+        grid-column: 1 / -1;
+    }
+
+    .receipt-label {
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--sicv-tinta-tenue);
+        margin-bottom: 2px;
+    }
+
+    .receipt-value {
+        font-size: .92rem;
+        font-weight: 600;
+        color: #1F2937;
+        word-break: break-word;
+    }
+
+    .receipt-value-muted {
+        color: var(--sicv-tinta-tenue);
+        font-weight: 500;
+        font-style: italic;
+    }
+
+    .receipt-note {
+        margin-top: 22px;
+        padding: 12px 14px;
+        border: 1px dashed var(--sicv-linea);
+        border-radius: 8px;
+        font-size: .8rem;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .receipt-footnote {
+        margin-top: 18px;
+        padding-top: 10px;
+        border-top: 1px solid var(--sicv-linea);
+        font-size: .72rem;
+        color: var(--sicv-tinta-tenue);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        body {
+            background: #FFFFFF !important;
+        }
+
+        .receipt-sheet {
+            box-shadow: none;
+            border: none;
+            border-radius: 0;
+            margin: 0;
+            max-width: none;
+            padding: 0;
+        }
+
+        main.sicv-main,
+        main {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+
+        @page {
+            size: A4;
+            margin: 14mm;
+        }
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="receipt-toolbar d-flex justify-content-between align-items-center no-print">
+
+        <a
+            href="{% url 'contracts:contract_summary' customer.pk contract.pk %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver al resumen de contratación
+        </a>
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            onclick="window.print()"
+        >
+            🖨️ Imprimir comprobante
+        </button>
+
+    </div>
+
+
+    <div class="receipt-sheet">
+
+        <div class="receipt-letterhead">
+
+            <div class="receipt-brand">
+
+                <div class="receipt-brand-mark">TC</div>
+
+                <div>
+                    <div class="receipt-brand-name">TELECABLE</div>
+                    <div class="receipt-brand-tag">
+                        {{ customer.branch.name|default:"Operaciones comerciales" }}
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="receipt-doc-id">
+                <div class="receipt-doc-title">
+                    Comprobante de instalación
+                </div>
+                <div class="receipt-doc-number">
+                    N.º {{ order.order_number }}
+                </div>
+                <div class="receipt-doc-status">
+                    Estado: {{ order.get_status_display }}
+                </div>
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Datos del abonado</div>
+
+            <div class="receipt-grid">
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Abonado</div>
+                    <div class="receipt-value">{{ customer }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">
+                        {{ customer.get_document_type_display }}
+                    </div>
+                    <div class="receipt-value">
+                        {{ customer.document_number }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Código de abonado</div>
+                    <div class="receipt-value">{{ customer.code }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Teléfono</div>
+                    <div class="receipt-value">
+                        {{ customer.phone|default:"-" }}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Dirección de instalación</div>
+
+            <div class="receipt-grid">
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Dirección</div>
+                    <div class="receipt-value">{{ address.address }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Distrito</div>
+                    <div class="receipt-value">
+                        {{ address.district|default:"-" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Sector / Zona</div>
+                    <div class="receipt-value">
+                        {{ address.zone.name|default:"-" }}
+                    </div>
+                </div>
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Referencia</div>
+                    <div class="receipt-value">
+                        {{ address.reference|default:"-" }}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Servicio y contrato</div>
+
+            <div class="receipt-grid">
+
+                <div>
+                    <div class="receipt-label">Plan contratado</div>
+                    <div class="receipt-value">
+                        {{ subscription.plan.name }}
+                        {% if subscription.plan.speed_mbps %}
+                            ({{ subscription.plan.speed_mbps }} Mbps)
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Servicio</div>
+                    <div class="receipt-value">
+                        {{ subscription.service_type.name }}
+                        #{{ subscription.service_number }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">N.º de contrato</div>
+                    <div class="receipt-value">
+                        {{ contract.contract_number }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Técnico asignado</div>
+                    <div class="receipt-value">
+                        {% if order.assigned_technician %}
+                            {{ order.assigned_technician.get_full_name|default:order.assigned_technician.username }}
+                        {% else %}
+                            <span class="receipt-value-muted">Pendiente de asignar</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Fecha y hora de emisión</div>
+                    <div class="receipt-value">
+                        {{ order.created_at|date:"d/m/Y H:i" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Fecha programada</div>
+                    <div class="receipt-value">
+                        {% if order.scheduled_at %}
+                            {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                        {% else %}
+                            <span class="receipt-value-muted">Por coordinar</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="receipt-note">
+            Este comprobante confirma el registro de la Orden de
+            Instalación {{ order.order_number }}. El detalle técnico de
+            la visita (materiales, equipos y conformidad del abonado) se
+            completa en la liquidación de la orden, a cargo del canal
+            técnico.
+        </div>
+
+        <div class="receipt-footnote">
+            <span>
+                Generado por {{ order.created_by.get_full_name|default:order.created_by.username }}
+                el {{ order.created_at|date:"d/m/Y H:i" }}
+            </span>
+            <span>SICV · TeleCable</span>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

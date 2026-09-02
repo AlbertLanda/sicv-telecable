@@ -26,6 +26,79 @@ class Customer(models.Model):
     def person_type_for_document(cls, document_type):
         return cls.DOCUMENT_PERSON_TYPE_MAP.get(document_type)
 
+    # -------------------------------------------------------------
+    # CÓDIGO DE ABONADO POR SEDE (mejora solicitada 02/09)
+    #
+    # Formato: {PREFIJO}01-A{correlativo de 7 dígitos}, por ejemplo
+    # HY01-A0000001 para el primer cliente de Huancayo. "01" y "A"
+    # son fijos (una sola oficina y una sola serie, por ahora); el
+    # correlativo es independiente por sede.
+    #
+    # El prefijo se busca por Branch.code, que es como están
+    # sembradas las 3 sedes reales del sprint (ver
+    # apps/organization/migrations/0002_seed_sedes_reales.py). Una
+    # sede sin prefijo aquí (por ejemplo, una sede creada a mano para
+    # pruebas) no rompe el alta: se deriva un prefijo de sus propias
+    # letras en vez de cortar el registro del cliente.
+    # -------------------------------------------------------------
+
+    BRANCH_CODE_PREFIXES = {
+        "HUANCAYO": "HY",
+        "JAUJA": "JA",
+        "OROYA": "OR",
+    }
+
+    @classmethod
+    def _prefix_for_branch(cls, branch):
+        prefix = cls.BRANCH_CODE_PREFIXES.get(branch.code)
+
+        if prefix:
+            return prefix
+
+        derived = "".join(
+            ch for ch in branch.code.upper() if ch.isalpha()
+        )[:2]
+
+        return derived or "SD"
+
+    @classmethod
+    def generate_code(cls, branch):
+        """
+        Genera el siguiente código de abonado para `branch`.
+
+        El correlativo se calcula a partir del código más alto ya
+        usado en esa sede (no de un conteo de filas), para no repetir
+        números si algún cliente de esa sede quedó inactivo. Como
+        todos los correlativos de una misma sede comparten el mismo
+        prefijo y ancho fijo (7 dígitos con ceros a la izquierda), el
+        orden alfabético de los códigos coincide con el orden
+        numérico: no hace falta parsear todos los códigos, solo el
+        último.
+        """
+
+        code_prefix = f"{cls._prefix_for_branch(branch)}01-A"
+
+        last_code = (
+            cls.objects
+            .filter(
+                branch=branch,
+                code__startswith=code_prefix,
+            )
+            .order_by("-code")
+            .values_list("code", flat=True)
+            .first()
+        )
+
+        last_number = 0
+
+        if last_code:
+            suffix = last_code[len(code_prefix):]
+
+            if suffix.isdigit():
+                last_number = int(suffix)
+
+        return f"{code_prefix}{last_number + 1:07d}"
+
     code = models.CharField(
         max_length=30,
         unique=True,

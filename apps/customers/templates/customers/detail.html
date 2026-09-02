@@ -74,12 +74,12 @@
 <nav class="card card-custom mb-4">
     <div class="card-body py-2">
         <div class="d-flex flex-wrap gap-2">
-            <a href="#bloque-a" class="btn btn-sm btn-outline-dark">Datos del cliente</a>
-            <a href="#bloque-b" class="btn btn-sm btn-outline-secondary">Direcciones</a>
-            <a href="#bloque-c" class="btn btn-sm btn-outline-info">Suscripciones</a>
-            <a href="#bloque-d" class="btn btn-sm btn-outline-dark">Contratos</a>
+            <a href="#bloque-a" class="btn btn-sm btn-outline-primary">Datos del cliente</a>
+            <a href="#bloque-b" class="btn btn-sm btn-outline-primary">Direcciones</a>
+            <a href="#bloque-c" class="btn btn-sm btn-outline-primary">Suscripciones</a>
+            <a href="#bloque-d" class="btn btn-sm btn-outline-primary">Contratos</a>
             <a href="#bloque-e" class="btn btn-sm btn-outline-primary">Órdenes de trabajo</a>
-            <a href="#bloque-f" class="btn btn-sm btn-outline-dark">Actividad reciente</a>
+            <a href="#bloque-f" class="btn btn-sm btn-outline-primary">Actividad reciente</a>
         </div>
     </div>
 </nav>
@@ -91,7 +91,7 @@
 
 <div id="bloque-a" class="card card-custom mb-4">
 
-    <div class="card-header bg-dark text-white fw-bold">
+    <div class="card-header panel-head">
         Bloque A - Datos del Cliente
     </div>
 
@@ -196,7 +196,7 @@
 
 <div id="bloque-b" class="card card-custom mb-4">
 
-    <div class="card-header bg-secondary text-white fw-bold d-flex justify-content-between align-items-center">
+    <div class="card-header panel-head d-flex justify-content-between align-items-center">
 
     <span>
         Bloque B - Direcciones
@@ -382,7 +382,7 @@
 
 <div id="bloque-c" class="card card-custom mb-4">
 
-    <div class="card-header bg-info text-white fw-bold d-flex justify-content-between align-items-center">
+    <div class="card-header panel-head d-flex justify-content-between align-items-center">
 
         <span>
             Bloque C - Suscripciones y Servicios
@@ -467,9 +467,9 @@
                             Tipo de servicio
                         </small>
 
-                        <strong>
+                        <span class="service-tag">
                             {{ sub.service_type.name }}
-                        </strong>
+                        </span>
                     </div>
 
                     <div class="col-md-4">
@@ -605,7 +605,7 @@
 
 <div id="bloque-d" class="card card-custom mb-5">
 
-    <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+    <div class="card-header panel-head d-flex justify-content-between align-items-center">
 
     <span>
         Bloque D - Contratos
@@ -630,9 +630,9 @@
 
             <div class="table-responsive">
 
-                <table class="table table-hover align-middle mb-0">
+                <table class="table table-hover align-middle mb-0 sicv-table">
 
-                    <thead class="table-light">
+                    <thead>
 
                         <tr>
                             <th class="ps-3">
@@ -785,7 +785,7 @@
 
 <div id="bloque-e" class="card card-custom mb-5">
 
-    <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+    <div class="card-header panel-head d-flex justify-content-between align-items-center">
 
         <span>
             Bloque E - Órdenes de Trabajo del Cliente
@@ -811,9 +811,9 @@
 
             <div class="table-responsive">
 
-                <table class="table table-hover table-sm align-middle mb-0">
+                <table class="table table-hover table-sm align-middle mb-0 sicv-table">
 
-                    <thead class="table-light">
+                    <thead>
 
                         <tr>
                             <th class="ps-3">
@@ -1116,7 +1116,7 @@
 
 <div id="bloque-f" class="card card-custom mb-5">
 
-    <div class="card-header bg-dark text-white fw-bold">
+    <div class="card-header panel-head">
         Bloque F - Actividad Reciente
     </div>
 

@@ -410,6 +410,55 @@ class SubscriptionCreateTests(TestCase):
         self.assertContains(response, self.address.address)
         self.assertContains(response, "Generar contrato")
 
+    def test_resumen_ofrece_registrar_otro_servicio(self):
+        """
+        Mejora solicitada 02/09: si el cliente contrata 2 o más
+        servicios, el resumen previo a la contratación debe ofrecer
+        continuar registrando otra suscripción -con una dirección ya
+        existente, o dando de alta una nueva- en lugar de obligar a
+        cerrar primero el contrato de la suscripción actual.
+        """
+
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            service_number=1,
+            status=Subscription.Status.PRESALE,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertContains(
+            response,
+            reverse(
+                "services:subscription_create",
+                kwargs={"customer_pk": self.customer.pk},
+            ),
+        )
+
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "customers:address_create",
+                    kwargs={"customer_pk": self.customer.pk},
+                )
+                + "?flow=another_service"
+            ),
+        )
+
     def test_resumen_no_accesible_con_suscripcion_de_otro_cliente(self):
         subscription = Subscription.objects.create(
             customer=self.customer_2,

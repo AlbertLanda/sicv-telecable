@@ -1,7 +1,39 @@
-﻿from django import forms
+﻿import calendar
+from datetime import date
+
+from django import forms
 
 from .models import Contract
 from apps.services.models import Subscription
+
+
+# Duración mínima del contrato, en meses (mejora solicitada 02/09).
+# Un contrato FTTH no puede cerrarse con una vigencia menor a medio año:
+# se valida aquí, en el formulario, y no en el modelo, porque end_date
+# sigue siendo opcional (null=True, blank=True) para los contratos sin
+# fecha de finalización definida -esos no entran a esta validación-.
+MINIMUM_CONTRACT_DURATION_MONTHS = 6
+
+
+def _add_months(source_date, months):
+    """
+    Suma meses calendario a una fecha, sin depender de python-dateutil
+    (no está en requirements.txt). Si el día de origen no existe en el
+    mes de destino (p. ej. 31 de enero + 1 mes) se ajusta al último día
+    de ese mes, igual que relativedelta.
+    """
+
+    month_index = source_date.month - 1 + months
+
+    year = source_date.year + month_index // 12
+    month = month_index % 12 + 1
+
+    day = min(
+        source_date.day,
+        calendar.monthrange(year, month)[1],
+    )
+
+    return date(year, month, day)
 
 
 class ContractCreateForm(forms.ModelForm):
@@ -135,6 +167,24 @@ class ContractCreateForm(forms.ModelForm):
                         "ser anterior a la fecha de inicio."
                     ),
                 )
+
+            else:
+                minimum_end_date = _add_months(
+                    start_date,
+                    MINIMUM_CONTRACT_DURATION_MONTHS,
+                )
+
+                if end_date < minimum_end_date:
+                    self.add_error(
+                        "end_date",
+                        (
+                            "El contrato debe tener una vigencia "
+                            f"mínima de {MINIMUM_CONTRACT_DURATION_MONTHS} "
+                            "meses. Con esta fecha de inicio, la fecha "
+                            "de finalización debe ser "
+                            f"{minimum_end_date:%d/%m/%Y} o posterior."
+                        ),
+                    )
 
         # ---------------------------------------------------------
         # EVITAR CONTRATO DUPLICADO

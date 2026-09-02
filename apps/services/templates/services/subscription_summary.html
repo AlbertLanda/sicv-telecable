@@ -133,6 +133,52 @@
             registrado el contrato.
         </div>
 
+        <!-- ================================================= -->
+        <!-- REGISTRAR OTRO SERVICIO (mejora solicitada 02/09)
+
+             Si el cliente contrata 2 o más servicios, no hace
+             falta cerrar este contrato para volver a empezar: se
+             puede seguir registrando suscripciones adicionales
+             desde aquí mismo, con una dirección ya existente o con
+             una nueva (misma ruta de alta de dirección que usa el
+             flujo guiado). Cada servicio adicional pasa otra vez
+             por este resumen antes de generar su contrato.
+        -->
+        <!-- ================================================= -->
+
+        <div class="alert alert-light border">
+
+            <strong class="d-block mb-2">
+                ¿El cliente necesita otro servicio?
+            </strong>
+
+            <p class="text-muted small mb-2">
+                Puede registrar otra suscripción antes de generar
+                el contrato de esta: reutilizando una dirección ya
+                registrada, o dando de alta una dirección nueva
+                para el servicio adicional.
+            </p>
+
+            <div class="d-flex flex-wrap gap-2">
+
+                <a
+                    href="{% url 'services:subscription_create' customer.pk %}"
+                    class="btn btn-outline-primary btn-sm"
+                >
+                    + Otro servicio (dirección existente)
+                </a>
+
+                <a
+                    href="{% url 'customers:address_create' customer.pk %}?flow=another_service"
+                    class="btn btn-outline-primary btn-sm"
+                >
+                    + Otro servicio (nueva dirección)
+                </a>
+
+            </div>
+
+        </div>
+
         <div class="d-flex justify-content-end gap-2">
 
             <a

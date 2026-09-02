@@ -1,13 +1,18 @@
 ﻿from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.views import View
 from django.views.generic import CreateView, DetailView
 
 from .forms import ContractCreateForm
 from .models import Contract
 from apps.customers.models import Customer
 from apps.services.models import Subscription
+from apps.work_orders.models import WorkOrder
+from apps.work_orders.services import create_installation_work_order
 
 
 class ContractCreateView(LoginRequiredMixin, CreateView):
@@ -167,8 +172,11 @@ class ContractSummaryView(LoginRequiredMixin, DetailView):
 
     Cierra, de solo lectura, el alta comercial FTTH del día:
     cliente, domicilio, servicio/plan, suscripción y contrato ya
-    registrados. No genera ninguna Orden de Trabajo: esa acción se
-    habilita en una jornada posterior del sprint.
+    registrados. Desde aquí también se puede generar la Orden de
+    Trabajo de instalación (día 03/09), consumiendo
+    create_installation_work_order() a través de
+    InstallationWorkOrderCreateView: esta vista sigue siendo de solo
+    lectura, no crea ninguna orden por sí misma.
     """
 
     model = Contract
@@ -192,7 +200,199 @@ class ContractSummaryView(LoginRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
+        subscription = self.object.subscription
+
         context["customer"] = self.object.customer
-        context["subscription"] = self.object.subscription
+        context["subscription"] = subscription
+
+        # -------------------------------------------------------------
+        # ORDEN DE INSTALACIÓN (día 03/09)
+        #
+        # Se muestra la instalación más reciente de la suscripción, si
+        # existe, en lugar de solo un booleano: así el resumen puede
+        # comunicar tanto "ya se generó, número X, estado Y" como
+        # "puede volver a intentarse" cuando la instalación anterior
+        # quedó en un estado final que create_installation_work_order()
+        # no bloquea (LIQUIDATED, REJECTED, NOT_FEASIBLE, CANCELLED).
+        # -------------------------------------------------------------
+
+        installation_order = (
+            subscription.work_orders
+            .filter(order_type__code="INSTALLATION")
+            .select_related("order_type")
+            .order_by("-created_at")
+            .first()
+        )
+
+        context["installation_order"] = installation_order
+
+        context["can_generate_installation_order"] = (
+            installation_order is None
+            or installation_order.status in WorkOrder.FINAL_STATUSES
+        )
+
+        context["can_request_installation_order"] = (
+            self.request.user.has_perm("work_orders.add_workorder")
+        )
+
+        return context
+
+
+class InstallationWorkOrderCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    View,
+):
+    """
+    Acción "Generar Orden de Instalación" del resumen de contratación
+    (día 03/09 del sprint FTTH).
+
+    Es una vista de un solo POST, sin formulario: todos los datos que
+    necesita create_installation_work_order() (suscripción, cliente,
+    sede, zona) ya están fijados por el contrato que se está cerrando,
+    así que no hay nada que el operador deba volver a escribir.
+
+    El mismo permiso que ya protege la creación web de órdenes
+    (work_orders.add_workorder, ver WorkOrderCreateView) protege esta
+    acción: es la misma operación de dominio, solo con un punto de
+    entrada distinto. No se define un permiso nuevo.
+
+    create_installation_work_order() es la única vía de creación que
+    se consume aquí; esta vista no reimplementa ninguna regla del
+    dominio de work_orders ni construye un WorkOrder directamente.
+    """
+
+    permission_required = "work_orders.add_workorder"
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        contract = get_object_or_404(
+            Contract.objects
+            .select_related(
+                "customer",
+                "subscription",
+                "subscription__customer__branch",
+                "subscription__address__zone",
+            ),
+            pk=self.kwargs["pk"],
+            customer_id=self.kwargs["customer_pk"],
+        )
+
+        try:
+            order = create_installation_work_order(
+                subscription=contract.subscription,
+                created_by=request.user,
+                customer=contract.customer,
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                " ".join(exc.messages),
+            )
+
+            # El servicio rechazó la generación (p. ej. ya hay una orden
+            # de instalación abierta): se vuelve al resumen del contrato,
+            # que es donde se explica el motivo y se ofrece el botón de
+            # nuevo si corresponde. No hay ninguna orden que imprimir.
+            return redirect(
+                "contracts:contract_summary",
+                customer_pk=contract.customer_id,
+                pk=contract.pk,
+            )
+
+        messages.success(
+            request,
+            (
+                f"Orden de instalación {order.order_number} "
+                f"generada correctamente en estado "
+                f"{order.get_status_display()}. Ya está "
+                "disponible para el canal técnico."
+            ),
+        )
+
+        # Orden generada: el siguiente paso es su comprobante, dentro del
+        # propio namespace de contracts (ver InstallationOrderReceiptView).
+        # No se redirige a una URL de work_orders: esta acción sigue
+        # siendo responsabilidad del flujo comercial, no del módulo de
+        # órdenes.
+        return redirect(
+            "contracts:installation_order_receipt",
+            customer_pk=contract.customer_id,
+            pk=contract.pk,
+        )
+
+
+class InstallationOrderReceiptView(LoginRequiredMixin, DetailView):
+    """
+    Comprobante de la Orden de Instalación generada desde el resumen de
+    contratación.
+
+    Se resuelve por contrato (mismo par customer_pk/pk que
+    ContractSummaryView e InstallationWorkOrderCreateView), no por el pk
+    de la orden: así toda la navegación de esta acción se queda dentro
+    del namespace de contracts, sin depender de ninguna URL de
+    work_orders.
+
+    Decisiones deliberadas, según el alcance del sprint (ver punto 4 de
+    la responsabilidad de Joleydi):
+
+    - Es de solo lectura y reutiliza exactamente el mismo criterio que
+      ContractSummaryView para ubicar la orden ("la más reciente de tipo
+      INSTALLATION de la suscripción"): no se inventa una regla propia
+      ni se reimplementa nada del dominio de work_orders.
+    - El comprobante NO incluye NAP, borne, materiales, fotografías ni
+      firmas: esa parte (liquidación técnica completa) queda fuera de
+      este sprint (punto 4.2) y se incorporará más adelante, junto con
+      el resto del flujo de liquidación de campo.
+    - No agrega un permiso nuevo: el acceso es el mismo que ya exige
+      ContractSummaryView (usuario autenticado), porque este comprobante
+      solo muestra en detalle datos que el resumen del contrato ya
+      expone.
+    """
+
+    model = Contract
+    template_name = "contracts/installation_order_receipt.html"
+    context_object_name = "contract"
+
+    def get_queryset(self):
+        return (
+            Contract.objects
+            .filter(customer_id=self.kwargs["customer_pk"])
+            .select_related(
+                "customer",
+                "customer__branch",
+                "subscription",
+                "subscription__address",
+                "subscription__address__zone",
+                "subscription__service_type",
+                "subscription__plan",
+            )
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        contract = self.object
+        subscription = contract.subscription
+
+        order = (
+            subscription.work_orders
+            .filter(order_type__code="INSTALLATION")
+            .select_related("order_type", "assigned_technician", "created_by")
+            .order_by("-created_at")
+            .first()
+        )
+
+        if order is None:
+            raise Http404(
+                "Este contrato todavía no tiene una orden de "
+                "instalación generada."
+            )
+
+        context["order"] = order
+        context["customer"] = contract.customer
+        context["subscription"] = subscription
+        context["address"] = subscription.address
 
         return context
