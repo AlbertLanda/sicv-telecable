@@ -30,6 +30,11 @@ class TechnicianLoginView(APIView):
     Único endpoint abierto de la API: no puede exigir un token para emitirlo.
     La apertura es explícita aquí, no en los ajustes globales, que siguen
     cerrados con `IsAuthenticated`.
+
+    Los rechazos de credenciales y de rol comparten la misma respuesta pública
+    para no confirmar que un usuario existe ni que la contraseña ingresada era
+    correcta. La causa concreta sigue diferenciada dentro del dominio mediante
+    sus excepciones, pero no se expone al cliente anónimo.
     """
 
     authentication_classes = []
@@ -45,18 +50,10 @@ class TechnicianLoginView(APIView):
                 password=serializer.validated_data["password"],
                 request=request,
             )
-        except InvalidCredentials:
-            # Mensaje único para credenciales malas, usuario inexistente y
-            # cuenta desactivada: la respuesta no debe servir para descubrir
-            # qué usuarios existen.
+        except (InvalidCredentials, NotATechnician):
             return Response(
                 {"detail": "Credenciales inválidas."},
                 status=status.HTTP_401_UNAUTHORIZED,
-            )
-        except NotATechnician:
-            return Response(
-                {"detail": "El usuario no tiene rol técnico."},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         token, _ = Token.objects.get_or_create(user=user)
