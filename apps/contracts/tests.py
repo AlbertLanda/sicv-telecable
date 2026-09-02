@@ -408,6 +408,170 @@ class ContractCreateTests(TestCase):
         )
 
     # -------------------------------------------------------------
+    # RESUMEN DE CONTRATACIÓN (día 02/09)
+    # -------------------------------------------------------------
+
+    def test_crear_contrato_redirige_al_resumen(self):
+        response = self.client.post(
+            self.create_url,
+            {
+                "subscription": self.subscription.pk,
+                "start_date": "2026-08-20",
+                "end_date": "",
+                "notes": "",
+            },
+        )
+
+        contract = Contract.objects.get(
+            subscription=self.subscription
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": contract.pk,
+                },
+            ),
+        )
+
+    def test_resumen_muestra_cliente_servicio_plan_y_contrato(self):
+        contract = Contract.objects.create(
+            contract_number="CONT-000001",
+            customer=self.customer,
+            subscription=self.subscription,
+            start_date=date(2026, 8, 20),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": contract.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, contract.contract_number)
+        self.assertContains(response, self.plan.name)
+        self.assertContains(response, self.service_type.name)
+        self.assertContains(response, self.address.address)
+
+    def test_resumen_no_accesible_con_contrato_de_otro_cliente(self):
+        other_customer = Customer.objects.create(
+            code="CLI-0003",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="11223344",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Carlos",
+            paternal_surname="Ramos",
+        )
+
+        other_address = CustomerAddress.objects.create(
+            customer=other_customer,
+            zone=self.zone,
+            address="Calle Otra 789",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        other_subscription = Subscription.objects.create(
+            customer=other_customer,
+            address=other_address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        other_contract = Contract.objects.create(
+            contract_number="CONT-000002",
+            customer=other_customer,
+            subscription=other_subscription,
+            start_date=date(2026, 8, 20),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    # customer_pk no corresponde al dueño real del contrato.
+                    "customer_pk": self.customer.pk,
+                    "pk": other_contract.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    # -------------------------------------------------------------
+    # PRESELECCIÓN DE SUSCRIPCIÓN DESDE EL RESUMEN (día 02/09)
+    # -------------------------------------------------------------
+
+    def test_formulario_preselecciona_suscripcion_recibida_por_query_param(self):
+        response = self.client.get(
+            f"{self.create_url}?subscription={self.subscription.pk}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.context["form"].initial.get("subscription"),
+            str(self.subscription.pk),
+        )
+
+        self.assertEqual(
+            response.context["preselected_subscription"],
+            self.subscription,
+        )
+
+        self.assertContains(response, self.plan.name)
+
+    def test_no_preselecciona_suscripcion_de_otro_cliente(self):
+        other_customer = Customer.objects.create(
+            code="CLI-0004",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="55667788",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Ana",
+            paternal_surname="Torres",
+        )
+
+        other_address = CustomerAddress.objects.create(
+            customer=other_customer,
+            zone=self.zone,
+            address="Jr. Ajena 111",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        other_subscription = Subscription.objects.create(
+            customer=other_customer,
+            address=other_address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        response = self.client.get(
+            f"{self.create_url}?subscription={other_subscription.pk}"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["preselected_subscription"])
+
+    # -------------------------------------------------------------
     # SUSCRIPCIÓN NO PRESALE
     # -------------------------------------------------------------
 

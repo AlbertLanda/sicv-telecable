@@ -15,16 +15,6 @@ class Customer(models.Model):
         NATURAL = "NATURAL", "Persona Natural"
         LEGAL = "LEGAL", "Persona Jurídica"
 
-    # ---------------------------------------------------------------
-    # REGLA DE CORRESPONDENCIA DOCUMENTO / TIPO DE PERSONA
-    #
-    # Fuente única de verdad para evitar combinaciones incoherentes
-    # como RUC + Persona Natural o DNI + Persona Jurídica. Se usa
-    # tanto en los formularios (apps/customers/forms.py) como en las
-    # vistas (apps/customers/views.py), por lo que el tipo de persona
-    # nunca depende únicamente de lo que el usuario elija en pantalla.
-    # ---------------------------------------------------------------
-
     DOCUMENT_PERSON_TYPE_MAP = {
         DocumentType.DNI: PersonType.NATURAL,
         DocumentType.CE: PersonType.NATURAL,
@@ -34,14 +24,6 @@ class Customer(models.Model):
 
     @classmethod
     def person_type_for_document(cls, document_type):
-        """
-        Devuelve el tipo de persona esperado para un tipo de documento,
-        según la tabla de correspondencia obligatoria del flujo de
-        registro (DNI/CE/PASAPORTE -> NATURAL, RUC -> LEGAL).
-
-        Devuelve None si el tipo de documento no es reconocido.
-        """
-
         return cls.DOCUMENT_PERSON_TYPE_MAP.get(document_type)
 
     code = models.CharField(
@@ -159,6 +141,7 @@ class Customer(models.Model):
 
         return full_name or self.document_number
 
+
 class CustomerAddress(models.Model):
 
     customer = models.ForeignKey(
@@ -197,6 +180,13 @@ class CustomerAddress(models.Model):
         max_length=50,
         blank=True,
         verbose_name="Número de medidor"
+    )
+
+    electrical_supply_code = models.CharField(
+        max_length=20,
+        blank=True,
+        db_index=True,
+        verbose_name="Código de suministro eléctrico"
     )
 
     latitude = models.DecimalField(
@@ -242,6 +232,15 @@ class CustomerAddress(models.Model):
     class Meta:
         verbose_name = "Dirección del cliente"
         verbose_name_plural = "Direcciones del cliente"
+
+    @property
+    def electrical_supply_number(self):
+        """Alias temporal de compatibilidad con la rama previa al rename."""
+        return self.electrical_supply_code
+
+    @electrical_supply_number.setter
+    def electrical_supply_number(self, value):
+        self.electrical_supply_code = value
 
     def __str__(self):
         return f"{self.customer} - {self.address}"

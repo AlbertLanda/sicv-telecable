@@ -97,6 +97,7 @@ class CustomerUIConsultaTests(TestCase):
             reference="Frente al parque",
             district="Huancayo",
             meter_number="MED-001",
+            electrical_supply_number="SUM-001",
             latitude="-12.0651",
             longitude="-75.2049",
             gps_link="https://maps.google.com/",
@@ -366,6 +367,13 @@ class CustomerUIConsultaTests(TestCase):
 
         self.assertEqual(addresses[0], self.address)
         self.assertTrue(addresses[0].is_primary)
+
+    def test_ficha_muestra_suministro_electrico_separado_del_medidor(self):
+        response = self.client.get(self.detail_url)
+
+        self.assertContains(response, "MED-001")
+        self.assertContains(response, "SUM-001")
+        self.assertNotEqual(self.address.meter_number, self.address.electrical_supply_number)
 
     def test_ficha_muestra_suscripciones(self):
         response = self.client.get(self.detail_url)

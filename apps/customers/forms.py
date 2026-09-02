@@ -332,6 +332,7 @@ class CustomerAddressForm(forms.ModelForm):
             "reference",
             "district",
             "meter_number",
+            "electrical_supply_code",
             "latitude",
             "longitude",
             "gps_link",
@@ -370,6 +371,14 @@ class CustomerAddressForm(forms.ModelForm):
                     "maxlength": "50",
                 }
             ),
+            "electrical_supply_code": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "maxlength": "20",
+                    "autocomplete": "off",
+                    "inputmode": "numeric",
+                }
+            ),
             "latitude": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -402,6 +411,7 @@ class CustomerAddressForm(forms.ModelForm):
             "reference": "Referencia",
             "district": "Distrito",
             "meter_number": "Número de medidor",
+            "electrical_supply_code": "Código de suministro eléctrico",
             "latitude": "Latitud",
             "longitude": "Longitud",
             "gps_link": "Enlace GPS",
@@ -419,3 +429,6 @@ class CustomerAddressForm(forms.ModelForm):
 
     def clean_meter_number(self):
         return self.cleaned_data.get("meter_number", "").strip()
+
+    def clean_electrical_supply_code(self):
+        return self.cleaned_data.get("electrical_supply_code", "").strip()
