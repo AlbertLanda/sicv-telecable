@@ -124,6 +124,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    # Terceros
+    'rest_framework',
+    'rest_framework.authtoken',
+
     # SICV
     'apps.accounts',
     'apps.organization',
@@ -236,3 +240,19 @@ AUTH_USER_MODEL = "accounts.User"
 # Redirecciones de autenticación
 LOGIN_REDIRECT_URL = '/customers/search/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+
+# API REST (canal del técnico)
+# ---------------------------------------------------------------------
+# La API queda cerrada por defecto: autenticación por token y permiso
+# IsAuthenticated global. Cada endpoint abre o restringe explícitamente
+# sobre esta base (el login se declara AllowAny; el canal técnico suma
+# IsActiveTechnician). Ver docs/api_technician_auth.md.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}

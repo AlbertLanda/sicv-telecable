@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from apps.services.models import Subscription
 from apps.work_orders.models import (
+    OrderType,
     WorkOrder,
     WorkOrderLiquidation,
     WorkOrderLiquidationCorrection,
@@ -25,6 +26,14 @@ from apps.work_orders.models import (
 
 ORDER_NUMBER_PREFIX = "OT"
 ORDER_NUMBER_PADDING = 6
+
+# Código del tipo de orden de instalación en el catálogo. Se nombra aquí
+# porque es el dominio quien conoce sus propios códigos: apply_order_result()
+# ya decide por él, el alta comercial lo necesita para registrar la OT y el
+# canal técnico para publicarla. Una sola definición evita que las tres se
+# desalineen, y en particular evita confundirlo con el DEMO-INSTALLATION de
+# datos de prueba.
+INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -262,6 +271,108 @@ def create_work_order(
     order.save()
 
     return order
+
+
+@transaction.atomic
+def create_installation_work_order(
+    *,
+    subscription,
+    created_by,
+    customer=None,
+    branch=None,
+    zone=None,
+    reason=None,
+    priority=None,
+    detail="",
+    scheduled_at=None,
+):
+    """
+    Registra la OT de instalación que produce el alta comercial FTTH.
+
+    Punto de entrada del flujo comercial hacia el dominio de órdenes. Resuelve
+    el tipo INSTALLATION, fija explícitamente la atención en campo y delega la
+    persistencia en create_work_order(), que sigue siendo el único camino que
+    emite el correlativo, valida la suscripción y persiste la orden.
+
+    La fachada también garantiza idempotencia operativa por suscripción: no se
+    permite crear una segunda instalación mientras exista otra que todavía no
+    esté en un estado final. Se bloquea la fila de Subscription con
+    select_for_update() antes de comprobarlo, de modo que dos solicitudes
+    concurrentes para la misma alta no puedan publicar dos órdenes abiertas.
+
+    Una instalación previa en LIQUIDATED, REJECTED, NOT_FEASIBLE o CANCELLED
+    no bloquea un nuevo intento; ATTENDED sí bloquea porque aún falta la
+    liquidación técnica.
+
+    No se exponen `subtype` —la instalación no tiene subtipos en el catálogo,
+    solo corte y traslado los usan— ni `cause`, que se registra durante la
+    atención y no al crear la orden. `attention_type` tampoco es argumento:
+    la fachada lo fija a FIELD de forma explícita.
+
+    `created_by` debe salir del usuario ejecutor (`request.user`), nunca de
+    datos enviados por el navegador.
+    """
+    if subscription is None or subscription.pk is None:
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
+    try:
+        order_type = OrderType.objects.get(
+            code=INSTALLATION_ORDER_TYPE_CODE,
+        )
+
+    except OrderType.DoesNotExist:
+        # Falta de datos maestros, no error del operador. El mensaje nombra el
+        # código exacto para que quien administre el catálogo sepa qué crear.
+        raise ValidationError(
+            "No existe el tipo de orden de instalación en el catálogo "
+            f"(código «{INSTALLATION_ORDER_TYPE_CODE}»). "
+            "Debe registrarse antes de generar instalaciones."
+        )
+
+    try:
+        locked_subscription = (
+            Subscription.objects
+            .select_for_update()
+            .select_related("customer__branch", "address__zone")
+            .get(pk=subscription.pk)
+        )
+    except Subscription.DoesNotExist:
+        raise ValidationError(
+            "La suscripción indicada ya no existe."
+        )
+
+    # Se revalida contra la fila bloqueada, no contra una instancia que pudo
+    # quedar desactualizada antes de entrar en la transacción.
+    _validate_creation_subscription(locked_subscription, customer)
+
+    has_open_installation = (
+        locked_subscription.work_orders
+        .filter(order_type__code=INSTALLATION_ORDER_TYPE_CODE)
+        .exclude(status__in=WorkOrder.FINAL_STATUSES)
+        .exists()
+    )
+
+    if has_open_installation:
+        raise ValidationError(
+            "La suscripción ya tiene una orden de instalación abierta. "
+            "Finalícela o anúlela antes de generar otra."
+        )
+
+    return create_work_order(
+        subscription=locked_subscription,
+        order_type=order_type,
+        created_by=created_by,
+        customer=customer,
+        branch=branch,
+        zone=zone,
+        reason=reason,
+        attention_type=WorkOrder.AttentionType.FIELD,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
 
 
 @transaction.atomic
