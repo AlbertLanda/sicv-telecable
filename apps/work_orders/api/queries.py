@@ -20,13 +20,7 @@ estado nuevo y el dominio queda intacto.
 """
 
 from apps.work_orders.models import WorkOrder
-
-
-# Código del tipo de orden publicado en el canal técnico durante el MVP.
-# Se nombra en lugar de escribirse suelto en el filtro para que el recorte de
-# alcance sea localizable: quien busque por qué la app no muestra averías
-# llega aquí y no a una cadena perdida dentro de un `filter()`.
-INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
+from apps.work_orders.services import INSTALLATION_ORDER_TYPE_CODE
 
 
 def available_work_orders(queryset=None):
@@ -58,10 +52,16 @@ def available_work_orders(queryset=None):
        pasaría a ASSIGNED con él como responsable y quedaría bloqueada para
        quien debe resolverla en remoto.
 
-    4. ``order_type.code = "INSTALLATION"`` — **recorte de alcance del MVP**,
+    4. ``order_type.code = INSTALLATION`` — **recorte de alcance del MVP**,
        no una regla de negocio. El hito del 07/09 es el circuito de
        instalaciones FTTH. Abrirlo a averías u otros trabajos de campo es
        cambiar esta línea y nada más; el resto del diseño no se entera.
+
+       El código se importa del dominio en lugar de escribirse aquí: es el
+       mismo que usa `create_installation_work_order()` para registrar la
+       orden. Si estuviera escrito dos veces, un cambio en uno solo dejaría
+       al canal publicando un tipo distinto del que el alta comercial crea —
+       es decir, instalaciones reales que no aparecen en la app.
 
        La comparación es exacta, así que el `DEMO-INSTALLATION` de datos de
        prueba queda fuera sin necesitar una exclusión aparte.

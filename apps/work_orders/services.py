@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from apps.services.models import Subscription
 from apps.work_orders.models import (
+    OrderType,
     WorkOrder,
     WorkOrderLiquidation,
     WorkOrderLiquidationCorrection,
@@ -25,6 +26,14 @@ from apps.work_orders.models import (
 
 ORDER_NUMBER_PREFIX = "OT"
 ORDER_NUMBER_PADDING = 6
+
+# Código del tipo de orden de instalación en el catálogo. Se nombra aquí
+# porque es el dominio quien conoce sus propios códigos: apply_order_result()
+# ya decide por él, el alta comercial lo necesita para registrar la OT y el
+# canal técnico para publicarla. Una sola definición evita que las tres se
+# desalineen, y en particular evita confundirlo con el DEMO-INSTALLATION de
+# datos de prueba.
+INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -262,6 +271,88 @@ def create_work_order(
     order.save()
 
     return order
+
+
+@transaction.atomic
+def create_installation_work_order(
+    *,
+    subscription,
+    created_by,
+    customer=None,
+    branch=None,
+    zone=None,
+    reason=None,
+    priority=None,
+    detail="",
+    scheduled_at=None,
+):
+    """
+    Registra la OT de instalación que produce el alta comercial FTTH.
+
+    Punto de entrada del flujo comercial hacia el dominio de órdenes. **No
+    añade ninguna regla de negocio**: resuelve el tipo de orden y delega en
+    create_work_order(), que sigue siendo el único camino que emite el
+    correlativo, valida la suscripción y persiste la orden. Si mañana cambia
+    una regla de creación, cambia en un sitio y esta función la hereda.
+
+    Existe porque el paso «Generar Orden de Instalación» del flujo aprobado
+    tiene dos formas documentadas de producir una OT válida pero INVISIBLE
+    para el técnico, y las dos se evitan mejor con una firma que con una
+    advertencia en un manual:
+
+    1. **Tipo de orden equivocado.** El catálogo contiene INSTALLATION y
+       también un DEMO-INSTALLATION de datos de prueba. Resolverlo por
+       nombre, por coincidencia parcial o tomando el primer resultado puede
+       devolver el de demo, y el canal técnico no lo publica. Aquí se resuelve
+       por código exacto y el llamador no elige.
+
+    2. **Canal de atención equivocado.** attention_type decide si la orden
+       pertenece al técnico de campo (FIELD) o a NOC (SYSTEM); el canal
+       técnico solo publica FIELD. Una instalación es siempre trabajo de
+       campo, así que este servicio **no acepta el argumento**: aplica el
+       valor por defecto del modelo. Un POST que lo incluya no tiene por
+       dónde entrar.
+
+    Tampoco se exponen `subtype` —la instalación no tiene subtipos en el
+    catálogo, solo corte y traslado los usan— ni `cause`, que se registra
+    durante la atención y no al crear la orden.
+
+    Todo lo demás se pasa tal cual: `created_by` debe salir del usuario
+    ejecutor (`request.user`), nunca de datos enviados por el navegador.
+
+    NOTA (bloqueo B8, abierto): este servicio **no** comprueba si la
+    suscripción ya tiene una instalación abierta. Prohibirlo sería una regla
+    de dominio nueva y aún no está definida por negocio —si el veto es
+    permanente o solo mientras haya una activa, qué ocurre tras una
+    NOT_FEASIBLE, si el bloqueo es duro o un aviso—. Se reporta, no se
+    inventa. Ver docs/ftth_integracion_ot_instalacion.md §6.
+    """
+    try:
+        order_type = OrderType.objects.get(
+            code=INSTALLATION_ORDER_TYPE_CODE,
+        )
+
+    except OrderType.DoesNotExist:
+        # Falta de datos maestros, no error del operador. El mensaje nombra el
+        # código exacto para que quien administre el catálogo sepa qué crear.
+        raise ValidationError(
+            "No existe el tipo de orden de instalación en el catálogo "
+            f"(código «{INSTALLATION_ORDER_TYPE_CODE}»). "
+            "Debe registrarse antes de generar instalaciones."
+        )
+
+    return create_work_order(
+        subscription=subscription,
+        order_type=order_type,
+        created_by=created_by,
+        customer=customer,
+        branch=branch,
+        zone=zone,
+        reason=reason,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
 
 
 @transaction.atomic
