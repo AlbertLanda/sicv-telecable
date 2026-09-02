@@ -294,7 +294,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         try {
             const response = await fetch(
-                "{% url 'customers:lookup_supply' %}?supply_code="
+                "{% url 'customers:lookup_supply' %}?supply_number="
                 + encodeURIComponent(supplyCode),
                 {
                     method: "GET",
