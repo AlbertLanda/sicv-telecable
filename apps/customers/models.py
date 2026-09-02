@@ -159,6 +159,7 @@ class Customer(models.Model):
 
         return full_name or self.document_number
 
+
 class CustomerAddress(models.Model):
 
     customer = models.ForeignKey(
@@ -199,10 +200,11 @@ class CustomerAddress(models.Model):
         verbose_name="Número de medidor"
     )
 
-    electrical_supply_number = models.CharField(
-        max_length=50,
+    electrical_supply_code = models.CharField(
+        max_length=20,
         blank=True,
-        verbose_name="Número de suministro eléctrico"
+        db_index=True,
+        verbose_name="Código de suministro eléctrico"
     )
 
     latitude = models.DecimalField(
