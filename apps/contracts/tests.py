@@ -660,6 +660,7 @@ class ContractCreateTests(TestCase):
             0,
         )
 
+
 class InstallationWorkOrderCreateTests(TestCase):
     """
     Acción "Generar Orden de Instalación" del resumen de contratación
@@ -874,10 +875,6 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         order = WorkOrder.objects.get(subscription=self.subscription)
 
-        # Tras generar la orden, el siguiente paso es su comprobante,
-        # dentro del propio namespace de contracts -no una URL de
-        # work_orders-: ver InstallationWorkOrderCreateView.post() y
-        # InstallationOrderReceiptView.
         self.assertRedirects(
             response,
             reverse(
@@ -897,12 +894,7 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(order.zone, self.zone)
 
     def test_post_con_datos_del_formulario_los_persiste_en_la_orden(self):
-        """
-        Los campos que ofrece InstallationWorkOrderForm -observaciones,
-        prioridad, motivo, tipo de atención, vendedor- deben llegar tal
-        cual a create_installation_work_order() y quedar en la orden
-        creada.
-        """
+        """Los datos comerciales válidos llegan a la OT; instalación es FIELD."""
 
         self.grant_add_workorder_permission()
 
@@ -918,7 +910,7 @@ class InstallationWorkOrderCreateTests(TestCase):
             {
                 "reason": reason.pk,
                 "priority": WorkOrder.Priority.HIGH,
-                "attention_type": WorkOrder.AttentionType.SYSTEM,
+                "attention_type": WorkOrder.AttentionType.FIELD,
                 "seller": self.seller.pk,
                 "detail": "Coordinar con el abonado antes de las 9am.",
             },
@@ -939,17 +931,35 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertEqual(order.reason, reason)
         self.assertEqual(order.priority, WorkOrder.Priority.HIGH)
-        self.assertEqual(order.attention_type, WorkOrder.AttentionType.SYSTEM)
+        self.assertEqual(order.attention_type, WorkOrder.AttentionType.FIELD)
         self.assertEqual(order.seller, self.seller)
         self.assertEqual(
             order.detail,
             "Coordinar con el abonado antes de las 9am.",
         )
 
+    def test_formulario_rechaza_instalacion_system_noc(self):
+        """Una instalación SYSTEM no debe crear una OT invisible para la app."""
+        self.grant_add_workorder_permission()
+
+        response = self.client.post(
+            self.generate_url,
+            {"attention_type": WorkOrder.AttentionType.SYSTEM},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "attention_type",
+            "Escoja una opción válida. SYSTEM no es una de las opciones disponibles.",
+        )
+        self.assertFalse(
+            WorkOrder.objects.filter(subscription=self.subscription).exists()
+        )
+
     def test_post_sin_tipo_de_atencion_aplica_campo_por_defecto(self):
         """
-        Si ATC no elige explícitamente el tipo de atención, se mantiene el
-        comportamiento de siempre: la instalación queda en Campo.
+        Si ATC no envía el tipo, la instalación queda en Campo.
         """
 
         self.grant_add_workorder_permission()
@@ -961,20 +971,12 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(order.attention_type, WorkOrder.AttentionType.FIELD)
 
     def test_no_construye_la_orden_por_fuera_del_servicio(self):
-        """
-        No hay ningún WorkOrder.objects.create() en la vista: el
-        correlativo, el estado inicial y el autor deben salir
-        exclusivamente de create_installation_work_order().
-        """
-
         self.grant_add_workorder_permission()
 
         self.client.post(self.generate_url)
 
         order = WorkOrder.objects.get(subscription=self.subscription)
 
-        # El formato del correlativo lo decide generate_order_number()
-        # dentro del servicio; aquí solo se confirma que se emitió uno.
         self.assertTrue(order.order_number)
 
     def test_resumen_muestra_la_orden_generada(self):
@@ -1043,14 +1045,7 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(WorkOrder.objects.count(), 0)
 
     # -------------------------------------------------------------
-    # ENLACE A LA FICHA DE LA ORDEN (ver / editar)
-    #
-    # Generar la orden no debe dejar a ATC sin manera de abrirla: el
-    # comprobante y el resumen de contratación son de solo lectura -no
-    # asignan técnico ni completan NAP/borne/MAC/precinto-, así que ambos
-    # deben enlazar a work_orders:detail. El enlace solo se ofrece con el
-    # mismo permiso que exige esa vista (view_workorder): mostrarlo sin el
-    # permiso dejaría un botón que termina en 403.
+    # ENLACE A LA FICHA DE LA ORDEN
     # -------------------------------------------------------------
 
     def test_resumen_enlaza_a_la_ficha_de_la_orden_con_permiso(self):
@@ -1072,7 +1067,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, "Ver / editar ficha de la orden")
 
     def test_resumen_no_ofrece_el_enlace_sin_permiso(self):
-        """Sin view_workorder no se ofrece un enlace que terminaría en 403."""
         self.grant_add_workorder_permission()
 
         self.client.post(self.generate_url)
@@ -1080,21 +1074,10 @@ class InstallationWorkOrderCreateTests(TestCase):
         response = self.client.get(self.summary_url)
 
         self.assertNotContains(response, "Ver / editar ficha de la orden")
-        # La orden de instalación -de solo lectura, sin permiso adicional-
-        # sigue disponible: el operador no se queda sin ninguna manera de
-        # consultar lo que acaba de generar.
         self.assertContains(response, "Ver orden de instalación")
 
     # -------------------------------------------------------------
-    # ORDEN CREADA: EXACTAMENTE "CANCELAR", "IMPRIMIR" Y "LIQUIDAR"
-    #
-    # Revisión del 03/09: al crear la orden, la pantalla debe ofrecer
-    # exactamente tres botones -Cancelar, Imprimir y Liquidar-.
-    # "Cancelar" solo cierra la vista y vuelve a la ficha del cliente: no
-    # anula ni modifica la orden ya creada. "Liquidar" navega a la ficha
-    # técnica de la orden (work_orders:detail), donde el técnico completa
-    # NAP/borne/MAC/precinto/materiales/evidencias; se ofrece con el mismo
-    # permiso que ya exige esa vista (view_workorder).
+    # ORDEN CREADA: CANCELAR, IMPRIMIR Y LIQUIDAR
     # -------------------------------------------------------------
 
     def test_orden_ofrece_cancelar_imprimir_y_liquidar_con_permiso(self):
@@ -1128,7 +1111,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, detail_url)
 
     def test_orden_no_ofrece_liquidar_sin_permiso(self):
-        """Sin view_workorder no se ofrece un enlace que terminaría en 403."""
         self.grant_add_workorder_permission()
 
         self.client.post(self.generate_url)
@@ -1154,7 +1136,6 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertNotContains(response, detail_url)
 
-        # Cancelar e Imprimir siguen disponibles sin el permiso adicional.
         self.assertContains(response, "Cancelar")
         self.assertContains(response, "Imprimir")
 
@@ -1180,8 +1161,6 @@ class InstallationWorkOrderCreateTests(TestCase):
             reverse("customers:detail", kwargs={"pk": self.customer.pk}),
         )
 
-        # "Cancelar" es solo un enlace de navegación (GET): no dispara
-        # ninguna acción de dominio, así que la orden generada no cambia.
         order.refresh_from_db()
 
         self.assertEqual(order.status, WorkOrder.Status.PENDING)
@@ -1191,13 +1170,6 @@ class InstallationWorkOrderCreateTests(TestCase):
     # -------------------------------------------------------------
 
     def test_orden_muestra_los_datos_requeridos(self):
-        """
-        Cliente, código de cliente, dirección, código de suministro,
-        estado, fecha y hora de emisión, observación, plan y teléfono;
-        más lo que ATC ingresó al crearla (motivo, prioridad, tipo de
-        atención, vendedor).
-        """
-
         self.grant_add_workorder_permission()
 
         self.customer.phone = "987654321"
@@ -1218,7 +1190,7 @@ class InstallationWorkOrderCreateTests(TestCase):
             {
                 "reason": reason.pk,
                 "priority": WorkOrder.Priority.HIGH,
-                "attention_type": WorkOrder.AttentionType.SYSTEM,
+                "attention_type": WorkOrder.AttentionType.FIELD,
                 "seller": self.seller.pk,
                 "detail": "Coordinar con el abonado antes de las 9am.",
             },
@@ -1257,11 +1229,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, self.seller.username)
 
     def test_orden_muestra_gps_no_disponible_sin_coordenadas(self):
-        """
-        Sin GPS registrado (o en 0/0.0000000) se trata como inválido: se
-        muestra "GPS no disponible" y no se inventan coordenadas.
-        """
-
         self.grant_add_workorder_permission()
 
         self.client.post(self.generate_url)
@@ -1303,9 +1270,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, "-77.871234")
 
     def test_orden_muestra_gps_no_disponible_con_coordenadas_en_cero(self):
-        """0 / 0.0000000 en cualquiera de los dos ejes se trata como
-        inválido, igual que la ausencia de coordenadas."""
-
         self.grant_add_workorder_permission()
 
         self.address.latitude = Decimal("0.0000000")
