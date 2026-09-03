@@ -8,8 +8,8 @@ presentación de la OT:
 
 - la dirección textual se muestra siempre;
 - con GPS válido, Maps abre las coordenadas exactas;
-- sin GPS válido, la ficha sigue ofreciendo Maps mediante una búsqueda por la
-  dirección textual;
+- sin GPS válido, se informa «GPS no disponible» y la ficha sigue ofreciendo
+  Maps mediante una búsqueda por la dirección textual;
 - nunca se corrigen ni inventan coordenadas ni se modifica CustomerAddress.
 """
 
@@ -29,6 +29,7 @@ def resolve_location_display(address):
             "has_valid_gps": False,
             "maps_url": "",
             "gps_label": "GPS no disponible",
+            "maps_label": "Buscar dirección en Google Maps",
         }
 
     payload = location_payload(address)
@@ -40,18 +41,21 @@ def resolve_location_display(address):
 
     if has_valid_gps:
         maps_url = payload["gps_link"]
-        gps_label = "Abrir en Google Maps"
+        gps_label = "GPS disponible"
+        maps_label = "Abrir en Google Maps"
     else:
         # Cuando el proveedor no trae georreferencia confiable, el técnico
         # conserva una acción útil: Maps busca la dirección textual completa.
         maps_url = f"{MAPS_SEARCH_BASE_URL}{quote(text)}" if text else ""
-        gps_label = "Buscar dirección en Google Maps"
+        gps_label = "GPS no disponible"
+        maps_label = "Buscar dirección en Google Maps"
 
     return {
         "text": text,
         "has_valid_gps": has_valid_gps,
         "maps_url": maps_url,
         "gps_label": gps_label,
+        "maps_label": maps_label,
     }
 
 
