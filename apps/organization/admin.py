@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.organization.models import Branch, Office
+from apps.organization.models import Branch, Office, Zone
 
 
 @admin.register(Branch)
@@ -17,6 +17,11 @@ class OfficeAdmin(admin.ModelAdmin):
     search_fields = ("code", "name")
 
 
-# Zone no se registra a propósito. El modelo sigue existiendo porque es
-# llave foránea de CustomerAddress y WorkOrder, y retirarlo del esquema
-# es un refactor aparte, no una decisión de esta pantalla.
+@admin.register(Zone)
+class ZoneAdmin(admin.ModelAdmin):
+    """Catálogo operativo de pueblos/sectores por sede."""
+
+    list_display = ("name", "branch", "is_active")
+    list_filter = ("branch", "is_active")
+    search_fields = ("name", "branch__name", "branch__code")
+    ordering = ("branch", "name")
