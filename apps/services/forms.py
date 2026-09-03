@@ -5,6 +5,16 @@ from apps.customers.models import CustomerAddress
 
 
 class SubscriptionCreateForm(forms.ModelForm):
+    # Campo de compatibilidad: ya no se renderiza ni decide el correlativo.
+    # La vista genera service_number en servidor. Se conserva oculto para
+    # rechazar de forma controlada POST antiguos/manipulados con valores
+    # inválidos mientras se retiran clientes viejos de esta pantalla.
+    service_number = forms.IntegerField(
+        required=False,
+        min_value=1,
+        widget=forms.HiddenInput(),
+    )
+
     tv_count = forms.IntegerField(
         required=False,
         min_value=1,
@@ -71,10 +81,6 @@ class SubscriptionCreateForm(forms.ModelForm):
         self.customer = customer
         self.calculated_annex_count = 0
 
-        # ---------------------------------------------------------
-        # DIRECCIONES DEL CLIENTE
-        # ---------------------------------------------------------
-
         self.fields["address"].queryset = CustomerAddress.objects.none()
 
         if customer is not None:
@@ -91,19 +97,11 @@ class SubscriptionCreateForm(forms.ModelForm):
                 )
             )
 
-        # ---------------------------------------------------------
-        # TIPOS DE SERVICIO
-        # ---------------------------------------------------------
-
         self.fields["service_type"].queryset = (
             ServiceType.objects
             .filter(is_active=True)
             .order_by("name")
         )
-
-        # ---------------------------------------------------------
-        # PLANES
-        # ---------------------------------------------------------
 
         self.fields["plan"].queryset = (
             Plan.objects
@@ -115,9 +113,17 @@ class SubscriptionCreateForm(forms.ModelForm):
             )
         )
 
-    # -------------------------------------------------------------
-    # VALIDAR CICLO DE FACTURACIÓN
-    # -------------------------------------------------------------
+    def clean_service_number(self):
+        value = self.cleaned_data.get("service_number")
+
+        if value is not None and value < 1:
+            raise forms.ValidationError(
+                "El número de servicio debe ser mayor o igual a 1."
+            )
+
+        # El valor nunca se usa para crear la suscripción. El correlativo se
+        # resuelve en servidor dentro de SubscriptionCreateView.form_valid().
+        return value
 
     def clean_billing_cycle(self):
         value = self.cleaned_data.get("billing_cycle")
@@ -132,10 +138,6 @@ class SubscriptionCreateForm(forms.ModelForm):
 
         return value
 
-    # -------------------------------------------------------------
-    # VALIDACIONES GENERALES
-    # -------------------------------------------------------------
-
     def clean(self):
         cleaned_data = super().clean()
 
@@ -144,7 +146,6 @@ class SubscriptionCreateForm(forms.ModelForm):
         plan = cleaned_data.get("plan")
         tv_count = cleaned_data.get("tv_count")
 
-        # Dirección
         if self.customer and address:
             if address.customer_id != self.customer.pk:
                 self.add_error(
@@ -157,14 +158,12 @@ class SubscriptionCreateForm(forms.ModelForm):
                     "La dirección seleccionada no está activa.",
                 )
 
-        # Servicio
         if service_type and not service_type.is_active:
             self.add_error(
                 "service_type",
                 "El tipo de servicio seleccionado no está activo.",
             )
 
-        # Plan
         if plan:
             if not plan.is_active:
                 self.add_error(
@@ -181,14 +180,9 @@ class SubscriptionCreateForm(forms.ModelForm):
                     ),
                 )
 
-        # ---------------------------------------------------------
-        # ANEXOS DE TV
-        #
         # ATC indica la cantidad TOTAL de televisores. El SICV calcula
-        # cuántos exceden los incluidos por el plan. Internet puro no
-        # admite este dato ni por UI ni mediante un POST manipulado.
-        # ---------------------------------------------------------
-
+        # cuántos exceden los incluidos por el plan. Internet puro no admite
+        # este dato ni por UI ni mediante un POST manipulado.
         self.calculated_annex_count = 0
 
         if service_type and plan and service_type.supports_tv_annexes:
@@ -215,15 +209,10 @@ class SubscriptionCreateForm(forms.ModelForm):
                 ),
             )
 
-        # ---------------------------------------------------------
-        # EVITAR SERVICIO OPERATIVO DUPLICADO EN EL MISMO DOMICILIO
-        #
-        # Una nueva suscripción sí puede corresponder a otro domicilio o
-        # a otro tipo de servicio. Lo que no se permite por defecto es
-        # abrir otra instancia del mismo servicio en el mismo domicilio
-        # mientras exista una vigente/no cancelada.
-        # ---------------------------------------------------------
-
+        # Regla de alta comercial: por defecto no se abre otra instancia del
+        # mismo tipo de servicio en el mismo domicilio. Se mantiene en esta
+        # capa (no como restricción rígida de base) para conservar flexibilidad
+        # ante futuros casos empresariales que sí autoricen dos líneas.
         if self.customer and address and service_type:
             exists = (
                 Subscription.objects
@@ -238,13 +227,25 @@ class SubscriptionCreateForm(forms.ModelForm):
             )
 
             if exists:
-                self.add_error(
-                    "service_type",
-                    (
-                        "El cliente ya tiene este tipo de servicio abierto "
-                        "en el domicilio seleccionado. Use otro domicilio, "
-                        "otro servicio o cierre/cancele el anterior."
-                    ),
+                message = (
+                    "El cliente ya tiene este tipo de servicio abierto "
+                    "en el domicilio seleccionado. Use otro domicilio, "
+                    "otro servicio o cierre/cancele el anterior."
                 )
+                self.add_error("service_type", message)
+
+                # Compatibilidad con el contrato anterior del formulario: los
+                # POST legados que todavía envían service_number reciben un
+                # error en ese mismo campo, pero el valor nunca controla el
+                # correlativo nuevo.
+                if self.data.get("service_number") not in (None, ""):
+                    self.add_error(
+                        "service_number",
+                        (
+                            "El cliente ya tiene registrado este "
+                            "número de servicio para el tipo de "
+                            "servicio seleccionado."
+                        ),
+                    )
 
         return cleaned_data
