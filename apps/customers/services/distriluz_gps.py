@@ -16,6 +16,8 @@ import xml.etree.ElementTree as ET
 import requests
 from django.conf import settings
 
+from apps.customers.coordinates import build_gps_link, normalize_coordinate_pair
+
 from .distriluz import SupplyLookupError
 
 DEFAULT_DISTRILUZ_MOVIL_URL = (
@@ -93,8 +95,10 @@ def consultar_suministro_gps(supply_code):
     - latitude / longitude
     - gps_link
 
-    Nunca inventa coordenadas. Si Distriluz no devuelve GPS, latitude,
-    longitude y gps_link quedan vacíos.
+    Las coordenadas pasan por la regla única de `apps.customers.coordinates`.
+    El centinela 0 / 0.0000000, un par incompleto, un valor no numérico o una
+    coordenada fuera de rango se convierten en `None`. De esta forma el dato
+    inválido ya no entra a CustomerAddress ni genera un enlace falso a 0,0.
     """
     supply_code = (supply_code or "").strip()
 
@@ -157,15 +161,11 @@ def consultar_suministro_gps(supply_code):
         or ""
     )
 
-    latitude = data.get("gpsy") or data.get("latitud") or ""
-    longitude = data.get("gpsx") or data.get("longitud") or ""
-
-    gps_link = ""
-    if latitude and longitude:
-        gps_link = (
-            "https://www.google.com/maps/search/?api=1"
-            f"&query={latitude},{longitude}"
-        )
+    latitude, longitude = normalize_coordinate_pair(
+        data.get("gpsy") or data.get("latitud"),
+        data.get("gpsx") or data.get("longitud"),
+    )
+    gps_link = build_gps_link(latitude, longitude)
 
     return {
         "supply_code": supply_code,
