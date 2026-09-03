@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import Plan, ServiceType, Subscription
+from .models import (
+    Plan,
+    ServiceType,
+    Subscription,
+    SubscriptionAnnexAdjustment,
+)
 
 
 @admin.register(ServiceType)
@@ -59,3 +64,46 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "plan",
         "address",
     )
+
+
+@admin.register(SubscriptionAnnexAdjustment)
+class SubscriptionAnnexAdjustmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "work_order",
+        "subscription",
+        "operation",
+        "previous_annex_count",
+        "quantity",
+        "target_annex_count",
+        "installation_charge",
+        "monthly_delta",
+        "applied_at",
+    )
+    list_filter = ("operation", "applied_at")
+    search_fields = (
+        "work_order__order_number",
+        "subscription__customer__document_number",
+    )
+    list_select_related = (
+        "work_order",
+        "subscription__customer",
+    )
+    readonly_fields = (
+        "subscription",
+        "work_order",
+        "operation",
+        "previous_annex_count",
+        "quantity",
+        "target_annex_count",
+        "installation_charge",
+        "monthly_delta",
+        "monthly_charge_after",
+        "applied_at",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
