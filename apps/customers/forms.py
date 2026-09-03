@@ -7,9 +7,10 @@ class CustomerInitialForm(forms.Form):
     """
     Datos mínimos para iniciar el registro del cliente.
 
-    Los nombres/apellidos son obligatorios para persona natural. En RUC se
-    solicita razón social. La validación vive en servidor; el JavaScript del
-    formulario solo mejora la experiencia visual.
+    Los nombres/apellidos son obligatorios para persona natural. Para RUC no
+    se exigen datos personales en esta pantalla; la razón social puede llegar
+    desde la consulta automática y se valida de forma definitiva en la
+    pantalla de datos generales.
     """
 
     document_type = forms.ChoiceField(
@@ -146,13 +147,6 @@ class CustomerInitialForm(forms.Form):
                 self.add_error(
                     "paternal_surname",
                     "El apellido paterno es obligatorio para persona natural.",
-                )
-
-        elif person_type == Customer.PersonType.LEGAL:
-            if not (cleaned_data.get("business_name") or "").strip():
-                self.add_error(
-                    "business_name",
-                    "La razón social es obligatoria para persona jurídica.",
                 )
 
         if not self.errors:
