@@ -312,10 +312,14 @@ class InstallationServiceTests(InstallationPublicationTestCase):
     """`create_installation_work_order()`: el punto de entrada del alta FTTH.
 
     Las trampas de `InstallationPublicationTrapTests` existen porque el
-    llamador puede equivocarse de tipo de orden o de canal de atención. Este
-    servicio las cierra **por firma**: no hay argumento que equivocar. Estas
-    pruebas verifican que así sea, y que el servicio no invente nada por su
-    cuenta más allá de eso.
+    llamador puede equivocarse de tipo de orden o de canal de atención. El
+    tipo de orden lo sigue cerrando la fachada **por firma** -no es un
+    parámetro-. El canal de atención (Trampa 1) cambió de criterio el 03/09:
+    ya no se cierra por firma, porque ATC ahora sí necesita poder elegirlo a
+    propósito; en su lugar, sigue teniendo FIELD como valor por defecto
+    cuando no se envía, así que un llamador que no lo use no cambia de
+    comportamiento. Estas pruebas verifican ambos criterios y que el
+    servicio no invente nada más por su cuenta.
     """
 
     def test_service_publishes_the_installation_end_to_end(self):
@@ -362,21 +366,40 @@ class InstallationServiceTests(InstallationPublicationTestCase):
 
         self.assertEqual(order.attention_type, WorkOrder.AttentionType.FIELD)
 
-    def test_attention_type_cannot_be_passed_at_all(self):
-        """No es que se ignore: no hay parámetro que enviar.
+    def test_attention_type_defaults_to_field_when_not_sent(self):
+        """Sin enviarlo, el comportamiento sigue siendo el de antes: Campo.
 
-        Cerrar la trampa por firma y no por validación significa que ni
-        siquiera existe un valor que el llamador pueda pasar mal. Si alguien
-        añadiera el argumento en el futuro, esta prueba lo detiene.
+        Revisión del 03/09: `attention_type` pasó de estar cerrado por firma
+        a ser un argumento opcional, porque ahora ATC puede elegirlo de
+        forma explícita (Campo / Sistema) al generar la instalación desde el
+        resumen de contratación (ver InstallationWorkOrderForm). No enviarlo
+        sigue dejando la orden en FIELD -el mismo valor por defecto de
+        siempre-, así que ningún llamador existente que no lo envíe cambia
+        de comportamiento.
         """
-        with self.assertRaises(TypeError):
-            create_installation_work_order(
-                subscription=self.subscription,
-                created_by=self.atc_user,
-                attention_type=WorkOrder.AttentionType.SYSTEM,
-            )
+        order = create_installation_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+        )
 
-        self.assertFalse(WorkOrder.objects.exists())
+        self.assertEqual(order.attention_type, WorkOrder.AttentionType.FIELD)
+
+    def test_attention_type_can_be_selected_explicitly(self):
+        """ATC puede elegir Sistema/NOC a propósito, no por accidente.
+
+        La Trampa 1 (sección 3 de docs/ftth_integracion_ot_instalacion.md)
+        era sobre un valor que se filtraba sin que nadie lo decidiera a
+        propósito. Ahora que el formulario comercial sí ofrece el campo,
+        seguir cerrándolo por firma le impediría a ATC hacer una elección
+        legítima; en su lugar, se acepta el valor que ATC eligió tal cual.
+        """
+        order = create_installation_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+        )
+
+        self.assertEqual(order.attention_type, WorkOrder.AttentionType.SYSTEM)
 
     def test_missing_catalog_type_is_reported_clearly(self):
         """Sin el código INSTALLATION en el catálogo, el error lo nombra.
@@ -443,6 +466,7 @@ class InstallationServiceTests(InstallationPublicationTestCase):
             reason=self.installation_reason,
             priority=WorkOrder.Priority.HIGH,
             detail="Cliente nuevo FTTH. Coordinar acceso con portería.",
+            seller=self.seller,
         )
 
         self.assertEqual(order.reason, self.installation_reason)
@@ -451,6 +475,7 @@ class InstallationServiceTests(InstallationPublicationTestCase):
             order.detail,
             "Cliente nuevo FTTH. Coordinar acceso con portería.",
         )
+        self.assertEqual(order.seller, self.seller)
 
 
 class InstallationCreationRejectionTests(InstallationPublicationTestCase):

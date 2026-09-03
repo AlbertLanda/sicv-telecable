@@ -4,13 +4,13 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
-from django.views import View
-from django.views.generic import CreateView, DetailView
+from django.views.generic import CreateView, DetailView, FormView
 
-from .forms import ContractCreateForm
+from .forms import ContractCreateForm, InstallationWorkOrderForm
 from .models import Contract
 from apps.customers.models import Customer
 from apps.services.models import Subscription
+from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import create_installation_work_order
 
@@ -241,60 +241,131 @@ class ContractSummaryView(LoginRequiredMixin, DetailView):
 class InstallationWorkOrderCreateView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
-    View,
+    FormView,
 ):
     """
-    Acción "Generar Orden de Instalación" del resumen de contratación
-    (día 03/09 del sprint FTTH).
+    Formulario "Generar Orden de Instalación" del resumen de contratación.
 
-    Es una vista de un solo POST, sin formulario: todos los datos que
-    necesita create_installation_work_order() (suscripción, cliente,
-    sede, zona) ya están fijados por el contrato que se está cerrando,
-    así que no hay nada que el operador deba volver a escribir.
+    Revisión posterior al día 03/09 del sprint FTTH: antes era un único
+    botón que creaba la orden en el mismo clic (POST directo, sin
+    pantalla propia). Ahora "Generar Orden de Instalación" navega aquí
+    (GET) para mostrar los datos que el contrato ya fija -cliente,
+    dirección, plan- junto con lo que ATC sí puede decidir -observaciones,
+    prioridad, motivo, tipo de atención y vendedor-, y solo crea la orden
+    cuando se confirma el formulario (POST).
 
     El mismo permiso que ya protege la creación web de órdenes
     (work_orders.add_workorder, ver WorkOrderCreateView) protege esta
     acción: es la misma operación de dominio, solo con un punto de
     entrada distinto. No se define un permiso nuevo.
 
-    create_installation_work_order() es la única vía de creación que
-    se consume aquí; esta vista no reimplementa ninguna regla del
-    dominio de work_orders ni construye un WorkOrder directamente.
+    create_installation_work_order() sigue siendo la única vía de
+    creación que se consume aquí; esta vista no reimplementa ninguna
+    regla del dominio de work_orders ni construye un WorkOrder
+    directamente. `subscription` y `order_type` no son campos del
+    formulario -la fachada los fija por sí misma-, así que ningún POST
+    manipulado puede imponerlos. `attention_type` sí es un campo del
+    formulario desde esta revisión: es ATC quien decide a propósito si la
+    instalación es de Campo o de Sistema/NOC, y la fachada sigue aplicando
+    FIELD por defecto si no llega ningún valor.
     """
 
     permission_required = "work_orders.add_workorder"
-    http_method_names = ["post"]
+    form_class = InstallationWorkOrderForm
+    template_name = "contracts/installation_order_form.html"
 
-    def post(self, request, *args, **kwargs):
-        contract = get_object_or_404(
-            Contract.objects
-            .select_related(
-                "customer",
-                "subscription",
-                "subscription__customer__branch",
-                "subscription__address__zone",
-            ),
-            pk=self.kwargs["pk"],
-            customer_id=self.kwargs["customer_pk"],
+    def get_contract(self):
+        """Contrato de la acción, resuelto una sola vez por petición."""
+        if not hasattr(self, "_contract"):
+            self._contract = get_object_or_404(
+                Contract.objects
+                .select_related(
+                    "customer",
+                    "customer__branch",
+                    "subscription",
+                    "subscription__address",
+                    "subscription__address__zone",
+                    "subscription__service_type",
+                    "subscription__plan",
+                ),
+                pk=self.kwargs["pk"],
+                customer_id=self.kwargs["customer_pk"],
+            )
+
+        return self._contract
+
+    def _has_blocking_installation(self, subscription):
+        """
+        Mismo criterio que ContractSummaryView.can_generate_installation_order:
+        una instalación que todavía no llegó a un estado final bloquea una
+        nueva. Se repite aquí -y no solo en el resumen- para que abrir esta
+        URL directamente, sin pasar por el botón, tampoco ofrezca un
+        formulario condenado a fallar.
+        """
+        return (
+            subscription.work_orders
+            .filter(order_type__code="INSTALLATION")
+            .exclude(status__in=WorkOrder.FINAL_STATUSES)
+            .exists()
         )
+
+    def get(self, request, *args, **kwargs):
+        contract = self.get_contract()
+
+        if self._has_blocking_installation(contract.subscription):
+            messages.error(
+                request,
+                (
+                    "La suscripción ya tiene una orden de instalación "
+                    "abierta. Finalícela o anúlela antes de generar otra."
+                ),
+            )
+
+            return redirect(
+                "contracts:contract_summary",
+                customer_pk=contract.customer_id,
+                pk=contract.pk,
+            )
+
+        return super().get(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        contract = self.get_contract()
+
+        context["contract"] = contract
+        context["customer"] = contract.customer
+        context["subscription"] = contract.subscription
+
+        return context
+
+    def form_valid(self, form):
+        contract = self.get_contract()
 
         try:
             order = create_installation_work_order(
                 subscription=contract.subscription,
-                created_by=request.user,
+                created_by=self.request.user,
                 customer=contract.customer,
+                reason=form.cleaned_data.get("reason"),
+                priority=form.cleaned_data.get("priority") or None,
+                detail=form.cleaned_data.get("detail", ""),
+                attention_type=form.cleaned_data.get("attention_type") or None,
+                seller=form.cleaned_data.get("seller"),
             )
 
         except ValidationError as exc:
             messages.error(
-                request,
+                self.request,
                 " ".join(exc.messages),
             )
 
             # El servicio rechazó la generación (p. ej. ya hay una orden
-            # de instalación abierta): se vuelve al resumen del contrato,
-            # que es donde se explica el motivo y se ofrece el botón de
-            # nuevo si corresponde. No hay ninguna orden que imprimir.
+            # de instalación abierta que apareció entre el GET y este
+            # POST): se vuelve al resumen del contrato, que es donde se
+            # explica el motivo y se ofrece el botón de nuevo si
+            # corresponde. No hay ninguna orden que imprimir.
             return redirect(
                 "contracts:contract_summary",
                 customer_pk=contract.customer_id,
@@ -302,7 +373,7 @@ class InstallationWorkOrderCreateView(
             )
 
         messages.success(
-            request,
+            self.request,
             (
                 f"Orden de instalación {order.order_number} "
                 f"generada correctamente en estado "
@@ -341,14 +412,20 @@ class InstallationOrderReceiptView(LoginRequiredMixin, DetailView):
       ContractSummaryView para ubicar la orden ("la más reciente de tipo
       INSTALLATION de la suscripción"): no se inventa una regla propia
       ni se reimplementa nada del dominio de work_orders.
-    - El comprobante NO incluye NAP, borne, materiales, fotografías ni
-      firmas: esa parte (liquidación técnica completa) queda fuera de
-      este sprint (punto 4.2) y se incorporará más adelante, junto con
-      el resto del flujo de liquidación de campo.
+    - Muestra los datos propios de la orden recién creada -cliente,
+      código de cliente, teléfono, dirección, código de suministro,
+      plan, estado, fecha de emisión, observaciones- junto con lo que
+      ATC decidió al generarla (motivo, prioridad, tipo de atención,
+      vendedor) y la ubicación GPS (ver resolve_location_display).
+    - NO incluye NAP, borne, MAC/equipo, precinto, materiales ni
+      evidencias: eso es la liquidación técnica, exclusiva del técnico
+      asignado, y vive en la ficha de la orden (work_orders:detail,
+      botón "Liquidar" de esta misma pantalla).
     - No agrega un permiso nuevo: el acceso es el mismo que ya exige
-      ContractSummaryView (usuario autenticado), porque este comprobante
+      ContractSummaryView (usuario autenticado), porque esta pantalla
       solo muestra en detalle datos que el resumen del contrato ya
-      expone.
+      expone. El botón "Liquidar" hacia la ficha técnica sigue
+      exigiendo work_orders.view_workorder, igual que en el resumen.
     """
 
     model = Contract
@@ -379,7 +456,13 @@ class InstallationOrderReceiptView(LoginRequiredMixin, DetailView):
         order = (
             subscription.work_orders
             .filter(order_type__code="INSTALLATION")
-            .select_related("order_type", "assigned_technician", "created_by")
+            .select_related(
+                "order_type",
+                "reason",
+                "assigned_technician",
+                "seller",
+                "created_by",
+            )
             .order_by("-created_at")
             .first()
         )
@@ -394,5 +477,11 @@ class InstallationOrderReceiptView(LoginRequiredMixin, DetailView):
         context["customer"] = contract.customer
         context["subscription"] = subscription
         context["address"] = subscription.address
+
+        # Misma función que ya usa la ficha técnica de la orden
+        # (apps.work_orders.location): la dirección textual siempre se
+        # muestra, y el botón de Maps solo ofrece coordenadas cuando son
+        # válidas -nunca se inventan ni se corrigen aquí-.
+        context["location"] = resolve_location_display(subscription.address)
 
         return context

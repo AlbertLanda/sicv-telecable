@@ -1,15 +1,18 @@
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.services.models import Plan, ServiceType, Subscription
-from apps.work_orders.models import OrderType, WorkOrder
+from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 
+from .forms import InstallationWorkOrderForm
 from .models import Contract
 
 
@@ -741,6 +744,13 @@ class InstallationWorkOrderCreateTests(TestCase):
             name="Instalación",
         )
 
+        self.seller = User.objects.create_user(
+            username="vendedor_ot",
+            password="123",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
+
         self.summary_url = reverse(
             "contracts:contract_summary",
             kwargs={
@@ -770,6 +780,14 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.user.user_permissions.add(permission)
 
+    def grant_view_workorder_permission(self):
+        permission = Permission.objects.get(
+            codename="view_workorder",
+            content_type__app_label="work_orders",
+        )
+
+        self.user.user_permissions.add(permission)
+
     # -------------------------------------------------------------
     # ACCESO / PERMISOS
     # -------------------------------------------------------------
@@ -788,12 +806,46 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(WorkOrder.objects.count(), 0)
 
-    def test_get_no_esta_permitido(self):
+    def test_get_muestra_el_formulario(self):
+        """
+        Revisión del 03/09: "Generar Orden de Instalación" ya no crea la
+        orden en el mismo clic -ahora navega (GET) a un formulario propio
+        (InstallationWorkOrderCreateView, ahora un FormView) y solo la
+        crea al confirmarlo (POST)-.
+        """
+
         self.grant_add_workorder_permission()
 
         response = self.client.get(self.generate_url)
 
-        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertIsInstance(
+            response.context["form"],
+            InstallationWorkOrderForm,
+        )
+        self.assertEqual(response.context["contract"], self.contract)
+        self.assertEqual(response.context["customer"], self.customer)
+        self.assertEqual(response.context["subscription"], self.subscription)
+        self.assertContains(response, self.plan.name)
+        self.assertContains(response, self.address.address)
+
+    def test_get_redirige_al_resumen_si_ya_hay_instalacion_abierta(self):
+        """
+        Abrir la URL del formulario directamente -sin pasar por el botón,
+        ya oculto en el resumen- tampoco debe ofrecer un formulario
+        condenado a fallar cuando ya existe una instalación abierta.
+        """
+
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        response = self.client.get(self.generate_url, follow=True)
+
+        self.assertRedirects(response, self.summary_url)
+        self.assertContains(response, "ya tiene una orden de instalación abierta")
+        self.assertEqual(WorkOrder.objects.count(), 1)
 
     def test_resumen_oculta_el_boton_sin_permiso(self):
         response = self.client.get(self.summary_url)
@@ -843,6 +895,70 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(order.created_by, self.user)
         self.assertEqual(order.branch, self.branch)
         self.assertEqual(order.zone, self.zone)
+
+    def test_post_con_datos_del_formulario_los_persiste_en_la_orden(self):
+        """
+        Los campos que ofrece InstallationWorkOrderForm -observaciones,
+        prioridad, motivo, tipo de atención, vendedor- deben llegar tal
+        cual a create_installation_work_order() y quedar en la orden
+        creada.
+        """
+
+        self.grant_add_workorder_permission()
+
+        reason = OrderReason.objects.create(
+            order_type=self.installation_type,
+            code="NUEVA-CONEXION",
+            name="Nueva conexión",
+            is_active=True,
+        )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "reason": reason.pk,
+                "priority": WorkOrder.Priority.HIGH,
+                "attention_type": WorkOrder.AttentionType.SYSTEM,
+                "seller": self.seller.pk,
+                "detail": "Coordinar con el abonado antes de las 9am.",
+            },
+        )
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "contracts:installation_order_receipt",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": self.contract.pk,
+                },
+            ),
+        )
+
+        self.assertEqual(order.reason, reason)
+        self.assertEqual(order.priority, WorkOrder.Priority.HIGH)
+        self.assertEqual(order.attention_type, WorkOrder.AttentionType.SYSTEM)
+        self.assertEqual(order.seller, self.seller)
+        self.assertEqual(
+            order.detail,
+            "Coordinar con el abonado antes de las 9am.",
+        )
+
+    def test_post_sin_tipo_de_atencion_aplica_campo_por_defecto(self):
+        """
+        Si ATC no elige explícitamente el tipo de atención, se mantiene el
+        comportamiento de siempre: la instalación queda en Campo.
+        """
+
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url, {})
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        self.assertEqual(order.attention_type, WorkOrder.AttentionType.FIELD)
 
     def test_no_construye_la_orden_por_fuera_del_servicio(self):
         """
@@ -925,3 +1041,288 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(WorkOrder.objects.count(), 0)
+
+    # -------------------------------------------------------------
+    # ENLACE A LA FICHA DE LA ORDEN (ver / editar)
+    #
+    # Generar la orden no debe dejar a ATC sin manera de abrirla: el
+    # comprobante y el resumen de contratación son de solo lectura -no
+    # asignan técnico ni completan NAP/borne/MAC/precinto-, así que ambos
+    # deben enlazar a work_orders:detail. El enlace solo se ofrece con el
+    # mismo permiso que exige esa vista (view_workorder): mostrarlo sin el
+    # permiso dejaría un botón que termina en 403.
+    # -------------------------------------------------------------
+
+    def test_resumen_enlaza_a_la_ficha_de_la_orden_con_permiso(self):
+        self.grant_add_workorder_permission()
+        self.grant_view_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        response = self.client.get(self.summary_url)
+
+        detail_url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": order.pk},
+        )
+
+        self.assertContains(response, detail_url)
+        self.assertContains(response, "Ver / editar ficha de la orden")
+
+    def test_resumen_no_ofrece_el_enlace_sin_permiso(self):
+        """Sin view_workorder no se ofrece un enlace que terminaría en 403."""
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        response = self.client.get(self.summary_url)
+
+        self.assertNotContains(response, "Ver / editar ficha de la orden")
+        # La orden de instalación -de solo lectura, sin permiso adicional-
+        # sigue disponible: el operador no se queda sin ninguna manera de
+        # consultar lo que acaba de generar.
+        self.assertContains(response, "Ver orden de instalación")
+
+    # -------------------------------------------------------------
+    # ORDEN CREADA: EXACTAMENTE "CANCELAR", "IMPRIMIR" Y "LIQUIDAR"
+    #
+    # Revisión del 03/09: al crear la orden, la pantalla debe ofrecer
+    # exactamente tres botones -Cancelar, Imprimir y Liquidar-.
+    # "Cancelar" solo cierra la vista y vuelve a la ficha del cliente: no
+    # anula ni modifica la orden ya creada. "Liquidar" navega a la ficha
+    # técnica de la orden (work_orders:detail), donde el técnico completa
+    # NAP/borne/MAC/precinto/materiales/evidencias; se ofrece con el mismo
+    # permiso que ya exige esa vista (view_workorder).
+    # -------------------------------------------------------------
+
+    def test_orden_ofrece_cancelar_imprimir_y_liquidar_con_permiso(self):
+        self.grant_add_workorder_permission()
+        self.grant_view_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cancelar")
+        self.assertContains(response, "Imprimir")
+        self.assertContains(response, "Liquidar")
+
+        detail_url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": order.pk},
+        )
+
+        self.assertContains(response, detail_url)
+
+    def test_orden_no_ofrece_liquidar_sin_permiso(self):
+        """Sin view_workorder no se ofrece un enlace que terminaría en 403."""
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertNotContains(response, "Liquidar")
+
+        detail_url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": order.pk},
+        )
+
+        self.assertNotContains(response, detail_url)
+
+        # Cancelar e Imprimir siguen disponibles sin el permiso adicional.
+        self.assertContains(response, "Cancelar")
+        self.assertContains(response, "Imprimir")
+
+    def test_cancelar_de_la_orden_vuelve_a_la_ficha_del_cliente_sin_alterarla(self):
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertContains(
+            response,
+            reverse("customers:detail", kwargs={"pk": self.customer.pk}),
+        )
+
+        # "Cancelar" es solo un enlace de navegación (GET): no dispara
+        # ninguna acción de dominio, así que la orden generada no cambia.
+        order.refresh_from_db()
+
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
+
+    # -------------------------------------------------------------
+    # DATOS QUE DEBE MOSTRAR LA ORDEN DE INSTALACIÓN
+    # -------------------------------------------------------------
+
+    def test_orden_muestra_los_datos_requeridos(self):
+        """
+        Cliente, código de cliente, dirección, código de suministro,
+        estado, fecha y hora de emisión, observación, plan y teléfono;
+        más lo que ATC ingresó al crearla (motivo, prioridad, tipo de
+        atención, vendedor).
+        """
+
+        self.grant_add_workorder_permission()
+
+        self.customer.phone = "987654321"
+        self.customer.save(update_fields=["phone"])
+
+        self.address.electrical_supply_code = "SUM-000123"
+        self.address.save(update_fields=["electrical_supply_code"])
+
+        reason = OrderReason.objects.create(
+            order_type=self.installation_type,
+            code="NUEVA-CONEXION",
+            name="Nueva conexión",
+            is_active=True,
+        )
+
+        self.client.post(
+            self.generate_url,
+            {
+                "reason": reason.pk,
+                "priority": WorkOrder.Priority.HIGH,
+                "attention_type": WorkOrder.AttentionType.SYSTEM,
+                "seller": self.seller.pk,
+                "detail": "Coordinar con el abonado antes de las 9am.",
+            },
+        )
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertContains(response, str(self.customer))
+        self.assertContains(response, self.customer.code)
+        self.assertContains(response, self.address.address)
+        self.assertContains(response, "SUM-000123")
+        self.assertContains(response, order.get_status_display())
+        self.assertContains(
+            response,
+            timezone.localtime(order.created_at).strftime("%d/%m/%Y"),
+        )
+        self.assertContains(
+            response,
+            "Coordinar con el abonado antes de las 9am.",
+        )
+        self.assertContains(response, self.plan.name)
+        self.assertContains(response, "987654321")
+        self.assertContains(response, reason.name)
+        self.assertContains(response, order.get_priority_display())
+        self.assertContains(response, order.get_attention_type_display())
+        self.assertContains(response, self.seller.username)
+
+    def test_orden_muestra_gps_no_disponible_sin_coordenadas(self):
+        """
+        Sin GPS registrado (o en 0/0.0000000) se trata como inválido: se
+        muestra "GPS no disponible" y no se inventan coordenadas.
+        """
+
+        self.grant_add_workorder_permission()
+
+        self.client.post(self.generate_url)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertContains(response, "GPS no disponible")
+        self.assertNotContains(response, "Abrir en Google Maps")
+
+    def test_orden_muestra_boton_de_maps_con_gps_valido(self):
+        self.grant_add_workorder_permission()
+
+        self.address.latitude = Decimal("-6.231234")
+        self.address.longitude = Decimal("-77.871234")
+        self.address.save(update_fields=["latitude", "longitude"])
+
+        self.client.post(self.generate_url)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertContains(response, "Abrir en Google Maps")
+        self.assertContains(response, "-6.231234")
+        self.assertContains(response, "-77.871234")
+
+    def test_orden_muestra_gps_no_disponible_con_coordenadas_en_cero(self):
+        """0 / 0.0000000 en cualquiera de los dos ejes se trata como
+        inválido, igual que la ausencia de coordenadas."""
+
+        self.grant_add_workorder_permission()
+
+        self.address.latitude = Decimal("0.0000000")
+        self.address.longitude = Decimal("0.0000000")
+        self.address.save(update_fields=["latitude", "longitude"])
+
+        self.client.post(self.generate_url)
+
+        receipt_url = reverse(
+            "contracts:installation_order_receipt",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        response = self.client.get(receipt_url)
+
+        self.assertContains(response, "GPS no disponible")
+        self.assertNotContains(response, "Abrir en Google Maps")

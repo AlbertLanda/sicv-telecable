@@ -93,6 +93,38 @@ class CreateWorkOrderTests(WorkOrderTestCase):
 
         self.assertEqual(order.order_number, expected)
 
+    def test_seller_is_optional_and_persists_when_sent(self):
+        """
+        Revisión del 03/09: `seller` registra qué vendedor originó la venta.
+        Es opcional -no cambia nada si no se envía- y, cuando se envía, debe
+        quedar tal cual en la orden.
+        """
+        order_without_seller = create_work_order(
+            subscription=self.subscription,
+            order_type=self.installation_type,
+            created_by=self.atc_user,
+        )
+
+        self.assertIsNone(order_without_seller.seller)
+
+        other_subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.other_address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=2,
+        )
+
+        order_with_seller = create_work_order(
+            subscription=other_subscription,
+            order_type=self.installation_type,
+            created_by=self.atc_user,
+            seller=self.seller,
+        )
+
+        self.assertEqual(order_with_seller.seller, self.seller)
+
 
 class CreateWorkOrderValidationTests(WorkOrderTestCase):
     """Reglas que deben rechazarse ANTES de persistir nada."""
@@ -143,6 +175,26 @@ class CreateWorkOrderValidationTests(WorkOrderTestCase):
             self._create()
 
         self.assertEqual(WorkOrder.objects.count(), 0)
+
+    def test_rejects_seller_without_sales_role(self):
+        """El vendedor debe tener rol Ventas, igual que el técnico asignado
+        debe tener rol Técnico: un usuario de otra área no puede quedar
+        registrado como quien originó la venta."""
+        with self.assertRaises(ValidationError):
+            self._create(seller=self.atc_user)
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+    def test_rejects_inactive_seller(self):
+        with self.assertRaises(ValidationError):
+            self._create(seller=self.inactive_seller)
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+    def test_accepts_active_seller_with_sales_role(self):
+        order = self._create(seller=self.seller)
+
+        self.assertEqual(order.seller, self.seller)
 
     def test_rejects_subscription_of_another_customer(self):
         other_customer = Customer.objects.create(

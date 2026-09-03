@@ -48,4 +48,12 @@ urlpatterns = [
         views.WorkOrderStartAttentionView.as_view(),
         name="start",
     ),
+
+    # Ficha única de la orden: la misma pantalla sirve a ATC (solo lectura)
+    # y al técnico asignado (además completa ficha técnica y evidencias).
+    path(
+        "<int:pk>/",
+        views.WorkOrderDetailView.as_view(),
+        name="detail",
+    ),
 ]

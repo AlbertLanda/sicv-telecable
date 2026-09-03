@@ -195,12 +195,30 @@
                     </p>
                 {% endif %}
 
-                <a
-                    href="{% url 'contracts:installation_order_receipt' customer.pk contract.pk %}"
-                    class="btn btn-outline-primary btn-sm mb-3"
-                >
-                    Ver comprobante
-                </a>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+
+                    <a
+                        href="{% url 'contracts:installation_order_receipt' customer.pk contract.pk %}"
+                        class="btn btn-outline-primary btn-sm"
+                    >
+                        Ver orden de instalación
+                    </a>
+
+                    {# La ficha es donde se asigna técnico, se completan   #}
+                    {# NAP/borne/MAC/precinto y se adjuntan evidencias -el #}
+                    {# comprobante es de solo lectura y no ofrece nada de  #}
+                    {# eso-. Se ofrece con el mismo permiso que abre la    #}
+                    {# ficha desde cualquier otra pantalla del sistema.    #}
+                    {% if perms.work_orders.view_workorder %}
+                        <a
+                            href="{% url 'work_orders:detail' installation_order.pk %}"
+                            class="btn btn-primary btn-sm"
+                        >
+                            Ver / editar ficha de la orden
+                        </a>
+                    {% endif %}
+
+                </div>
 
             {% else %}
 
@@ -215,18 +233,17 @@
 
                 {% if can_request_installation_order %}
 
-                    <form
-                        method="post"
-                        action="{% url 'contracts:generate_installation_order' customer.pk contract.pk %}"
+                    {# El botón navega (GET) al formulario de la orden -no #}
+                    {# crea nada en el clic-: InstallationWorkOrderCreateView #}
+                    {# ahora es un FormView que muestra la pantalla de       #}
+                    {# creación aquí y solo genera la orden al confirmar     #}
+                    {# ese formulario (POST).                                #}
+                    <a
+                        href="{% url 'contracts:generate_installation_order' customer.pk contract.pk %}"
+                        class="btn btn-primary"
                     >
-
-                        {% csrf_token %}
-
-                        <button type="submit" class="btn btn-primary">
-                            Generar Orden de Instalación
-                        </button>
-
-                    </form>
+                        Generar Orden de Instalación
+                    </a>
 
                 {% else %}
 

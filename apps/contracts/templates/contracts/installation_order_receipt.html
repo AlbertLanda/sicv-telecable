@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 
-{% block title %}Orden {{ order.order_number }} - Comprobante{% endblock %}
+{% block title %}Orden {{ order.order_number }} - Instalación{% endblock %}
 
 {% block extra_css %}
 <style>
 
     /*
-     * Comprobante de la Orden de Instalación.
+     * Orden de Instalación generada desde el resumen de contratación.
      *
-     * Alcance deliberado (ver InstallationOrderReceiptView): es un
-     * resumen informativo de lo que ya vive en Customer, CustomerAddress,
-     * Subscription, Contract y WorkOrder -nada de NAP, borne, materiales,
-     * fotografías ni firmas-. Esa parte técnica pertenece a la
-     * liquidación de campo, fuera de este sprint.
+     * Revisión del 03/09 (ver InstallationOrderReceiptView): antes era un
+     * comprobante puramente informativo. Ahora también muestra los datos
+     * que ATC ingresó al crearla (motivo, prioridad, tipo de atención,
+     * vendedor) y la ubicación GPS de la dirección de instalación -con la
+     * misma regla que ya aplica la ficha técnica de la orden
+     * (apps.work_orders.location): la dirección textual siempre se
+     * muestra, el enlace a Maps por coordenadas solo aparece con GPS
+     * válido, nunca se inventan ni se corrigen coordenadas-. NAP, borne, MAC/equipo,
+     * precinto, materiales y evidencias siguen sin estar aquí: son la
+     * liquidación técnica, exclusiva del técnico asignado, en la ficha de
+     * la orden -enlazada desde el tercer botón de esta pantalla, cuando
+     * el usuario tiene permiso para verla-.
      */
 
     .receipt-toolbar {
@@ -157,6 +164,28 @@
         font-style: italic;
     }
 
+    .receipt-gps-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .8rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+    }
+
+    .receipt-gps-badge.is-valid {
+        background: var(--sicv-superficie-azul);
+        color: var(--sicv-azul);
+        border: 1px solid rgba(27,58,92,.18);
+    }
+
+    .receipt-gps-badge.is-invalid {
+        background: var(--sicv-fondo);
+        color: var(--sicv-tinta-tenue);
+        border: 1px solid var(--sicv-linea);
+    }
+
     .receipt-note {
         margin-top: 22px;
         padding: 12px 14px;
@@ -214,22 +243,52 @@
 
 <div class="container py-4">
 
-    <div class="receipt-toolbar d-flex justify-content-between align-items-center no-print">
+    <div class="receipt-toolbar d-flex justify-content-end align-items-center no-print">
 
-        <a
-            href="{% url 'contracts:contract_summary' customer.pk contract.pk %}"
-            class="btn btn-outline-secondary"
-        >
-            ← Volver al resumen de contratación
-        </a>
+        {% comment %}
+            Exactamente tres botones bajo la orden creada: Cancelar,
+            Imprimir y Liquidar (aclaración del 03/09).
 
-        <button
-            type="button"
-            class="btn btn-primary"
-            onclick="window.print()"
-        >
-            🖨️ Imprimir comprobante
-        </button>
+            - Cancelar solo cierra esta vista y vuelve a la ficha del
+              cliente: no anula ni modifica la orden ya creada.
+            - Imprimir usa el mismo documento en pantalla como base del
+              PDF/impreso -ver @media print arriba-.
+            - Liquidar navega a la ficha técnica de la orden
+              (work_orders:detail), donde viven NAP, borne, MAC/equipo,
+              precinto, materiales y evidencias. Esa ficha ya es de solo
+              lectura para ATC y editable solo por el técnico asignado
+              (ver WorkOrderDetailView): esta pantalla no reimplementa esa
+              regla, solo enlaza a ella. Se ofrece con el mismo permiso
+              que ya exige esa vista (view_workorder).
+        {% endcomment %}
+
+        <div class="d-flex gap-2">
+
+            <a
+                href="{% url 'customers:detail' customer.pk %}#bloque-d"
+                class="btn btn-outline-secondary"
+            >
+                Cancelar
+            </a>
+
+            <button
+                type="button"
+                class="btn btn-outline-primary"
+                onclick="window.print()"
+            >
+                🖨️ Imprimir
+            </button>
+
+            {% if perms.work_orders.view_workorder %}
+                <a
+                    href="{% url 'work_orders:detail' order.pk %}"
+                    class="btn btn-primary"
+                >
+                    Liquidar
+                </a>
+            {% endif %}
+
+        </div>
 
     </div>
 
@@ -253,7 +312,7 @@
 
             <div class="receipt-doc-id">
                 <div class="receipt-doc-title">
-                    Comprobante de instalación
+                    Orden de instalación
                 </div>
                 <div class="receipt-doc-number">
                     N.º {{ order.order_number }}
@@ -268,26 +327,17 @@
 
         <div class="receipt-section">
 
-            <div class="receipt-section-title">Datos del abonado</div>
+            <div class="receipt-section-title">Datos del cliente</div>
 
             <div class="receipt-grid">
 
                 <div class="receipt-field-full">
-                    <div class="receipt-label">Abonado</div>
+                    <div class="receipt-label">Cliente</div>
                     <div class="receipt-value">{{ customer }}</div>
                 </div>
 
                 <div>
-                    <div class="receipt-label">
-                        {{ customer.get_document_type_display }}
-                    </div>
-                    <div class="receipt-value">
-                        {{ customer.document_number }}
-                    </div>
-                </div>
-
-                <div>
-                    <div class="receipt-label">Código de abonado</div>
+                    <div class="receipt-label">Código de cliente</div>
                     <div class="receipt-value">{{ customer.code }}</div>
                 </div>
 
@@ -298,56 +348,8 @@
                     </div>
                 </div>
 
-            </div>
-
-        </div>
-
-
-        <div class="receipt-section">
-
-            <div class="receipt-section-title">Dirección de instalación</div>
-
-            <div class="receipt-grid">
-
-                <div class="receipt-field-full">
-                    <div class="receipt-label">Dirección</div>
-                    <div class="receipt-value">{{ address.address }}</div>
-                </div>
-
                 <div>
-                    <div class="receipt-label">Distrito</div>
-                    <div class="receipt-value">
-                        {{ address.district|default:"-" }}
-                    </div>
-                </div>
-
-                <div>
-                    <div class="receipt-label">Sector / Zona</div>
-                    <div class="receipt-value">
-                        {{ address.zone.name|default:"-" }}
-                    </div>
-                </div>
-
-                <div class="receipt-field-full">
-                    <div class="receipt-label">Referencia</div>
-                    <div class="receipt-value">
-                        {{ address.reference|default:"-" }}
-                    </div>
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="receipt-section">
-
-            <div class="receipt-section-title">Servicio y contrato</div>
-
-            <div class="receipt-grid">
-
-                <div>
-                    <div class="receipt-label">Plan contratado</div>
+                    <div class="receipt-label">Plan</div>
                     <div class="receipt-value">
                         {{ subscription.plan.name }}
                         {% if subscription.plan.speed_mbps %}
@@ -356,18 +358,104 @@
                     </div>
                 </div>
 
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Dirección</div>
+                    <div class="receipt-value">{{ address.address }}</div>
+                </div>
+
                 <div>
-                    <div class="receipt-label">Servicio</div>
+                    <div class="receipt-label">Código de suministro</div>
+                    <div class="receipt-value {% if not address.electrical_supply_code %}receipt-value-muted{% endif %}">
+                        {{ address.electrical_supply_code|default:"No registrado" }}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Ubicación GPS</div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+
+                <span class="receipt-gps-badge {% if location.has_valid_gps %}is-valid{% else %}is-invalid{% endif %}">
+                    {% if location.has_valid_gps %}
+                        📍 GPS disponible
+                    {% else %}
+                        GPS no disponible
+                    {% endif %}
+                </span>
+
+                {% if location.maps_url %}
+                    <a
+                        href="{{ location.maps_url }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="btn btn-sm btn-outline-primary no-print"
+                    >
+                        {{ location.gps_label }}
+                    </a>
+                {% endif %}
+
+            </div>
+
+            {% if not location.has_valid_gps %}
+                <div class="form-text">
+                    Sin coordenadas confiables registradas para esta
+                    dirección. El enlace de Maps busca por la dirección
+                    textual -no se inventan ni se corrigen coordenadas
+                    aquí-.
+                </div>
+            {% endif %}
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Datos de la orden</div>
+
+            <div class="receipt-grid">
+
+                <div>
+                    <div class="receipt-label">Fecha y hora de emisión</div>
                     <div class="receipt-value">
-                        {{ subscription.service_type.name }}
-                        #{{ subscription.service_number }}
+                        {{ order.created_at|date:"d/m/Y H:i" }}
                     </div>
                 </div>
 
                 <div>
-                    <div class="receipt-label">N.º de contrato</div>
+                    <div class="receipt-label">Prioridad</div>
                     <div class="receipt-value">
-                        {{ contract.contract_number }}
+                        {{ order.get_priority_display }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Tipo de atención</div>
+                    <div class="receipt-value">
+                        {{ order.get_attention_type_display }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Motivo</div>
+                    <div class="receipt-value {% if not order.reason %}receipt-value-muted{% endif %}">
+                        {{ order.reason.name|default:"Sin motivo registrado" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Vendedor</div>
+                    <div class="receipt-value {% if not order.seller %}receipt-value-muted{% endif %}">
+                        {% if order.seller %}
+                            {{ order.seller.get_full_name|default:order.seller.username }}
+                        {% else %}
+                            Sin vendedor registrado
+                        {% endif %}
                     </div>
                 </div>
 
@@ -382,21 +470,10 @@
                     </div>
                 </div>
 
-                <div>
-                    <div class="receipt-label">Fecha y hora de emisión</div>
-                    <div class="receipt-value">
-                        {{ order.created_at|date:"d/m/Y H:i" }}
-                    </div>
-                </div>
-
-                <div>
-                    <div class="receipt-label">Fecha programada</div>
-                    <div class="receipt-value">
-                        {% if order.scheduled_at %}
-                            {{ order.scheduled_at|date:"d/m/Y H:i" }}
-                        {% else %}
-                            <span class="receipt-value-muted">Por coordinar</span>
-                        {% endif %}
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Observaciones</div>
+                    <div class="receipt-value {% if not order.detail %}receipt-value-muted{% endif %}">
+                        {{ order.detail|default:"Sin observaciones" }}
                     </div>
                 </div>
 
@@ -405,11 +482,10 @@
         </div>
 
         <div class="receipt-note">
-            Este comprobante confirma el registro de la Orden de
-            Instalación {{ order.order_number }}. El detalle técnico de
-            la visita (materiales, equipos y conformidad del abonado) se
-            completa en la liquidación de la orden, a cargo del canal
-            técnico.
+            Esta orden confirma el registro de la Instalación
+            {{ order.order_number }}. NAP, borne, MAC/equipo, precinto,
+            materiales y evidencias se completan en la liquidación
+            técnica, a cargo exclusivo del técnico asignado.
         </div>
 
         <div class="receipt-footnote">

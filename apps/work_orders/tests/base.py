@@ -116,6 +116,23 @@ class WorkOrderTestCase(TestCase):
             branch=self.branch,
         )
 
+        # Vendedor: revisión del 03/09, WorkOrder.seller solo acepta usuarios
+        # con este rol (ver _validate_seller en services.py).
+        self.seller = User.objects.create_user(
+            username="vendedor1",
+            password="test1234",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
+
+        self.inactive_seller = User.objects.create_user(
+            username="vendedor2",
+            password="test1234",
+            role=User.Role.SALES,
+            branch=self.branch,
+            is_active=False,
+        )
+
         # --- Usuarios del ciclo de revisión --------------------------------
         # El validador se define por PERMISO, no por rol. Se le asigna un rol
         # cualquiera a propósito para demostrar que la autorización no depende

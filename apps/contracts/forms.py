@@ -4,7 +4,9 @@ from datetime import date
 from django import forms
 
 from .models import Contract
+from apps.accounts.models import User
 from apps.services.models import Subscription
+from apps.work_orders.models import OrderReason, WorkOrder
 
 
 # Duración mínima del contrato, en meses (mejora solicitada 02/09).
@@ -207,3 +209,114 @@ class ContractCreateForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+
+class InstallationWorkOrderForm(forms.Form):
+    """
+    Datos que ATC ingresa al generar la Orden de Instalación desde el
+    resumen de contratación: observaciones, prioridad, motivo, tipo de
+    atención y vendedor.
+
+    No es un ModelForm de WorkOrder ni expone `subscription` ni
+    `order_type`: create_installation_work_order() es una fachada que fija
+    esos dos datos por sí misma (la suscripción del contrato y el tipo
+    INSTALLATION por código exacto). Exponerlos aquí reabriría la trampa
+    documentada en docs/ftth_integracion_ot_instalacion.md del tipo de demo
+    en vez de instalación real.
+
+    Revisión del 03/09: `attention_type` sí se expone -a diferencia de la
+    versión anterior de este formulario- porque ahora es ATC quien decide
+    a propósito si la instalación es de Campo o de Sistema/NOC; la fachada
+    sigue aplicando FIELD por defecto si no se envía nada, así que no hay
+    riesgo de que quede vacío. `scheduled_at` (fecha programada) se retira
+    de este formulario: ya no es un dato que ATC ingrese en este paso.
+    """
+
+    detail = forms.CharField(
+        required=False,
+        label="Observaciones",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Observaciones operativas para el técnico..."
+                ),
+            }
+        ),
+    )
+
+    priority = forms.ChoiceField(
+        choices=WorkOrder.Priority.choices,
+        required=False,
+        initial=WorkOrder.Priority.NORMAL,
+        label="Prioridad",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    reason = forms.ModelChoiceField(
+        queryset=OrderReason.objects.none(),
+        required=False,
+        label="Motivo",
+        empty_label="Sin motivo",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    attention_type = forms.ChoiceField(
+        choices=WorkOrder.AttentionType.choices,
+        required=False,
+        initial=WorkOrder.AttentionType.FIELD,
+        label="Tipo de atención",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    seller = forms.ModelChoiceField(
+        queryset=User.objects.none(),
+        required=False,
+        label="Vendedor",
+        empty_label="Sin vendedor",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Solo motivos activos del catálogo de INSTALACIÓN: el mismo
+        # criterio de alcance que ya aplica WorkOrderCreateForm para el
+        # resto de tipos de orden.
+        self.fields["reason"].queryset = (
+            OrderReason.objects
+            .filter(
+                order_type__code="INSTALLATION",
+                is_active=True,
+            )
+            .order_by("name")
+        )
+
+        # Solo usuarios activos con rol Ventas: el mismo criterio que
+        # _validate_seller exige en el servicio, para que el formulario
+        # nunca ofrezca una opción que el servicio vaya a rechazar.
+        self.fields["seller"].queryset = (
+            User.objects
+            .filter(
+                role=User.Role.SALES,
+                is_active=True,
+            )
+            .order_by("first_name", "last_name", "username")
+        )

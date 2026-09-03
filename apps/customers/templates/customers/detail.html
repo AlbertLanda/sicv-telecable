@@ -878,9 +878,15 @@
                             <tr>
 
                                 <td class="ps-3">
-                                    <strong>
-                                        {{ order.order_number }}
-                                    </strong>
+                                    {% if perms.work_orders.view_workorder %}
+                                        <a href="{% url 'work_orders:detail' order.pk %}" class="fw-bold text-decoration-none">
+                                            {{ order.order_number }}
+                                        </a>
+                                    {% else %}
+                                        <strong>
+                                            {{ order.order_number }}
+                                        </strong>
+                                    {% endif %}
                                 </td>
 
                                 <td>
@@ -1055,25 +1061,39 @@
 
                                 <td class="text-end pe-3">
 
-                                    {% if perms.work_orders.assign_workorder and order.can_be_assigned %}
+                                    <div class="d-inline-flex gap-2">
 
-                                        <a
-                                            href="{% url 'work_orders:assign' order.pk %}"
-                                            class="btn btn-outline-primary btn-sm"
-                                            title="Asignar o reasignar el técnico de esta orden."
-                                        >
-                                            {% if order.assigned_technician %}
-                                                Reasignar
-                                            {% else %}
-                                                Asignar
-                                            {% endif %}
-                                        </a>
+                                        {% if perms.work_orders.view_workorder %}
+                                            <a
+                                                href="{% url 'work_orders:detail' order.pk %}"
+                                                class="btn btn-outline-secondary btn-sm"
+                                                title="Abrir la ficha técnica de esta orden."
+                                            >
+                                                Ver ficha
+                                            </a>
+                                        {% endif %}
 
-                                    {% else %}
+                                        {% if perms.work_orders.assign_workorder and order.can_be_assigned %}
 
-                                        <span class="text-muted">-</span>
+                                            <a
+                                                href="{% url 'work_orders:assign' order.pk %}"
+                                                class="btn btn-outline-primary btn-sm"
+                                                title="Asignar o reasignar el técnico de esta orden."
+                                            >
+                                                {% if order.assigned_technician %}
+                                                    Reasignar
+                                                {% else %}
+                                                    Asignar
+                                                {% endif %}
+                                            </a>
 
-                                    {% endif %}
+                                        {% elif not perms.work_orders.view_workorder %}
+
+                                            <span class="text-muted">-</span>
+
+                                        {% endif %}
+
+                                    </div>
 
                                 </td>
 
