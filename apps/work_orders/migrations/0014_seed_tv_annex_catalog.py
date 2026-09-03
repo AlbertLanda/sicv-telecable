@@ -63,7 +63,16 @@ def seed_tv_annex_catalog(apps, schema_editor):
 
 def unseed_tv_annex_catalog(apps, schema_editor):
     OrderType = apps.get_model("work_orders", "OrderType")
-    OrderType.objects.filter(code="TV_ANNEX").delete()
+    OrderSubtype = apps.get_model("work_orders", "OrderSubtype")
+    OrderResult = apps.get_model("work_orders", "OrderResult")
+
+    order_type = OrderType.objects.filter(code="TV_ANNEX").first()
+    if order_type is None:
+        return
+
+    OrderResult.objects.filter(order_type=order_type).delete()
+    OrderSubtype.objects.filter(order_type=order_type).delete()
+    order_type.delete()
 
 
 class Migration(migrations.Migration):
