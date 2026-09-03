@@ -5,18 +5,11 @@ from .models import Customer, CustomerAddress
 
 class CustomerInitialForm(forms.Form):
     """
-    Pantalla 3:
     Datos mínimos para iniciar el registro del cliente.
 
-    Los campos de nombres/apellidos personales solo son obligatorios
-    para persona natural (DNI/CE/PASAPORTE). Para persona jurídica
-    (RUC) no se exigen datos personales; la razón social se solicita
-    en la Pantalla 4 (Datos generales).
-
-    IMPORTANTE: esta obligatoriedad condicional se resuelve en
-    clean(), es decir, del lado servidor. El JavaScript del template
-    solo oculta/muestra campos para mejorar la experiencia de uso,
-    pero no es la fuente de la validación.
+    Los nombres/apellidos son obligatorios para persona natural. En RUC se
+    solicita razón social. La validación vive en servidor; el JavaScript del
+    formulario solo mejora la experiencia visual.
     """
 
     document_type = forms.ChoiceField(
@@ -78,14 +71,6 @@ class CustomerInitialForm(forms.Form):
         ),
     )
 
-    # Solo aplica a RUC (persona jurídica). Se completa mediante el
-    # botón "Obtener datos" (consulta a SUNAT) o manualmente por el
-    # usuario. Es un campo visible (igual que nombres/apellidos lo
-    # son para persona natural) para que el operador vea y pueda
-    # corregir la razón social apenas se consulta SUNAT. El valor
-    # viaja a la sesión junto con el resto de datos de esta pantalla
-    # para prellenar "Razón social" en la Pantalla 4
-    # (CustomerGeneralDataView), donde puede volver a editarse.
     business_name = forms.CharField(
         label="Razón social",
         max_length=200,
@@ -114,18 +99,12 @@ class CustomerInitialForm(forms.Form):
         if not document_type or not document_number:
             return cleaned_data
 
-        # ---------------------------------------------------------
-        # VALIDACIÓN DEL DOCUMENTO
-        # ---------------------------------------------------------
-
         if document_type == Customer.DocumentType.DNI:
-
             if not document_number.isdigit():
                 self.add_error(
                     "document_number",
                     "El DNI debe contener únicamente números.",
                 )
-
             elif len(document_number) != 8:
                 self.add_error(
                     "document_number",
@@ -133,13 +112,11 @@ class CustomerInitialForm(forms.Form):
                 )
 
         elif document_type == Customer.DocumentType.RUC:
-
             if not document_number.isdigit():
                 self.add_error(
                     "document_number",
                     "El RUC debe contener únicamente números.",
                 )
-
             elif len(document_number) != 11:
                 self.add_error(
                     "document_number",
@@ -150,25 +127,15 @@ class CustomerInitialForm(forms.Form):
             Customer.DocumentType.CE,
             Customer.DocumentType.PASSPORT,
         ):
-
             if not document_number:
                 self.add_error(
                     "document_number",
                     "El documento es obligatorio.",
                 )
 
-        # ---------------------------------------------------------
-        # VALIDACIÓN DE DATOS PERSONALES SEGÚN TIPO DE PERSONA
-        #
-        # Persona natural (DNI/CE/PASAPORTE): nombres y apellido
-        # paterno son obligatorios.
-        # Persona jurídica (RUC): no se exigen datos personales.
-        # ---------------------------------------------------------
-
         person_type = Customer.person_type_for_document(document_type)
 
         if person_type == Customer.PersonType.NATURAL:
-
             if not (cleaned_data.get("first_name") or "").strip():
                 self.add_error(
                     "first_name",
@@ -178,39 +145,17 @@ class CustomerInitialForm(forms.Form):
             if not (cleaned_data.get("paternal_surname") or "").strip():
                 self.add_error(
                     "paternal_surname",
-                    (
-                        "El apellido paterno es obligatorio para "
-                        "persona natural."
-                    ),
+                    "El apellido paterno es obligatorio para persona natural.",
                 )
 
-            if person_type == Customer.PersonType.LEGAL:
-
-                if not (cleaned_data.get("business_name") or "").strip():
-                    self.add_error(
-                        "business_name",
-                        (
-                            "La razón social es obligatoria para "
-                            "persona jurídica."
-                        ),
-                    )
-
-        # ---------------------------------------------------------
-        # VALIDACIÓN DE DUPLICADO
-        #
-        # Sin filtrar por is_active: la restricción única del modelo
-        # (Customer.Meta.constraints, unique_customer_document) es
-        # sobre document_type + document_number sin condición de
-        # is_active, así que un cliente inactivo con el mismo
-        # documento igual bloquea el guardado en Pantalla 4. Filtrar
-        # aquí solo por activos hacía que ese caso pasara Pantalla 3
-        # sin aviso y reventara después con el IntegrityError genérico
-        # de CustomerGeneralDataView. El chequeo debe reflejar
-        # exactamente lo que la base de datos va a permitir.
-        # ---------------------------------------------------------
+        elif person_type == Customer.PersonType.LEGAL:
+            if not (cleaned_data.get("business_name") or "").strip():
+                self.add_error(
+                    "business_name",
+                    "La razón social es obligatoria para persona jurídica.",
+                )
 
         if not self.errors:
-
             exists = Customer.objects.filter(
                 document_type=document_type,
                 document_number=document_number,
@@ -229,26 +174,7 @@ class CustomerInitialForm(forms.Form):
 
 
 class CustomerRegistrationForm(forms.ModelForm):
-    """
-    Pantalla 4:
-    Datos generales del cliente.
-
-    Los datos básicos de identidad vienen de la Pantalla 3
-    mediante la sesión.
-
-    NOTA IMPORTANTE:
-    "person_type" NO es un campo editable de este formulario. Se
-    deriva siempre del tipo de documento (Customer.person_type_for_
-    document), tal como exige la regla de correspondencia
-    documento/tipo de persona. Esto evita que la interfaz permita
-    combinaciones incoherentes (p. ej. RUC + Persona Natural) y hace
-    que la regla se cumpla también del lado servidor, sin depender
-    de lo que el usuario seleccione.
-
-    El tipo de documento se recibe en __init__ (no en los datos del
-    formulario) para poder calcular el tipo de persona esperado y
-    exigir la razón social cuando corresponda.
-    """
+    """Datos generales del cliente; el tipo de persona deriva del documento."""
 
     class Meta:
         model = Customer
@@ -306,11 +232,6 @@ class CustomerRegistrationForm(forms.ModelForm):
 
         self.document_type = document_type
         self.person_type = Customer.person_type_for_document(document_type)
-
-        # El campo solo es obligatorio a nivel de negocio para
-        # persona jurídica; se deja opcional a nivel de Django para
-        # que la validación real ocurra en clean(), donde se conoce
-        # el tipo de persona derivado del documento.
         self.fields["business_name"].required = False
 
     def clean(self):
@@ -331,6 +252,13 @@ class CustomerRegistrationForm(forms.ModelForm):
 
 
 class CustomerAddressForm(forms.ModelForm):
+    """
+    Domicilio operativo del servicio.
+
+    `meter_number` permanece temporalmente en el modelo por compatibilidad con
+    datos históricos, pero ya no forma parte del alta nueva: el dato operativo
+    requerido es el código de suministro eléctrico.
+    """
 
     class Meta:
         model = CustomerAddress
@@ -340,7 +268,6 @@ class CustomerAddressForm(forms.ModelForm):
             "address",
             "reference",
             "district",
-            "meter_number",
             "electrical_supply_code",
             "latitude",
             "longitude",
@@ -372,12 +299,6 @@ class CustomerAddressForm(forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "maxlength": "120",
-                }
-            ),
-            "meter_number": forms.TextInput(
-                attrs={
-                    "class": "form-control",
-                    "maxlength": "50",
                 }
             ),
             "electrical_supply_code": forms.TextInput(
@@ -419,7 +340,6 @@ class CustomerAddressForm(forms.ModelForm):
             "address": "Dirección",
             "reference": "Referencia",
             "district": "Distrito",
-            "meter_number": "Número de medidor",
             "electrical_supply_code": "Código de suministro eléctrico",
             "latitude": "Latitud",
             "longitude": "Longitud",
@@ -435,9 +355,6 @@ class CustomerAddressForm(forms.ModelForm):
 
     def clean_district(self):
         return self.cleaned_data.get("district", "").strip()
-
-    def clean_meter_number(self):
-        return self.cleaned_data.get("meter_number", "").strip()
 
     def clean_electrical_supply_code(self):
         return self.cleaned_data.get("electrical_supply_code", "").strip()
