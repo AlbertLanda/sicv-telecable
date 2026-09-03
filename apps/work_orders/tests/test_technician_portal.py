@@ -23,15 +23,15 @@ class TechnicianPortalShellTests(TestCase):
     def test_portal_contains_field_workflow_controls(self):
         response = self.client.get(reverse("technician_portal:home"))
 
-        self.assertContains(response, "Iniciar atención", html=False)
+        self.assertContains(response, "Ficha técnica")
         self.assertContains(response, "Caja NAP")
         self.assertContains(response, "Borne")
         self.assertContains(response, "MAC / Equipo")
         self.assertContains(response, "Fotos y archivos")
 
-    def test_portal_keeps_textual_address_and_maps_fallback_visible(self):
+    def test_portal_keeps_textual_address_and_maps_action_visible(self):
         response = self.client.get(reverse("technician_portal:home"))
 
         self.assertContains(response, "Dirección")
+        self.assertContains(response, "Referencia")
         self.assertContains(response, "Abrir en Google Maps")
-        self.assertContains(response, "GPS no disponible")
