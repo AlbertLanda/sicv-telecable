@@ -113,7 +113,16 @@ SUNAT_API_BASE_URL = os.environ.get(
 
 SUNAT_API_TIMEOUT = float(os.environ.get('SUNAT_API_TIMEOUT', '8'))
 
+JSONPE_API_TOKEN = os.environ.get("JSONPE_API_TOKEN", "")
 
+JSONPE_API_BASE_URL = os.environ.get(
+    "JSONPE_API_BASE_URL",
+    "https://api.json.pe/api",
+).rstrip("/")
+
+JSONPE_API_TIMEOUT = float(
+    os.environ.get("JSONPE_API_TIMEOUT", "8")
+)
 # Application definition
 
 INSTALLED_APPS = [

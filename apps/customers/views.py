@@ -28,7 +28,10 @@ from .services.activity import (
     build_customer_operational_summary,
     build_customer_recent_activity,
 )
-from .services.sunat import consultar_documento, DocumentLookupError
+from .services.document_lookup import (
+    consultar_documento,
+    DocumentLookupError,
+)
 
 from .services.distriluz import (
     SupplyLookupError,
