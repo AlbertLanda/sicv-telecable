@@ -84,24 +84,19 @@ ALLOWED_HOSTS = env_list(
 
 
 # ---------------------------------------------------------------------
-# Integracion RENIEC / SUNAT (consulta de DNI y RUC)
+# Consulta automatica de DNI / RUC
 #
-# Se usa para autocompletar nombres/apellidos (DNI) o razon social
-# (RUC) en el registro de clientes (Pantalla 3). El proveedor por
-# defecto es Peru API (https://peruapi.com), elegido porque su plan
-# gratuito incluye tanto RUC como DNI (a diferencia de otras opciones
-# evaluadas). La autenticacion va como parametro de consulta
-# "api_token", no como header Authorization.
+# Se usa para autocompletar nombres y apellidos (DNI) o razon social
+# (RUC) durante el registro de clientes.
 #
-# Ver docs/consulta_documento_externa.md para el detalle de limites
-# del plan gratuito, formato de respuesta y consideraciones sobre
-# proteccion de datos personales.
+# Proveedor activo: JSON.pe.
+# La autenticacion se realiza mediante Bearer Token.
 #
-# SUNAT_API_TOKEN: token gratuito obtenido en https://peruapi.com
-# (panel tras registrarse). Si no se configura, el boton "Obtener
-# datos" mostrara un aviso indicando que el servicio no esta
-# disponible, sin afectar el resto del registro manual del cliente
-# (la consulta automatica es siempre opcional).
+# Peru API se conserva temporalmente como integracion legada hasta
+# completar su retiro definitivo.
+#
+# La consulta automatica es opcional: si el proveedor no esta
+# disponible, el operador puede continuar con el registro manual.
 # ---------------------------------------------------------------------
 
 SUNAT_API_TOKEN = os.environ.get('SUNAT_API_TOKEN', '')
