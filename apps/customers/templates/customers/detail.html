@@ -310,8 +310,14 @@
                                             Latitud
                                         </small>
 
+                                        {% comment %}
+                                            Se muestran las coordenadas publicables, no las
+                                            almacenadas: un 0.0000000 guardado por una consulta
+                                            de suministro sin georreferencia es «sin dato», no
+                                            una ubicación. Ver apps/customers/coordinates.py.
+                                        {% endcomment %}
                                         <span>
-                                            {{ addr.latitude|default:"No registrada" }}
+                                            {{ addr.map_latitude|default:"No registrada" }}
                                         </span>
                                     </div>
 
@@ -321,13 +327,13 @@
                                         </small>
 
                                         <span>
-                                            {{ addr.longitude|default:"No registrada" }}
+                                            {{ addr.map_longitude|default:"No registrada" }}
                                         </span>
                                     </div>
 
-                                    {% if addr.gps_link %}
+                                    {% if addr.map_link %}
                                         <div class="col-12">
-                                            <a href="{{ addr.gps_link }}"
+                                            <a href="{{ addr.map_link }}"
                                                target="_blank"
                                                rel="noopener noreferrer"
                                                class="btn btn-sm btn-outline-primary">

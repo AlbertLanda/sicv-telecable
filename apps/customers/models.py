@@ -1,5 +1,9 @@
 from django.db import models
 
+from apps.customers.coordinates import (
+    build_gps_link,
+    normalize_coordinate_pair,
+)
 from apps.organization.models import Branch, Zone
 
 
@@ -232,6 +236,41 @@ class CustomerAddress(models.Model):
     class Meta:
         verbose_name = "Dirección del cliente"
         verbose_name_plural = "Direcciones del cliente"
+
+    # --- Ubicación publicable --------------------------------------------
+    #
+    # Los campos `latitude`, `longitude` y `gps_link` guardan lo que llegó:
+    # pueden contener `0.0000000` —el centinela de «sin georreferencia» de
+    # Distriluz— y un enlace construido sobre ese cero. Estas propiedades son
+    # lo que debe **mostrarse**, y aplican la regla única de
+    # `apps.customers.coordinates`: cero, vacío, medio par o fuera del planeta
+    # no son una ubicación, así que se publican como `None`.
+    #
+    # Se exponen como propiedades porque las plantillas no pueden llamar
+    # funciones con argumentos, y las tres fichas que muestran ubicación
+    # —cliente, resumen del contrato y Orden Técnica— deben coincidir. No hay
+    # migración: los campos almacenados no cambian.
+
+    @property
+    def map_latitude(self):
+        """Latitud publicable, o `None` si el par no es una ubicación real."""
+        return normalize_coordinate_pair(self.latitude, self.longitude)[0]
+
+    @property
+    def map_longitude(self):
+        """Longitud publicable, o `None` si el par no es una ubicación real."""
+        return normalize_coordinate_pair(self.latitude, self.longitude)[1]
+
+    @property
+    def map_link(self):
+        """Enlace de mapa, o cadena vacía si no hay coordenadas válidas.
+
+        Se **deriva** de las coordenadas en lugar de devolver `gps_link`: el
+        enlace almacenado pudo construirse sobre un `0,0` antes de esta regla,
+        y servirlo tal cual sería la puerta de atrás por la que el dato falso
+        vuelve a aparecer en pantalla.
+        """
+        return build_gps_link(self.latitude, self.longitude)
 
     @property
     def electrical_supply_number(self):

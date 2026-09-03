@@ -1,26 +1,33 @@
 """
 Vistas de API de órdenes de trabajo del canal técnico.
 
-Tres endpoints de **solo lectura**: órdenes disponibles, mis órdenes y el
-detalle de una orden propia. Ninguna acción de escritura vive aquí todavía:
-la toma de la orden llega el viernes y delegará en los servicios de dominio
-que ya usa la web, igual que hacen las vistas web hoy.
+Tres endpoints de lectura —órdenes disponibles, mis órdenes y el detalle de una
+orden propia— y **una** acción de escritura: la toma de la orden (`claim/`).
 
 Ninguna vista de este módulo decide reglas de negocio. Qué es una orden
 disponible lo define `api/queries.py`; de quién es una orden lo decide el
-queryset a partir de `request.user`.
+queryset a partir de `request.user`; y la transición de la toma la ejecuta
+`WorkOrder.assign_technician()`, el mismo método que usa la bandeja web. Lo
+único que la vista de escritura añade sobre el dominio es el **bloqueo de
+fila**, que es una responsabilidad del canal y no una regla nueva.
 """
 
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import F
 from django.http import Http404
+from rest_framework import status as http_status
 from rest_framework.exceptions import NotFound, ParseError
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from rest_framework.generics import GenericAPIView, ListAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from apps.accounts.api.permissions import IsActiveTechnician
+from apps.work_orders.api.permissions import CanClaimWorkOrder
 from apps.work_orders.api.queries import available_work_orders
 from apps.work_orders.api.serializers import (
     AvailableWorkOrderSerializer,
+    WorkOrderClaimSerializer,
     WorkOrderDetailSerializer,
     WorkOrderListSerializer,
 )
@@ -60,8 +67,33 @@ class TechnicianChannelMixin:
         "subtype",
     )
 
+    # Relaciones que solo hacen falta al operar sobre UNA orden y que no se le
+    # cobran a los listados. Se declaran aquí, y no dentro del detalle, porque
+    # hay dos consumidores: la ficha de `<id>/` y la respuesta de `claim/`,
+    # que devuelve esa misma ficha. Escritas dos veces, un campo nuevo en el
+    # detalle costaría una consulta extra en la toma sin que nadie lo note.
+    OBJECT_RELATIONS = (
+        "subscription__address",
+        "branch",
+        "zone",
+        "reason",
+        # Reverso uno-a-uno: trae el bloque técnico en la misma consulta. Sin
+        # esto, cada ficha dispara una consulta extra solo para descubrir que
+        # la orden todavía no tiene liquidación, que es el caso más frecuente.
+        "liquidation",
+    )
+
     def base_queryset(self):
         return WorkOrder.objects.select_related(*self.LIST_RELATIONS)
+
+    def object_queryset(self):
+        """Consulta para pintar **una** orden completa, sin filtrar por dueño.
+
+        El filtro por técnico es responsabilidad de quien la use: el detalle
+        lo aplica (`MyWorkOrdersMixin`), y la toma no puede aplicarlo porque
+        opera justo sobre órdenes que todavía no tienen dueño.
+        """
+        return self.base_queryset().select_related(*self.OBJECT_RELATIONS)
 
 
 class AvailableWorkOrderListView(TechnicianChannelMixin, ListAPIView):
@@ -218,12 +250,10 @@ class TechnicianWorkOrderObjectMixin(MyWorkOrdersMixin):
     """
 
     def get_queryset(self):
-        # Encadenar `select_related` acumula sobre el del mixin base.
-        return super().get_queryset().select_related(
-            "subscription__address",
-            "branch",
-            "zone",
-        )
+        # Encadenar `select_related` acumula sobre el del mixin base. Las
+        # relaciones se leen de `OBJECT_RELATIONS`, compartidas con la
+        # respuesta de la toma, para no declararlas dos veces.
+        return super().get_queryset().select_related(*self.OBJECT_RELATIONS)
 
     def get_object(self):
         try:
@@ -265,3 +295,167 @@ class MyWorkOrderDetailView(TechnicianWorkOrderObjectMixin, RetrieveAPIView):
     """
 
     serializer_class = WorkOrderDetailSerializer
+
+
+class ClaimWorkOrderView(TechnicianChannelMixin, GenericAPIView):
+    """POST /api/technicians/work-orders/<id>/claim/ — el técnico toma la OT.
+
+    Única acción de escritura del canal. **No implementa ninguna transición**:
+    llama a `WorkOrder.assign_technician()`, exactamente el mismo método que
+    ejecuta la bandeja de despacho web (`views.py:214`), que mueve
+    PENDING → ASSIGNED por `change_status()`, deja historial y abre el
+    `WorkOrderAssignment`. Reimplementar la comprobación de estados aquí
+    crearía una segunda matriz que podría desalinearse de la del dominio.
+
+    La diferencia con el despacho web no está en el mecanismo sino en **quién
+    decide**: allí un supervisor elige a quién le toca, aquí el técnico se
+    adjudica trabajo sin dueño. Por eso `assigned_by` y `technician` son el
+    mismo usuario, y así queda en la traza: una asignación donde ambos
+    coinciden es, en el historial, una orden tomada desde la app.
+
+    **No hereda de `TechnicianWorkOrderObjectMixin`** —corrección de lo que
+    anticipaba `docs/api_technician_work_orders.md` §4—. Ese mixin filtra por
+    `assigned_technician = request.user`, y una orden tomable no tiene técnico
+    asignado: heredarlo daría un universo vacío y ninguna orden podría
+    tomarse nunca. La toma resuelve su objeto contra
+    `available_work_orders()`, que es el universo correcto y además el mismo
+    que publica `available/`.
+
+    **Cuatro capas, evaluadas en este orden y por separado:**
+
+    1. `IsActiveTechnician` — ¿puedes operar en este canal?
+    2. `CanClaimWorkOrder` — ¿puedes ejecutar *esta acción*? (bloqueo B3: hoy
+       no exige un permiso Django adicional; ver `api/permissions.py`.)
+    3. `available_work_orders()` bajo bloqueo de fila — ¿está tomable *ahora*?
+    4. El dominio — ¿admite la transición?
+
+    Las dos primeras se evalúan antes de resolver la orden, así que quien no
+    puede tomar recibe `403` para cualquier id y no puede sondear cuáles
+    existen.
+    """
+
+    # Se **suma** a la lista del canal en lugar de reescribirla: si mañana se
+    # agrega un permiso de canal, la toma lo hereda sin que nadie tenga que
+    # acordarse de repetirlo aquí.
+    permission_classes = (
+        TechnicianChannelMixin.permission_classes + [CanClaimWorkOrder]
+    )
+
+    serializer_class = WorkOrderClaimSerializer
+
+    # Una sola respuesta para todo lo que no se puede tomar: inexistente, ya
+    # tomada, de otro técnico, en otro estado o de otro tipo. Es deliberado
+    # que sean indistinguibles —mismo código y mismo cuerpo—, por el mismo
+    # principio de no enumeración que el 404 del detalle: si «no existe»
+    # respondiera distinto de «ya la tomó otro», el técnico podría descubrir
+    # qué ids existen probándolos.
+    #
+    # El código es 409 y no 404 porque la pregunta del cliente no es «¿existe
+    # esta orden?» sino «¿puedo tomarla?», y la respuesta —para todos esos
+    # casos— es que ya no está disponible. El mensaje dice exactamente eso y
+    # no cuenta de más.
+    UNAVAILABLE_DETAIL = "La orden ya no está disponible."
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            order = self.claim(remarks=serializer.validated_data["remarks"])
+
+        except WorkOrder.DoesNotExist:
+            return Response(
+                {"detail": self.UNAVAILABLE_DETAIL},
+                status=http_status.HTTP_409_CONFLICT,
+            )
+
+        except ValidationError as exc:
+            # Red de seguridad, no camino esperado: las condiciones que
+            # `assign_technician()` valida —técnico activo con rol técnico,
+            # orden en un estado asignable— ya las garantizan el permiso de
+            # canal y el filtro de disponibilidad. Se captura para que una
+            # regla de dominio futura se manifieste como un 400 con su mensaje
+            # en español y no como un 500. La transacción ya revirtió: no
+            # queda ni asignación ni historial a medias.
+            #
+            # Los mensajes se unen en una cadena para que `detail` tenga el
+            # mismo tipo que en el resto de los errores del canal y el cliente
+            # no distinga entre texto y lista según el código.
+            return Response(
+                {"detail": " ".join(exc.messages)},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # La respuesta es la ficha completa, con el serializador del detalle:
+        # el técnico que acaba de tomar la orden ya necesita la dirección y
+        # las coordenadas —que la fila de `available/` no lleva—, y así no
+        # hace una segunda petición para empezar a moverse. Se relee por
+        # `object_queryset()` en lugar de serializar la instancia bloqueada:
+        # esa se cargó sin `select_related` a propósito (ver `claim()`), y
+        # pintarla dispararía una consulta por cada relación.
+        claimed = self.object_queryset().get(pk=order.pk)
+
+        return Response(WorkOrderDetailSerializer(claimed).data)
+
+    @transaction.atomic
+    def claim(self, *, remarks):
+        """Resuelve la orden bajo bloqueo de fila y la adjudica al técnico.
+
+        Cierra el hueco detectado en la auditoría del día 1 (§2.3):
+        `assign_technician()` es atómico pero **no bloquea la fila** —valida
+        `self.status` sobre la instancia ya cargada en memoria—, así que dos
+        tomas simultáneas de la misma OT podrían leer ambas `PENDING` y pasar
+        las dos, dejando a dos técnicos convencidos de ser el responsable. El
+        bloqueo se resuelve aquí, en el canal, sin modificar el dominio.
+
+        Todo el peso está en que **el filtro viaja dentro del
+        `select_for_update()`**: el ganador toma el lock con la orden aún
+        disponible; el perdedor espera, y cuando el lock se libera la orden ya
+        no cumple el filtro —tiene dueño y está en ASSIGNED—, así que cae en
+        `DoesNotExist` y recibe 409. Si la comprobación se hiciera antes o
+        después del bloqueo en lugar de dentro, la carrera seguiría abierta.
+
+        El universo es `available_work_orders()`, la **misma** función que
+        publica `available/`. Esa coincidencia es la garantía de que lo
+        listado es exactamente lo tomable: sin ella, un listado más ancho que
+        la toma haría que la app muestre órdenes que al pulsarlas rebotan con
+        409 sin explicación posible. Y trae de regalo dos cosas que no hay que
+        programar aquí: una orden de otro técnico no es tomable (tiene dueño)
+        y una `SYSTEM` de NOC tampoco (no es de campo).
+
+        **`of=("self",)` es intencional.** El filtro por
+        `order_type__code` obliga a un JOIN con el catálogo, y un
+        `FOR UPDATE` sin `of` bloquearía también esa fila: como todas las
+        instalaciones comparten el mismo `OrderType`, cada toma esperaría a la
+        anterior en el sistema completo, no solo en su orden. Limitando el
+        bloqueo a `self` se lockea la OT y nada más. En SQLite (desarrollo y
+        CI) toda la cláusula se ignora y las escrituras se serializan a nivel
+        de base de datos; en PostgreSQL (producción) el bloqueo es real.
+
+        **No se filtra por sede.** El plan lo exige: la sede organiza y
+        filtra, nunca restringe. `available/` la usa para ordenar la bandeja
+        —con `?scope=all` para ampliar—, pero una asignación legítima fuera de
+        sede no puede quedar bloqueada en la toma.
+        """
+        order = available_work_orders(
+            # Sin `select_related`: la consulta que bloquea trae solo la fila
+            # de la OT. Añadir relaciones aquí metería LEFT JOIN por las FK
+            # opcionales (`zone`, `subtype`), y PostgreSQL rechaza un
+            # `FOR UPDATE` sobre el lado nulable de un outer join. La ficha se
+            # relee después, ya fuera de la carrera.
+            WorkOrder.objects.select_for_update(of=("self",))
+        ).get(pk=self.kwargs["pk"])
+
+        order.assign_technician(
+            # El técnico sale de `request.user`, jamás del cuerpo: no hay
+            # parámetro que manipular para tomar una orden en nombre de otro.
+            self.request.user,
+            # Quien adjudica es el propio técnico. La traza lo refleja tal
+            # cual en lugar de dejarlo vacío: una asignación con `assigned_by`
+            # nulo se leería como un dato faltante, y aquí sí se sabe quién
+            # decidió.
+            assigned_by=self.request.user,
+            remarks=remarks,
+        )
+
+        return order

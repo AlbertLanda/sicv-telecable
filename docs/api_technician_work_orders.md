@@ -27,7 +27,9 @@ Prefijo `/api/technicians/work-orders/`. Todos exigen la cabecera
 | Detalle | `GET /api/technicians/work-orders/<id>/` | `200` ficha | `401` · `403` · `404` |
 
 Los tres son de solo lectura: `POST`, `PATCH`, `PUT` y `DELETE` responden
-`405`.
+`405`. La única acción de escritura del canal es la toma de la orden, que se
+documenta aparte en
+[`docs/api_technician_claim.md`](api_technician_claim.md) (día 5).
 
 Todos los errores tienen la misma forma, en español y con `detail` siempre
 cadena — nunca lista — para que el cliente no distinga formatos según el
@@ -84,7 +86,49 @@ mantiene su propia tabla de traducciones ni se rompe si cambia una etiqueta.
 tomar la orden.
 
 **El detalle añade** `address` (objeto con `address`, `reference`, `district`,
-`latitude`, `longitude`, `gps_link`), `detail`, `branch` y `zone`.
+`latitude`, `longitude`, `gps_link`), `detail`, `branch`, `zone` y —desde el
+día 5— los campos con los que el técnico trabaja la orden:
+
+| Campo | Qué dice |
+|---|---|
+| `reason` | Por qué existe la OT (catálogo; puede ser `null`) |
+| `started_at` · `attended_at` | Cuándo empezó y terminó el trabajo en campo (`null` mientras no ocurran) |
+| `can_start_attention` | Si corresponde ofrecer «Iniciar atención». **Lo decide el dominio**, leyendo las mismas condiciones que verifica `start_attention()`: si la app repitiera esa matriz, un cambio en el dominio dejaría botones que fallan al pulsarlos |
+| `technical_data` | Bloque de datos técnicos ejecutados, o `null` si aún no hay liquidación |
+
+`technical_data` refleja `WorkOrderLiquidation` y es **solo lectura**:
+`liquidated_at`, `resolution_detail`, `technical_notes`, `network_element`,
+`network_port`, `equipment_serial`, `signal_level_dbm`, `cable_meters_used`,
+`krill_reference`, `review_status` + `review_status_display`. Registrarlos pasa
+por `liquidate_order()`, que exige orden atendida y aplica el ciclo de
+revisión; exponer una escritura aquí sería una segunda vía de liquidación sin
+revisión. Los nombres se fijan desde hoy para que la app y la ficha de ATC se
+escriban una sola vez.
+
+Es `null` —y no un bloque de campos vacíos— porque «aún no se liquidó» y «se
+liquidó dejando los opcionales en blanco» son estados distintos.
+
+> **La OT es una sola `WorkOrder`.** No hay modelo espejo de «datos del
+> técnico»: ATC la consulta en lectura y el técnico escribe únicamente su
+> parte, sobre la misma fila. Ver
+> [`orden_tecnica_contrato_compartido.md`](orden_tecnica_contrato_compartido.md).
+
+### 1.3 Ubicación: dirección textual siempre, GPS solo si es real
+
+La regla vive en [`apps/customers/coordinates.py`](../apps/customers/coordinates.py),
+en una sola función que los tres frentes pueden consumir.
+
+`address`, `reference` y `district` **viajan siempre**: son el dato que permite
+llegar y nunca se sustituyen por coordenadas. `latitude`, `longitude` y
+`gps_link` solo viajan si el par es válido; un `0`, un `0.0000000`, un vacío o
+media coordenada se publican como `null` y sin enlace.
+
+No es una precaución teórica: Distriluz responde `0` cuando el suministro no
+tiene georreferencia, y `0,0` es un punto en el golfo de Guinea, a 9.000 km de
+Chachapoyas. Para el técnico que abre el mapa en la puerta del cliente eso no
+es un dato pobre, es un dato falso que parece bueno. `gps_link` se **deriva**
+de las coordenadas en lugar de leerse de la base de datos, porque el enlace
+almacenado pudo construirse sobre un `0,0` antes de esta regla.
 
 > **Sin paginación.** Las listas son arreglos planos, no `{count, next,
 > previous, results}`. Decisión consciente del MVP: activar la paginación
@@ -135,15 +179,25 @@ El parámetro `queryset` permite aplicar la misma regla sobre consultas
 distintas sin que la función conozca ninguna de las dos:
 
 ```python
-# Listado (hoy)
+# Listado (día 3)
 available_work_orders(WorkOrder.objects.select_related(...))
 
-# Claim (viernes)
-available_work_orders(WorkOrder.objects.select_for_update()).get(pk=pk)
+# Toma (día 5, ya implementada)
+available_work_orders(
+    WorkOrder.objects.select_for_update(of=("self",))
+).get(pk=pk)
 ```
 
 Hay una prueba que fija el invariante:
-`test_everything_listed_satisfies_the_claim_condition`.
+`test_everything_listed_satisfies_the_claim_condition`. La toma lo verifica
+además desde el cliente y en las dos direcciones — lo listado se puede tomar y
+lo tomado sale de la bandeja (`docs/api_technician_claim.md` §2).
+
+> El `of=("self",)` de la toma **no** era parte de la previsión de este
+> documento y se añadió el día 5: sin él, el JOIN con el catálogo que impone el
+> filtro `order_type__code` haría que `FOR UPDATE` bloqueara también la fila
+> del `OrderType`, compartida por todas las instalaciones. Ver
+> `api_technician_claim.md` §3.
 
 **No se añadió un manager al modelo.** «Disponible» no es un concepto de
 `WorkOrder` —la bandeja de despacho web publica otro conjunto y sigue siendo
@@ -184,15 +238,27 @@ La jerarquía separa las dos preguntas:
 ```
 TechnicianChannelMixin          ← permisos + select_related. NO filtra.
 ├── AvailableWorkOrderListView  ← filtro: available_work_orders() + sede
+├── ClaimWorkOrderView          ← filtro: available_work_orders() bajo bloqueo
 └── MyWorkOrdersMixin           ← filtro: assigned_technician = request.user
     ├── MyWorkOrderListView
     └── TechnicianWorkOrderObjectMixin   ← + relaciones del detalle, 404 uniforme
         └── MyWorkOrderDetailView
 ```
 
-El filtro por técnico está escrito **una sola vez**, en `MyWorkOrdersMixin`. El
-claim del viernes colgará de `TechnicianWorkOrderObjectMixin` y heredará el 404
-uniforme sin implementarlo.
+El filtro por técnico está escrito **una sola vez**, en `MyWorkOrdersMixin`.
+
+> **Corrección del día 5.** Este documento anticipaba que el claim colgaría de
+> `TechnicianWorkOrderObjectMixin` para heredar el 404 uniforme. **No puede:**
+> ese mixin filtra por `assigned_technician = request.user` y una orden tomable
+> no tiene técnico asignado, así que el universo sería siempre vacío y ninguna
+> orden podría tomarse. La toma cuelga de `TechnicianChannelMixin` y resuelve su
+> objeto contra `available_work_orders()`, que además es el universo correcto:
+> el mismo que publica `available/`. Lo no tomable responde `409` uniforme por
+> el mismo principio de no enumeración, no por herencia.
+>
+> Las relaciones de la ficha, que el detalle y la respuesta de la toma pintan
+> igual, quedaron declaradas una sola vez en
+> `TechnicianChannelMixin.OBJECT_RELATIONS`.
 
 ---
 
@@ -318,6 +384,18 @@ sobre el `base.py` actual.
   `district`. Confirmar si basta o si negocio quiere un detalle antes de tomar.
 - **B7 — Paginación.** Hoy lista plana. Revisar cuando el volumen lo pida;
   activarla cambia la forma de la respuesta.
-- **B3, B4 — Permiso y nombre del claim.** Siguen abiertos del día 1; se
-  resuelven el viernes.
-- **B5 — Punto de creación comercial.** Coordinación con Joleydi, jueves.
+- **B3 — Permiso del claim.** Sigue abierto, y el día 5 aportó evidencia nueva:
+  reutilizar `assign_workorder` daría a los técnicos la potestad de despachar
+  cualquier orden desde la web. Ver `api_technician_claim.md` §6.
+- **B4 — Nombre del claim.** Cerrado: `claim/`.
+- **B5 — Punto de creación comercial.** Resuelto del lado del dominio: la
+  fachada `create_installation_work_order()` ya fija el tipo `INSTALLATION` y
+  `attention_type = FIELD`, así que la OT que produzca nace visible en
+  `available/` y tomable por `claim/` sin sincronización manual. **Falta el
+  llamador:** hoy solo la consumen las pruebas
+  (`git grep create_installation_work_order` no encuentra ninguna vista). El
+  paso «Generar Orden de Instalación» del resumen del contrato lo conecta
+  Joleydi; hasta entonces el circuito completo solo se puede recorrer creando
+  la OT desde la web o el Admin.
+- **B9 (nuevo) — Idempotencia de la toma ante reintento del mismo técnico.**
+  Ver `api_technician_claim.md` §7.

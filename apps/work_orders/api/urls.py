@@ -42,4 +42,19 @@ urlpatterns = [
         name="my_order_detail",
     ),
 
+    # Toma de una OT disponible: el técnico se adjudica trabajo sin dueño.
+    #
+    # Es la acción sobre un recurso concreto, así que va como sufijo del id y
+    # no como una ruta suelta con el id en el cuerpo: el objeto de la acción
+    # se lee en la URL. Mismo criterio que la web, que expone
+    # `ordenes/<pk>/asignar/`.
+    #
+    # No eclipsa al detalle ni al revés: Django resuelve la ruta completa, y
+    # `<int:pk>/` solo casa con la URL que termina en el id.
+    path(
+        "<int:pk>/claim/",
+        views.ClaimWorkOrderView.as_view(),
+        name="claim",
+    ),
+
 ]
