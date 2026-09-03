@@ -70,6 +70,14 @@ urlpatterns = [
         include("apps.work_orders.urls"),
     ),
 
+    # Portal móvil/responsive del técnico. El HTML es público porque no
+    # contiene datos operativos; toda lectura/escritura real exige el token de
+    # la API y vuelve a validar que el usuario sea un técnico activo.
+    path(
+        "technician/",
+        include("apps.work_orders.technician_urls"),
+    ),
+
     # API del técnico (app/PWA) — canal separado del login web de sesión:
     # autenticación por token, sin cookies ni plantillas.
     #
