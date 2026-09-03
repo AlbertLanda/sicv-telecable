@@ -70,12 +70,4 @@ class Migration(migrations.Migration):
                 verbose_name="Anexos de TV",
             ),
         ),
-        migrations.AddConstraint(
-            model_name="subscription",
-            constraint=models.UniqueConstraint(
-                condition=models.Q(is_active=True) & ~models.Q(status="CANCELLED"),
-                fields=("customer", "address", "service_type"),
-                name="unique_open_service_per_address",
-            ),
-        ),
     ]
