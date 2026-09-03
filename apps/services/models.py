@@ -2,7 +2,6 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 
 from apps.customers.models import Customer, CustomerAddress
 
@@ -266,15 +265,6 @@ class Subscription(models.Model):
                     "service_number",
                 ],
                 name="unique_customer_service_number",
-            ),
-            models.UniqueConstraint(
-                fields=[
-                    "customer",
-                    "address",
-                    "service_type",
-                ],
-                condition=Q(is_active=True) & ~Q(status="CANCELLED"),
-                name="unique_open_service_per_address",
             ),
         ]
 
