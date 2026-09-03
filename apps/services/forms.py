@@ -12,6 +12,9 @@ class SubscriptionCreateForm(forms.ModelForm):
     service_number = forms.IntegerField(
         required=False,
         min_value=1,
+        error_messages={
+            "min_value": "El número de servicio debe ser mayor o igual a 1.",
+        },
         widget=forms.HiddenInput(),
     )
 
