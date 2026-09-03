@@ -348,3 +348,129 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"{self.customer} - {self.plan}"
+
+
+class SubscriptionAnnexAdjustment(models.Model):
+    """
+    Movimiento futuro de anexos asociado a una OT independiente.
+
+    La suscripción conserva el total vigente (`annex_count`) y este registro
+    conserva la trazabilidad de cómo se solicitó llegar al nuevo total. El
+    cambio no se aplica al crear la OT: solo se aplica después de una
+    liquidación exitosa de esa orden.
+    """
+
+    class Operation(models.TextChoices):
+        ADD = "ADD", "Aumento de anexos"
+        REMOVE = "REMOVE", "Retiro de anexos"
+
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.PROTECT,
+        related_name="annex_adjustments",
+        verbose_name="Suscripción",
+    )
+
+    work_order = models.OneToOneField(
+        "work_orders.WorkOrder",
+        on_delete=models.PROTECT,
+        related_name="annex_adjustment",
+        verbose_name="Orden de trabajo",
+    )
+
+    operation = models.CharField(
+        max_length=10,
+        choices=Operation.choices,
+        verbose_name="Operación",
+    )
+
+    previous_annex_count = models.PositiveIntegerField(
+        verbose_name="Anexos antes",
+    )
+
+    quantity = models.PositiveIntegerField(
+        verbose_name="Cantidad a modificar",
+    )
+
+    target_annex_count = models.PositiveIntegerField(
+        verbose_name="Anexos resultantes",
+    )
+
+    installation_charge = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Cobro único de instalación",
+    )
+
+    monthly_delta = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Variación mensual",
+    )
+
+    monthly_charge_after = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Cargo mensual de anexos resultante",
+    )
+
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Aplicado en la suscripción",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Ajuste de anexos"
+        verbose_name_plural = "Ajustes de anexos"
+        ordering = ["-created_at"]
+
+    def clean(self):
+        super().clean()
+
+        if self.quantity < 1:
+            raise ValidationError({
+                "quantity": "La cantidad de anexos debe ser mayor a cero."
+            })
+
+        if (
+            self.subscription_id
+            and not self.subscription.service_type.supports_tv_annexes
+        ):
+            raise ValidationError(
+                "La suscripción seleccionada no admite anexos de TV."
+            )
+
+        if self.work_order_id and self.subscription_id:
+            if self.work_order.subscription_id != self.subscription_id:
+                raise ValidationError(
+                    "La OT de anexos debe pertenecer a la misma suscripción."
+                )
+
+        expected_target = self.previous_annex_count
+        if self.operation == self.Operation.ADD:
+            expected_target += self.quantity
+        elif self.operation == self.Operation.REMOVE:
+            if self.quantity > self.previous_annex_count:
+                raise ValidationError({
+                    "quantity": "No se pueden retirar más anexos de los existentes."
+                })
+            expected_target -= self.quantity
+
+        if self.target_annex_count != expected_target:
+            raise ValidationError({
+                "target_annex_count": (
+                    "El total resultante no coincide con la operación solicitada."
+                )
+            })
+
+    def __str__(self):
+        return (
+            f"{self.subscription} - {self.get_operation_display()} "
+            f"({self.previous_annex_count} → {self.target_annex_count})"
+        )
