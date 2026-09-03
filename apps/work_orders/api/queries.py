@@ -20,7 +20,10 @@ estado nuevo y el dominio queda intacto.
 """
 
 from apps.work_orders.models import WorkOrder
-from apps.work_orders.services import INSTALLATION_ORDER_TYPE_CODE
+from apps.work_orders.services import (
+    INSTALLATION_ORDER_TYPE_CODE,
+    SUBSCRIPTION_BLOCKED_STATUSES,
+)
 
 
 def available_work_orders(queryset=None):
@@ -66,6 +69,28 @@ def available_work_orders(queryset=None):
        La comparación es exacta, así que el `DEMO-INSTALLATION` de datos de
        prueba queda fuera sin necesitar una exclusión aparte.
 
+    5. **La suscripción no está en un estado que bloquee trabajo nuevo**
+       (bloqueo B10, mitigación del día 6). Las cuatro condiciones anteriores
+       miran solo la orden, y eso dejaba un hueco: `WorkOrder` guarda su propio
+       estado, así que una OT nacida sobre una suscripción válida sigue en
+       `PENDING` aunque la suscripción se cancele **después**. El camino existe
+       —un corte definitivo pone la suscripción en `CANCELLED` y no toca las
+       demás órdenes de esa suscripción— y el resultado era que el técnico
+       podía tomar y viajar a instalar un servicio que comercialmente ya no
+       existe.
+
+       La lista se **importa del dominio**: es la misma
+       `SUBSCRIPTION_BLOCKED_STATUSES` desde la que `create_work_order()` se
+       niega a registrar trabajo nuevo. No se inventa un criterio para el
+       canal: si el dominio no aceptaría crear esa orden hoy, el canal no la
+       publica. Y si mañana negocio añade un estado a esa lista, las dos
+       puntas se mueven juntas.
+
+       Es una **mitigación de canal, no un efecto de dominio**: la OT sigue
+       viva y visible para despacho, que es quien debe decidir si se anula.
+       Qué hacer con las OT abiertas al cancelar una suscripción sigue siendo
+       decisión de negocio (ver docs/orden_tecnica_contrato_compartido.md §6).
+
     El parámetro `queryset` permite aplicar la regla sobre una consulta ya
     preparada —con `select_related()` en el listado, con
     `select_for_update()` en el claim— sin que este módulo tenga que conocer
@@ -78,4 +103,6 @@ def available_work_orders(queryset=None):
         assigned_technician__isnull=True,
         attention_type=WorkOrder.AttentionType.FIELD,
         order_type__code=INSTALLATION_ORDER_TYPE_CODE,
+    ).exclude(
+        subscription__status__in=SUBSCRIPTION_BLOCKED_STATUSES,
     )
