@@ -1,10 +1,26 @@
-﻿from django import forms
+from django import forms
 
 from .models import Subscription, ServiceType, Plan
 from apps.customers.models import CustomerAddress
 
 
 class SubscriptionCreateForm(forms.ModelForm):
+    tv_count = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label="Cantidad total de televisores",
+        widget=forms.NumberInput(
+            attrs={
+                "class": "form-control",
+                "min": "1",
+                "inputmode": "numeric",
+            }
+        ),
+        help_text=(
+            "Solo aplica a CABLE/DUO. Los primeros TV incluidos por el plan "
+            "no generan anexo; desde el siguiente se calcula automáticamente."
+        ),
+    )
 
     class Meta:
         model = Subscription
@@ -13,7 +29,6 @@ class SubscriptionCreateForm(forms.ModelForm):
             "address",
             "service_type",
             "plan",
-            "service_number",
             "billing_cycle",
         ]
 
@@ -33,12 +48,6 @@ class SubscriptionCreateForm(forms.ModelForm):
                     "class": "form-select",
                 }
             ),
-            "service_number": forms.NumberInput(
-                attrs={
-                    "class": "form-control",
-                    "min": "1",
-                }
-            ),
             "billing_cycle": forms.NumberInput(
                 attrs={
                     "class": "form-control",
@@ -48,10 +57,9 @@ class SubscriptionCreateForm(forms.ModelForm):
         }
 
         labels = {
-            "address": "Dirección",
+            "address": "Domicilio del servicio",
             "service_type": "Tipo de servicio",
             "plan": "Plan",
-            "service_number": "Número de servicio",
             "billing_cycle": "Ciclo de facturación",
         }
 
@@ -61,14 +69,13 @@ class SubscriptionCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.customer = customer
+        self.calculated_annex_count = 0
 
         # ---------------------------------------------------------
         # DIRECCIONES DEL CLIENTE
         # ---------------------------------------------------------
 
-        self.fields["address"].queryset = (
-            CustomerAddress.objects.none()
-        )
+        self.fields["address"].queryset = CustomerAddress.objects.none()
 
         if customer is not None:
             self.fields["address"].queryset = (
@@ -109,23 +116,6 @@ class SubscriptionCreateForm(forms.ModelForm):
         )
 
     # -------------------------------------------------------------
-    # VALIDAR NÚMERO DE SERVICIO
-    # -------------------------------------------------------------
-
-    def clean_service_number(self):
-        value = self.cleaned_data.get("service_number")
-
-        if value is None:
-            return value
-
-        if value < 1:
-            raise forms.ValidationError(
-                "El número de servicio debe ser mayor o igual a 1."
-            )
-
-        return value
-
-    # -------------------------------------------------------------
     # VALIDAR CICLO DE FACTURACIÓN
     # -------------------------------------------------------------
 
@@ -152,7 +142,7 @@ class SubscriptionCreateForm(forms.ModelForm):
         address = cleaned_data.get("address")
         service_type = cleaned_data.get("service_type")
         plan = cleaned_data.get("plan")
-        service_number = cleaned_data.get("service_number")
+        tv_count = cleaned_data.get("tv_count")
 
         # Dirección
         if self.customer and address:
@@ -191,21 +181,69 @@ class SubscriptionCreateForm(forms.ModelForm):
                     ),
                 )
 
-        # Número de servicio
-        if self.customer and service_type and service_number:
-            exists = Subscription.objects.filter(
-                customer=self.customer,
-                service_type=service_type,
-                service_number=service_number,
-            ).exists()
+        # ---------------------------------------------------------
+        # ANEXOS DE TV
+        #
+        # ATC indica la cantidad TOTAL de televisores. El SICV calcula
+        # cuántos exceden los incluidos por el plan. Internet puro no
+        # admite este dato ni por UI ni mediante un POST manipulado.
+        # ---------------------------------------------------------
+
+        self.calculated_annex_count = 0
+
+        if service_type and plan and service_type.supports_tv_annexes:
+            if tv_count is None:
+                self.add_error(
+                    "tv_count",
+                    (
+                        "Indique la cantidad total de televisores que "
+                        "recibirán señal de cable."
+                    ),
+                )
+            else:
+                self.calculated_annex_count = max(
+                    tv_count - plan.included_tv_points,
+                    0,
+                )
+
+        elif tv_count not in (None, 0):
+            self.add_error(
+                "tv_count",
+                (
+                    "La cantidad de televisores solo aplica a servicios "
+                    "CABLE/DUO que permiten anexos de TV."
+                ),
+            )
+
+        # ---------------------------------------------------------
+        # EVITAR SERVICIO OPERATIVO DUPLICADO EN EL MISMO DOMICILIO
+        #
+        # Una nueva suscripción sí puede corresponder a otro domicilio o
+        # a otro tipo de servicio. Lo que no se permite por defecto es
+        # abrir otra instancia del mismo servicio en el mismo domicilio
+        # mientras exista una vigente/no cancelada.
+        # ---------------------------------------------------------
+
+        if self.customer and address and service_type:
+            exists = (
+                Subscription.objects
+                .filter(
+                    customer=self.customer,
+                    address=address,
+                    service_type=service_type,
+                    is_active=True,
+                )
+                .exclude(status=Subscription.Status.CANCELLED)
+                .exists()
+            )
 
             if exists:
                 self.add_error(
-                    "service_number",
+                    "service_type",
                     (
-                        "El cliente ya tiene registrado este "
-                        "número de servicio para el tipo de "
-                        "servicio seleccionado."
+                        "El cliente ya tiene este tipo de servicio abierto "
+                        "en el domicilio seleccionado. Use otro domicilio, "
+                        "otro servicio o cierre/cancele el anterior."
                     ),
                 )
 
