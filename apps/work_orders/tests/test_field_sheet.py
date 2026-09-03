@@ -213,17 +213,19 @@ class LocationDisplayTests(WorkOrderTestCase):
 
         self.assertFalse(result["has_valid_gps"])
 
-    def test_only_one_axis_zero_is_still_valid(self):
-        """Cero en un solo eje puede ser una coordenada real (el ecuador,
-        el meridiano de Greenwich); solo (0, 0) a la vez es la señal de
-        'nunca se guardó nada'."""
+    def test_only_one_axis_zero_is_invalid_for_this_provider(self):
+        """Distriluz usa cero como centinela de ausencia de georreferencia.
+
+        En el SICV operativo no se publica un par parcial/centinela aunque el
+        otro eje tenga valor: una ubicación dudosa no debe parecer exacta.
+        """
         self.address.latitude = Decimal("0")
         self.address.longitude = Decimal("-77.2069000")
         self.address.save()
 
         result = resolve_location_display(self.address)
 
-        self.assertTrue(result["has_valid_gps"])
+        self.assertFalse(result["has_valid_gps"])
 
     def test_address_text_is_always_present_regardless_of_gps(self):
         self.address.latitude = None
