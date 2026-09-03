@@ -197,6 +197,16 @@ class CustomerInitialForm(forms.Form):
 
         # ---------------------------------------------------------
         # VALIDACIÓN DE DUPLICADO
+        #
+        # Sin filtrar por is_active: la restricción única del modelo
+        # (Customer.Meta.constraints, unique_customer_document) es
+        # sobre document_type + document_number sin condición de
+        # is_active, así que un cliente inactivo con el mismo
+        # documento igual bloquea el guardado en Pantalla 4. Filtrar
+        # aquí solo por activos hacía que ese caso pasara Pantalla 3
+        # sin aviso y reventara después con el IntegrityError genérico
+        # de CustomerGeneralDataView. El chequeo debe reflejar
+        # exactamente lo que la base de datos va a permitir.
         # ---------------------------------------------------------
 
         if not self.errors:
@@ -204,7 +214,6 @@ class CustomerInitialForm(forms.Form):
             exists = Customer.objects.filter(
                 document_type=document_type,
                 document_number=document_number,
-                is_active=True,
             ).exists()
 
             if exists:

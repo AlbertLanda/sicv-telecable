@@ -17,6 +17,7 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apps.work_orders.services import attend_order, liquidate_order
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -112,6 +113,11 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "detail",
                 "branch",
                 "zone",
+                "reason",
+                "started_at",
+                "attended_at",
+                "can_start_attention",
+                "technical_data",
             },
         )
 
@@ -174,6 +180,275 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["zone"])
+
+    def test_detail_exposes_the_work_fields_of_the_technician(self):
+        """La ficha dice por qué existe la OT, cuándo se trabajó y qué ofrecer.
+
+        `reason` es catálogo y puede faltar; `started_at` y `attended_at` son
+        nulos mientras no ocurran; `can_start_attention` lo decide el dominio
+        —no la app— leyendo las mismas condiciones que verifica
+        `start_attention()`.
+        """
+        order = self.create_assigned_order(reason=self.installation_reason)
+
+        self.authenticate(self.technician)
+
+        data = self.api.get(self.detail_url(order.pk)).data
+
+        self.assertEqual(data["reason"], "Cliente nuevo")
+        self.assertIsNone(data["started_at"])
+        self.assertIsNone(data["attended_at"])
+        self.assertTrue(data["can_start_attention"])
+
+    def test_started_order_reports_its_timestamps(self):
+        """Con la atención iniciada, la marca de tiempo viaja y la acción no.
+
+        Una orden ya en atención no vuelve a iniciarse: `can_start_attention`
+        pasa a `False` sin que la app tenga que deducirlo del estado.
+        """
+        order = self.create_order_in_progress()
+
+        self.authenticate(self.technician)
+
+        data = self.api.get(self.detail_url(order.pk)).data
+
+        self.assertIsNotNone(data["started_at"])
+        self.assertFalse(data["can_start_attention"])
+
+
+class WorkOrderDetailLocationTests(WorkOrderDetailAPITestCase):
+    """Ubicación: la dirección textual siempre; el GPS solo si es real.
+
+    La regla vive en `apps.customers.coordinates` y estas pruebas verifican que
+    el canal técnico la aplique. El caso que las motiva no es teórico:
+    Distriluz responde `0` en `gpsx`/`gpsy` cuando el suministro no tiene
+    georreferencia, y `0,0` es un punto en el golfo de Guinea. Un técnico que
+    abre ese enlace en la puerta del cliente no ve un dato faltante: ve un
+    destino equivocado.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate(self.technician)
+
+    def location_of(self, **address_fields):
+        """Bloque `address` de la ficha, con la dirección ajustada."""
+        for field, value in address_fields.items():
+            setattr(self.address, field, value)
+
+        self.address.save()
+
+        order = self.create_assigned_order()
+
+        return self.api.get(self.detail_url(order.pk)).data["address"]
+
+    def test_valid_coordinates_travel_with_their_map_link(self):
+        """Con GPS real, el técnico recibe las coordenadas y el enlace."""
+        location = self.location_of(
+            latitude="-6.2290000",
+            longitude="-77.8730000",
+        )
+
+        self.assertEqual(location["latitude"], "-6.2290000")
+        self.assertEqual(location["longitude"], "-77.8730000")
+        self.assertIn("-6.2290000,-77.8730000", location["gps_link"])
+
+    def test_zero_coordinates_are_not_gps(self):
+        """`0 / 0.0000000` es el centinela de «sin dato», no una ubicación.
+
+        Es el caso exacto que la coordinación de hoy pide blindar. Se publica
+        `null` y sin enlace: el técnico ve que no hay GPS, en lugar de recibir
+        un pin a 9.000 km.
+        """
+        location = self.location_of(
+            latitude="0.0000000",
+            longitude="0.0000000",
+        )
+
+        self.assertIsNone(location["latitude"])
+        self.assertIsNone(location["longitude"])
+        self.assertEqual(location["gps_link"], "")
+
+    def test_empty_coordinates_are_not_gps(self):
+        """Sin coordenadas registradas, el bloque responde igual: `null`."""
+        location = self.location_of(latitude=None, longitude=None)
+
+        self.assertIsNone(location["latitude"])
+        self.assertIsNone(location["longitude"])
+        self.assertEqual(location["gps_link"], "")
+
+    def test_half_a_coordinate_is_not_published(self):
+        """El par es indivisible: una coordenada sola no ubica nada.
+
+        Publicar la mitad invitaría a que alguien compusiera un mapa con el
+        valor que falta puesto a cero, que es el mismo problema por otra vía.
+        """
+        location = self.location_of(latitude="-6.2290000", longitude="0")
+
+        self.assertIsNone(location["latitude"])
+        self.assertIsNone(location["longitude"])
+        self.assertEqual(location["gps_link"], "")
+
+    def test_the_textual_address_always_travels(self):
+        """Sin GPS, la dirección y el distrito siguen ahí.
+
+        Es lo que permite llegar cuando el GPS falta, y la razón por la que
+        descartar coordenadas falsas no deja al técnico sin nada: la ubicación
+        útil nunca fue la coordenada.
+        """
+        location = self.location_of(
+            latitude="0",
+            longitude="0",
+            reference="Frente al parque, portón azul",
+        )
+
+        self.assertEqual(location["address"], "Av. Los Álamos 123")
+        self.assertEqual(location["district"], "Chachapoyas")
+        self.assertEqual(
+            location["reference"],
+            "Frente al parque, portón azul",
+        )
+
+    def test_a_stored_link_over_invalid_coordinates_is_not_served(self):
+        """Un enlace guardado antes de la regla no se publica.
+
+        El enlace se **deriva** de las coordenadas en lugar de leerse de la
+        base de datos, justamente porque el que hay almacenado pudo
+        construirse sobre un `0,0`. Si se sirviera tal cual, el dato falso
+        volvería a aparecer por la puerta de atrás.
+        """
+        location = self.location_of(
+            latitude="0",
+            longitude="0",
+            gps_link=(
+                "https://www.google.com/maps/search/?api=1&query=0.0,0.0"
+            ),
+        )
+
+        self.assertEqual(location["gps_link"], "")
+
+
+class WorkOrderDetailTechnicalDataTests(WorkOrderDetailAPITestCase):
+    """El bloque de datos técnicos: una sola OT, sin modelo paralelo."""
+
+    def setUp(self):
+        super().setUp()
+        self.authenticate(self.technician)
+
+    def test_order_without_liquidation_reports_null(self):
+        """Sin nada registrado, `technical_data` es `null`.
+
+        `null` y no un bloque de campos vacíos: el cliente debe poder
+        distinguir «el técnico aún no liquidó» de «liquidó dejando los campos
+        opcionales en blanco».
+        """
+        order = self.create_assigned_order()
+
+        data = self.api.get(self.detail_url(order.pk)).data
+
+        self.assertIsNone(data["technical_data"])
+
+    def test_registered_technical_data_travels_in_the_detail(self):
+        """Lo que el técnico ejecutó se lee en la misma ficha.
+
+        Los datos salen de `WorkOrderLiquidation`, que es donde el dominio ya
+        los guarda: la Orden Técnica sigue siendo una sola `WorkOrder` y este
+        bloque no es una copia paralela.
+        """
+        liquidation = self.create_liquidation()
+
+        data = self.api.get(self.detail_url(liquidation.work_order.pk)).data
+
+        technical_data = data["technical_data"]
+
+        self.assertEqual(
+            set(technical_data.keys()),
+            {
+                "liquidated_at",
+                "resolution_detail",
+                "technical_notes",
+                "network_element",
+                "network_port",
+                "equipment_serial",
+                "signal_level_dbm",
+                "cable_meters_used",
+                "krill_reference",
+                "review_status",
+                "review_status_display",
+            },
+        )
+
+        self.assertEqual(technical_data["network_element"], "NAP-014")
+        self.assertEqual(technical_data["network_port"], "5")
+        self.assertEqual(technical_data["equipment_serial"], "ABC123")
+        self.assertEqual(
+            technical_data["review_status"],
+            "LIQUIDATED",
+        )
+        self.assertEqual(
+            technical_data["review_status_display"],
+            "Liquidada",
+        )
+
+    def test_technical_data_is_read_only_in_this_channel(self):
+        """El detalle no admite escritura, tampoco de los datos técnicos.
+
+        Registrarlos pasa por `liquidate_order()`, que exige orden atendida y
+        aplica el ciclo de revisión. Una escritura aquí sería una segunda vía
+        de liquidación sin revisión.
+        """
+        liquidation = self.create_liquidation()
+
+        url = self.detail_url(liquidation.work_order.pk)
+
+        for method in ("put", "patch"):
+            with self.subTest(metodo=method):
+                response = getattr(self.api, method)(
+                    url,
+                    {"technical_data": {"equipment_serial": "HACKED"}},
+                    format="json",
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_405_METHOD_NOT_ALLOWED,
+                )
+
+        liquidation.refresh_from_db()
+
+        self.assertEqual(liquidation.equipment_serial, "ABC123")
+
+    def test_another_technicians_technical_data_is_unreachable(self):
+        """Aislamiento por usuario: el bloque técnico no abre una vía nueva.
+
+        La ficha completa —datos técnicos incluidos— vive detrás del mismo
+        queryset filtrado por `request.user`, así que una OT ajena responde 404
+        y lo que otro técnico registró en campo no viaja en ninguna forma.
+        """
+        foreign_order = self.create_order()
+        foreign_order.assign_technician(
+            technician=self.other_technician,
+            assigned_by=self.supervisor,
+        )
+        foreign_order.start_attention(user=self.other_technician)
+
+        attend_order(
+            foreign_order,
+            result=self.installation_success,
+            user=self.other_technician,
+        )
+
+        liquidate_order(
+            foreign_order,
+            user=self.other_technician,
+            resolution_detail="Instalación del otro técnico.",
+            equipment_serial="SERIE-AJENA",
+        )
+
+        response = self.api.get(self.detail_url(foreign_order.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertNotIn("SERIE-AJENA", response.content.decode())
 
 
 class WorkOrderDetailIsolationTests(WorkOrderDetailAPITestCase):

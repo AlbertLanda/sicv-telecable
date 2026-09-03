@@ -1,5 +1,6 @@
+import logging
+
 from email.quoprimime import quote
-from uuid import uuid4
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -54,6 +55,8 @@ from apps.contracts.models import Contract
 # la lógica de persistencia de órdenes queda fuera del alcance de esta
 # actividad.
 from apps.work_orders.models import OrderType, WorkOrder
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerSearchView(LoginRequiredMixin, ListView):
@@ -522,25 +525,92 @@ class CustomerGeneralDataView(LoginRequiredMixin, FormView):
 
                 # -----------------------------------------
                 # CÓDIGO
+                #
+                # Código de abonado por sede (mejora solicitada
+                # 02/09): PREFIJO01-ACORRELATIVO, p. ej.
+                # HY01-A0000001 para el primer cliente de Huancayo.
+                # customer.branch ya viene asignado por el
+                # ModelForm (campo "branch" de la Pantalla 4), así
+                # que el correlativo por sede se puede calcular acá.
+                # Ver Customer.generate_code().
                 # -----------------------------------------
 
-                customer.code = (
-                    f"CLI-{uuid4().hex[:8].upper()}"
+                customer.code = Customer.generate_code(
+                    customer.branch
                 )
 
                 customer.save()
 
                 self.object = customer
 
-        except IntegrityError:
+        except IntegrityError as exc:
 
-            form.add_error(
-                None,
-                (
-                    "No fue posible registrar el cliente. "
-                    "Verifique los datos e inténtelo nuevamente."
-                ),
+            # -----------------------------------------
+            # MENSAJE ESPECÍFICO PARA DOCUMENTO DUPLICADO
+            #
+            # CustomerInitialForm.clean() (Pantalla 3) ya
+            # rechaza este caso antes de llegar aquí, pero
+            # este bloque queda como defensa en profundidad
+            # (p. ej. datos de sesión de Pantalla 3 que
+            # quedaron desactualizados, o una carrera entre
+            # dos registros concurrentes con el mismo
+            # documento). Si el motivo real del IntegrityError
+            # es la restricción única de documento, se lo
+            # decimos al usuario en vez del mensaje genérico.
+            #
+            # Se registra siempre el detalle real del error en el
+            # log del servidor: el mensaje que ve el usuario es
+            # deliberadamente genérico cuando no se trata de un
+            # documento duplicado, pero swallowing el detalle por
+            # completo hace imposible diagnosticar la causa real
+            # (por ejemplo, una restricción distinta a la de
+            # documento, o un problema con la sede seleccionada).
+            # -----------------------------------------
+
+            logger.warning(
+                "IntegrityError al registrar cliente (sede=%s, "
+                "document_type=%s, document_number=%s): %s",
+                self.request.POST.get("branch"),
+                self.registration_data.get("document_type"),
+                self.registration_data.get("document_number"),
+                exc,
             )
+
+            document_type = self.registration_data.get(
+                "document_type"
+            )
+
+            document_number = self.registration_data.get(
+                "document_number"
+            )
+
+            if (
+                document_type
+                and document_number
+                and Customer.objects.filter(
+                    document_type=document_type,
+                    document_number=document_number,
+                ).exists()
+            ):
+
+                form.add_error(
+                    None,
+                    (
+                        "Ya existe un cliente registrado con este "
+                        "tipo y número de documento. Vuelve a "
+                        "iniciar el registro con otro documento."
+                    ),
+                )
+
+            else:
+
+                form.add_error(
+                    None,
+                    (
+                        "No fue posible registrar el cliente. "
+                        "Verifique los datos e inténtelo nuevamente."
+                    ),
+                )
 
             return self.form_invalid(form)
 
@@ -866,6 +936,29 @@ class CustomerAddressCreateView(LoginRequiredMixin, CreateView):
             **kwargs,
         )
 
+    def get(self, request, *args, **kwargs):
+        # -----------------------------------------------------------
+        # OTRA DIRECCIÓN PARA OTRO SERVICIO (mejora solicitada 02/09)
+        #
+        # El resumen previo a la contratación (subscription_summary)
+        # enlaza aquí con ?flow=another_service cuando el operador
+        # necesita registrar un servicio adicional en un domicilio
+        # nuevo, reutilizando esta misma pantalla de alta de
+        # dirección -la misma ruta que ya usa el flujo guiado desde
+        # Datos Generales-. Se deja la misma marca de sesión que deja
+        # ese flujo para que, al guardar la dirección, se continúe
+        # directo a registrar la suscripción en vez de volver a la
+        # ficha del cliente.
+        # -----------------------------------------------------------
+
+        if request.GET.get("flow") == "another_service":
+            request.session["customer_flow_return"] = {
+                "type": "subscription_new_service",
+                "customer_pk": self.customer.pk,
+            }
+
+        return super().get(request, *args, **kwargs)
+
     def form_valid(self, form):
         try:
             with transaction.atomic():
@@ -895,6 +988,40 @@ class CustomerAddressCreateView(LoginRequiredMixin, CreateView):
             self.request,
             "Dirección registrada correctamente.",
         )
+
+        # -----------------------------------------------------------
+        # CONTINUAR LA SECUENCIA COMERCIAL
+        #
+        # BUSCAR/REGISTRAR CLIENTE -> REGISTRAR DIRECCIÓN -> SELECCIONAR
+        # SERVICIO Y PLAN -> CREAR SUSCRIPCIÓN -> CONTRATO -> ORDEN DE
+        # INSTALACIÓN. Cuando se llega aquí desde ese flujo guiado
+        # (marca dejada por CustomerGeneralDataView al elegir "Registrar
+        # cliente y continuar a direcciones"), o desde el resumen de
+        # suscripción al registrar un servicio adicional (marca
+        # "subscription_new_service" dejada por el GET con
+        # ?flow=another_service, ver arriba), el siguiente paso natural
+        # es seleccionar servicio y plan -no la ficha del cliente-, así
+        # que en ambos casos se continúa directo a
+        # services:subscription_create.
+        #
+        # Fuera de esos flujos (por ejemplo, agregar una dirección
+        # adicional desde la ficha de un cliente ya existente, donde no
+        # se dejó ninguna marca) el comportamiento no cambia: se vuelve
+        # a la ficha, que es donde se inició esa acción.
+        # -----------------------------------------------------------
+
+        flow_return = self.request.session.pop(
+            "customer_flow_return",
+            None,
+        )
+
+        flow_type = flow_return.get("type") if flow_return else None
+
+        if flow_type in ("general_data", "subscription_new_service"):
+            return redirect(
+                "services:subscription_create",
+                customer_pk=self.customer.pk,
+            )
 
         return redirect(
             "customers:detail",

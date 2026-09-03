@@ -27,6 +27,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.organization.models import Branch
+from apps.services.models import Subscription
 from apps.work_orders.api.queries import available_work_orders
 from apps.work_orders.models import OrderType, WorkOrder
 from apps.work_orders.tests.base import WorkOrderTestCase
@@ -145,6 +146,49 @@ class AvailableWorkOrdersDefinitionTests(AvailableWorkOrdersAPITestCase):
         demo_order = self.create_order(order_type=demo_type)
 
         self.assertNotIn(demo_order.order_number, self.listed())
+
+    def test_order_of_a_cancelled_subscription_is_not_available(self):
+        """Mitigación B10: no se publica trabajo de un servicio que ya no existe.
+
+        Las otras cuatro condiciones miran solo la orden, y `WorkOrder` guarda
+        su propio estado: una OT nacida sobre una suscripción válida sigue en
+        `PENDING` aunque la suscripción se cancele después. El camino no es
+        teórico —un corte definitivo cancela la suscripción y no toca sus otras
+        órdenes— y sin esta condición el técnico podía tomar y viajar a
+        instalar un servicio comercialmente cancelado.
+
+        La lista de estados se importa del dominio, así que esta prueba
+        también fija que las dos puntas usen el mismo criterio.
+        """
+        order = self.create_order()
+
+        self.assertIn(order.order_number, self.listed())
+
+        self.subscription.status = Subscription.Status.CANCELLED
+        self.subscription.save(update_fields=["status"])
+
+        self.assertNotIn(order.order_number, self.listed())
+
+    def test_other_subscription_statuses_stay_available(self):
+        """La mitigación es estrecha: solo cancelada sale del pool.
+
+        Una instalación vive precisamente en PRESALE, y una reinstalación
+        puede ocurrir sobre una suscripción suspendida. Excluir de más dejaría
+        al técnico sin trabajo legítimo, que es peor que el problema que se
+        quiere evitar.
+        """
+        order = self.create_order()
+
+        for state in (
+            Subscription.Status.PRESALE,
+            Subscription.Status.ACTIVE,
+            Subscription.Status.SUSPENDED,
+        ):
+            with self.subTest(suscripcion=state):
+                self.subscription.status = state
+                self.subscription.save(update_fields=["status"])
+
+                self.assertIn(order.order_number, self.listed())
 
     def test_everything_listed_satisfies_the_claim_condition(self):
         """Invariante del canal: lo listado es exactamente lo tomable.

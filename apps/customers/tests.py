@@ -857,6 +857,249 @@ class CustomerRegistrationFlowTests(TestCase):
             ),
         )
 
+    def test_registro_duplicado_con_cliente_inactivo_tambien_bloqueado(self):
+        """
+        Customer.Meta.constraints define unique_customer_document sobre
+        document_type + document_number sin condición de is_active: un
+        cliente inactivo con el mismo documento igual impide el alta en
+        base de datos. La Pantalla 3 debe reflejar exactamente esa
+        restricción y bloquear el registro con un mensaje claro, en vez
+        de dejarlo pasar y reventar en la Pantalla 4 con un error
+        genérico de integridad.
+        """
+
+        Customer.objects.create(
+            code="CLI-INACTIVO",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="99887766",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Ana",
+            paternal_surname="Torres",
+            is_active=False,
+        )
+
+        response = self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "99887766",
+            first_name="Ana",
+            paternal_surname="Torres",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            "document_number",
+            (
+                "Ya existe un cliente registrado con este "
+                "tipo y número de documento."
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # SECUENCIA GUIADA: DATOS GENERALES -> DIRECCIÓN -> SUSCRIPCIÓN
+    #
+    # BUSCAR/REGISTRAR CLIENTE -> REGISTRAR DIRECCIÓN -> SELECCIONAR
+    # SERVICIO Y PLAN -> CREAR SUSCRIPCIÓN -> CONTRATO -> ORDEN DE
+    # INSTALACIÓN. Este bloque cubre que, dentro de ese flujo guiado, el
+    # alta no se corte en la ficha del cliente en ningún paso intermedio.
+    # ------------------------------------------------------------------
+
+    def test_datos_generales_continua_a_direcciones(self):
+        """
+        Al completar la Pantalla 4 (datos generales), el flujo guiado
+        continúa directo al registro de dirección, no a la ficha del
+        cliente.
+        """
+
+        self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "45678913",
+            first_name="Elena",
+            paternal_surname="Rios",
+        )
+
+        response = self.client.post(
+            self.general_create_url,
+            {
+                "branch": self.branch.pk,
+                "business_name": "",
+                "phone": "987000001",
+                "secondary_phone": "",
+                "email": "elena@example.com",
+                "action": "address",
+            },
+        )
+
+        customer = Customer.objects.get(document_number="45678913")
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "customers:address_create",
+                kwargs={"customer_pk": customer.pk},
+            ),
+        )
+
+    def test_direccion_continua_a_seleccionar_servicio_y_plan(self):
+        """
+        Al registrar la dirección dentro de la secuencia guiada (llegada
+        desde la Pantalla 4 con action=address), el siguiente paso es
+        seleccionar servicio y plan -services:subscription_create-, no
+        la ficha del cliente.
+        """
+
+        self._iniciar_registro(
+            Customer.DocumentType.DNI,
+            "45678914",
+            first_name="Marco",
+            paternal_surname="Diaz",
+        )
+
+        self.client.post(
+            self.general_create_url,
+            {
+                "branch": self.branch.pk,
+                "business_name": "",
+                "phone": "987000002",
+                "secondary_phone": "",
+                "email": "marco@example.com",
+                "action": "address",
+            },
+        )
+
+        customer = Customer.objects.get(document_number="45678914")
+
+        address_create_url = reverse(
+            "customers:address_create",
+            kwargs={"customer_pk": customer.pk},
+        )
+
+        response = self.client.post(
+            address_create_url,
+            {
+                "zone": self.zone.pk,
+                "address": "Av. Tercera 300",
+                "reference": "",
+                "district": "Huancayo",
+                "meter_number": "",
+                "latitude": "",
+                "longitude": "",
+                "gps_link": "",
+                "is_primary": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "services:subscription_create",
+                kwargs={"customer_pk": customer.pk},
+            ),
+        )
+
+    def test_direccion_para_otro_servicio_continua_a_seleccionar_servicio_y_plan(
+        self,
+    ):
+        """
+        Mejora solicitada 02/09: desde el resumen previo a la
+        contratación, "+ Otro servicio (nueva dirección)" enlaza a
+        customers:address_create con ?flow=another_service. Al abrir
+        esa pantalla se deja la misma marca de sesión que usa la
+        secuencia guiada, así que registrar la dirección continúa
+        directo a seleccionar servicio y plan, no a la ficha del
+        cliente -aunque no se venga de la Pantalla 4 en esta sesión-.
+        """
+
+        customer = Customer.objects.create(
+            code="CLI-OTRO-SERVICIO",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="45678916",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Lucia",
+            paternal_surname="Vega",
+        )
+
+        address_create_url = reverse(
+            "customers:address_create",
+            kwargs={"customer_pk": customer.pk},
+        )
+
+        # Simula abrir la pantalla desde el enlace del resumen de
+        # suscripción, que agrega ?flow=another_service.
+        self.client.get(
+            address_create_url,
+            {"flow": "another_service"},
+        )
+
+        response = self.client.post(
+            address_create_url,
+            {
+                "zone": self.zone.pk,
+                "address": "Av. Quinta 500",
+                "reference": "",
+                "district": "Huancayo",
+                "meter_number": "",
+                "latitude": "",
+                "longitude": "",
+                "gps_link": "",
+                "is_primary": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "services:subscription_create",
+                kwargs={"customer_pk": customer.pk},
+            ),
+        )
+
+    def test_agregar_direccion_fuera_del_flujo_guiado_vuelve_a_la_ficha(self):
+        """
+        Fuera de la secuencia guiada -por ejemplo, agregar una segunda
+        dirección desde la ficha de un cliente ya existente, sin haber
+        pasado por la Pantalla 4 en esta sesión- el comportamiento no
+        cambia: se vuelve a la ficha del cliente.
+        """
+
+        customer = Customer.objects.create(
+            code="CLI-ADDR-FICHA",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="45678915",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Pedro",
+            paternal_surname="Salas",
+        )
+
+        address_create_url = reverse(
+            "customers:address_create",
+            kwargs={"customer_pk": customer.pk},
+        )
+
+        response = self.client.post(
+            address_create_url,
+            {
+                "zone": self.zone.pk,
+                "address": "Av. Cuarta 400",
+                "reference": "",
+                "district": "Huancayo",
+                "meter_number": "",
+                "latitude": "",
+                "longitude": "",
+                "gps_link": "",
+                "is_primary": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("customers:detail", kwargs={"pk": customer.pk}),
+        )
+
     # ------------------------------------------------------------------
     # DIRECCIONES
     # ------------------------------------------------------------------
@@ -953,6 +1196,189 @@ class CustomerRegistrationFlowTests(TestCase):
             primary_addresses.first().address,
             "Av. Segunda 200",
         )
+
+
+class CustomerCodeGenerationTests(TestCase):
+    """
+    Código de abonado por sede (mejora solicitada 02/09):
+    PREFIJO01-ACORRELATIVO, p. ej. HY01-A0000001 para el primer
+    cliente de Huancayo. Ver Customer.generate_code().
+    """
+
+    def setUp(self):
+        # get_or_create: las 3 sedes reales ya vienen sembradas por
+        # apps/organization/migrations/0002_seed_sedes_reales.py, que
+        # también corre sobre la base de datos de pruebas. No se
+        # recrean para no chocar con su restricción de unicidad.
+        self.huancayo, _ = Branch.objects.get_or_create(
+            code="HUANCAYO",
+            defaults={"name": "Huancayo"},
+        )
+
+        self.jauja, _ = Branch.objects.get_or_create(
+            code="JAUJA",
+            defaults={"name": "Jauja"},
+        )
+
+        self.oroya, _ = Branch.objects.get_or_create(
+            code="OROYA",
+            defaults={"name": "La Oroya"},
+        )
+
+        self.user = User.objects.create_user(
+            username="colaborador_codigo",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.huancayo,
+        )
+
+        self.client.login(
+            username="colaborador_codigo",
+            password="123",
+        )
+
+        self.create_url = reverse("customers:create")
+        self.general_create_url = reverse("customers:general_create")
+
+    # ------------------------------------------------------------------
+    # HELPER: registra un cliente completo (Pantalla 3 + Pantalla 4)
+    # ------------------------------------------------------------------
+
+    def _registrar_cliente(self, branch, document_number, first_name):
+        self.client.post(
+            self.create_url,
+            {
+                "document_type": Customer.DocumentType.DNI,
+                "document_number": document_number,
+                "first_name": first_name,
+                "paternal_surname": "Apellido",
+                "maternal_surname": "",
+            },
+        )
+
+        self.client.post(
+            self.general_create_url,
+            {
+                "branch": branch.pk,
+                "business_name": "",
+                "phone": "987000000",
+                "secondary_phone": "",
+                "email": f"{document_number}@example.com",
+            },
+        )
+
+        return Customer.objects.get(document_number=document_number)
+
+    # ------------------------------------------------------------------
+    # PREFIJOS POR SEDE
+    # ------------------------------------------------------------------
+
+    def test_codigo_usa_el_prefijo_de_huancayo(self):
+        customer = self._registrar_cliente(
+            self.huancayo,
+            "70000001",
+            "Rosa",
+        )
+
+        self.assertEqual(customer.code, "HY01-A0000001")
+
+    def test_codigo_usa_el_prefijo_de_jauja(self):
+        customer = self._registrar_cliente(
+            self.jauja,
+            "70000002",
+            "Luis",
+        )
+
+        self.assertEqual(customer.code, "JA01-A0000001")
+
+    def test_codigo_usa_el_prefijo_de_la_oroya(self):
+        customer = self._registrar_cliente(
+            self.oroya,
+            "70000003",
+            "Ana",
+        )
+
+        self.assertEqual(customer.code, "OR01-A0000001")
+
+    # ------------------------------------------------------------------
+    # CORRELATIVO POR SEDE
+    # ------------------------------------------------------------------
+
+    def test_correlativo_incrementa_dentro_de_la_misma_sede(self):
+        primero = self._registrar_cliente(
+            self.huancayo,
+            "70000004",
+            "Carlos",
+        )
+        segundo = self._registrar_cliente(
+            self.huancayo,
+            "70000005",
+            "Diana",
+        )
+
+        self.assertEqual(primero.code, "HY01-A0000001")
+        self.assertEqual(segundo.code, "HY01-A0000002")
+
+    def test_correlativo_es_independiente_por_sede(self):
+        huancayo_cliente = self._registrar_cliente(
+            self.huancayo,
+            "70000006",
+            "Elena",
+        )
+        jauja_cliente = self._registrar_cliente(
+            self.jauja,
+            "70000007",
+            "Fabio",
+        )
+
+        # Cada sede arranca su propio correlativo en 1, aunque ya
+        # existan clientes registrados en otra sede.
+        self.assertEqual(huancayo_cliente.code, "HY01-A0000001")
+        self.assertEqual(jauja_cliente.code, "JA01-A0000001")
+
+    def test_correlativo_no_se_repite_si_el_ultimo_cliente_de_la_sede_esta_inactivo(
+        self,
+    ):
+        primero = self._registrar_cliente(
+            self.huancayo,
+            "70000008",
+            "Gustavo",
+        )
+
+        primero.is_active = False
+        primero.save(update_fields=["is_active"])
+
+        segundo = self._registrar_cliente(
+            self.huancayo,
+            "70000009",
+            "Hilda",
+        )
+
+        self.assertEqual(segundo.code, "HY01-A0000002")
+
+    # ------------------------------------------------------------------
+    # SEDE SIN PREFIJO CONFIGURADO
+    # ------------------------------------------------------------------
+
+    def test_sede_sin_prefijo_configurado_no_rompe_el_alta(self):
+        """
+        Una sede que no está en el mapeo de prefijos oficiales (por
+        ejemplo, una sede de prueba) no debe impedir el registro: se
+        deriva un prefijo de su propio código en vez de fallar.
+        """
+
+        otra_sede = Branch.objects.create(
+            code="LIMA_NORTE",
+            name="Lima Norte",
+        )
+
+        customer = self._registrar_cliente(
+            otra_sede,
+            "70000010",
+            "Irene",
+        )
+
+        self.assertEqual(customer.code, "LI01-A0000001")
 
 
 class CustomerWorkOrderUIPreviewTests(TestCase):

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -202,6 +203,31 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+
+# Hasher rapido EXCLUSIVAMENTE durante la ejecucion de la suite.
+#
+# El costo de la suite no esta en la logica sino en el setUp: los escenarios de
+# prueba crean varios usuarios por cada prueba y cada create_user() ejecuta
+# PBKDF2 con cientos de miles de iteraciones. Medido en este proyecto: 536
+# pruebas en ~34 minutos, y por ese motivo el timeout de CI se amplio a 30.
+# Con MD5 la suite completa baja a minutos, en local y en CI, sin cambiar
+# ninguna validacion ni ninguna prueba.
+#
+# La condicion es deliberadamente estrecha: se exige que el comando de gestion
+# invocado sea exactamente "test" (manage.py test), no que la palabra aparezca
+# en algun argumento. Cualquier otro arranque -runserver, gunicorn, migrate,
+# shell- conserva PBKDF2, de modo que ningun entorno real puede quedar con
+# hasheo debil por accidente. Fuera de la suite esta lista NO se declara y
+# Django usa su valor por defecto.
+#
+# MD5 es inseguro para contrasenas reales. Aqui es correcto porque las
+# contrasenas de prueba se crean y se destruyen con la base de datos de test.
+
+if sys.argv[1:2] == ['test']:
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
 
 
 # Internationalization

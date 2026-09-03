@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+
+{% block title %}Orden {{ order.order_number }} - Instalación{% endblock %}
+
+{% block extra_css %}
+<style>
+
+    /*
+     * Orden de Instalación generada desde el resumen de contratación.
+     *
+     * Revisión del 03/09 (ver InstallationOrderReceiptView): antes era un
+     * comprobante puramente informativo. Ahora también muestra los datos
+     * que ATC ingresó al crearla (motivo, prioridad, tipo de atención,
+     * vendedor) y la ubicación GPS de la dirección de instalación -con la
+     * misma regla que ya aplica la ficha técnica de la orden
+     * (apps.work_orders.location): la dirección textual siempre se
+     * muestra, el enlace a Maps por coordenadas solo aparece con GPS
+     * válido, nunca se inventan ni se corrigen coordenadas-. NAP, borne, MAC/equipo,
+     * precinto, materiales y evidencias siguen sin estar aquí: son la
+     * liquidación técnica, exclusiva del técnico asignado, en la ficha de
+     * la orden -enlazada desde el tercer botón de esta pantalla, cuando
+     * el usuario tiene permiso para verla-.
+     */
+
+    .receipt-toolbar {
+        max-width: 820px;
+        margin: 0 auto 18px;
+    }
+
+    .receipt-sheet {
+        max-width: 820px;
+        margin: 0 auto 40px;
+        background: #FFFFFF;
+        border: 1px solid var(--sicv-linea);
+        border-radius: 10px;
+        box-shadow: 0 1px 2px rgba(31,41,55,0.05), 0 16px 32px -20px rgba(31,41,55,0.22);
+        padding: 32px 38px 28px;
+        color: #1F2937;
+    }
+
+    .receipt-letterhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 3px solid var(--sicv-azul);
+        padding-bottom: 16px;
+        margin-bottom: 18px;
+    }
+
+    .receipt-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .receipt-brand-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--sicv-azul) 0%, #2E8B57 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #FFFFFF;
+        font-weight: 800;
+        font-size: .95rem;
+        flex: none;
+    }
+
+    .receipt-brand-name {
+        font-weight: 800;
+        font-size: 1.3rem;
+        letter-spacing: .04em;
+        color: var(--sicv-azul);
+        line-height: 1.1;
+    }
+
+    .receipt-brand-tag {
+        font-size: .78rem;
+        color: var(--sicv-tinta-tenue);
+        font-weight: 500;
+    }
+
+    .receipt-doc-id {
+        text-align: right;
+    }
+
+    .receipt-doc-title {
+        font-size: 1rem;
+        font-weight: 800;
+        color: var(--sicv-azul);
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        margin-bottom: 2px;
+    }
+
+    .receipt-doc-number {
+        display: inline-block;
+        border: 2px solid var(--sicv-azul);
+        border-radius: 8px;
+        padding: 4px 14px;
+        font-size: 1.1rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: var(--sicv-azul);
+    }
+
+    .receipt-doc-status {
+        margin-top: 6px;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .receipt-section {
+        margin-bottom: 16px;
+    }
+
+    .receipt-section-title {
+        font-size: .74rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #FFFFFF;
+        background: var(--sicv-azul);
+        padding: 5px 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        display: inline-block;
+    }
+
+    .receipt-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px 18px;
+    }
+
+    .receipt-field-full {
+        grid-column: 1 / -1;
+    }
+
+    .receipt-label {
+        font-size: .68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--sicv-tinta-tenue);
+        margin-bottom: 2px;
+    }
+
+    .receipt-value {
+        font-size: .92rem;
+        font-weight: 600;
+        color: #1F2937;
+        word-break: break-word;
+    }
+
+    .receipt-value-muted {
+        color: var(--sicv-tinta-tenue);
+        font-weight: 500;
+        font-style: italic;
+    }
+
+    .receipt-gps-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .8rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+    }
+
+    .receipt-gps-badge.is-valid {
+        background: var(--sicv-superficie-azul);
+        color: var(--sicv-azul);
+        border: 1px solid rgba(27,58,92,.18);
+    }
+
+    .receipt-gps-badge.is-invalid {
+        background: var(--sicv-fondo);
+        color: var(--sicv-tinta-tenue);
+        border: 1px solid var(--sicv-linea);
+    }
+
+    .receipt-note {
+        margin-top: 22px;
+        padding: 12px 14px;
+        border: 1px dashed var(--sicv-linea);
+        border-radius: 8px;
+        font-size: .8rem;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .receipt-footnote {
+        margin-top: 18px;
+        padding-top: 10px;
+        border-top: 1px solid var(--sicv-linea);
+        font-size: .72rem;
+        color: var(--sicv-tinta-tenue);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        body {
+            background: #FFFFFF !important;
+        }
+
+        .receipt-sheet {
+            box-shadow: none;
+            border: none;
+            border-radius: 0;
+            margin: 0;
+            max-width: none;
+            padding: 0;
+        }
+
+        main.sicv-main,
+        main {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+
+        @page {
+            size: A4;
+            margin: 14mm;
+        }
+    }
+
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+
+    <div class="receipt-toolbar d-flex justify-content-end align-items-center no-print">
+
+        {% comment %}
+            Exactamente tres botones bajo la orden creada: Cancelar,
+            Imprimir y Liquidar (aclaración del 03/09).
+
+            - Cancelar solo cierra esta vista y vuelve a la ficha del
+              cliente: no anula ni modifica la orden ya creada.
+            - Imprimir usa el mismo documento en pantalla como base del
+              PDF/impreso -ver @media print arriba-.
+            - Liquidar navega a la ficha técnica de la orden
+              (work_orders:detail), donde viven NAP, borne, MAC/equipo,
+              precinto, materiales y evidencias. Esa ficha ya es de solo
+              lectura para ATC y editable solo por el técnico asignado
+              (ver WorkOrderDetailView): esta pantalla no reimplementa esa
+              regla, solo enlaza a ella. Se ofrece con el mismo permiso
+              que ya exige esa vista (view_workorder).
+        {% endcomment %}
+
+        <div class="d-flex gap-2">
+
+            <a
+                href="{% url 'customers:detail' customer.pk %}#bloque-d"
+                class="btn btn-outline-secondary"
+            >
+                Cancelar
+            </a>
+
+            <button
+                type="button"
+                class="btn btn-outline-primary"
+                onclick="window.print()"
+            >
+                🖨️ Imprimir
+            </button>
+
+            {% if perms.work_orders.view_workorder %}
+                <a
+                    href="{% url 'work_orders:detail' order.pk %}"
+                    class="btn btn-primary"
+                >
+                    Liquidar
+                </a>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <div class="receipt-sheet">
+
+        <div class="receipt-letterhead">
+
+            <div class="receipt-brand">
+
+                <div class="receipt-brand-mark">TC</div>
+
+                <div>
+                    <div class="receipt-brand-name">TELECABLE</div>
+                    <div class="receipt-brand-tag">
+                        {{ customer.branch.name|default:"Operaciones comerciales" }}
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="receipt-doc-id">
+                <div class="receipt-doc-title">
+                    Orden de instalación
+                </div>
+                <div class="receipt-doc-number">
+                    N.º {{ order.order_number }}
+                </div>
+                <div class="receipt-doc-status">
+                    Estado: {{ order.get_status_display }}
+                </div>
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Datos del cliente</div>
+
+            <div class="receipt-grid">
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Cliente</div>
+                    <div class="receipt-value">{{ customer }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Código de cliente</div>
+                    <div class="receipt-value">{{ customer.code }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Teléfono</div>
+                    <div class="receipt-value">
+                        {{ customer.phone|default:"-" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Plan</div>
+                    <div class="receipt-value">
+                        {{ subscription.plan.name }}
+                        {% if subscription.plan.speed_mbps %}
+                            ({{ subscription.plan.speed_mbps }} Mbps)
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Dirección</div>
+                    <div class="receipt-value">{{ address.address }}</div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Código de suministro</div>
+                    <div class="receipt-value {% if not address.electrical_supply_code %}receipt-value-muted{% endif %}">
+                        {{ address.electrical_supply_code|default:"No registrado" }}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Ubicación GPS</div>
+
+            <div class="d-flex flex-wrap align-items-center gap-2">
+
+                <span class="receipt-gps-badge {% if location.has_valid_gps %}is-valid{% else %}is-invalid{% endif %}">
+                    {% if location.has_valid_gps %}
+                        📍 GPS disponible
+                    {% else %}
+                        GPS no disponible
+                    {% endif %}
+                </span>
+
+                {% if location.maps_url %}
+                    <a
+                        href="{{ location.maps_url }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="btn btn-sm btn-outline-primary no-print"
+                    >
+                        {{ location.gps_label }}
+                    </a>
+                {% endif %}
+
+            </div>
+
+            {% if not location.has_valid_gps %}
+                <div class="form-text">
+                    Sin coordenadas confiables registradas para esta
+                    dirección. El enlace de Maps busca por la dirección
+                    textual -no se inventan ni se corrigen coordenadas
+                    aquí-.
+                </div>
+            {% endif %}
+
+        </div>
+
+
+        <div class="receipt-section">
+
+            <div class="receipt-section-title">Datos de la orden</div>
+
+            <div class="receipt-grid">
+
+                <div>
+                    <div class="receipt-label">Fecha y hora de emisión</div>
+                    <div class="receipt-value">
+                        {{ order.created_at|date:"d/m/Y H:i" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Prioridad</div>
+                    <div class="receipt-value">
+                        {{ order.get_priority_display }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Tipo de atención</div>
+                    <div class="receipt-value">
+                        {{ order.get_attention_type_display }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Motivo</div>
+                    <div class="receipt-value {% if not order.reason %}receipt-value-muted{% endif %}">
+                        {{ order.reason.name|default:"Sin motivo registrado" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Vendedor</div>
+                    <div class="receipt-value {% if not order.seller %}receipt-value-muted{% endif %}">
+                        {% if order.seller %}
+                            {{ order.seller.get_full_name|default:order.seller.username }}
+                        {% else %}
+                            Sin vendedor registrado
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="receipt-label">Técnico asignado</div>
+                    <div class="receipt-value">
+                        {% if order.assigned_technician %}
+                            {{ order.assigned_technician.get_full_name|default:order.assigned_technician.username }}
+                        {% else %}
+                            <span class="receipt-value-muted">Pendiente de asignar</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="receipt-field-full">
+                    <div class="receipt-label">Observaciones</div>
+                    <div class="receipt-value {% if not order.detail %}receipt-value-muted{% endif %}">
+                        {{ order.detail|default:"Sin observaciones" }}
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="receipt-note">
+            Esta orden confirma el registro de la Instalación
+            {{ order.order_number }}. NAP, borne, MAC/equipo, precinto,
+            materiales y evidencias se completan en la liquidación
+            técnica, a cargo exclusivo del técnico asignado.
+        </div>
+
+        <div class="receipt-footnote">
+            <span>
+                Generado por {{ order.created_by.get_full_name|default:order.created_by.username }}
+                el {{ order.created_at|date:"d/m/Y H:i" }}
+            </span>
+            <span>SICV · TeleCable</span>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -29,9 +29,6 @@ urlpatterns = [
     ),
 
     # Asignar una orden de trabajo pendiente a un técnico.
-    #
-    # La orden viaja en la ruta; el POST solo elige entre los técnicos que el
-    # formulario ya acotó a la sede de esa orden.
     path(
         "<int:pk>/assign/",
         views.WorkOrderAssignView.as_view(),
@@ -39,13 +36,17 @@ urlpatterns = [
     ),
 
     # Iniciar la atención de una orden ya despachada.
-    #
-    # La orden viaja en la ruta y el POST solo lleva una observación: el
-    # estado destino y la hora real de inicio los pone el dominio, no el
-    # navegador. El GET únicamente confirma; nada cambia hasta el POST.
     path(
         "<int:pk>/start/",
         views.WorkOrderStartAttentionView.as_view(),
         name="start",
+    ),
+
+    # Ficha única de la orden: la misma pantalla sirve a ATC (solo lectura)
+    # y al técnico asignado (además completa ficha técnica y evidencias).
+    path(
+        "<int:pk>/",
+        views.WorkOrderDetailView.as_view(),
+        name="detail",
     ),
 ]

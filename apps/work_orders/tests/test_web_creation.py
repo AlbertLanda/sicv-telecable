@@ -238,6 +238,33 @@ class WorkOrderCreateViewSuccessTests(WorkOrderWebCreationTestCase):
 
         self.assertIsNone(self.subscription.installation_date)
 
+    def test_success_message_links_to_the_order_detail(self):
+        """
+        El flujo comercial debe dejar visible el número de orden y un enlace
+        directo a su ficha, sin obligar a buscarla de nuevo.
+        """
+        response = self.client.post(
+            self.url,
+            self.valid_payload(),
+            follow=True,
+        )
+
+        order = WorkOrder.objects.get()
+
+        messages = [str(message) for message in response.context["messages"]]
+
+        detail_url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": order.pk},
+        )
+
+        self.assertTrue(
+            any(order.order_number in message for message in messages)
+        )
+        self.assertTrue(
+            any(detail_url in message for message in messages)
+        )
+
     def test_optional_fields_may_be_omitted(self):
         response = self.client.post(
             self.url,

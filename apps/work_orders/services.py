@@ -2,10 +2,13 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     OrderType,
     WorkOrder,
+    WorkOrderEvidence,
+    WorkOrderFieldSheet,
     WorkOrderLiquidation,
     WorkOrderLiquidationCorrection,
     WorkOrderLiquidationItem,
@@ -173,6 +176,28 @@ def _validate_creation_catalogs(order_type, subtype, reason, cause):
         )
 
 
+def _validate_seller(seller):
+    """
+    `seller` es opcional -no toda orden nace de una venta con vendedor
+    identificado-, pero cuando se envía debe ser un usuario activo con rol
+    Ventas: igual que assigned_technician exige rol Técnico en el formulario
+    de despacho, aquí se exige rol Ventas para no registrar como vendedor a
+    un usuario de otra área.
+    """
+    if seller is None:
+        return
+
+    if seller.pk is None or not seller.is_active:
+        raise ValidationError(
+            "El vendedor indicado debe ser un usuario activo."
+        )
+
+    if seller.role != User.Role.SALES:
+        raise ValidationError(
+            "El vendedor indicado debe tener el rol de Ventas."
+        )
+
+
 def _validate_creation_subscription(subscription, customer):
     if subscription is None or subscription.pk is None:
         raise ValidationError(
@@ -211,6 +236,7 @@ def create_work_order(
     priority=None,
     detail="",
     scheduled_at=None,
+    seller=None,
 ):
     """
     Registra una nueva orden de trabajo y devuelve la instancia creada.
@@ -223,6 +249,10 @@ def create_work_order(
     datos enviados por el cliente. Tampoco se aceptan `order_number` ni
     `assigned_technician`: el número lo emite el correlativo y la asignación
     de técnico es un flujo aparte.
+
+    `seller` es opcional y, si se envía, debe ser un usuario activo con rol
+    Ventas (ver `_validate_seller`); registra quién originó la venta que dio
+    lugar a la orden, sin abrir un campo de texto libre.
 
     Crear la orden NO toca la suscripción. Una OT de instalación sobre una
     suscripción en PRESALE la deja en PRESALE.
@@ -242,6 +272,7 @@ def create_work_order(
 
     _validate_creation_subscription(subscription, customer)
     _validate_creation_catalogs(order_type, subtype, reason, cause)
+    _validate_seller(seller)
 
     branch = _resolve_branch(subscription, branch)
     zone = _resolve_zone(subscription, zone, branch)
@@ -259,6 +290,7 @@ def create_work_order(
         created_by=created_by,
         detail=detail,
         scheduled_at=scheduled_at,
+        seller=seller,
     )
 
     if attention_type is not None:
@@ -285,14 +317,16 @@ def create_installation_work_order(
     priority=None,
     detail="",
     scheduled_at=None,
+    attention_type=None,
+    seller=None,
 ):
     """
     Registra la OT de instalación que produce el alta comercial FTTH.
 
     Punto de entrada del flujo comercial hacia el dominio de órdenes. Resuelve
-    el tipo INSTALLATION, fija explícitamente la atención en campo y delega la
-    persistencia en create_work_order(), que sigue siendo el único camino que
-    emite el correlativo, valida la suscripción y persiste la orden.
+    el tipo INSTALLATION y delega la persistencia en create_work_order(), que
+    sigue siendo el único camino que emite el correlativo, valida la
+    suscripción y persiste la orden.
 
     La fachada también garantiza idempotencia operativa por suscripción: no se
     permite crear una segunda instalación mientras exista otra que todavía no
@@ -306,8 +340,19 @@ def create_installation_work_order(
 
     No se exponen `subtype` —la instalación no tiene subtipos en el catálogo,
     solo corte y traslado los usan— ni `cause`, que se registra durante la
-    atención y no al crear la orden. `attention_type` tampoco es argumento:
-    la fachada lo fija a FIELD de forma explícita.
+    atención y no al crear la orden.
+
+    `attention_type` (revisión del 03/09): antes la fachada lo fijaba siempre
+    a FIELD para evitar que una orden de instalación terminara como
+    Sistema/NOC por accidente. Ahora ATC sí puede elegirlo explícitamente
+    (Campo / Sistema) al generar la orden desde el resumen de contratación,
+    así que se acepta como argumento opcional; si no se envía, se mantiene el
+    valor por defecto FIELD -el mismo comportamiento de antes de esta
+    revisión-. `create_work_order()` sigue validando que el valor pertenezca
+    a `WorkOrder.AttentionType`.
+
+    `seller` es opcional y se valida en create_work_order() (usuario activo
+    con rol Ventas).
 
     `created_by` debe salir del usuario ejecutor (`request.user`), nunca de
     datos enviados por el navegador.
@@ -368,10 +413,11 @@ def create_installation_work_order(
         branch=branch,
         zone=zone,
         reason=reason,
-        attention_type=WorkOrder.AttentionType.FIELD,
+        attention_type=attention_type or WorkOrder.AttentionType.FIELD,
         priority=priority,
         detail=detail,
         scheduled_at=scheduled_at,
+        seller=seller,
     )
 
 
@@ -467,6 +513,118 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
     apply_order_result(order)
 
     return order
+
+
+# --- Ficha técnica de campo (borrador previo a la liquidación) -------------
+#
+# WorkOrderFieldSheet documenta NAP, borne, MAC/equipo, precinto y las
+# observaciones de campo mientras el técnico todavía está trabajando la
+# orden -antes de que exista liquidación-. No es una liquidación: no exige
+# resolution_detail, no cierra la orden y no transiciona el estado. El
+# técnico puede guardarla varias veces mientras la orden sigue abierta.
+
+FIELD_SHEET_EDITABLE_FIELDS = (
+    "nap",
+    "terminal",
+    "equipment_code",
+    "seal_number",
+    "notes",
+)
+
+
+def _require_assigned_technician(order, user):
+    """
+    Solo el técnico asignado a la orden puede completar su ficha técnica o
+    adjuntar evidencias mientras la atención sigue abierta.
+
+    No se reconsulta el rol del usuario: assign_technician() ya garantiza que
+    assigned_technician es siempre un usuario con rol Técnico, así que
+    comparar la identidad basta.
+    """
+    if user is None or user.pk is None:
+        raise ValidationError(
+            "Debe indicar el usuario que completa la ficha técnica."
+        )
+
+    if not user.is_active:
+        raise ValidationError(
+            "El usuario que completa la ficha técnica debe estar activo."
+        )
+
+    if order.assigned_technician_id != user.pk:
+        raise ValidationError(
+            "Solo el técnico asignado a la orden puede completar su ficha técnica."
+        )
+
+    if order.is_closed:
+        raise ValidationError(
+            "No se puede editar la ficha técnica de una orden cerrada. "
+            f"Estado actual: {order.get_status_display()}."
+        )
+
+
+@transaction.atomic
+def update_field_sheet(order: WorkOrder, user, **fields):
+    """
+    Crea o actualiza la ficha técnica de campo de una orden.
+
+    Único camino legítimo para escribir WorkOrderFieldSheet: valida que quien
+    escribe es el técnico asignado y que la orden sigue abierta, y rechaza
+    cualquier clave que no esté en FIELD_SHEET_EDITABLE_FIELDS antes de tocar
+    la base de datos.
+    """
+    _require_assigned_technician(order, user)
+
+    unknown_fields = set(fields) - set(FIELD_SHEET_EDITABLE_FIELDS)
+
+    if unknown_fields:
+        raise ValidationError(
+            "Campos no reconocidos en la ficha técnica: "
+            f"{', '.join(sorted(unknown_fields))}."
+        )
+
+    sheet, _created = WorkOrderFieldSheet.objects.get_or_create(work_order=order)
+
+    for field, value in fields.items():
+        setattr(sheet, field, value)
+
+    sheet.updated_by = user
+
+    sheet.full_clean(exclude=["work_order"])
+    sheet.save()
+
+    return sheet
+
+
+@transaction.atomic
+def add_work_order_evidence(order: WorkOrder, user, file, description=""):
+    """
+    Adjunta una evidencia (foto o archivo) a la orden.
+
+    Mismo criterio de autorización que la ficha técnica: solo el técnico
+    asignado, y solo mientras la orden sigue abierta. La evidencia se asocia
+    directamente a la orden (liquidation=None); si más adelante se liquida,
+    esa liquidación es un registro aparte y no reclama esta evidencia
+    automáticamente.
+    """
+    _require_assigned_technician(order, user)
+
+    if not file:
+        raise ValidationError(
+            "Debe adjuntar un archivo o fotografía."
+        )
+
+    evidence = WorkOrderEvidence(
+        work_order=order,
+        file=file,
+        description=description,
+        uploaded_by=user,
+    )
+
+    evidence.full_clean(exclude=["work_order", "liquidation"])
+    evidence.save()
+
+    return evidence
 
 
 # Campos técnicos opcionales que liquidate_order() acepta y traslada tal cual

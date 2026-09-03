@@ -557,6 +557,21 @@ class WorkOrder(models.Model):
         verbose_name="Técnico asignado"
     )
 
+    # Revisión del 03/09 del sprint FTTH: ATC puede registrar qué vendedor
+    # originó la venta al generar la Orden de Instalación desde el resumen
+    # de contratación (ver InstallationWorkOrderForm). Es opcional -no toda
+    # instalación nace de una venta con vendedor identificado- y, como
+    # assigned_technician, apunta al usuario y no a un texto libre para que
+    # no se pueda registrar un nombre que no exista en el sistema.
+    seller = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sold_work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Vendedor"
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -1991,3 +2006,98 @@ class WorkOrderEvidence(models.Model):
 
     def __str__(self):
         return f"Evidencia - {self.work_order.order_number}"
+
+
+class WorkOrderFieldSheet(models.Model):
+    """
+    Ficha técnica de campo de una orden de trabajo.
+
+    Es el borrador que el técnico va completando **durante** la atención
+    -NAP, borne, MAC/equipo, precinto y sus observaciones-, antes de que
+    exista una liquidación. WorkOrderLiquidation exige `resolution_detail`
+    y solo puede crearse cuando la orden ya está ATTENDED (ver
+    services.liquidate_order()): no sirve para capturar datos mientras la
+    atención sigue en curso. Esta ficha sí, porque no representa el cierre
+    de la atención, solo el estado actual del punto de instalación.
+
+    Vive aparte de WorkOrderLiquidation a propósito, para no relajar las
+    validaciones de esta última ni duplicar su ciclo de revisión. El técnico
+    la edita solo mientras la orden sigue en trabajo con
+    services.update_field_sheet(); ATC la consulta pero nunca la edita
+    -actualiza_campos técnicos es una atribución exclusiva del técnico
+    asignado-. El correlativo de este modelo con OneToOneField asegura una
+    sola ficha por orden.
+    """
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="field_sheet",
+        verbose_name="Orden de trabajo"
+    )
+
+    nap = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="NAP"
+    )
+
+    terminal = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Borne"
+    )
+
+    equipment_code = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="MAC / Equipo"
+    )
+
+    seal_number = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Precinto"
+    )
+
+    notes = models.TextField(
+        blank=True,
+        verbose_name="Observaciones del técnico"
+    )
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_field_sheet_updates",
+        null=True,
+        blank=True,
+        verbose_name="Actualizado por"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de creación"
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última actualización"
+    )
+
+    class Meta:
+        verbose_name = "Ficha técnica de campo"
+        verbose_name_plural = "Fichas técnicas de campo"
+
+    @property
+    def is_empty(self):
+        """No hay ningún dato técnico cargado todavía."""
+        return not any([
+            self.nap,
+            self.terminal,
+            self.equipment_code,
+            self.seal_number,
+            self.notes,
+        ])
+
+    def __str__(self):
+        return f"Ficha técnica - {self.work_order.order_number}"

@@ -1,5 +1,6 @@
 """Pruebas de consulta de suministro eléctrico y ubicación Distriluz."""
 
+from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import requests
@@ -47,6 +48,21 @@ SOAP_WITHOUT_GPS = """<?xml version="1.0" encoding="utf-8"?>
 </soap:Envelope>
 """
 
+SOAP_WITH_ZERO_GPS = """<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <ConsultaGeneralResponse xmlns="http://www.distriluz.com.pe/">
+      <ConsultaGeneralResult>
+        <string>Direccion</string><string>JR SIN GEO 789</string>
+        <string>DireccionComplementaria</string><string>JAUJA</string>
+        <string>GPSY</string><string>0.0000000</string>
+        <string>GPSX</string><string>0</string>
+      </ConsultaGeneralResult>
+    </ConsultaGeneralResponse>
+  </soap:Body>
+</soap:Envelope>
+"""
+
 
 class DistriluzGPSServiceTests(TestCase):
     @patch("apps.customers.services.distriluz_gps.requests.post")
@@ -72,8 +88,8 @@ class DistriluzGPSServiceTests(TestCase):
         self.assertEqual(data["supply_code"], "75018907")
         self.assertEqual(data["address"], "JR PRUEBA 123")
         self.assertEqual(data["district"], "SAUSA")
-        self.assertEqual(data["latitude"], "-11.7861026")
-        self.assertEqual(data["longitude"], "-75.4900202")
+        self.assertEqual(data["latitude"], Decimal("-11.7861026"))
+        self.assertEqual(data["longitude"], Decimal("-75.4900202"))
         self.assertIn("-11.7861026,-75.4900202", data["gps_link"])
         self.assertNotIn("titular_name", data)
         self.assertNotIn("document_number", data)
@@ -85,8 +101,19 @@ class DistriluzGPSServiceTests(TestCase):
         data = consultar_suministro_gps("75018907")
 
         self.assertEqual(data["address"], "JR SIN GPS 456")
-        self.assertEqual(data["latitude"], "")
-        self.assertEqual(data["longitude"], "")
+        self.assertIsNone(data["latitude"])
+        self.assertIsNone(data["longitude"])
+        self.assertEqual(data["gps_link"], "")
+
+    @patch("apps.customers.services.distriluz_gps.requests.post")
+    def test_zero_gps_is_normalized_before_it_reaches_the_form(self, post):
+        """El centinela 0/0.0000000 de Distriluz nunca entra como GPS válido."""
+        post.return_value = Mock(ok=True, text=SOAP_WITH_ZERO_GPS)
+
+        data = consultar_suministro_gps("75018907")
+
+        self.assertIsNone(data["latitude"])
+        self.assertIsNone(data["longitude"])
         self.assertEqual(data["gps_link"], "")
 
     def test_empty_supply_code_is_rejected_without_network_call(self):

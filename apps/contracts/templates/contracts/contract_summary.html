@@ -159,10 +159,114 @@
     </div>
 
 
-    <div class="alert alert-secondary mb-0">
-        Alta comercial y contrato registrados correctamente. Aún no se
-        ha generado la Orden de Trabajo: la solicitud de instalación
-        se habilita en la siguiente etapa del sprint.
+    <div class="card shadow-sm border-0 mb-0">
+
+        <div class="card-header bg-light">
+            <strong>Orden de instalación</strong>
+        </div>
+
+        <div class="card-body">
+
+            {% if installation_order %}
+
+                <div class="row g-4 mb-3">
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Número de OT</small>
+                        <strong class="text-primary">{{ installation_order.order_number }}</strong>
+                    </div>
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Estado</small>
+                        <strong>{{ installation_order.get_status_display }}</strong>
+                    </div>
+
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Registrada</small>
+                        <strong>{{ installation_order.created_at }}</strong>
+                    </div>
+
+                </div>
+
+                {% if installation_order.status == "PENDING" %}
+                    <p class="text-muted small mb-3">
+                        La orden ya está disponible para tomar desde
+                        la app del técnico.
+                    </p>
+                {% endif %}
+
+                <div class="d-flex flex-wrap gap-2 mb-3">
+
+                    <a
+                        href="{% url 'contracts:installation_order_receipt' customer.pk contract.pk %}"
+                        class="btn btn-outline-primary btn-sm"
+                    >
+                        Ver orden de instalación
+                    </a>
+
+                    {# La ficha es donde se asigna técnico, se completan   #}
+                    {# NAP/borne/MAC/precinto y se adjuntan evidencias -el #}
+                    {# comprobante es de solo lectura y no ofrece nada de  #}
+                    {# eso-. Se ofrece con el mismo permiso que abre la    #}
+                    {# ficha desde cualquier otra pantalla del sistema.    #}
+                    {% if perms.work_orders.view_workorder %}
+                        <a
+                            href="{% url 'work_orders:detail' installation_order.pk %}"
+                            class="btn btn-primary btn-sm"
+                        >
+                            Ver / editar ficha de la orden
+                        </a>
+                    {% endif %}
+
+                </div>
+
+            {% else %}
+
+                <p class="text-muted small mb-3">
+                    Todavía no se generó ninguna Orden de Trabajo para
+                    esta suscripción.
+                </p>
+
+            {% endif %}
+
+            {% if can_generate_installation_order %}
+
+                {% if can_request_installation_order %}
+
+                    {# El botón navega (GET) al formulario de la orden -no #}
+                    {# crea nada en el clic-: InstallationWorkOrderCreateView #}
+                    {# ahora es un FormView que muestra la pantalla de       #}
+                    {# creación aquí y solo genera la orden al confirmar     #}
+                    {# ese formulario (POST).                                #}
+                    <a
+                        href="{% url 'contracts:generate_installation_order' customer.pk contract.pk %}"
+                        class="btn btn-primary"
+                    >
+                        Generar Orden de Instalación
+                    </a>
+
+                {% else %}
+
+                    <div class="alert alert-secondary mb-0">
+                        No tienes permiso para generar órdenes de
+                        trabajo. Solicita a un usuario autorizado que
+                        complete este paso.
+                    </div>
+
+                {% endif %}
+
+            {% else %}
+
+                <div class="alert alert-secondary mb-0">
+                    Ya existe una orden de instalación en curso para
+                    esta suscripción; no se puede generar otra
+                    mientras esa no llegue a un estado final.
+                </div>
+
+            {% endif %}
+
+        </div>
+
     </div>
 
 </div>

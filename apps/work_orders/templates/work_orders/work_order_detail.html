@@ -1,0 +1,642 @@
+{% extends "base.html" %}
+{% load work_order_tags %}
+
+{% block title %}Orden {{ order.order_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /*
+     * La ficha es una sola plantilla para ATC (escritorio, solo lectura) y
+     * para el técnico (pensada para abrirse desde un teléfono en campo).
+     * Bootstrap ya apila las columnas en móvil por defecto; lo de aquí solo
+     * refuerza esa experiencia: campos de lectura legibles y, cuando hay
+     * controles de edición, objetivos de toque grandes y una barra de
+     * acción que no se pierde al hacer scroll en pantallas angostas.
+     */
+
+    .ot-field {
+        margin-bottom: 14px;
+    }
+
+    .ot-field:last-child {
+        margin-bottom: 0;
+    }
+
+    .ot-field-label {
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--sicv-tinta-tenue);
+        margin-bottom: 4px;
+    }
+
+    .ot-field-value {
+        font-size: .95rem;
+        color: var(--sicv-tinta);
+        word-break: break-word;
+    }
+
+    .ot-field-value.text-muted-value {
+        color: var(--sicv-tinta-tenue);
+        font-style: italic;
+    }
+
+    .ot-gps-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .8rem;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+    }
+
+    .ot-gps-badge.is-valid {
+        background: var(--sicv-superficie-azul);
+        color: var(--sicv-azul);
+        border: 1px solid rgba(27,58,92,.18);
+    }
+
+    .ot-gps-badge.is-invalid {
+        background: var(--sicv-fondo);
+        color: var(--sicv-tinta-tenue);
+        border: 1px solid var(--sicv-linea);
+    }
+
+    .ot-evidence-thumb {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--sicv-linea);
+        background: var(--sicv-fondo);
+    }
+
+    .ot-evidence-file {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 4 / 3;
+        border-radius: 8px;
+        border: 1px dashed var(--sicv-linea);
+        background: var(--sicv-fondo);
+        color: var(--sicv-tinta-tenue);
+        font-size: .8rem;
+        text-align: center;
+        padding: 10px;
+    }
+
+    /* En pantallas de teléfono, la acción principal de cada formulario
+       queda fija al pie: el técnico no tiene que desplazarse hasta abajo
+       de una ficha larga para guardar. En escritorio no hace falta y se
+       muestra en el flujo normal del formulario. */
+    @media (max-width: 575.98px) {
+        .ot-sticky-actions {
+            position: sticky;
+            bottom: 0;
+            background: var(--sicv-superficie);
+            margin: 16px -16px -16px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--sicv-linea);
+            box-shadow: 0 -8px 16px -12px rgba(31,41,55,0.25);
+        }
+
+        .ot-sticky-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid py-4" style="max-width: 1180px;">
+
+    <!-- ENCABEZADO -->
+
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+
+        <div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                <h1 class="h3 mb-0">Orden {{ order.order_number }}</h1>
+                <span class="badge {{ order.status|status_css }}">{{ order.get_status_display }}</span>
+                <span class="badge {{ order.priority|priority_css }}">{{ order.get_priority_display }}</span>
+            </div>
+
+            <p class="text-muted mb-0">
+                {{ order.order_type.name }}{% if order.subtype %} - {{ order.subtype.name }}{% endif %}
+                ·
+                {% if is_owner_technician %}
+                    Ficha técnica del técnico asignado
+                {% else %}
+                    Consulta de ATC (solo lectura)
+                {% endif %}
+            </p>
+        </div>
+
+        <a
+            href="{% url 'customers:detail' customer.pk %}"
+            class="btn btn-outline-secondary"
+        >
+            ← Volver a la ficha del cliente
+        </a>
+
+    </div>
+
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    {% if is_owner_technician and order.is_closed %}
+        <div class="alert alert-secondary">
+            Esta orden ya está <strong>{{ order.get_status_display }}</strong> y no admite más
+            edición de su ficha técnica ni nuevas evidencias.
+        </div>
+    {% endif %}
+
+
+    <div class="row g-3">
+
+        <div class="col-lg-8">
+
+            <!-- ========================================================= -->
+            <!-- CLIENTE, SUSCRIPCIÓN Y UBICACIÓN (SOLO LECTURA SIEMPRE) -->
+            <!-- ========================================================= -->
+
+            <div class="card card-custom shadow-sm mb-3">
+
+                <div class="card-header panel-head">
+                    Cliente y suscripción
+                </div>
+
+                <div class="card-body">
+
+                    <div class="row">
+
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Cliente</div>
+                            <div class="ot-field-value">{{ customer.code }} - {{ customer }}</div>
+                        </div>
+
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Plan</div>
+                            <div class="ot-field-value">
+                                {{ subscription.plan.name }}
+                                {% if subscription.plan.speed_mbps %}
+                                    ({{ subscription.plan.speed_mbps }} Mbps)
+                                {% endif %}
+                                <span class="text-muted"> · {{ subscription.service_type.name }}</span>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Código de suministro eléctrico</div>
+                            <div class="ot-field-value {% if not subscription.address.electrical_supply_code %}text-muted-value{% endif %}">
+                                {{ subscription.address.electrical_supply_code|default:"No registrado" }}
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Sede / Zona</div>
+                            <div class="ot-field-value">
+                                {{ order.branch }}
+                                {% if order.zone %} · {{ order.zone.name }}{% endif %}
+                            </div>
+                        </div>
+
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Dirección de atención</div>
+                            <div class="ot-field-value">{{ location.text|default:"Sin dirección registrada" }}</div>
+                        </div>
+
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Ubicación GPS</div>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="ot-gps-badge {% if location.has_valid_gps %}is-valid{% else %}is-invalid{% endif %}">
+                                    {% if location.has_valid_gps %}
+                                        📍 GPS disponible
+                                    {% else %}
+                                        GPS no disponible
+                                    {% endif %}
+                                </span>
+
+                                {% if location.maps_url %}
+                                    <a
+                                        href="{{ location.maps_url }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="btn btn-sm btn-outline-primary"
+                                    >
+                                        {{ location.gps_label }}
+                                    </a>
+                                {% endif %}
+                            </div>
+                            {% if not location.has_valid_gps %}
+                                <div class="form-text">
+                                    Sin coordenadas confiables registradas para esta dirección.
+                                    El enlace de Maps busca por la dirección textual.
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if order.detail %}
+                            <div class="col-12 ot-field">
+                                <div class="ot-field-label">Detalle de la solicitud (ATC)</div>
+                                <div class="ot-field-value">{{ order.detail|linebreaksbr }}</div>
+                            </div>
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ========================================================= -->
+            <!-- FICHA TÉCNICA DE CAMPO -->
+            <!-- ========================================================= -->
+
+            <div class="card card-custom shadow-sm mb-3">
+
+                <div class="card-header panel-head d-flex justify-content-between align-items-center">
+                    <span>Ficha técnica de campo</span>
+                    {% if not can_edit %}
+                        <span class="panel-head-note">Solo lectura</span>
+                    {% endif %}
+                </div>
+
+                <div class="card-body">
+
+                    {% if can_edit %}
+
+                        <form method="post" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="save_field_sheet">
+
+                            {% if field_sheet_form.non_field_errors %}
+                                <div class="alert alert-danger">
+                                    {% for error in field_sheet_form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="row g-3">
+
+                                <div class="col-sm-6 col-md-3">
+                                    <label for="{{ field_sheet_form.nap.id_for_label }}" class="form-label fw-semibold">
+                                        {{ field_sheet_form.nap.label }}
+                                    </label>
+                                    {{ field_sheet_form.nap }}
+                                    {% for error in field_sheet_form.nap.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="col-sm-6 col-md-3">
+                                    <label for="{{ field_sheet_form.terminal.id_for_label }}" class="form-label fw-semibold">
+                                        {{ field_sheet_form.terminal.label }}
+                                    </label>
+                                    {{ field_sheet_form.terminal }}
+                                    {% for error in field_sheet_form.terminal.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="col-sm-6 col-md-3">
+                                    <label for="{{ field_sheet_form.equipment_code.id_for_label }}" class="form-label fw-semibold">
+                                        {{ field_sheet_form.equipment_code.label }}
+                                    </label>
+                                    {{ field_sheet_form.equipment_code }}
+                                    {% for error in field_sheet_form.equipment_code.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="col-sm-6 col-md-3">
+                                    <label for="{{ field_sheet_form.seal_number.id_for_label }}" class="form-label fw-semibold">
+                                        {{ field_sheet_form.seal_number.label }}
+                                    </label>
+                                    {{ field_sheet_form.seal_number }}
+                                    {% for error in field_sheet_form.seal_number.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="col-12">
+                                    <label for="{{ field_sheet_form.notes.id_for_label }}" class="form-label fw-semibold">
+                                        {{ field_sheet_form.notes.label }}
+                                    </label>
+                                    {{ field_sheet_form.notes }}
+                                    {% for error in field_sheet_form.notes.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                            </div>
+
+                            <div class="ot-sticky-actions d-flex justify-content-end mt-3">
+                                <button type="submit" class="btn btn-primary">
+                                    Guardar ficha técnica
+                                </button>
+                            </div>
+
+                        </form>
+
+                    {% else %}
+
+                        <div class="row">
+
+                            <div class="col-sm-6 col-md-3 ot-field">
+                                <div class="ot-field-label">NAP</div>
+                                <div class="ot-field-value {% if not field_sheet.nap %}text-muted-value{% endif %}">
+                                    {{ field_sheet.nap|default:"Sin registrar" }}
+                                </div>
+                            </div>
+
+                            <div class="col-sm-6 col-md-3 ot-field">
+                                <div class="ot-field-label">Borne</div>
+                                <div class="ot-field-value {% if not field_sheet.terminal %}text-muted-value{% endif %}">
+                                    {{ field_sheet.terminal|default:"Sin registrar" }}
+                                </div>
+                            </div>
+
+                            <div class="col-sm-6 col-md-3 ot-field">
+                                <div class="ot-field-label">MAC / Equipo</div>
+                                <div class="ot-field-value {% if not field_sheet.equipment_code %}text-muted-value{% endif %}">
+                                    {{ field_sheet.equipment_code|default:"Sin registrar" }}
+                                </div>
+                            </div>
+
+                            <div class="col-sm-6 col-md-3 ot-field">
+                                <div class="ot-field-label">Precinto</div>
+                                <div class="ot-field-value {% if not field_sheet.seal_number %}text-muted-value{% endif %}">
+                                    {{ field_sheet.seal_number|default:"Sin registrar" }}
+                                </div>
+                            </div>
+
+                            <div class="col-12 ot-field">
+                                <div class="ot-field-label">Observaciones del técnico</div>
+                                {% if field_sheet.notes %}
+                                    <div class="ot-field-value">{{ field_sheet.notes|linebreaksbr }}</div>
+                                {% else %}
+                                    <div class="ot-field-value text-muted-value">
+                                        El técnico todavía no registra observaciones.
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            {% if not field_sheet %}
+                                <div class="col-12">
+                                    <div class="text-muted small mt-1">
+                                        La ficha técnica de campo aún no ha sido completada por el técnico asignado.
+                                    </div>
+                                </div>
+                            {% elif field_sheet.updated_at %}
+                                <div class="col-12">
+                                    <div class="text-muted small mt-1">
+                                        Última actualización: {{ field_sheet.updated_at|date:"d/m/Y H:i" }}
+                                        {% if field_sheet.updated_by %} por {{ field_sheet.updated_by }}{% endif %}.
+                                    </div>
+                                </div>
+                            {% endif %}
+
+                        </div>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+
+            <!-- ========================================================= -->
+            <!-- MATERIALES -->
+            <!-- ========================================================= -->
+
+            <div class="card card-custom shadow-sm mb-3">
+
+                <div class="card-header panel-head">
+                    Materiales
+                </div>
+
+                <div class="card-body">
+
+                    {% if liquidation_items %}
+
+                        <div class="table-responsive">
+                            <table class="table table-sm sicv-table align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Material / equipo</th>
+                                        <th>Movimiento</th>
+                                        <th class="text-end">Cantidad</th>
+                                        <th>Unidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in liquidation_items %}
+                                        <tr>
+                                            <td>
+                                                {{ item.material_name }}
+                                                {% if item.material_code %}
+                                                    <span class="text-muted small">({{ item.material_code }})</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ item.get_movement_type_display }}</td>
+                                            <td class="text-end tabular">{{ item.quantity }}</td>
+                                            <td>{{ item.get_unit_of_measure_display|default:"-" }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                    {% else %}
+
+                        <p class="text-muted small mb-0">
+                            Aún no se han declarado materiales. Se registran al liquidar la
+                            atención en campo, una vez que la orden queda Atendida.
+                        </p>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-lg-4">
+
+            <!-- ========================================================= -->
+            <!-- ESTADO Y TRAZABILIDAD -->
+            <!-- ========================================================= -->
+
+            <div class="card card-custom shadow-sm mb-3">
+
+                <div class="card-header panel-head">
+                    Estado y trazabilidad
+                </div>
+
+                <div class="card-body">
+
+                    <div class="ot-field">
+                        <div class="ot-field-label">Estado actual</div>
+                        <div class="ot-field-value">
+                            <span class="badge {{ order.status|status_css }}">{{ order.get_status_display }}</span>
+                        </div>
+                    </div>
+
+                    <div class="ot-field">
+                        <div class="ot-field-label">Técnico asignado</div>
+                        <div class="ot-field-value {% if not order.assigned_technician %}text-muted-value{% endif %}">
+                            {{ order.assigned_technician|default:"Sin asignar" }}
+                        </div>
+                    </div>
+
+                    <div class="ot-field">
+                        <div class="ot-field-label">Creada por</div>
+                        <div class="ot-field-value">{{ order.created_by }}</div>
+                    </div>
+
+                    <div class="ot-field">
+                        <div class="ot-field-label">Fecha de creación</div>
+                        <div class="ot-field-value">{{ order.created_at|date:"d/m/Y H:i" }}</div>
+                    </div>
+
+                    <div class="ot-field">
+                        <div class="ot-field-label">Fecha programada</div>
+                        <div class="ot-field-value {% if not order.scheduled_at %}text-muted-value{% endif %}">
+                            {{ order.scheduled_at|date:"d/m/Y H:i"|default:"Sin programar" }}
+                        </div>
+                    </div>
+
+                    {% if order.started_at %}
+                        <div class="ot-field">
+                            <div class="ot-field-label">Inicio real de atención</div>
+                            <div class="ot-field-value">{{ order.started_at|date:"d/m/Y H:i" }}</div>
+                        </div>
+                    {% endif %}
+
+                    {% if order.attended_at %}
+                        <div class="ot-field">
+                            <div class="ot-field-label">Fecha de atención</div>
+                            <div class="ot-field-value">{{ order.attended_at|date:"d/m/Y H:i" }}</div>
+                        </div>
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+
+            <!-- ========================================================= -->
+            <!-- EVIDENCIAS -->
+            <!-- ========================================================= -->
+
+            <div class="card card-custom shadow-sm mb-3">
+
+                <div class="card-header panel-head">
+                    Evidencias
+                </div>
+
+                <div class="card-body">
+
+                    {% if evidences %}
+
+                        <div class="row row-cols-2 g-2 mb-3">
+                            {% for evidence in evidences %}
+                                <div class="col">
+                                    <a href="{{ evidence.file.url }}" target="_blank" rel="noopener" class="text-decoration-none">
+                                        {% with name=evidence.file.name|lower %}
+                                            {% if ".jpg" in name or ".jpeg" in name or ".png" in name or ".webp" in name or ".gif" in name %}
+                                                <img src="{{ evidence.file.url }}" alt="{{ evidence.description }}" class="ot-evidence-thumb">
+                                            {% else %}
+                                                <div class="ot-evidence-file">
+                                                    📄 Ver archivo
+                                                </div>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </a>
+                                    <div class="text-muted small mt-1">
+                                        {{ evidence.description|default:"Sin descripción" }}
+                                        <br>
+                                        {{ evidence.created_at|date:"d/m/Y H:i" }}
+                                        {% if evidence.uploaded_by %} · {{ evidence.uploaded_by }}{% endif %}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                    {% else %}
+
+                        <p class="text-muted small">
+                            Todavía no se han adjuntado evidencias a esta orden.
+                        </p>
+
+                    {% endif %}
+
+                    {% if can_edit %}
+
+                        <hr>
+
+                        <form method="post" enctype="multipart/form-data" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="upload_evidence">
+
+                            {% if evidence_form.non_field_errors %}
+                                <div class="alert alert-danger">
+                                    {% for error in evidence_form.non_field_errors %}
+                                        <div>{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="mb-2">
+                                <label for="{{ evidence_form.file.id_for_label }}" class="form-label fw-semibold">
+                                    {{ evidence_form.file.label }}
+                                </label>
+                                {{ evidence_form.file }}
+                                {% for error in evidence_form.file.errors %}
+                                    <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-2">
+                                <label for="{{ evidence_form.description.id_for_label }}" class="form-label fw-semibold">
+                                    {{ evidence_form.description.label }}
+                                </label>
+                                {{ evidence_form.description }}
+                            </div>
+
+                            <div class="ot-sticky-actions d-grid">
+                                <button type="submit" class="btn btn-outline-primary">
+                                    Adjuntar evidencia
+                                </button>
+                            </div>
+
+                        </form>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
