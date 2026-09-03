@@ -1,16 +1,12 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block content %}
 
 <div class="container py-4">
 
     <div class="d-flex justify-content-between align-items-center mb-4">
-
         <div>
-            <h2 class="fw-bold mb-1">
-                Resumen previo a la contratación
-            </h2>
-
+            <h2 class="fw-bold mb-1">Resumen previo a la contratación</h2>
             <p class="text-muted mb-0">
                 Verifique los datos antes de generar el contrato
             </p>
@@ -22,32 +18,22 @@
         >
             ← Volver a la ficha del cliente
         </a>
-
     </div>
 
     {% if messages %}
-
         {% for message in messages %}
-
             <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-
                 {{ message }}
-
                 <button
                     type="button"
                     class="btn-close"
                     data-bs-dismiss="alert"
                 ></button>
-
             </div>
-
         {% endfor %}
-
     {% endif %}
 
-
     <div class="card shadow-sm border-0 mb-4">
-
         <div class="card-header bg-light">
             <strong>
                 Suscripción registrada — Estado: {{ subscription.get_status_display }}
@@ -55,9 +41,7 @@
         </div>
 
         <div class="card-body">
-
             <div class="row g-4">
-
                 <div class="col-md-6">
                     <small class="text-muted d-block">Cliente</small>
                     <strong>{{ customer }}</strong>
@@ -97,22 +81,61 @@
                 <div class="col-md-3">
                     <small class="text-muted d-block">Número de servicio</small>
                     <strong>{{ subscription.service_number }}</strong>
+                    <div class="small text-muted">Asignado automáticamente</div>
                 </div>
 
                 <div class="col-md-3">
                     <small class="text-muted d-block">Ciclo de facturación</small>
                     <strong>{{ subscription.billing_cycle|default:"—" }}</strong>
                 </div>
-
             </div>
 
-        </div>
+            {% if subscription.service_type.supports_tv_annexes %}
+                <hr class="my-4">
 
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">TV incluidos por el plan</small>
+                        <strong>{{ subscription.included_tv_points }}</strong>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">Anexos solicitados</small>
+                        <strong>{{ subscription.annex_count }}</strong>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">Total de TV</small>
+                        <strong>{{ subscription.total_tv_points }}</strong>
+                    </div>
+
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">Instalación de anexos</small>
+                        <strong>S/ {{ subscription.annex_installation_charge|floatformat:2 }}</strong>
+                    </div>
+
+                    <div class="col-md-6">
+                        <small class="text-muted d-block">Cargo mensual por anexos</small>
+                        <strong>S/ {{ subscription.annex_monthly_charge|floatformat:2 }}</strong>
+                    </div>
+
+                    <div class="col-md-6">
+                        <small class="text-muted d-block">Mensualidad estimada total</small>
+                        <strong>S/ {{ subscription.total_monthly_price|floatformat:2 }}</strong>
+                    </div>
+                </div>
+
+                <div class="alert alert-light border mt-3 mb-0 small">
+                    Cada anexo nuevo tiene un cobro único de instalación y un
+                    cargo mensual. El retiro futuro de anexos no tiene costo de
+                    retiro; cualquier aumento o retiro deberá gestionarse mediante
+                    una Orden de Trabajo independiente para conservar trazabilidad.
+                </div>
+            {% endif %}
+        </div>
     </div>
 
-
     {% if existing_contract %}
-
         <div class="alert alert-info">
             Esta suscripción ya tiene un contrato registrado:
             <strong>{{ existing_contract.contract_number }}</strong>.
@@ -124,63 +147,39 @@
                 Ver resumen del contrato
             </a>
         </div>
-
     {% else %}
-
         <div class="alert alert-secondary">
-            Aún no se ha generado la Orden de Trabajo. La instalación
-            se solicitará en una etapa posterior del sprint, una vez
-            registrado el contrato.
+            Aún no se ha generado la Orden de Trabajo. La instalación se
+            solicitará después de registrar el contrato.
         </div>
 
-        <!-- ================================================= -->
-        <!-- REGISTRAR OTRO SERVICIO (mejora solicitada 02/09)
-
-             Si el cliente contrata 2 o más servicios, no hace
-             falta cerrar este contrato para volver a empezar: se
-             puede seguir registrando suscripciones adicionales
-             desde aquí mismo, con una dirección ya existente o con
-             una nueva (misma ruta de alta de dirección que usa el
-             flujo guiado). Cada servicio adicional pasa otra vez
-             por este resumen antes de generar su contrato.
-        -->
-        <!-- ================================================= -->
-
         <div class="alert alert-light border">
-
-            <strong class="d-block mb-2">
-                ¿El cliente necesita otro servicio?
-            </strong>
+            <strong class="d-block mb-2">¿El cliente necesita otro servicio?</strong>
 
             <p class="text-muted small mb-2">
-                Puede registrar otra suscripción antes de generar
-                el contrato de esta: reutilizando una dirección ya
-                registrada, o dando de alta una dirección nueva
-                para el servicio adicional.
+                Puede agregar otra suscripción para otro domicilio o para otro
+                tipo de servicio. El SICV no permite duplicar el mismo tipo de
+                servicio en el mismo domicilio mientras exista uno abierto.
             </p>
 
             <div class="d-flex flex-wrap gap-2">
-
                 <a
                     href="{% url 'services:subscription_create' customer.pk %}"
                     class="btn btn-outline-primary btn-sm"
                 >
-                    + Otro servicio (dirección existente)
+                    + Agregar otro servicio
                 </a>
 
                 <a
                     href="{% url 'customers:address_create' customer.pk %}?flow=another_service"
                     class="btn btn-outline-primary btn-sm"
                 >
-                    + Otro servicio (nueva dirección)
+                    + Agregar otro domicilio
                 </a>
-
             </div>
-
         </div>
 
         <div class="d-flex justify-content-end gap-2">
-
             <a
                 href="{% url 'customers:detail' customer.pk %}#bloque-c"
                 class="btn btn-outline-secondary"
@@ -194,9 +193,7 @@
             >
                 Generar contrato
             </a>
-
         </div>
-
     {% endif %}
 
 </div>
