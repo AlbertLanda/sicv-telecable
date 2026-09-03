@@ -41,7 +41,9 @@ def resolve_location_display(address):
 
     if has_valid_gps:
         maps_url = payload["gps_link"]
-        gps_label = "GPS disponible"
+        # Se conserva por compatibilidad con las pruebas/vistas existentes;
+        # `maps_label` es el texto de acción que deben usar las plantillas.
+        gps_label = "Abrir en Google Maps"
         maps_label = "Abrir en Google Maps"
     else:
         # Cuando el proveedor no trae georreferencia confiable, el técnico
