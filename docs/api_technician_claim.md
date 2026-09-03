@@ -94,9 +94,12 @@ habría órdenes tomables invisibles. Se verifica **en las dos direcciones**:
 | Lo listado se puede tomar | `test_everything_available_can_actually_be_claimed` |
 | Lo tomado sale de la bandeja | `test_claimed_order_leaves_the_available_pool` |
 
-De reutilizar la definición se siguen gratis dos protecciones que **no hay que
-programar aquí**: una orden de otro técnico no es tomable (tiene dueño) y una
-`SYSTEM` de NOC tampoco (no es trabajo de campo).
+De reutilizar la definición se siguen gratis tres protecciones que **no hay que
+programar aquí**: una orden de otro técnico no es tomable (tiene dueño), una
+`SYSTEM` de NOC tampoco (no es trabajo de campo) y —desde el hardening del día
+6— tampoco una cuya suscripción se haya cancelado después de crearse
+(mitigación B10). Esa última llegó a la toma **sin tocar este archivo**, que es
+exactamente el beneficio de compartir la definición.
 
 ### 2.1 La protección que sí es propia del endpoint
 

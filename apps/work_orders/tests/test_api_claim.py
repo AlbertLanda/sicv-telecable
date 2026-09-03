@@ -33,6 +33,7 @@ from rest_framework.test import APIClient
 
 from apps.accounts.models import User
 from apps.organization.models import Branch
+from apps.services.models import Subscription
 from apps.work_orders.api.queries import available_work_orders
 from apps.work_orders.models import OrderType, WorkOrder
 from apps.work_orders.tests.base import WorkOrderTestCase
@@ -423,6 +424,29 @@ class ClaimUnavailableOrderTests(ClaimWorkOrderAPITestCase):
         )
 
         self.assertUnavailable(self.claim(self.create_order(order_type=demo_type)))
+
+    def test_order_of_a_cancelled_subscription_cannot_be_claimed(self):
+        """Mitigación B10: la toma la hereda sin escribir una línea.
+
+        Al vivir la condición en `available_work_orders()`, la orden deja de
+        ser tomable en el mismo momento en que deja de publicarse. Es
+        exactamente el beneficio de que el listado y la toma compartan
+        definición: la protección llega a las dos puntas o a ninguna.
+
+        Evita el caso operativo concreto: un técnico viajando a instalar un
+        servicio que comercialmente ya se canceló.
+        """
+        order = self.create_order()
+
+        self.subscription.status = Subscription.Status.CANCELLED
+        self.subscription.save(update_fields=["status"])
+
+        self.assertUnavailable(self.claim(order))
+
+        order.refresh_from_db()
+
+        self.assertIsNone(order.assigned_technician)
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
 
     def test_non_pending_states_cannot_be_claimed(self):
         """Solo PENDING, incluidos los estados asignables del dominio.

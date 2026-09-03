@@ -140,7 +140,8 @@ almacenado pudo construirse sobre un `0,0` antes de esta regla.
 ## 2. Qué es una «orden disponible» — bloqueo B1, cerrado
 
 Definido en [`apps/work_orders/api/queries.py`](../apps/work_orders/api/queries.py).
-Cuatro condiciones, decididas por negocio el 02/09:
+Cuatro condiciones decididas por negocio el 02/09, más una mitigación añadida
+en el hardening del día 6:
 
 | Condición | Por qué |
 |---|---|
@@ -148,6 +149,19 @@ Cuatro condiciones, decididas por negocio el 02/09:
 | `assigned_technician IS NULL` | Sin responsable |
 | `attention_type = FIELD` | **Regla permanente.** NOC atiende por sistema, el técnico en campo |
 | `order_type.code = "INSTALLATION"` | **Recorte de alcance del MVP**, no regla de negocio |
+| Suscripción no cancelada | **Mitigación del bloqueo B10** (día 6). Las otras cuatro miran solo la orden, y `WorkOrder` guarda su propio estado: una OT nacida sobre una suscripción válida sigue `PENDING` aunque la suscripción se cancele después. La lista se importa de `SUBSCRIPTION_BLOCKED_STATUSES`, la misma desde la que el dominio se niega a registrar trabajo nuevo |
+
+Sobre la quinta: el camino no es teórico —un corte definitivo cancela la
+suscripción y **no** toca sus otras órdenes—, así que el técnico podía tomar y
+viajar a instalar un servicio comercialmente cancelado. Es una mitigación **de
+canal**: la OT sigue viva y visible para despacho, que es quien decide si se
+anula. Qué debe pasar con las OT abiertas al cancelar una suscripción sigue
+siendo decisión de negocio (`orden_tecnica_contrato_compartido.md` §6).
+
+La mitigación es deliberadamente **estrecha**: solo cancelada. `PRESALE` es
+donde vive una instalación normal y `SUSPENDED` admite trabajo legítimo;
+excluir de más dejaría al técnico sin órdenes válidas, que es peor que el
+problema que se evita.
 
 Las dos últimas no tienen la misma vida útil y el código lo dice
 explícitamente:

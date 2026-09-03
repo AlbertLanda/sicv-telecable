@@ -9,7 +9,7 @@
 | **Colaborador** | Kevin Rivera |
 | **Frente** | Dominio Work Orders / API del Técnico |
 | **Rama** | `feature/ftth-api-tecnico-mvp` |
-| **Commit** | ver commit `feat: claim atomico de ordenes y ubicacion saneada dia 5 sprint ftth` |
+| **Commit** | `0fe32e6` — `feat: claim atomico de ordenes del canal tecnico dia 5 sprint ftth` |
 | **Base** | `035533f` (= `origin/develop` al inicio de la jornada, tras `git fetch` + fast-forward) |
 
 ---
