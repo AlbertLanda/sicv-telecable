@@ -214,22 +214,15 @@ class ContractCreateForm(forms.ModelForm):
 class InstallationWorkOrderForm(forms.Form):
     """
     Datos que ATC ingresa al generar la Orden de Instalación desde el
-    resumen de contratación: observaciones, prioridad, motivo, tipo de
-    atención y vendedor.
+    resumen de contratación: observaciones, prioridad, motivo y vendedor.
 
-    No es un ModelForm de WorkOrder ni expone `subscription` ni
-    `order_type`: create_installation_work_order() es una fachada que fija
-    esos dos datos por sí misma (la suscripción del contrato y el tipo
-    INSTALLATION por código exacto). Exponerlos aquí reabriría la trampa
-    documentada en docs/ftth_integracion_ot_instalacion.md del tipo de demo
-    en vez de instalación real.
+    La instalación FTTH es siempre trabajo de campo. El formulario mantiene
+    `attention_type` únicamente como dato explícito del contrato existente,
+    pero restringido a FIELD para que ATC no pueda crear una instalación
+    SYSTEM/NOC que después no aparecería en el canal técnico.
 
-    Revisión del 03/09: `attention_type` sí se expone -a diferencia de la
-    versión anterior de este formulario- porque ahora es ATC quien decide
-    a propósito si la instalación es de Campo o de Sistema/NOC; la fachada
-    sigue aplicando FIELD por defecto si no se envía nada, así que no hay
-    riesgo de que quede vacío. `scheduled_at` (fecha programada) se retira
-    de este formulario: ya no es un dato que ATC ingrese en este paso.
+    No es un ModelForm de WorkOrder ni expone `subscription` ni `order_type`:
+    create_installation_work_order() sigue siendo la fachada oficial.
     """
 
     detail = forms.CharField(
@@ -270,8 +263,14 @@ class InstallationWorkOrderForm(forms.Form):
         ),
     )
 
+    # Una instalación FTTH que llega al técnico debe nacer en FIELD. Se deja
+    # como selector de una sola opción para no romper la plantilla ni el
+    # contrato actual de la vista, pero un POST manipulado con SYSTEM queda
+    # invalidado por ChoiceField antes de llamar al dominio.
     attention_type = forms.ChoiceField(
-        choices=WorkOrder.AttentionType.choices,
+        choices=[
+            (WorkOrder.AttentionType.FIELD, "Campo"),
+        ],
         required=False,
         initial=WorkOrder.AttentionType.FIELD,
         label="Tipo de atención",
