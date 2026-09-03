@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import integrated_views, views
+from . import views
 
 
 app_name = "work_orders"
@@ -42,12 +42,11 @@ urlpatterns = [
         name="start",
     ),
 
-    # Ficha única de la orden: ATC consulta siempre en solo lectura; el
-    # técnico asignado obtiene controles de edición únicamente después de
-    # iniciar la atención (IN_PROGRESS).
+    # Ficha única de la orden: la misma pantalla sirve a ATC (solo lectura)
+    # y al técnico asignado (además completa ficha técnica y evidencias).
     path(
         "<int:pk>/",
-        integrated_views.IntegratedWorkOrderDetailView.as_view(),
+        views.WorkOrderDetailView.as_view(),
         name="detail",
     ),
 ]
