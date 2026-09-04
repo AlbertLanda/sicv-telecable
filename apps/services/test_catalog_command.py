@@ -11,6 +11,7 @@ from apps.services.models import (
     PlanTariff,
     ServiceType,
 )
+from apps.work_orders.models import OrderReason, OrderResult, OrderType
 
 
 class CommercialCatalogCommandTests(TestCase):
@@ -24,6 +25,32 @@ class CommercialCatalogCommandTests(TestCase):
         self.assertEqual(PlanTariff.objects.filter(plan__code="CABLE-GENERAL").count(), 2)
         self.assertEqual(CommercialCoverageRule.objects.count(), 1)
         self.assertEqual(InstallationMaterialRule.objects.count(), 12)
+
+        installation = OrderType.objects.get(code="INSTALLATION")
+        self.assertTrue(installation.is_active)
+        self.assertTrue(
+            OrderReason.objects.filter(
+                order_type=installation,
+                code="NEW_CLIENT",
+                is_active=True,
+            ).exists()
+        )
+        self.assertTrue(
+            OrderResult.objects.filter(
+                order_type=installation,
+                code="SUCCESSFUL",
+                is_success=True,
+                is_active=True,
+            ).exists()
+        )
+        self.assertTrue(
+            OrderResult.objects.filter(
+                order_type=installation,
+                code="NOT_COMPLETED",
+                is_success=False,
+                is_active=True,
+            ).exists()
+        )
 
         # Las zonas no se inventan: se cargaran cuando ATC valide la
         # nomenclatura geografica completa.
@@ -39,6 +66,9 @@ class CommercialCatalogCommandTests(TestCase):
             PlanTariff.objects.count(),
             CommercialCoverageRule.objects.count(),
             InstallationMaterialRule.objects.count(),
+            OrderType.objects.filter(code="INSTALLATION").count(),
+            OrderReason.objects.filter(order_type__code="INSTALLATION").count(),
+            OrderResult.objects.filter(order_type__code="INSTALLATION").count(),
         )
 
         call_command("cargar_catalogo_comercial", stdout=StringIO())
@@ -48,6 +78,9 @@ class CommercialCatalogCommandTests(TestCase):
             PlanTariff.objects.count(),
             CommercialCoverageRule.objects.count(),
             InstallationMaterialRule.objects.count(),
+            OrderType.objects.filter(code="INSTALLATION").count(),
+            OrderReason.objects.filter(order_type__code="INSTALLATION").count(),
+            OrderResult.objects.filter(order_type__code="INSTALLATION").count(),
         )
 
         self.assertEqual(second_counts, first_counts)
@@ -60,3 +93,6 @@ class CommercialCatalogCommandTests(TestCase):
         self.assertEqual(PlanTariff.objects.count(), 0)
         self.assertEqual(CommercialCoverageRule.objects.count(), 0)
         self.assertEqual(InstallationMaterialRule.objects.count(), 0)
+        self.assertFalse(OrderType.objects.filter(code="INSTALLATION").exists())
+        self.assertFalse(OrderReason.objects.filter(order_type__code="INSTALLATION").exists())
+        self.assertFalse(OrderResult.objects.filter(order_type__code="INSTALLATION").exists())
