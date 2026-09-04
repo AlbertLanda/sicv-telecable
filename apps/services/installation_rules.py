@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -6,6 +6,14 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .models import InstallationMaterialRule, InstallationMaterialUsage
+
+
+MONEY_QUANTUM = Decimal("0.01")
+METER_QUANTUM = Decimal("0.01")
+
+
+def _two_decimals(value, quantum=MONEY_QUANTUM):
+    return Decimal(value).quantize(quantum, rounding=ROUND_HALF_UP)
 
 
 @transaction.atomic
@@ -39,7 +47,7 @@ def resolve_installation_material_rule(*, work_order, material, on_date=None):
 @transaction.atomic
 def record_installation_material_usage(*, work_order, material, meters_used, on_date=None):
     try:
-        meters_used = Decimal(str(meters_used))
+        meters_used = _two_decimals(str(meters_used), METER_QUANTUM)
     except Exception as exc:
         raise ValidationError("El metraje utilizado no es válido.") from exc
 
@@ -56,8 +64,13 @@ def record_installation_material_usage(*, work_order, material, meters_used, on_
             "No existe una regla de metraje vigente para este material, servicio y sede."
         )
 
-    excess_meters = max(meters_used - rule.free_meters, Decimal("0.00"))
-    excess_charge = excess_meters * rule.excess_price_per_meter
+    free_meters = _two_decimals(rule.free_meters, METER_QUANTUM)
+    excess_price = _two_decimals(rule.excess_price_per_meter)
+    excess_meters = _two_decimals(
+        max(meters_used - free_meters, Decimal("0.00")),
+        METER_QUANTUM,
+    )
+    excess_charge = _two_decimals(excess_meters * excess_price)
 
     # Una OT conserva una sola medición vigente por tipo de material. Si la
     # regla cambia durante una corrección, se actualiza el mismo registro y se
@@ -74,8 +87,8 @@ def record_installation_material_usage(*, work_order, material, meters_used, on_
         usage.rule = rule
 
     usage.meters_used = meters_used
-    usage.free_meters_snapshot = rule.free_meters
-    usage.excess_price_per_meter_snapshot = rule.excess_price_per_meter
+    usage.free_meters_snapshot = free_meters
+    usage.excess_price_per_meter_snapshot = excess_price
     usage.excess_meters = excess_meters
     usage.excess_charge = excess_charge
     usage.full_clean()
@@ -89,4 +102,4 @@ def total_installation_excess_charge(work_order):
         .aggregate(total=Sum("excess_charge"))
         .get("total")
     )
-    return value or Decimal("0.00")
+    return _two_decimals(value or Decimal("0.00"))
