@@ -11,7 +11,7 @@ from rest_framework import serializers
 
 from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.services.models import InstallationMaterialRule, InstallationMaterialUsage
-from apps.work_orders.models import WorkOrderEvidence, WorkOrderFieldSheet
+from apps.work_orders.models import OrderResult, WorkOrderEvidence, WorkOrderFieldSheet
 
 
 MAX_EVIDENCE_SIZE = 10 * 1024 * 1024
@@ -156,6 +156,46 @@ class InstallationMaterialUsageInputSerializer(serializers.Serializer):
         max_digits=10,
         decimal_places=2,
         min_value=0,
+    )
+
+
+class OrderResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderResult
+        fields = ["id", "code", "name", "description", "is_success"]
+        read_only_fields = fields
+
+
+class WorkOrderCompletionSerializer(serializers.Serializer):
+    result_id = serializers.PrimaryKeyRelatedField(
+        source="result",
+        queryset=OrderResult.objects.filter(is_active=True),
+    )
+    remarks = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=1000,
+    )
+
+
+class WorkOrderLiquidationInputSerializer(serializers.Serializer):
+    resolution_detail = serializers.CharField(
+        allow_blank=False,
+        trim_whitespace=True,
+        max_length=4000,
+    )
+    technical_notes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=4000,
+    )
+    remarks = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=1000,
     )
 
 
