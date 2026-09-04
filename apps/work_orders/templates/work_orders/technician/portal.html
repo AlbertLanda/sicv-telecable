@@ -204,10 +204,73 @@
                         </form>
                     </section>
 
-                    <section id="materials-panel" class="panel">
+                    <section id="installed-materials-panel" class="panel">
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Materiales</p>
+                                <h2>Material utilizado en domicilio</h2>
+                            </div>
+                            <span id="installed-materials-count" class="mini-badge">0</span>
+                        </div>
+                        <p id="field-materials-help" class="helper">Inicia la atención para declarar los materiales realmente instalados o retirados.</p>
+                        <form id="installed-material-form" class="form-grid compact-form-grid">
+                            <label class="field">
+                                <span>Material instalado</span>
+                                <select id="installed-material-id" required>
+                                    <option value="">Seleccione material...</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span>Cantidad</span>
+                                <input id="installed-material-quantity" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+                            </label>
+                            <label class="field field-full">
+                                <span>Observación</span>
+                                <input id="installed-material-remarks" maxlength="250" placeholder="Opcional">
+                            </label>
+                            <div class="field-full">
+                                <button id="installed-material-submit" class="btn btn-primary btn-block" type="submit">Agregar material instalado</button>
+                            </div>
+                        </form>
+                        <div id="installed-materials-list" class="material-list"></div>
+                        <div id="installed-materials-empty" class="empty-state compact">Aún no se registraron materiales instalados.</div>
+                    </section>
+
+                    <section id="removed-materials-panel" class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Materiales</p>
+                                <h2>Material retirado de domicilio</h2>
+                            </div>
+                            <span id="removed-materials-count" class="mini-badge">0</span>
+                        </div>
+                        <form id="removed-material-form" class="form-grid compact-form-grid">
+                            <label class="field">
+                                <span>Material retirado</span>
+                                <select id="removed-material-id" required>
+                                    <option value="">Seleccione material...</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span>Cantidad</span>
+                                <input id="removed-material-quantity" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+                            </label>
+                            <label class="field field-full">
+                                <span>Observación</span>
+                                <input id="removed-material-remarks" maxlength="250" placeholder="Opcional: estado, devolución, daño, etc.">
+                            </label>
+                            <div class="field-full">
+                                <button id="removed-material-submit" class="btn btn-primary btn-block" type="submit">Agregar material retirado</button>
+                            </div>
+                        </form>
+                        <div id="removed-materials-list" class="material-list"></div>
+                        <div id="removed-materials-empty" class="empty-state compact">Aún no se registraron materiales retirados.</div>
+                    </section>
+
+                    <section id="materials-panel" class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Excesos</p>
                                 <h2>Metraje de instalación</h2>
                             </div>
                             <span id="materials-total" class="mini-badge">Exceso S/ 0.00</span>
