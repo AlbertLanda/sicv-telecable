@@ -2,17 +2,18 @@
 
 Este módulo integra la ficha creada en el frente web con el canal API del
 técnico. No crea una segunda OT: todos los datos siguen colgando de la misma
-`WorkOrder` mediante `WorkOrderFieldSheet` y `WorkOrderEvidence`.
+`WorkOrder` mediante ficha, evidencias y metrajes de instalación.
 """
 
 from pathlib import Path
 
 from rest_framework import serializers
 
+from apps.services.models import InstallationMaterialRule, InstallationMaterialUsage
 from apps.work_orders.models import WorkOrderEvidence, WorkOrderFieldSheet
 
 
-MAX_EVIDENCE_SIZE = 10 * 1024 * 1024  # 10 MiB
+MAX_EVIDENCE_SIZE = 10 * 1024 * 1024
 ALLOWED_EVIDENCE_CONTENT_TYPES = {
     "image/jpeg",
     "image/png",
@@ -50,23 +51,13 @@ class WorkOrderFieldSheetSerializer(serializers.ModelSerializer):
     def get_updated_by(self, sheet):
         if not sheet.updated_by_id:
             return None
-
-        return {
-            "id": sheet.updated_by_id,
-            "display_name": str(sheet.updated_by),
-        }
+        return {"id": sheet.updated_by_id, "display_name": str(sheet.updated_by)}
 
 
 class WorkOrderFieldSheetUpdateSerializer(serializers.Serializer):
-    """Entrada de la ficha durante IN_PROGRESS; todos los campos son parciales."""
-
     nap = serializers.CharField(required=False, allow_blank=True, max_length=60)
     terminal = serializers.CharField(required=False, allow_blank=True, max_length=30)
-    equipment_code = serializers.CharField(
-        required=False,
-        allow_blank=True,
-        max_length=120,
-    )
+    equipment_code = serializers.CharField(required=False, allow_blank=True, max_length=120)
     seal_number = serializers.CharField(required=False, allow_blank=True, max_length=60)
     notes = serializers.CharField(required=False, allow_blank=True)
 
@@ -78,28 +69,47 @@ class WorkOrderFieldSheetUpdateSerializer(serializers.Serializer):
         return attrs
 
 
+class InstallationMaterialUsageSerializer(serializers.ModelSerializer):
+    material = serializers.CharField(source="rule.material", read_only=True)
+    material_label = serializers.CharField(source="rule.get_material_display", read_only=True)
+
+    class Meta:
+        model = InstallationMaterialUsage
+        fields = [
+            "id",
+            "material",
+            "material_label",
+            "meters_used",
+            "free_meters_snapshot",
+            "excess_meters",
+            "excess_price_per_meter_snapshot",
+            "excess_charge",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class InstallationMaterialUsageInputSerializer(serializers.Serializer):
+    material = serializers.ChoiceField(choices=InstallationMaterialRule.Material.choices)
+    meters_used = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+    )
+
+
 class WorkOrderEvidenceSerializer(serializers.ModelSerializer):
     uploaded_by = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkOrderEvidence
-        fields = [
-            "id",
-            "file",
-            "description",
-            "uploaded_by",
-            "created_at",
-        ]
+        fields = ["id", "file", "description", "uploaded_by", "created_at"]
         read_only_fields = fields
 
     def get_uploaded_by(self, evidence):
         if not evidence.uploaded_by_id:
             return None
-
-        return {
-            "id": evidence.uploaded_by_id,
-            "display_name": str(evidence.uploaded_by),
-        }
+        return {"id": evidence.uploaded_by_id, "display_name": str(evidence.uploaded_by)}
 
 
 class WorkOrderEvidenceUploadSerializer(serializers.Serializer):
@@ -113,9 +123,7 @@ class WorkOrderEvidenceUploadSerializer(serializers.Serializer):
 
     def validate_file(self, file):
         if file.size > MAX_EVIDENCE_SIZE:
-            raise serializers.ValidationError(
-                "La evidencia no puede superar 10 MB."
-            )
+            raise serializers.ValidationError("La evidencia no puede superar 10 MB.")
 
         extension = Path(file.name or "").suffix.lower()
         content_type = getattr(file, "content_type", "")
@@ -124,10 +132,6 @@ class WorkOrderEvidenceUploadSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Formato no permitido. Use JPG, PNG, WEBP o PDF."
             )
-
         if content_type and content_type not in ALLOWED_EVIDENCE_CONTENT_TYPES:
-            raise serializers.ValidationError(
-                "El tipo de archivo no está permitido."
-            )
-
+            raise serializers.ValidationError("El tipo de archivo no está permitido.")
         return file
