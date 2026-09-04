@@ -10,7 +10,11 @@ jobs:
   validaciones:
     name: Validaciones Django (check, migraciones, tests)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # La suite completa ya supera los 15 minutos con la cobertura del canal
+    # técnico. El límite anterior cancelaba el job después de que los tests
+    # terminaban correctamente, por lo que se amplía el margen sin cambiar
+    # ninguna validación.
+    timeout-minutes: 30
 
     env:
       # Clave exclusiva de CI. No es un secreto real y no se usa en ningun entorno.

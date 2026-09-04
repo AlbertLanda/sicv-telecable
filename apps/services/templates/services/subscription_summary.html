@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">Resumen previo a la contratación</h2>
+            <p class="text-muted mb-0">Verifique tarifa, política y condiciones antes de generar el contrato.</p>
+        </div>
+        <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">← Volver a la ficha del cliente</a>
+    </div>
+
+    {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-light"><strong>Suscripción registrada — {{ subscription.get_status_display }}</strong></div>
+        <div class="card-body">
+            <div class="row g-4">
+                <div class="col-md-6"><small class="text-muted d-block">Cliente</small><strong>{{ customer }}</strong></div>
+                <div class="col-md-6">
+                    <small class="text-muted d-block">Domicilio</small>
+                    <strong>{{ subscription.address.address }}</strong>
+                    <div class="small text-muted">{{ subscription.address.district }}{% if subscription.address.zone %} · {{ subscription.address.zone }}{% endif %}</div>
+                </div>
+                <div class="col-md-3"><small class="text-muted d-block">Servicio</small><strong>{{ subscription.service_type }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Plan</small><strong>{{ subscription.plan }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Generación</small><strong>{{ subscription.plan.generation|default:"—" }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Categoría</small><strong>{% if subscription.plan.commercial_category %}{{ subscription.plan.get_commercial_category_display }}{% else %}—{% endif %}</strong></div>
+            </div>
+
+            <hr class="my-4">
+            <h5 class="fw-bold">Condiciones económicas contratadas</h5>
+            <div class="row g-3 mt-1">
+                <div class="col-md-3"><small class="text-muted d-block">Instalación base</small><strong>S/ {{ subscription.base_installation_fee|floatformat:2 }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Mensualidad base</small><strong>S/ {{ subscription.base_monthly_fee|floatformat:2 }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Mensualidad total</small><strong>S/ {{ subscription.total_monthly_price|floatformat:2 }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Total requerido para instalar</small><strong class="text-success">S/ {{ subscription.initial_payment_amount|floatformat:2 }}</strong></div>
+                <div class="col-md-6"><small class="text-muted d-block">Política de cobro</small><strong>{{ subscription.billing_policy|default:"Sin política asignada" }}</strong></div>
+                <div class="col-md-6"><small class="text-muted d-block">Tarifa geográfica aplicada</small><strong>{{ subscription.tariff|default:"Precio referencial del plan" }}</strong></div>
+            </div>
+
+            {% if subscription.billing_policy %}
+                <div class="alert alert-light border mt-3 mb-0 small">
+                    <strong>{{ subscription.billing_policy.get_billing_mode_display }}.</strong>
+                    {% if subscription.billing_policy.discount_amount > 0 %}
+                        Descuento por pronto pago: S/ {{ subscription.billing_policy.discount_amount|floatformat:2 }}.
+                        {% if subscription.billing_policy.discount_deadline_day %}Límite habitual: día {{ subscription.billing_policy.discount_deadline_day }} del mes (se ajusta al último día en meses más cortos).{% endif %}
+                        {% if subscription.billing_policy.discount_days_before_due %}Límite: {{ subscription.billing_policy.discount_days_before_due }} días antes del vencimiento.{% endif %}
+                    {% else %}
+                        Sin descuento por pronto pago.
+                    {% endif %}
+                    {% if subscription.billing_policy.cut_day_next_month %} Corte: día {{ subscription.billing_policy.cut_day_next_month }} del mes siguiente.{% endif %}
+                    {% if subscription.billing_policy.cut_days_after_due %} Corte: {{ subscription.billing_policy.cut_days_after_due }} día(s) después del vencimiento.{% endif %}
+                </div>
+            {% endif %}
+
+            {% if subscription.service_type.supports_tv_annexes %}
+                <hr class="my-4">
+                <h5 class="fw-bold">TV de cortesía y anexos</h5>
+                <div class="row g-3">
+                    <div class="col-md-3"><small class="text-muted d-block">Máximo de cortesía inicial</small><strong>{{ subscription.plan.initial_tv_courtesy_limit }}</strong></div>
+                    <div class="col-md-3"><small class="text-muted d-block">Cortesías realmente otorgadas</small><strong>{{ subscription.initial_tv_courtesy_granted }}</strong></div>
+                    <div class="col-md-3"><small class="text-muted d-block">Anexos activos</small><strong>{{ subscription.annex_count }}</strong></div>
+                    <div class="col-md-3"><small class="text-muted d-block">TV habilitadas</small><strong>{{ subscription.total_tv_points }}</strong></div>
+                    <div class="col-md-4"><small class="text-muted d-block">Instalación de anexos</small><strong>S/ {{ subscription.annex_installation_charge|floatformat:2 }}</strong></div>
+                    <div class="col-md-4"><small class="text-muted d-block">Cargo mensual anexos</small><strong>S/ {{ subscription.annex_monthly_charge|floatformat:2 }}</strong></div>
+                    <div class="col-md-4"><small class="text-muted d-block">Mensualidad con anexos</small><strong>S/ {{ subscription.total_monthly_price|floatformat:2 }}</strong></div>
+                </div>
+                <div class="alert alert-warning small mt-3 mb-0">
+                    La cortesía no utilizada durante esta instalación no queda pendiente. Toda TV incorporada después del alta se gestiona como anexo mediante una OT independiente. El aumento cobra instalación y mensualidad; el retiro no tiene costo único y reduce la mensualidad.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if existing_contract %}
+        <div class="alert alert-info">Esta suscripción ya tiene contrato <strong>{{ existing_contract.contract_number }}</strong>. <a href="{% url 'contracts:contract_summary' customer.pk existing_contract.pk %}" class="alert-link">Ver contrato</a></div>
+    {% else %}
+        <div class="alert alert-secondary">La Orden de Instalación se generará después del contrato. Los excesos de UTP, RG6 y Drop se calcularán con el metraje real registrado por el técnico y la regla vigente de sede/servicio.</div>
+        <div class="alert alert-light border">
+            <strong class="d-block mb-2">¿El cliente necesita otro servicio?</strong>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'services:subscription_create' customer.pk %}" class="btn btn-outline-primary btn-sm">+ Agregar otro servicio</a>
+                <a href="{% url 'customers:address_create' customer.pk %}?flow=another_service" class="btn btn-outline-primary btn-sm">+ Agregar otro domicilio</a>
+            </div>
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Cancelar</a>
+            <a href="{% url 'contracts:contract_create' customer.pk %}?subscription={{ subscription.pk }}" class="btn btn-primary">Generar contrato</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

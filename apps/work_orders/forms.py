@@ -9,6 +9,8 @@ from apps.work_orders.models import (
     OrderSubtype,
     OrderType,
     WorkOrder,
+    WorkOrderEvidence,
+    WorkOrderFieldSheet,
 )
 
 
@@ -330,6 +332,115 @@ class WorkOrderStartAttentionForm(forms.Form):
             "Opcional. Queda registrada en el historial de estados de la orden."
         ),
     )
+
+
+class WorkOrderFieldSheetForm(forms.ModelForm):
+    """
+    Datos técnicos de campo que completa el técnico en la ficha de la orden.
+
+    Es un ModelForm de WorkOrderFieldSheet, pero quien persiste no es
+    form.save(): la vista pasa cleaned_data a services.update_field_sheet(),
+    que es el único camino autorizado a escribir el modelo. Aquí solo se
+    valida forma y presentación (widgets, mensajes en español), no identidad
+    del técnico ni estado de la orden -eso lo decide el servicio-.
+    """
+
+    class Meta:
+        model = WorkOrderFieldSheet
+
+        fields = [
+            "nap",
+            "terminal",
+            "equipment_code",
+            "seal_number",
+            "notes",
+        ]
+
+        widgets = {
+            "nap": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Ej: NAP-014",
+                    "inputmode": "text",
+                }
+            ),
+            "terminal": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Ej: 5",
+                    "inputmode": "text",
+                }
+            ),
+            "equipment_code": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Ej: AA:BB:CC:DD:EE:FF o serie del equipo",
+                }
+            ),
+            "seal_number": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Ej: PRC-000123",
+                }
+            ),
+            "notes": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 4,
+                    "placeholder": "Observaciones de la visita en campo...",
+                }
+            ),
+        }
+
+        labels = {
+            "nap": "NAP",
+            "terminal": "Borne",
+            "equipment_code": "MAC / Equipo",
+            "seal_number": "Precinto",
+            "notes": "Observaciones",
+        }
+
+
+class WorkOrderEvidenceUploadForm(forms.ModelForm):
+    """
+    Adjunto de una evidencia (foto o archivo) a la orden.
+
+    Igual que WorkOrderFieldSheetForm: valida forma, no autorización. La
+    vista delega la creación en services.add_work_order_evidence(), que es
+    quien decide si el técnico puede adjuntar sobre esta orden.
+    """
+
+    class Meta:
+        model = WorkOrderEvidence
+
+        fields = [
+            "file",
+            "description",
+        ]
+
+        widgets = {
+            "file": forms.ClearableFileInput(
+                attrs={
+                    "class": "form-control",
+                    # `capture` sugiere la cámara del dispositivo en móviles
+                    # compatibles; en escritorio el navegador simplemente lo
+                    # ignora y abre el selector de archivos habitual.
+                    "capture": "environment",
+                    "accept": "image/*,application/pdf",
+                }
+            ),
+            "description": forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "placeholder": "Descripción breve (opcional)...",
+                }
+            ),
+        }
+
+        labels = {
+            "file": "Archivo o fotografía",
+            "description": "Descripción",
+        }
 
 
 class WorkOrderDispatchFilterForm(forms.Form):

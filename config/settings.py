@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -83,24 +84,19 @@ ALLOWED_HOSTS = env_list(
 
 
 # ---------------------------------------------------------------------
-# Integracion RENIEC / SUNAT (consulta de DNI y RUC)
+# Consulta automatica de DNI / RUC
 #
-# Se usa para autocompletar nombres/apellidos (DNI) o razon social
-# (RUC) en el registro de clientes (Pantalla 3). El proveedor por
-# defecto es Peru API (https://peruapi.com), elegido porque su plan
-# gratuito incluye tanto RUC como DNI (a diferencia de otras opciones
-# evaluadas). La autenticacion va como parametro de consulta
-# "api_token", no como header Authorization.
+# Se usa para autocompletar nombres y apellidos (DNI) o razon social
+# (RUC) durante el registro de clientes.
 #
-# Ver docs/consulta_documento_externa.md para el detalle de limites
-# del plan gratuito, formato de respuesta y consideraciones sobre
-# proteccion de datos personales.
+# Proveedor activo: JSON.pe.
+# La autenticacion se realiza mediante Bearer Token.
 #
-# SUNAT_API_TOKEN: token gratuito obtenido en https://peruapi.com
-# (panel tras registrarse). Si no se configura, el boton "Obtener
-# datos" mostrara un aviso indicando que el servicio no esta
-# disponible, sin afectar el resto del registro manual del cliente
-# (la consulta automatica es siempre opcional).
+# Peru API se conserva temporalmente como integracion legada hasta
+# completar su retiro definitivo.
+#
+# La consulta automatica es opcional: si el proveedor no esta
+# disponible, el operador puede continuar con el registro manual.
 # ---------------------------------------------------------------------
 
 SUNAT_API_TOKEN = os.environ.get('SUNAT_API_TOKEN', '')
@@ -112,7 +108,16 @@ SUNAT_API_BASE_URL = os.environ.get(
 
 SUNAT_API_TIMEOUT = float(os.environ.get('SUNAT_API_TIMEOUT', '8'))
 
+JSONPE_API_TOKEN = os.environ.get("JSONPE_API_TOKEN", "")
 
+JSONPE_API_BASE_URL = os.environ.get(
+    "JSONPE_API_BASE_URL",
+    "https://api.json.pe/api",
+).rstrip("/")
+
+JSONPE_API_TIMEOUT = float(
+    os.environ.get("JSONPE_API_TIMEOUT", "8")
+)
 # Application definition
 
 INSTALLED_APPS = [
@@ -123,6 +128,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # Terceros
+    'rest_framework',
+    'rest_framework.authtoken',
 
     # SICV
     'apps.accounts',
@@ -200,6 +209,31 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# Hasher rapido EXCLUSIVAMENTE durante la ejecucion de la suite.
+#
+# El costo de la suite no esta en la logica sino en el setUp: los escenarios de
+# prueba crean varios usuarios por cada prueba y cada create_user() ejecuta
+# PBKDF2 con cientos de miles de iteraciones. Medido en este proyecto: 536
+# pruebas en ~34 minutos, y por ese motivo el timeout de CI se amplio a 30.
+# Con MD5 la suite completa baja a minutos, en local y en CI, sin cambiar
+# ninguna validacion ni ninguna prueba.
+#
+# La condicion es deliberadamente estrecha: se exige que el comando de gestion
+# invocado sea exactamente "test" (manage.py test), no que la palabra aparezca
+# en algun argumento. Cualquier otro arranque -runserver, gunicorn, migrate,
+# shell- conserva PBKDF2, de modo que ningun entorno real puede quedar con
+# hasheo debil por accidente. Fuera de la suite esta lista NO se declara y
+# Django usa su valor por defecto.
+#
+# MD5 es inseguro para contrasenas reales. Aqui es correcto porque las
+# contrasenas de prueba se crean y se destruyen con la base de datos de test.
+
+if sys.argv[1:2] == ['test']:
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -236,3 +270,19 @@ AUTH_USER_MODEL = "accounts.User"
 # Redirecciones de autenticación
 LOGIN_REDIRECT_URL = '/customers/search/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
+
+
+# API REST (canal del técnico)
+# ---------------------------------------------------------------------
+# La API queda cerrada por defecto: autenticación por token y permiso
+# IsAuthenticated global. Cada endpoint abre o restringe explícitamente
+# sobre esta base (el login se declara AllowAny; el canal técnico suma
+# IsActiveTechnician). Ver docs/api_technician_auth.md.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}

@@ -9,6 +9,7 @@ from apps.work_orders.models import (
     WorkOrder,
     WorkOrderAssignment,
     WorkOrderEvidence,
+    WorkOrderFieldSheet,
     WorkOrderLiquidation,
     WorkOrderLiquidationCorrection,
     WorkOrderLiquidationItem,
@@ -220,6 +221,40 @@ class WorkOrderLiquidationItemInline(admin.TabularInline):
         return False
 
 
+class WorkOrderFieldSheetInline(admin.StackedInline):
+    """
+    Ficha técnica de campo, en modo consulta.
+
+    Se completa desde la ficha web de la orden vía services.update_field_sheet();
+    el Admin es solo un espejo de auditoría, igual que la liquidación.
+    """
+
+    model = WorkOrderFieldSheet
+    extra = 0
+
+    readonly_fields = (
+        "nap",
+        "terminal",
+        "equipment_code",
+        "seal_number",
+        "notes",
+        "updated_by",
+        "created_at",
+        "updated_at",
+    )
+
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("updated_by")
+
+
 class WorkOrderEvidenceInline(admin.TabularInline):
     model = WorkOrderEvidence
     extra = 0
@@ -259,6 +294,7 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "branch",
         "zone",
         "assigned_technician",
+        "seller",
         "status",
         "priority",
         "attention_type",
@@ -288,7 +324,12 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "subscription__customer__maternal_surname",
         "subscription__customer__business_name",
     )
-    raw_id_fields = ("subscription", "assigned_technician", "created_by")
+    raw_id_fields = (
+        "subscription",
+        "assigned_technician",
+        "seller",
+        "created_by",
+    )
     # `status` es de solo lectura también para impedir marcar LIQUIDATED a
     # mano y saltarse liquidate_order(): la liquidación exige su registro.
     readonly_fields = (
@@ -322,10 +363,12 @@ class WorkOrderAdmin(admin.ModelAdmin):
         "zone",
         "zone__branch",
         "assigned_technician",
+        "seller",
         "liquidation",
         "liquidation__liquidated_by",
     )
     inlines = [
+        WorkOrderFieldSheetInline,
         WorkOrderLiquidationInline,
         WorkOrderEvidenceInline,
         WorkOrderStatusHistoryInline,

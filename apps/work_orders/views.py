@@ -10,10 +10,12 @@ mano y no duplica las reglas del dominio.
 """
 
 from django.contrib import messages
-from django.core.exceptions import ValidationError
-from django.shortcuts import get_object_or_404, redirect
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
+from django.views import View
 from django.views.generic import FormView, ListView
 
 from apps.customers.models import Customer
@@ -22,10 +24,18 @@ from apps.work_orders.forms import (
     WorkOrderAssignForm,
     WorkOrderCreateForm,
     WorkOrderDispatchFilterForm,
+    WorkOrderEvidenceUploadForm,
+    WorkOrderFieldSheetForm,
     WorkOrderStartAttentionForm,
 )
+from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
-from apps.work_orders.services import create_work_order, start_order_attention
+from apps.work_orders.services import (
+    add_work_order_evidence,
+    create_work_order,
+    start_order_attention,
+    update_field_sheet,
+)
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 
 
@@ -105,11 +115,19 @@ class WorkOrderCreateView(
 
             return self.form_invalid(form)
 
+        # El mensaje incluye el número de orden y un enlace directo a su
+        # ficha: el flujo comercial no debe obligar a buscarla de nuevo para
+        # confirmar que quedó registrada. format_html escapa order_number y
+        # el estado; el único HTML de confianza es el que escribe esta vista.
         messages.success(
             self.request,
-            (
-                f"Orden de trabajo {order.order_number} registrada "
-                f"correctamente en estado {order.get_status_display()}."
+            format_html(
+                "Orden de trabajo <strong>{}</strong> registrada "
+                "correctamente en estado {}. "
+                '<a href="{}" class="alert-link">Ver ficha de la orden</a>.',
+                order.order_number,
+                order.get_status_display(),
+                reverse("work_orders:detail", kwargs={"pk": order.pk}),
             ),
         )
 
@@ -481,3 +499,227 @@ class WorkOrderDispatchListView(
         context["has_filters"] = bool(context["querystring"])
 
         return context
+
+
+class WorkOrderDetailView(LoginRequiredMixin, View):
+    """
+    Ficha única de una orden de trabajo.
+
+    Sirve tanto a ATC/supervisión como al técnico asignado desde la misma
+    plantilla: quien tiene el permiso funcional work_orders.view_workorder
+    consulta en solo lectura -no se ofrece ningún control de edición de
+    campos técnicos-, y el técnico asignado a ESTA orden en concreto además
+    puede completar su ficha técnica de campo (NAP, borne, MAC/equipo,
+    precinto, observaciones) y adjuntar evidencias, mientras la orden siga
+    abierta. Ninguna de las dos condiciones habilita la otra: un técnico sin
+    view_workorder solo abre las órdenes que tiene asignadas.
+
+    A diferencia de WorkOrderAssignView/WorkOrderStartAttentionView, aquí la
+    autorización depende del propio registro -si el usuario autenticado es
+    el técnico asignado a esta orden en particular-, así que no puede
+    resolverse con un permiso declarativo antes de la búsqueda: la orden se
+    resuelve primero y el control de acceso se aplica sobre ella. Sigue
+    habiendo LoginRequiredMixin delante: un anónimo nunca llega a la
+    resolución de la orden, solo se redirige al login.
+
+    La escritura (ficha técnica, evidencias) no ocurre en esta vista: se
+    delega en services.update_field_sheet() y
+    services.add_work_order_evidence(), que son quienes deciden si el
+    usuario puede operar sobre la orden y dejan la comprobación real del
+    lado del dominio, no del formulario.
+    """
+
+    template_name = "work_orders/work_order_detail.html"
+
+    def get_work_order(self):
+        """Orden de la ficha, resuelta una sola vez por petición."""
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "subscription__address",
+                    "subscription__address__zone",
+                    "subscription__service_type",
+                    "subscription__plan",
+                    "branch",
+                    "zone",
+                    "order_type",
+                    "subtype",
+                    "reason",
+                    "cause",
+                    "result",
+                    "assigned_technician",
+                    "created_by",
+                ),
+                pk=self.kwargs["pk"],
+            )
+
+        return self._work_order
+
+    def _resolve_access(self, request, order):
+        """
+        Decide si el usuario puede ver esta orden y si además puede editar
+        su ficha técnica. Deja el resultado en la instancia y corta con
+        PermissionDenied si ninguna de las dos vías de acceso aplica.
+        """
+        user = request.user
+
+        is_owner_technician = order.assigned_technician_id == user.pk
+        can_view_as_staff = user.has_perm("work_orders.view_workorder")
+
+        if not (is_owner_technician or can_view_as_staff):
+            raise PermissionDenied(
+                "No tiene autorización para consultar esta orden."
+            )
+
+        self.is_owner_technician = is_owner_technician
+
+        # Ver como técnico propietario habilita edición solo mientras la
+        # orden sigue operativamente abierta. La comprobación real -y la
+        # única que importa de verdad- la repite el servicio en cada POST;
+        # esto únicamente decide si se ofrecen los controles en pantalla.
+        self.can_edit = is_owner_technician and not order.is_closed
+
+    @staticmethod
+    def _get_liquidation(order):
+        try:
+            return order.liquidation
+        except WorkOrder.liquidation.RelatedObjectDoesNotExist:
+            return None
+
+    @staticmethod
+    def _get_field_sheet(order):
+        try:
+            return order.field_sheet
+        except WorkOrder.field_sheet.RelatedObjectDoesNotExist:
+            return None
+
+    def get_context(self, order, field_sheet_form, evidence_form):
+        liquidation = self._get_liquidation(order)
+
+        return {
+            "order": order,
+            "customer": order.subscription.customer,
+            "subscription": order.subscription,
+            "location": resolve_location_display(order.subscription.address),
+            "liquidation": liquidation,
+            "liquidation_items": (
+                liquidation.items.all() if liquidation is not None else []
+            ),
+            "field_sheet": self._get_field_sheet(order),
+            "evidences": order.evidences.select_related("uploaded_by").all(),
+            "is_owner_technician": self.is_owner_technician,
+            "can_edit": self.can_edit,
+            "field_sheet_form": field_sheet_form,
+            "evidence_form": evidence_form,
+        }
+
+    def get(self, request, *args, **kwargs):
+        order = self.get_work_order()
+        self._resolve_access(request, order)
+
+        context = self.get_context(
+            order,
+            field_sheet_form=WorkOrderFieldSheetForm(
+                instance=self._get_field_sheet(order),
+            ),
+            evidence_form=WorkOrderEvidenceUploadForm(),
+        )
+
+        return render(request, self.template_name, context)
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_work_order()
+        self._resolve_access(request, order)
+
+        if not self.can_edit:
+            # ATC nunca envía este formulario -la plantilla no se lo
+            # ofrece-, y un técnico ya no editor solo llega aquí forzando el
+            # POST a mano. En ambos casos la respuesta es la misma: 403.
+            raise PermissionDenied(
+                "Esta orden no admite edición de su ficha técnica."
+            )
+
+        action = request.POST.get("action")
+
+        if action == "save_field_sheet":
+            return self._handle_field_sheet(request, order)
+
+        if action == "upload_evidence":
+            return self._handle_evidence_upload(request, order)
+
+        raise PermissionDenied("Acción no reconocida.")
+
+    def _handle_field_sheet(self, request, order):
+        form = WorkOrderFieldSheetForm(
+            request.POST,
+            instance=self._get_field_sheet(order),
+        )
+
+        if form.is_valid():
+            try:
+                update_field_sheet(
+                    order,
+                    user=request.user,
+                    **{
+                        field: form.cleaned_data[field]
+                        for field in WorkOrderFieldSheetForm.Meta.fields
+                    },
+                )
+
+            except ValidationError as exc:
+                # El dominio rechazó la escritura (orden cerrada entre el
+                # GET y el POST, por ejemplo). Se relee la orden más abajo
+                # para no pintar en pantalla datos que no llegaron a
+                # persistirse.
+                form.add_error(None, exc.messages)
+
+            else:
+                messages.success(
+                    request,
+                    "Ficha técnica de campo actualizada correctamente.",
+                )
+
+                return redirect("work_orders:detail", pk=order.pk)
+
+        context = self.get_context(
+            order,
+            field_sheet_form=form,
+            evidence_form=WorkOrderEvidenceUploadForm(),
+        )
+
+        return render(request, self.template_name, context)
+
+    def _handle_evidence_upload(self, request, order):
+        form = WorkOrderEvidenceUploadForm(request.POST, request.FILES)
+
+        if form.is_valid():
+            try:
+                add_work_order_evidence(
+                    order,
+                    user=request.user,
+                    file=form.cleaned_data["file"],
+                    description=form.cleaned_data.get("description", ""),
+                )
+
+            except ValidationError as exc:
+                form.add_error(None, exc.messages)
+
+            else:
+                messages.success(
+                    request,
+                    "Evidencia adjuntada correctamente.",
+                )
+
+                return redirect("work_orders:detail", pk=order.pk)
+
+        context = self.get_context(
+            order,
+            field_sheet_form=WorkOrderFieldSheetForm(
+                instance=self._get_field_sheet(order),
+            ),
+            evidence_form=form,
+        )
+
+        return render(request, self.template_name, context)

@@ -351,6 +351,216 @@ class SubscriptionCreateTests(TestCase):
     # CICLO DE FACTURACIÓN
     # -------------------------------------------------------------
 
+    # -------------------------------------------------------------
+    # RESUMEN PREVIO A LA CONTRATACIÓN (día 02/09)
+    # -------------------------------------------------------------
+
+    def test_crear_suscripcion_redirige_al_resumen(self):
+        response = self.client.post(
+            self.subscription_url,
+            {
+                "address": self.address.pk,
+                "service_type": self.service_type.pk,
+                "plan": self.plan.pk,
+                "service_number": 1,
+                "billing_cycle": 1,
+            },
+        )
+
+        subscription = Subscription.objects.get(
+            customer=self.customer,
+            service_type=self.service_type,
+            service_number=1,
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            ),
+        )
+
+    def test_resumen_muestra_cliente_domicilio_servicio_y_plan(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            service_number=1,
+            status=Subscription.Status.PRESALE,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.plan.name)
+        self.assertContains(response, self.service_type.name)
+        self.assertContains(response, self.address.address)
+        self.assertContains(response, "Generar contrato")
+
+    def test_resumen_ofrece_registrar_otro_servicio(self):
+        """
+        Mejora solicitada 02/09: si el cliente contrata 2 o más
+        servicios, el resumen previo a la contratación debe ofrecer
+        continuar registrando otra suscripción -con una dirección ya
+        existente, o dando de alta una nueva- en lugar de obligar a
+        cerrar primero el contrato de la suscripción actual.
+        """
+
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            service_number=1,
+            status=Subscription.Status.PRESALE,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertContains(
+            response,
+            reverse(
+                "services:subscription_create",
+                kwargs={"customer_pk": self.customer.pk},
+            ),
+        )
+
+        self.assertContains(
+            response,
+            (
+                reverse(
+                    "customers:address_create",
+                    kwargs={"customer_pk": self.customer.pk},
+                )
+                + "?flow=another_service"
+            ),
+        )
+
+    def test_resumen_no_accesible_con_suscripcion_de_otro_cliente(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer_2,
+            address=self.other_address,
+            service_type=self.service_type,
+            plan=self.plan,
+            service_number=1,
+            status=Subscription.Status.PRESALE,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    # El customer_pk de la URL no coincide con el
+                    # dueño real de la suscripción.
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_usuario_anonimo_no_ve_el_resumen(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            service_number=1,
+            status=Subscription.Status.PRESALE,
+        )
+
+        self.client.logout()
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+    # -------------------------------------------------------------
+    # SELECTOR SERVICIO -> PLAN (día 02/09)
+    # -------------------------------------------------------------
+
+    def test_formulario_expone_planes_agrupados_por_servicio_para_el_selector(self):
+        response = self.client.get(self.subscription_url)
+
+        plans_by_service_type = response.context["plans_by_service_type"]
+
+        self.assertIn(self.service_type.pk, plans_by_service_type)
+        self.assertIn(self.service_type_2.pk, plans_by_service_type)
+
+        plan_ids = [
+            item["id"]
+            for item in plans_by_service_type[self.service_type.pk]
+        ]
+
+        self.assertIn(self.plan.pk, plan_ids)
+        self.assertNotIn(self.plan_2.pk, plan_ids)
+
+    # -------------------------------------------------------------
+    # SIN DEPENDENCIA DE TV CABLE FICTICIA (día 02/09)
+    # -------------------------------------------------------------
+
+    def test_crear_suscripcion_de_internet_no_crea_suscripcion_de_tv_cable(self):
+        """
+        El registro de una suscripción para un servicio (p. ej.
+        Internet) no debe generar, ni directa ni indirectamente,
+        ninguna otra Subscription para un tipo de servicio distinto
+        del elegido por el cliente (como TV Cable heredado del
+        sistema anterior).
+        """
+
+        response = self.client.post(
+            self.subscription_url,
+            {
+                "address": self.address.pk,
+                "service_type": self.service_type.pk,
+                "plan": self.plan.pk,
+                "service_number": 1,
+                "billing_cycle": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(Subscription.objects.count(), 1)
+
+        self.assertFalse(
+            Subscription.objects.filter(
+                service_type=self.service_type_2
+            ).exists()
+        )
+
     def test_ciclo_de_facturacion_puede_quedar_vacio(self):
         response = self.client.post(
             self.subscription_url,

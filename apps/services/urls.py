@@ -12,4 +12,9 @@ urlpatterns = [
         views.SubscriptionCreateView.as_view(),
         name="subscription_create",
     ),
+    path(
+        "customers/<int:customer_pk>/subscriptions/<int:subscription_pk>/summary/",
+        views.SubscriptionSummaryView.as_view(),
+        name="subscription_summary",
+    ),
 ]

@@ -3,266 +3,212 @@
 {% block title %}Registrar dirección{% endblock %}
 
 {% block content %}
-
 <div class="container py-4">
-
     <div class="d-flex justify-content-between align-items-center mb-4">
-
         <div>
             <h1 class="h3 mb-1">Registrar dirección</h1>
-
             <p class="text-muted mb-0">
-                Cliente:
-                <strong>{{ customer }}</strong>
+                Cliente: <strong>{{ customer }}</strong>
             </p>
         </div>
 
-        <button
-            type="button"
-            class="btn btn-outline-secondary"
-            onclick="history.back()"
-        >
-            ← Volver
-        </button>
-
+        {% if return_to_general %}
+            <a
+                href="{% url 'customers:general_edit' customer.pk %}"
+                class="btn btn-outline-secondary"
+            >
+                ← Volver
+            </a>
+        {% else %}
+            <a
+                href="{% url 'customers:detail' customer.pk %}#bloque-b"
+                class="btn btn-outline-secondary"
+            >
+                ← Volver a la ficha
+            </a>
+        {% endif %}
     </div>
 
-
     {% if form.non_field_errors %}
-
         <div class="alert alert-danger">
-
             {% for error in form.non_field_errors %}
                 <div>{{ error }}</div>
             {% endfor %}
-
         </div>
-
     {% endif %}
 
-
     <div class="card shadow-sm">
-
         <div class="card-header">
-
-            <strong>
-                Datos de la dirección
-            </strong>
-
+            <strong>Datos del domicilio del servicio</strong>
         </div>
 
-
         <div class="card-body">
-
             <form method="post" novalidate>
-
                 {% csrf_token %}
 
                 <div class="row g-3">
-
-
-                    <!-- ZONA -->
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.zone.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.zone.id_for_label }}" class="form-label">
                             {{ form.zone.label }}
                         </label>
-
                         {{ form.zone }}
-
                         {% for error in form.zone.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
+                        <div class="form-text">
+                            Pueblo, sector o zona operativa dentro de la sede.
+                        </div>
                     </div>
 
-
-                    <!-- DISTRITO -->
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.district.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.district.label }}
-                            <span class="text-danger">*</span>
+                        <label for="{{ form.district.id_for_label }}" class="form-label">
+                            {{ form.district.label }} <span class="text-danger">*</span>
                         </label>
-
                         {{ form.district }}
-
                         {% for error in form.district.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- DIRECCIÓN -->
                     <div class="col-12">
-
-                        <label
-                            for="{{ form.address.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.address.label }}
-                            <span class="text-danger">*</span>
+                        <label for="{{ form.address.id_for_label }}" class="form-label">
+                            {{ form.address.label }} <span class="text-danger">*</span>
                         </label>
-
                         {{ form.address }}
-
                         {% for error in form.address.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- REFERENCIA -->
                     <div class="col-12">
-
-                        <label
-                            for="{{ form.reference.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.reference.id_for_label }}" class="form-label">
                             {{ form.reference.label }}
                         </label>
-
                         {{ form.reference }}
-
                         {% for error in form.reference.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- MEDIDOR -->
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.meter_number.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.meter_number.label }}
+                        <label for="{{ form.electrical_supply_code.id_for_label }}" class="form-label">
+                            {{ form.electrical_supply_code.label }}
                         </label>
 
-                        {{ form.meter_number }}
-
-                        {% for error in form.meter_number.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- GPS LINK -->
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.gps_link.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.gps_link.label }}
-                        </label>
-
-                        {{ form.gps_link }}
-
-                        {% for error in form.gps_link.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- LATITUD -->
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.latitude.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.latitude.label }}
-                        </label>
-
-                        {{ form.latitude }}
-
-                        {% for error in form.latitude.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- LONGITUD -->
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.longitude.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.longitude.label }}
-                        </label>
-
-                        {{ form.longitude }}
-
-                        {% for error in form.longitude.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- PRINCIPAL -->
-                    <div class="col-12">
-
-                        <div class="form-check">
-
-                            {{ form.is_primary }}
-
-                            <label
-                                for="{{ form.is_primary.id_for_label }}"
-                                class="form-check-label"
+                        <div class="input-group">
+                            {{ form.electrical_supply_code }}
+                            <button
+                                type="button"
+                                id="btn-consultar-suministro"
+                                class="btn btn-outline-primary"
                             >
-                                {{ form.is_primary.label }}
-                            </label>
-
+                                Consultar
+                            </button>
                         </div>
 
-                        {% for error in form.is_primary.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
+                        <div class="form-text">
+                            Dato operativo de referencia para ubicar el domicilio. El número de medidor físico ya no se solicita en el alta nueva.
+                        </div>
 
+                        <div id="suministro-mensaje" class="small mt-1"></div>
+
+                        {% for error in form.electrical_supply_code.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
                     </div>
 
-                </div>
+                    <div class="col-12 d-none" id="suministro-preview">
+                        <div class="alert alert-light border mb-0">
+                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                <div>
+                                    <strong class="d-block mb-2">Ubicación encontrada</strong>
+                                    <div class="small mb-1">
+                                        <span class="text-muted">Dirección:</span>
+                                        <span id="preview-address">—</span>
+                                    </div>
+                                    <div class="small mb-1">
+                                        <span class="text-muted">Distrito:</span>
+                                        <span id="preview-district">—</span>
+                                    </div>
+                                    <div class="small">
+                                        <span class="text-muted">Coordenadas:</span>
+                                        <span id="preview-coordinates">No disponibles</span>
+                                    </div>
+                                </div>
 
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <a
+                                        id="preview-maps-link"
+                                        href="#"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="btn btn-outline-primary btn-sm d-none"
+                                    >
+                                        Ver en Maps
+                                    </a>
+
+                                    <button
+                                        type="button"
+                                        id="btn-usar-ubicacion"
+                                        class="btn btn-primary btn-sm"
+                                    >
+                                        Usar esta ubicación
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="small text-muted mt-2">
+                                Revise la ubicación antes de usarla. La consulta no reemplaza la confirmación de ATC.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="{{ form.latitude.id_for_label }}" class="form-label">
+                            {{ form.latitude.label }}
+                        </label>
+                        {{ form.latitude }}
+                        {% for error in form.latitude.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="{{ form.longitude.id_for_label }}" class="form-label">
+                            {{ form.longitude.label }}
+                        </label>
+                        {{ form.longitude }}
+                        {% for error in form.longitude.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <label for="{{ form.gps_link.id_for_label }}" class="form-label">
+                            {{ form.gps_link.label }}
+                        </label>
+                        {{ form.gps_link }}
+                        {% for error in form.gps_link.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ form.is_primary }}
+                            <label for="{{ form.is_primary.id_for_label }}" class="form-check-label">
+                                {{ form.is_primary.label }}
+                            </label>
+                        </div>
+                        {% for error in form.is_primary.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
 
                 <hr class="my-4">
 
-
                 <div class="d-flex justify-content-end gap-2">
-
                     {% if return_to_general %}
                         <a
                             href="{% url 'customers:general_edit' customer.pk %}"
@@ -272,27 +218,154 @@
                         </a>
                     {% else %}
                         <a
-                            href="{% url 'customers:detail' customer.pk %}#bloque-a"
+                            href="{% url 'customers:detail' customer.pk %}#bloque-b"
                             class="btn btn-outline-secondary"
                         >
                             Cancelar
                         </a>
                     {% endif %}
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
+
+                    <button type="submit" class="btn btn-primary">
                         Registrar dirección
                     </button>
-
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const supplyInput = document.getElementById(
+        "{{ form.electrical_supply_code.id_for_label }}"
+    );
+    const addressInput = document.getElementById(
+        "{{ form.address.id_for_label }}"
+    );
+    const districtInput = document.getElementById(
+        "{{ form.district.id_for_label }}"
+    );
+    const latitudeInput = document.getElementById(
+        "{{ form.latitude.id_for_label }}"
+    );
+    const longitudeInput = document.getElementById(
+        "{{ form.longitude.id_for_label }}"
+    );
+    const gpsLinkInput = document.getElementById(
+        "{{ form.gps_link.id_for_label }}"
+    );
+
+    const consultButton = document.getElementById("btn-consultar-suministro");
+    const useButton = document.getElementById("btn-usar-ubicacion");
+    const message = document.getElementById("suministro-mensaje");
+    const preview = document.getElementById("suministro-preview");
+    const previewAddress = document.getElementById("preview-address");
+    const previewDistrict = document.getElementById("preview-district");
+    const previewCoordinates = document.getElementById("preview-coordinates");
+    const previewMapsLink = document.getElementById("preview-maps-link");
+
+    let pendingLocation = null;
+
+    if (!supplyInput || !consultButton) {
+        return;
+    }
+
+    function clearPreview() {
+        pendingLocation = null;
+        preview.classList.add("d-none");
+        previewMapsLink.classList.add("d-none");
+        previewMapsLink.removeAttribute("href");
+    }
+
+    supplyInput.addEventListener("input", clearPreview);
+
+    consultButton.addEventListener("click", async function () {
+        const supplyCode = supplyInput.value.trim();
+
+        clearPreview();
+
+        if (!supplyCode) {
+            message.textContent = "Ingrese un código de suministro.";
+            message.className = "text-danger small mt-1";
+            supplyInput.focus();
+            return;
+        }
+
+        consultButton.disabled = true;
+        consultButton.textContent = "Consultando...";
+        message.textContent = "Consultando ubicación del suministro...";
+        message.className = "text-muted small mt-1";
+
+        try {
+            const response = await fetch(
+                "{% url 'customers:lookup_supply' %}?supply_number="
+                + encodeURIComponent(supplyCode),
+                {
+                    method: "GET",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.message || "No fue posible consultar el suministro."
+                );
+            }
+
+            const data = result.data || {};
+            pendingLocation = data;
+
+            previewAddress.textContent = data.address || "No disponible";
+            previewDistrict.textContent = data.district || "No disponible";
+
+            if (data.latitude && data.longitude) {
+                previewCoordinates.textContent = data.latitude + ", " + data.longitude;
+            } else {
+                previewCoordinates.textContent = "No disponibles";
+            }
+
+            if (data.gps_link) {
+                previewMapsLink.href = data.gps_link;
+                previewMapsLink.classList.remove("d-none");
+            }
+
+            preview.classList.remove("d-none");
+            message.textContent = data.latitude && data.longitude
+                ? "Suministro encontrado con coordenadas GPS. Confirme antes de usar."
+                : "Suministro encontrado sin coordenadas exactas. Confirme la dirección manualmente.";
+            message.className = "text-success small mt-1";
+        } catch (error) {
+            message.textContent = error.message || "Ocurrió un error al consultar el suministro.";
+            message.className = "text-danger small mt-1";
+        } finally {
+            consultButton.disabled = false;
+            consultButton.textContent = "Consultar";
+        }
+    });
+
+    useButton.addEventListener("click", function () {
+        if (!pendingLocation) {
+            return;
+        }
+
+        if (pendingLocation.address) {
+            addressInput.value = pendingLocation.address;
+        }
+        if (pendingLocation.district) {
+            districtInput.value = pendingLocation.district;
+        }
+        latitudeInput.value = pendingLocation.latitude || "";
+        longitudeInput.value = pendingLocation.longitude || "";
+        gpsLinkInput.value = pendingLocation.gps_link || "";
+
+        message.textContent = "Ubicación aplicada al formulario. Revise los datos antes de registrar.";
+        message.className = "text-primary small mt-1";
+    });
+});
+</script>
 {% endblock %}
