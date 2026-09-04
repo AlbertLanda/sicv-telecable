@@ -27,6 +27,8 @@ class TechnicianPortalShellTests(TestCase):
         self.assertContains(response, "Caja NAP")
         self.assertContains(response, "Borne")
         self.assertContains(response, "MAC / Equipo")
+        self.assertContains(response, "Material utilizado en domicilio")
+        self.assertContains(response, "Material retirado de domicilio")
         self.assertContains(response, "Metraje de instalación")
         self.assertContains(response, "Cable UTP")
         self.assertContains(response, "Cable coaxial RG6")
