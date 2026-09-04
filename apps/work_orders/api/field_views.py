@@ -16,14 +16,22 @@ from apps.services.installation_rules import (
     record_installation_material_usage,
     total_installation_excess_charge,
 )
+from apps.work_orders.api.field_completion import (
+    field_completion_summary,
+    liquidation_items_from_field,
+    liquidation_technical_data_from_field,
+)
 from apps.work_orders.api.field_serializers import (
     InstallationMaterialUsageInputSerializer,
     InstallationMaterialUsageSerializer,
     MaterialCatalogSerializer,
+    OrderResultSerializer,
+    WorkOrderCompletionSerializer,
     WorkOrderEvidenceSerializer,
     WorkOrderEvidenceUploadSerializer,
     WorkOrderFieldSheetSerializer,
     WorkOrderFieldSheetUpdateSerializer,
+    WorkOrderLiquidationInputSerializer,
     WorkOrderMaterialMovementDeleteSerializer,
     WorkOrderMaterialMovementInputSerializer,
     WorkOrderMaterialMovementSerializer,
@@ -31,9 +39,11 @@ from apps.work_orders.api.field_serializers import (
 )
 from apps.work_orders.api.serializers import WorkOrderDetailSerializer
 from apps.work_orders.api.views import TechnicianWorkOrderObjectMixin
-from apps.work_orders.models import WorkOrder, WorkOrderFieldSheet
+from apps.work_orders.models import OrderResult, WorkOrder, WorkOrderFieldSheet
 from apps.work_orders.services import (
     add_work_order_evidence,
+    attend_order,
+    liquidate_order,
     start_order_attention,
     update_field_sheet,
 )
@@ -49,6 +59,24 @@ def _django_validation_response(exc):
         {"detail": " ".join(exc.messages)},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+def _completion_payload(order):
+    results = OrderResult.objects.filter(
+        order_type=order.order_type,
+        is_active=True,
+    ).order_by("name")
+    return {
+        "status": order.status,
+        "status_display": order.get_status_display(),
+        "results": OrderResultSerializer(results, many=True).data,
+        "selected_result": (
+            OrderResultSerializer(order.result).data
+            if order.result_id
+            else None
+        ),
+        "summary": field_completion_summary(order),
+    }
 
 
 class StartWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
@@ -70,6 +98,96 @@ class StartWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
 
         order.refresh_from_db()
         return Response(WorkOrderDetailSerializer(order).data)
+
+
+class CompleteWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
+    """Resumen de cierre y transición IN_PROGRESS -> ATTENDED."""
+
+    serializer_class = WorkOrderCompletionSerializer
+
+    def get(self, request, *args, **kwargs):
+        return Response(_completion_payload(self.get_object()))
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status != WorkOrder.Status.IN_PROGRESS:
+            return Response(
+                {"detail": "Solo una orden En atención puede finalizar su atención."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = serializer.validated_data["result"]
+        if result.order_type_id != order.order_type_id:
+            return Response(
+                {"detail": "El resultado seleccionado no corresponde al tipo de orden."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            attend_order(
+                order,
+                result=result,
+                user=request.user,
+                remarks=serializer.validated_data["remarks"],
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        order.refresh_from_db()
+        return Response(
+            {
+                "order": WorkOrderDetailSerializer(order).data,
+                **_completion_payload(order),
+            }
+        )
+
+
+class LiquidateWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
+    """Consolida la atención ya finalizada y pasa ATTENDED -> LIQUIDATED."""
+
+    serializer_class = WorkOrderLiquidationInputSerializer
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status != WorkOrder.Status.ATTENDED:
+            return Response(
+                {"detail": "Solo una orden Atendida puede enviar su liquidación técnica."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        technical_data = liquidation_technical_data_from_field(order)
+        technical_notes = serializer.validated_data["technical_notes"]
+        if not technical_notes:
+            try:
+                technical_notes = order.field_sheet.notes
+            except WorkOrder.field_sheet.RelatedObjectDoesNotExist:
+                technical_notes = ""
+
+        try:
+            liquidate_order(
+                order,
+                user=request.user,
+                resolution_detail=serializer.validated_data["resolution_detail"],
+                technical_notes=technical_notes,
+                items=liquidation_items_from_field(order),
+                remarks=serializer.validated_data["remarks"],
+                **technical_data,
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        order.refresh_from_db()
+        return Response(
+            {
+                "order": WorkOrderDetailSerializer(order).data,
+                **_completion_payload(order),
+            }
+        )
 
 
 class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
@@ -208,13 +326,7 @@ class InstallationMaterialUsageListCreateView(
     TechnicianWorkOrderObjectMixin,
     GenericAPIView,
 ):
-    """
-    GET/POST `<id>/materials/`.
-
-    El técnico registra metros realmente utilizados. El backend resuelve la
-    regla vigente por material/servicio/sede y calcula exceso e importe; el
-    cliente móvil nunca envía precios ni metros gratuitos.
-    """
+    """GET/POST `<id>/materials/`: metraje real y exceso calculado."""
 
     serializer_class = InstallationMaterialUsageInputSerializer
 
