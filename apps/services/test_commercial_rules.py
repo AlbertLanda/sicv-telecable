@@ -24,14 +24,8 @@ User = get_user_model()
 
 class CommercialServiceRulesTests(TestCase):
     def setUp(self):
-        self.branch = Branch.objects.create(
-            code="TST",
-            name="Sede Test Comercial",
-        )
-        self.zone = Zone.objects.create(
-            branch=self.branch,
-            name="Zona Centro",
-        )
+        self.branch = Branch.objects.create(code="TST", name="Sede Test Comercial")
+        self.zone = Zone.objects.create(branch=self.branch, name="Zona Centro")
         self.customer = Customer.objects.create(
             code="TST01-A0000001",
             branch=self.branch,
@@ -69,7 +63,6 @@ class CommercialServiceRulesTests(TestCase):
             name="Internet 100",
             monthly_price=Decimal("60.00"),
         )
-
         self.duo = ServiceType.objects.create(
             code="DUO-TEST",
             name="DUO Test",
@@ -90,7 +83,7 @@ class CommercialServiceRulesTests(TestCase):
         self.assertNotIn("meter_number", form.fields)
         self.assertIn("electrical_supply_code", form.fields)
 
-    def test_duo_cinco_tv_calcula_tres_anexos(self):
+    def test_duo_cinco_tv_calcula_dos_cortesias_y_tres_anexos(self):
         form = SubscriptionCreateForm(
             data={
                 "address": self.address.pk,
@@ -101,9 +94,24 @@ class CommercialServiceRulesTests(TestCase):
             },
             customer=self.customer,
         )
-
         self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.calculated_initial_courtesy_count, 2)
         self.assertEqual(form.calculated_annex_count, 3)
+
+    def test_una_tv_en_alta_no_deja_segunda_cortesia_pendiente(self):
+        form = SubscriptionCreateForm(
+            data={
+                "address": self.address.pk,
+                "service_type": self.duo.pk,
+                "plan": self.duo_plan.pk,
+                "billing_cycle": 1,
+                "tv_count": 1,
+            },
+            customer=self.customer,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.calculated_initial_courtesy_count, 1)
+        self.assertEqual(form.calculated_annex_count, 0)
 
     def test_internet_no_admite_cantidad_de_tv(self):
         form = SubscriptionCreateForm(
@@ -116,7 +124,6 @@ class CommercialServiceRulesTests(TestCase):
             },
             customer=self.customer,
         )
-
         self.assertFalse(form.is_valid())
         self.assertIn("tv_count", form.errors)
 
@@ -129,7 +136,6 @@ class CommercialServiceRulesTests(TestCase):
             service_number=1,
             status=Subscription.Status.ACTIVE,
         )
-
         form = SubscriptionCreateForm(
             data={
                 "address": self.address.pk,
@@ -139,7 +145,6 @@ class CommercialServiceRulesTests(TestCase):
             },
             customer=self.customer,
         )
-
         self.assertFalse(form.is_valid())
         self.assertIn("service_type", form.errors)
 
@@ -152,7 +157,6 @@ class CommercialServiceRulesTests(TestCase):
             service_number=1,
             status=Subscription.Status.ACTIVE,
         )
-
         form = SubscriptionCreateForm(
             data={
                 "address": self.other_address.pk,
@@ -162,19 +166,19 @@ class CommercialServiceRulesTests(TestCase):
             },
             customer=self.customer,
         )
-
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_costos_de_tres_anexos(self):
+    def test_costos_de_tres_anexos_usan_snapshot_real(self):
         subscription = Subscription.objects.create(
             customer=self.customer,
             address=self.address,
             service_type=self.duo,
             plan=self.duo_plan,
             service_number=1,
+            initial_tv_courtesy_granted=2,
             annex_count=3,
+            base_monthly_fee=Decimal("80.00"),
         )
-
         self.assertEqual(subscription.included_tv_points, 2)
         self.assertEqual(subscription.total_tv_points, 5)
         self.assertEqual(subscription.annex_installation_charge, Decimal("15.00"))
@@ -247,19 +251,20 @@ class SubscriptionCreateViewRulesTests(TestCase):
             },
         )
 
-    def test_numero_de_servicio_es_automatico_y_anexos_se_guardan(self):
+    def test_numero_de_servicio_es_automatico_y_snapshot_se_guarda(self):
         response = self._post(self.address_1)
-
         self.assertEqual(response.status_code, 302)
         first = Subscription.objects.get(address=self.address_1)
         self.assertEqual(first.service_number, 1)
+        self.assertEqual(first.initial_tv_courtesy_granted, 2)
         self.assertEqual(first.annex_count, 3)
+        self.assertEqual(first.base_monthly_fee, Decimal("80.00"))
 
         response = self._post(self.address_2)
         self.assertEqual(response.status_code, 302)
-
         second = Subscription.objects.get(address=self.address_2)
         self.assertEqual(second.service_number, 2)
+        self.assertEqual(second.initial_tv_courtesy_granted, 2)
         self.assertEqual(second.annex_count, 3)
 
 
@@ -301,7 +306,9 @@ class AnnexAdjustmentDomainTests(TestCase):
             plan=self.plan,
             service_number=1,
             status=Subscription.Status.ACTIVE,
+            initial_tv_courtesy_granted=2,
             annex_count=3,
+            base_monthly_fee=Decimal("50.00"),
         )
         self.user = User.objects.create_user(
             username="atc_anexos",
@@ -317,10 +324,8 @@ class AnnexAdjustmentDomainTests(TestCase):
             quantity=2,
             created_by=self.user,
         )
-
         adjustment = order.annex_adjustment
         self.subscription.refresh_from_db()
-
         self.assertEqual(self.subscription.annex_count, 3)
         self.assertEqual(adjustment.previous_annex_count, 3)
         self.assertEqual(adjustment.target_annex_count, 5)
@@ -328,17 +333,12 @@ class AnnexAdjustmentDomainTests(TestCase):
         self.assertEqual(adjustment.monthly_delta, Decimal("10.00"))
         self.assertEqual(adjustment.monthly_charge_after, Decimal("25.00"))
 
-        success = OrderResult.objects.get(
-            order_type__code="TV_ANNEX",
-            code="COMPLETED",
-        )
+        success = OrderResult.objects.get(order_type__code="TV_ANNEX", code="COMPLETED")
         order.result = success
         order.status = WorkOrder.Status.LIQUIDATED
         order.save(update_fields=["result", "status", "updated_at"])
-
         self.subscription.refresh_from_db()
         adjustment.refresh_from_db()
-
         self.assertEqual(self.subscription.annex_count, 5)
         self.assertIsNotNone(adjustment.applied_at)
 
@@ -349,9 +349,7 @@ class AnnexAdjustmentDomainTests(TestCase):
             quantity=2,
             created_by=self.user,
         )
-
         adjustment = order.annex_adjustment
-
         self.assertEqual(adjustment.target_annex_count, 1)
         self.assertEqual(adjustment.installation_charge, Decimal("0.00"))
         self.assertEqual(adjustment.monthly_delta, Decimal("-10.00"))
@@ -364,18 +362,12 @@ class AnnexAdjustmentDomainTests(TestCase):
             quantity=1,
             created_by=self.user,
         )
-
-        failed = OrderResult.objects.get(
-            order_type__code="TV_ANNEX",
-            code="NOT_COMPLETED",
-        )
+        failed = OrderResult.objects.get(order_type__code="TV_ANNEX", code="NOT_COMPLETED")
         order.result = failed
         order.status = WorkOrder.Status.LIQUIDATED
         order.save(update_fields=["result", "status", "updated_at"])
-
         self.subscription.refresh_from_db()
         adjustment = order.annex_adjustment
         adjustment.refresh_from_db()
-
         self.assertEqual(self.subscription.annex_count, 3)
         self.assertIsNone(adjustment.applied_at)
