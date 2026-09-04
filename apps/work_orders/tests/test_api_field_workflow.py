@@ -1,4 +1,4 @@
-"""Pruebas de integración API: claim -> start -> ficha -> evidencias."""
+"""Pruebas de integración API: claim -> start -> ficha -> materiales -> evidencias."""
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.work_orders.models import WorkOrder, WorkOrderFieldSheet
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -80,6 +81,124 @@ class TechnicianFieldWorkflowAPITests(WorkOrderTestCase):
         self.api.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
 
         response = self.api.get(self.url("field_sheet", order))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_field_materials_are_blocked_before_start(self):
+        order = self.create_assigned_order()
+        material = Material.objects.get(code="CABLE_RG6")
+
+        response = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "INSTALLED",
+                "quantity": "12.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertFalse(
+            WorkOrderMaterialMovement.objects.filter(work_order=order).exists()
+        )
+
+    def test_field_materials_keep_installed_and_removed_separate(self):
+        order = self.create_assigned_order()
+        self.api.post(self.url("start", order), {}, format="json")
+        material = Material.objects.get(code="CABLE_RG6")
+
+        installed = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "INSTALLED",
+                "quantity": "20.00",
+                "remarks": "Tendido nuevo.",
+            },
+            format="json",
+        )
+        removed = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "REMOVED",
+                "quantity": "4.00",
+                "remarks": "Cable deteriorado.",
+            },
+            format="json",
+        )
+        listing = self.api.get(self.url("field_materials", order))
+
+        self.assertEqual(installed.status_code, status.HTTP_200_OK)
+        self.assertEqual(removed.status_code, status.HTTP_200_OK)
+        self.assertEqual(listing.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(listing.data["installed"]), 1)
+        self.assertEqual(len(listing.data["removed"]), 1)
+        self.assertEqual(listing.data["installed"][0]["material"]["code"], "CABLE_RG6")
+        self.assertEqual(listing.data["removed"][0]["material"]["code"], "CABLE_RG6")
+        self.assertEqual(
+            WorkOrderMaterialMovement.objects.filter(work_order=order).count(),
+            2,
+        )
+
+    def test_reposting_same_field_material_updates_quantity_without_duplicate(self):
+        order = self.create_assigned_order()
+        self.api.post(self.url("start", order), {}, format="json")
+        material = Material.objects.get(code="CONECTOR_F56")
+        payload = {
+            "material_id": material.pk,
+            "movement_type": "INSTALLED",
+            "quantity": "2.00",
+        }
+
+        first = self.api.post(self.url("field_materials", order), payload, format="json")
+        payload["quantity"] = "5.00"
+        second = self.api.post(self.url("field_materials", order), payload, format="json")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        movements = WorkOrderMaterialMovement.objects.filter(
+            work_order=order,
+            material=material,
+            movement_type=WorkOrderMaterialMovement.MovementType.INSTALLED,
+        )
+        self.assertEqual(movements.count(), 1)
+        self.assertEqual(str(movements.get().quantity), "5.00")
+
+    def test_assigned_technician_can_delete_field_material_during_attention(self):
+        order = self.create_assigned_order()
+        self.api.post(self.url("start", order), {}, format="json")
+        material = Material.objects.get(code="SPLITTER_2")
+        created = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "REMOVED",
+                "quantity": "1.00",
+            },
+            format="json",
+        )
+        movement_id = created.data["item"]["id"]
+
+        response = self.api.delete(
+            self.url("field_materials", order),
+            {"movement_id": movement_id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(
+            WorkOrderMaterialMovement.objects.filter(pk=movement_id).exists()
+        )
+        self.assertEqual(response.data["removed"], [])
+
+    def test_other_technician_cannot_access_field_materials(self):
+        order = self.create_assigned_order()
+        token, _ = Token.objects.get_or_create(user=self.other_technician)
+        self.api.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+
+        response = self.api.get(self.url("field_materials", order))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
