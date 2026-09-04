@@ -12,6 +12,8 @@ urlpatterns = [
     path("<int:pk>/", views.MyWorkOrderDetailView.as_view(), name="my_order_detail"),
     path("<int:pk>/claim/", views.ClaimWorkOrderView.as_view(), name="claim"),
     path("<int:pk>/start/", field_views.StartWorkOrderView.as_view(), name="start"),
+    path("<int:pk>/complete/", field_views.CompleteWorkOrderView.as_view(), name="complete"),
+    path("<int:pk>/liquidate/", field_views.LiquidateWorkOrderView.as_view(), name="liquidate"),
     path("<int:pk>/field-sheet/", field_views.FieldSheetView.as_view(), name="field_sheet"),
     path(
         "<int:pk>/field-materials/",
