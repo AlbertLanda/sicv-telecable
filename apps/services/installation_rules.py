@@ -59,17 +59,25 @@ def record_installation_material_usage(*, work_order, material, meters_used, on_
     excess_meters = max(meters_used - rule.free_meters, Decimal("0.00"))
     excess_charge = excess_meters * rule.excess_price_per_meter
 
-    usage, _ = InstallationMaterialUsage.objects.update_or_create(
-        work_order=work_order,
-        rule=rule,
-        defaults={
-            "meters_used": meters_used,
-            "free_meters_snapshot": rule.free_meters,
-            "excess_price_per_meter_snapshot": rule.excess_price_per_meter,
-            "excess_meters": excess_meters,
-            "excess_charge": excess_charge,
-        },
+    # Una OT conserva una sola medición vigente por tipo de material. Si la
+    # regla cambia durante una corrección, se actualiza el mismo registro y se
+    # guarda el nuevo snapshot, en lugar de duplicar UTP/RG6/Drop.
+    usage = (
+        InstallationMaterialUsage.objects
+        .select_for_update()
+        .filter(work_order=work_order, rule__material=material)
+        .first()
     )
+    if usage is None:
+        usage = InstallationMaterialUsage(work_order=work_order, rule=rule)
+    else:
+        usage.rule = rule
+
+    usage.meters_used = meters_used
+    usage.free_meters_snapshot = rule.free_meters
+    usage.excess_price_per_meter_snapshot = rule.excess_price_per_meter
+    usage.excess_meters = excess_meters
+    usage.excess_charge = excess_charge
     usage.full_clean()
     usage.save()
     return usage
