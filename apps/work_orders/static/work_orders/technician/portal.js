@@ -9,6 +9,7 @@
         currentScreen: "home",
         detailId: null,
         detailBackScreen: "mine",
+        detailEditable: false,
         toastTimer: null,
     };
 
@@ -124,6 +125,7 @@
         state.token = "";
         state.technician = null;
         state.detailId = null;
+        state.detailEditable = false;
         sessionStorage.removeItem(tokenKey);
         showLogin();
         if (showMessage) showToast("Sesión cerrada.", "success");
@@ -382,15 +384,25 @@
 
     function configureTechnicalMode(order) {
         const editable = order.status === "IN_PROGRESS";
+        state.detailEditable = editable;
         $("#field-sheet-mode").textContent = editable ? "Editable" : "Solo lectura";
         $("#field-sheet-help").textContent = editable
             ? "Registra la información real encontrada durante la atención."
             : "La toma de la OT no habilita datos técnicos. Primero debes iniciar la atención.";
+        $("#field-materials-help").textContent = editable
+            ? "Declara por separado lo que queda instalado y lo que se retira del domicilio."
+            : "Inicia la atención para declarar los materiales realmente instalados o retirados.";
         $("#materials-help").textContent = editable
             ? "Registra únicamente el metraje real usado. El SICV calcula los excesos."
             : "Inicia la atención para registrar los metrajes de instalación.";
 
         ["#field-nap", "#field-terminal", "#field-equipment", "#field-seal", "#field-notes", "#field-save"].forEach((selector) => {
+            $(selector).disabled = !editable;
+        });
+        [
+            "#installed-material-id", "#installed-material-quantity", "#installed-material-remarks", "#installed-material-submit",
+            "#removed-material-id", "#removed-material-quantity", "#removed-material-remarks", "#removed-material-submit",
+        ].forEach((selector) => {
             $(selector).disabled = !editable;
         });
         ["#material-type", "#material-meters", "#material-submit"].forEach((selector) => {
@@ -410,7 +422,12 @@
         try {
             const order = await api(`${config.workOrdersUrl}${id}/`);
             renderDetail(order);
-            await Promise.all([loadFieldSheet(id), loadMaterials(id), loadEvidences(id)]);
+            await Promise.all([
+                loadFieldSheet(id),
+                loadFieldMaterials(id),
+                loadMaterials(id),
+                loadEvidences(id),
+            ]);
             content.hidden = false;
             loading.hidden = true;
         } catch (error) {
@@ -467,6 +484,140 @@
         } catch (error) {
             showToast(error.message, "error");
         } finally {
+            setBusy(button, false);
+        }
+    }
+
+    function populateFieldMaterialCatalog(catalog) {
+        ["#installed-material-id", "#removed-material-id"].forEach((selector) => {
+            const select = $(selector);
+            const selected = select.value;
+            select.replaceChildren();
+            const placeholder = element("option", "", "Seleccione material...");
+            placeholder.value = "";
+            select.append(placeholder);
+            (catalog || []).forEach((material) => {
+                const option = element("option", "", `${material.name} · ${material.unit_label}`);
+                option.value = material.id;
+                select.append(option);
+            });
+            if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+                select.value = selected;
+            }
+        });
+    }
+
+    function renderFieldMaterialList(items, listSelector, emptySelector, countSelector) {
+        const list = $(listSelector);
+        const empty = $(emptySelector);
+        list.replaceChildren();
+        $(countSelector).textContent = String(items.length);
+        empty.hidden = items.length !== 0;
+
+        items.forEach((item) => {
+            const row = element("article", "material-item");
+            const material = item.material || {};
+            const unit = material.unit_label || material.unit_of_measure || "";
+            row.append(
+                element("strong", "", material.name || "Material"),
+                element("p", "", `${text(item.quantity, "0")} ${unit}${item.remarks ? ` · ${item.remarks}` : ""}`),
+            );
+            if (state.detailEditable) {
+                const remove = element("button", "btn btn-danger btn-block", "Quitar registro");
+                remove.type = "button";
+                remove.addEventListener("click", () => deleteFieldMaterial(item.id, remove));
+                row.append(remove);
+            }
+            list.append(row);
+        });
+    }
+
+    function renderFieldMaterials(payload) {
+        populateFieldMaterialCatalog(payload?.catalog || []);
+        renderFieldMaterialList(
+            payload?.installed || [],
+            "#installed-materials-list",
+            "#installed-materials-empty",
+            "#installed-materials-count",
+        );
+        renderFieldMaterialList(
+            payload?.removed || [],
+            "#removed-materials-list",
+            "#removed-materials-empty",
+            "#removed-materials-count",
+        );
+    }
+
+    async function loadFieldMaterials(id) {
+        try {
+            renderFieldMaterials(await api(`${config.workOrdersUrl}${id}/field-materials/`));
+        } catch (error) {
+            $("#installed-materials-list").replaceChildren();
+            $("#removed-materials-list").replaceChildren();
+            $("#installed-materials-empty").textContent = "No se pudieron consultar los materiales instalados.";
+            $("#removed-materials-empty").textContent = "No se pudieron consultar los materiales retirados.";
+            $("#installed-materials-empty").hidden = false;
+            $("#removed-materials-empty").hidden = false;
+        }
+    }
+
+    async function saveFieldMaterial(event, movementType) {
+        event.preventDefault();
+        if (!state.detailId) return;
+
+        const installed = movementType === "INSTALLED";
+        const prefix = installed ? "installed" : "removed";
+        const materialId = $(`#${prefix}-material-id`).value;
+        const quantity = $(`#${prefix}-material-quantity`).value;
+        const remarks = $(`#${prefix}-material-remarks`).value.trim();
+        const button = $(`#${prefix}-material-submit`);
+
+        if (!materialId) {
+            showToast("Selecciona un material.", "error");
+            return;
+        }
+        if (quantity === "" || Number(quantity) <= 0) {
+            showToast("Ingresa una cantidad mayor a cero.", "error");
+            return;
+        }
+
+        setBusy(button, true, "Guardando…");
+        try {
+            const payload = await api(`${config.workOrdersUrl}${state.detailId}/field-materials/`, {
+                method: "POST",
+                body: JSON.stringify({
+                    material_id: Number(materialId),
+                    movement_type: movementType,
+                    quantity,
+                    remarks,
+                }),
+            });
+            $(`#${prefix}-material-quantity`).value = "";
+            $(`#${prefix}-material-remarks`).value = "";
+            renderFieldMaterials(payload);
+            showToast(
+                installed ? "Material instalado registrado." : "Material retirado registrado.",
+                "success",
+            );
+        } catch (error) {
+            showToast(error.message, "error");
+        } finally {
+            setBusy(button, false);
+        }
+    }
+
+    async function deleteFieldMaterial(movementId, button) {
+        if (!state.detailId || !state.detailEditable) return;
+        setBusy(button, true, "Quitando…");
+        try {
+            const payload = await api(`${config.workOrdersUrl}${state.detailId}/field-materials/`, {
+                method: "DELETE",
+                body: JSON.stringify({movement_id: movementId}),
+            });
+            renderFieldMaterials(payload);
+            showToast("Registro de material eliminado.", "success");
+        } catch (error) {
+            showToast(error.message, "error");
             setBusy(button, false);
         }
     }
@@ -592,6 +743,8 @@
         $("#available-scope-all").addEventListener("change", loadAvailable);
         $("#detail-back").addEventListener("click", () => navigate(state.detailBackScreen));
         $("#field-sheet-form").addEventListener("submit", saveFieldSheet);
+        $("#installed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "INSTALLED"));
+        $("#removed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "REMOVED"));
         $("#materials-form").addEventListener("submit", saveMaterial);
         $("#evidence-form").addEventListener("submit", uploadEvidence);
         $$('[data-nav]').forEach((button) => {
