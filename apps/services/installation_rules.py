@@ -1,0 +1,105 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Q, Sum
+from django.utils import timezone
+
+from .models import InstallationMaterialRule, InstallationMaterialUsage
+
+
+MONEY_QUANTUM = Decimal("0.01")
+METER_QUANTUM = Decimal("0.01")
+
+
+def _two_decimals(value, quantum=MONEY_QUANTUM):
+    return Decimal(value).quantize(quantum, rounding=ROUND_HALF_UP)
+
+
+@transaction.atomic
+def resolve_installation_material_rule(*, work_order, material, on_date=None):
+    on_date = on_date or timezone.localdate()
+
+    if work_order.order_type.code != "INSTALLATION":
+        raise ValidationError(
+            "Las reglas de metraje de instalación solo aplican a órdenes de instalación."
+        )
+
+    rules = (
+        InstallationMaterialRule.objects
+        .filter(
+            material=material,
+            service_type=work_order.subscription.service_type,
+            is_active=True,
+            valid_from__lte=on_date,
+        )
+        .filter(Q(valid_until__isnull=True) | Q(valid_until__gte=on_date))
+        .select_related("branch", "service_type")
+    )
+
+    rule = rules.filter(branch=work_order.branch).order_by("-valid_from", "-pk").first()
+    if rule:
+        return rule
+
+    return rules.filter(branch__isnull=True).order_by("-valid_from", "-pk").first()
+
+
+@transaction.atomic
+def record_installation_material_usage(*, work_order, material, meters_used, on_date=None):
+    try:
+        meters_used = _two_decimals(str(meters_used), METER_QUANTUM)
+    except Exception as exc:
+        raise ValidationError("El metraje utilizado no es válido.") from exc
+
+    if meters_used < 0:
+        raise ValidationError("El metraje utilizado no puede ser negativo.")
+
+    rule = resolve_installation_material_rule(
+        work_order=work_order,
+        material=material,
+        on_date=on_date,
+    )
+    if rule is None:
+        raise ValidationError(
+            "No existe una regla de metraje vigente para este material, servicio y sede."
+        )
+
+    free_meters = _two_decimals(rule.free_meters, METER_QUANTUM)
+    excess_price = _two_decimals(rule.excess_price_per_meter)
+    excess_meters = _two_decimals(
+        max(meters_used - free_meters, Decimal("0.00")),
+        METER_QUANTUM,
+    )
+    excess_charge = _two_decimals(excess_meters * excess_price)
+
+    # Una OT conserva una sola medición vigente por tipo de material. Si la
+    # regla cambia durante una corrección, se actualiza el mismo registro y se
+    # guarda el nuevo snapshot, en lugar de duplicar UTP/RG6/Drop.
+    usage = (
+        InstallationMaterialUsage.objects
+        .select_for_update()
+        .filter(work_order=work_order, rule__material=material)
+        .first()
+    )
+    if usage is None:
+        usage = InstallationMaterialUsage(work_order=work_order, rule=rule)
+    else:
+        usage.rule = rule
+
+    usage.meters_used = meters_used
+    usage.free_meters_snapshot = free_meters
+    usage.excess_price_per_meter_snapshot = excess_price
+    usage.excess_meters = excess_meters
+    usage.excess_charge = excess_charge
+    usage.full_clean()
+    usage.save()
+    return usage
+
+
+def total_installation_excess_charge(work_order):
+    value = (
+        work_order.installation_material_usages
+        .aggregate(total=Sum("excess_charge"))
+        .get("total")
+    )
+    return _two_decimals(value or Decimal("0.00"))

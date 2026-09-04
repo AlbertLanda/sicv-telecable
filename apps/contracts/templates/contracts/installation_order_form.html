@@ -5,15 +5,10 @@
 <div class="container py-4">
 
     <div class="d-flex justify-content-between align-items-center mb-4">
-
         <div>
-            <h2 class="fw-bold mb-1">
-                Generar Orden de Instalación
-            </h2>
-
+            <h2 class="fw-bold mb-1">Generar Orden de Instalación</h2>
             <p class="text-muted mb-0">
-                Confirme los datos y, si corresponde, complete lo
-                operativo antes de crear la orden.
+                Confirme los datos y complete lo operativo antes de crear la orden.
             </p>
         </div>
 
@@ -23,48 +18,28 @@
         >
             ← Volver al resumen
         </a>
-
     </div>
 
     {% if messages %}
-
         {% for message in messages %}
-
             <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-
                 {{ message }}
-
                 <button
                     type="button"
                     class="btn-close"
                     data-bs-dismiss="alert"
                 ></button>
-
             </div>
-
         {% endfor %}
-
     {% endif %}
 
-
     <div class="card shadow-sm border-0 mb-4">
-
         <div class="card-header bg-light">
             <strong>Datos que fija el contrato</strong>
         </div>
 
         <div class="card-body">
-
-            {% comment %}
-                Solo lectura, a propósito: subscription y order_type no
-                son campos de InstallationWorkOrderForm
-                -create_installation_work_order() los fija por sí misma-,
-                así que aquí solo se confirma lo que ya quedó definido en
-                el contrato, no se vuelve a pedir.
-            {% endcomment %}
-
             <div class="row g-4">
-
                 <div class="col-md-6">
                     <small class="text-muted d-block">Cliente</small>
                     <strong>{{ customer }}</strong>
@@ -89,28 +64,52 @@
                 <div class="col-md-6">
                     <small class="text-muted d-block">Servicio</small>
                     <strong>
-                        {{ subscription.service_type }}
-                        #{{ subscription.service_number }}
+                        {{ subscription.service_type }} #{{ subscription.service_number }}
                     </strong>
                 </div>
-
             </div>
 
-        </div>
+            {% if subscription.service_type.supports_tv_annexes %}
+                <hr class="my-4">
 
+                <div class="alert alert-primary mb-0">
+                    <strong class="d-block mb-2">Instalación de TV / anexos</strong>
+
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">TV incluidos</small>
+                            <strong>{{ subscription.included_tv_points }}</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Anexos a instalar</small>
+                            <strong>{{ subscription.annex_count }}</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Total TV a habilitar</small>
+                            <strong>{{ subscription.total_tv_points }}</strong>
+                        </div>
+                        <div class="col-md-3">
+                            <small class="text-muted d-block">Pago único anexos</small>
+                            <strong>S/ {{ subscription.annex_installation_charge|floatformat:2 }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="small mt-3">
+                        Cargo mensual por anexos: <strong>S/ {{ subscription.annex_monthly_charge|floatformat:2 }}</strong>.
+                        Esta información viaja con la misma Orden Técnica para que el técnico conozca cuántos puntos de TV debe habilitar.
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </div>
 
-
     <div class="card shadow-sm border-0">
-
         <div class="card-header bg-light">
             <strong>Datos operativos de la orden</strong>
         </div>
 
         <div class="card-body">
-
             <form method="post">
-
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
@@ -120,130 +119,63 @@
                 {% endif %}
 
                 <div class="row g-3">
-
-                    <!-- OBSERVACIONES -->
-
                     <div class="col-12">
-
-                        <label
-                            for="{{ form.detail.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.detail.id_for_label }}" class="form-label">
                             {{ form.detail.label }}
                         </label>
-
                         {{ form.detail }}
-
                         {% for error in form.detail.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- PRIORIDAD -->
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.priority.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.priority.id_for_label }}" class="form-label">
                             {{ form.priority.label }}
                         </label>
-
                         {{ form.priority }}
-
                         {% for error in form.priority.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- MOTIVO -->
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.reason.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.reason.id_for_label }}" class="form-label">
                             {{ form.reason.label }}
                         </label>
-
                         {{ form.reason }}
-
                         {% for error in form.reason.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
 
-
-                    <!-- TIPO DE ATENCIÓN -->
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.attention_type.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.attention_type.id_for_label }}" class="form-label">
                             {{ form.attention_type.label }}
                         </label>
-
                         {{ form.attention_type }}
-
                         {% for error in form.attention_type.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                         <div class="form-text">
-                            Campo: la visita la realiza un técnico en el
-                            domicilio. Sistema/NOC: se atiende de forma
-                            remota.
+                            La instalación se atiende en campo por el canal técnico.
                         </div>
-
                     </div>
-
-
-                    <!-- VENDEDOR -->
 
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.seller.id_for_label }}"
-                            class="form-label"
-                        >
+                        <label for="{{ form.seller.id_for_label }}" class="form-label">
                             {{ form.seller.label }}
                         </label>
-
                         {{ form.seller }}
-
                         {% for error in form.seller.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
+                            <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
-
                     </div>
-
                 </div>
-
 
                 <hr class="my-4">
 
-
                 <div class="d-flex justify-content-end gap-2">
-
                     <a
                         href="{% url 'contracts:contract_summary' customer.pk contract.pk %}"
                         class="btn btn-outline-secondary"
@@ -251,21 +183,13 @@
                         Cancelar
                     </a>
 
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
+                    <button type="submit" class="btn btn-primary">
                         Crear orden de instalación
                     </button>
-
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
 
 {% endblock %}

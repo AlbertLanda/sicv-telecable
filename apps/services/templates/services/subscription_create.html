@@ -1,280 +1,211 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
 {% block content %}
-
 <div class="container py-4">
-
     <div class="d-flex justify-content-between align-items-center mb-4">
-
         <div>
-            <h2 class="fw-bold mb-1">
-                Nueva suscripción
-            </h2>
-
-            <p class="text-muted mb-0">
-                Registrar un nuevo servicio para el cliente
-            </p>
+            <h2 class="fw-bold mb-1">Nueva suscripción</h2>
+            <p class="text-muted mb-0">Seleccione domicilio, servicio y plan. El SICV resolverá la tarifa y política vigentes.</p>
         </div>
-
-        <button
-            type="button"
-            class="btn btn-outline-secondary"
-            onclick="history.back()"
-        >
-            ← Volver
-        </button>
-
+        <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">← Volver a la ficha</a>
     </div>
-
 
     <div class="card shadow-sm border-0">
-
-        <div class="card-header bg-light">
-            <strong>
-                Datos de la suscripción
-            </strong>
-        </div>
-
-
+        <div class="card-header bg-light"><strong>Datos de la suscripción</strong></div>
         <div class="card-body">
+            <div class="alert alert-info"><strong>Cliente:</strong> {{ customer }}</div>
 
-            <div class="alert alert-info">
-
-                <strong>Cliente:</strong>
-
-                {{ customer }}
-
-                {% if customer.document_number %}
-                    <span class="ms-2">
-                        {{ customer.document_type }}
-                        {{ customer.document_number }}
-                    </span>
-                {% endif %}
-
-            </div>
-
-
-            <form method="post">
-
+            <form method="post" novalidate>
                 {% csrf_token %}
-
-
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ form.non_field_errors }}
-                    </div>
-                {% endif %}
-
+                {{ form.service_number }}
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
 
                 <div class="row g-3">
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.address.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.address.label }}
-                        </label>
-
+                        <label for="{{ form.address.id_for_label }}" class="form-label">{{ form.address.label }}</label>
                         {{ form.address }}
-
-                        {% for error in form.address.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
+                        {% for error in form.address.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        <div class="form-text">La sede y zona del domicilio determinan cobertura y, cuando corresponde, la tarifa.</div>
                     </div>
-
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.service_type.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.service_type.label }}
-                        </label>
-
+                        <label for="{{ form.service_type.id_for_label }}" class="form-label">{{ form.service_type.label }}</label>
                         {{ form.service_type }}
-
-                        {% for error in form.service_type.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
+                        {% for error in form.service_type.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
-
-
                     <div class="col-md-6">
-
-                        <label
-                            for="{{ form.plan.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.plan.label }}
-                        </label>
-
+                        <label for="{{ form.plan.id_for_label }}" class="form-label">{{ form.plan.label }}</label>
                         {{ form.plan }}
-
-                        {% for error in form.plan.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            El listado de planes se filtra según el
-                            tipo de servicio elegido.
+                        {% for error in form.plan.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        <div class="form-text">Los planes se filtran por servicio y se validan contra las reglas comerciales del domicilio.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 bg-light h-100">
+                            <small class="text-muted d-block">Generación / categoría</small>
+                            <strong id="plan-generation-category">—</strong>
+                            <div class="small text-muted mt-1" id="plan-coverage">Seleccione un plan.</div>
                         </div>
-
                     </div>
 
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.service_number.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.service_number.label }}
-                        </label>
-
-                        {{ form.service_number }}
-
-                        {% for error in form.service_number.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
+                    <div class="col-12 d-none" id="tv-annex-section">
+                        <div class="card border-primary-subtle bg-light">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-2">TV de cortesía y anexos</h5>
+                                <div class="alert alert-warning small py-2">
+                                    La cortesía solo existe durante la instalación inicial. Si hoy el cliente tiene una sola TV, la segunda cortesía no queda reservada: una TV agregada posteriormente será un anexo.
+                                </div>
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label for="{{ form.tv_count.id_for_label }}" class="form-label">{{ form.tv_count.label }}</label>
+                                        {{ form.tv_count }}
+                                        {% for error in form.tv_count.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="row g-2 text-center">
+                                            <div class="col-sm-3"><div class="border rounded p-2 bg-white h-100"><small class="text-muted d-block">Máx. cortesía hoy</small><strong id="tv-courtesy-limit">0</strong></div></div>
+                                            <div class="col-sm-3"><div class="border rounded p-2 bg-white h-100"><small class="text-muted d-block">Cortesías usadas</small><strong id="tv-courtesy-granted">0</strong></div></div>
+                                            <div class="col-sm-3"><div class="border rounded p-2 bg-white h-100"><small class="text-muted d-block">Anexos</small><strong id="tv-annexes">0</strong></div></div>
+                                            <div class="col-sm-3"><div class="border rounded p-2 bg-white h-100"><small class="text-muted d-block">Mensual anexos</small><strong id="tv-monthly-charge">S/ 0.00</strong></div></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        {% endfor %}
-
+                        </div>
                     </div>
 
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.billing_cycle.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.billing_cycle.label }}
-                        </label>
-
-                        {{ form.billing_cycle }}
-
-                        {% for error in form.billing_cycle.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
+                    <div class="col-12">
+                        <div class="card border-success-subtle">
+                            <div class="card-header bg-light"><strong>Cotización comercial</strong></div>
+                            <div class="card-body">
+                                <div id="quote-error" class="alert alert-danger d-none mb-3"></div>
+                                <div class="row g-3" id="quote-values">
+                                    <div class="col-md-3"><small class="text-muted d-block">Instalación base</small><strong id="quote-installation">S/ 0.00</strong></div>
+                                    <div class="col-md-3"><small class="text-muted d-block">Primera mensualidad</small><strong id="quote-monthly">S/ 0.00</strong></div>
+                                    <div class="col-md-3"><small class="text-muted d-block">Instalación anexos</small><strong id="quote-annex-installation">S/ 0.00</strong></div>
+                                    <div class="col-md-3"><small class="text-muted d-block">Primera mensualidad anexos</small><strong id="quote-annex-monthly">S/ 0.00</strong></div>
+                                    <div class="col-md-6"><small class="text-muted d-block">Total requerido para instalar</small><strong class="fs-5" id="quote-initial-total">S/ 0.00</strong></div>
+                                    <div class="col-md-6"><small class="text-muted d-block">Mensualidad posterior</small><strong class="fs-5" id="quote-recurring-total">S/ 0.00</strong></div>
+                                    <div class="col-12"><small class="text-muted d-block">Política de cobro</small><strong id="quote-policy">—</strong><span class="text-muted ms-2" id="quote-discount"></span></div>
+                                </div>
                             </div>
-                        {% endfor %}
-
+                        </div>
                     </div>
-
                 </div>
 
-
+                {{ form.billing_cycle.as_hidden }}
                 <hr class="my-4">
-
-
                 <div class="d-flex justify-content-end gap-2">
-
-                    <a
-                        href="{% url 'customers:detail' customer.pk %}#bloque-a"
-                        class="btn btn-outline-secondary"
-                    >
-                        Cancelar
-                    </a>
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
-                        Registrar suscripción
-                    </button>
-
+                    <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">Registrar suscripción</button>
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
 
 {{ plans_by_service_type|json_script:"plans-by-service-type" }}
+{{ service_type_config|json_script:"service-type-config" }}
+{{ commercial_quotes|json_script:"commercial-quotes" }}
 
 <script>
 (function () {
     "use strict";
+    var plansByServiceType = JSON.parse(document.getElementById("plans-by-service-type").textContent);
+    var serviceTypeConfig = JSON.parse(document.getElementById("service-type-config").textContent);
+    var commercialQuotes = JSON.parse(document.getElementById("commercial-quotes").textContent);
 
-    // ---------------------------------------------------------------
-    // SELECTOR SERVICIO -> PLAN
-    //
-    // Filtra en el propio navegador las opciones de "Plan" según el
-    // "Tipo de servicio" elegido, para que el operador no pueda dejar
-    // seleccionada en pantalla una combinación que el servidor de
-    // todas formas rechazaría (ver SubscriptionCreateForm.clean()).
-    // Es una mejora de UI: la validación real sigue siendo la del
-    // formulario en el servidor.
-    // ---------------------------------------------------------------
-
-    var plansByServiceType = JSON.parse(
-        document.getElementById("plans-by-service-type").textContent
-    );
-
-    var serviceTypeField = document.getElementById(
-        "{{ form.service_type.id_for_label }}"
-    );
-
-    var planField = document.getElementById(
-        "{{ form.plan.id_for_label }}"
-    );
-
-    if (!serviceTypeField || !planField) {
-        return;
-    }
-
+    var addressField = document.getElementById("{{ form.address.id_for_label }}");
+    var serviceTypeField = document.getElementById("{{ form.service_type.id_for_label }}");
+    var planField = document.getElementById("{{ form.plan.id_for_label }}");
+    var tvCountField = document.getElementById("{{ form.tv_count.id_for_label }}");
+    var tvSection = document.getElementById("tv-annex-section");
     var initialPlanValue = "{{ form.plan.value|default_if_none:'' }}";
 
-    function renderPlanOptions(selectedServiceTypeId, selectedPlanId) {
-        var plans = plansByServiceType[selectedServiceTypeId] || [];
-
+    function money(value) { return "S/ " + Number(value || 0).toFixed(2); }
+    function selectedPlan() {
+        var plans = plansByServiceType[serviceTypeField.value] || [];
+        return plans.find(function (plan) { return String(plan.id) === String(planField.value); }) || null;
+    }
+    function currentQuote() {
+        var byAddress = commercialQuotes[String(addressField.value)] || {};
+        return byAddress[String(planField.value)] || null;
+    }
+    function renderPlanOptions(serviceTypeId, selectedPlanId) {
+        var plans = plansByServiceType[serviceTypeId] || [];
         planField.innerHTML = "";
-
         var placeholder = document.createElement("option");
         placeholder.value = "";
-        placeholder.textContent = selectedServiceTypeId
-            ? "Seleccione un plan"
-            : "Seleccione primero un tipo de servicio";
+        placeholder.textContent = serviceTypeId ? "Seleccione un plan" : "Seleccione primero un tipo de servicio";
         planField.appendChild(placeholder);
-
         plans.forEach(function (plan) {
             var option = document.createElement("option");
             option.value = plan.id;
             option.textContent = plan.label;
-
-            if (
-                selectedPlanId &&
-                String(plan.id) === String(selectedPlanId)
-            ) {
-                option.selected = true;
-            }
-
+            if (selectedPlanId && String(plan.id) === String(selectedPlanId)) option.selected = true;
             planField.appendChild(option);
         });
     }
+    function annexState() {
+        var config = serviceTypeConfig[serviceTypeField.value] || {};
+        var plan = selectedPlan();
+        var supports = Boolean(config.supports_tv_annexes);
+        if (!supports) {
+            tvSection.classList.add("d-none");
+            if (tvCountField) tvCountField.value = "";
+            return { annexes: 0, installation: 0, monthly: 0 };
+        }
+        tvSection.classList.remove("d-none");
+        var limit = plan ? Number(plan.initial_tv_courtesy_limit || 0) : 0;
+        var requested = tvCountField && tvCountField.value ? Number(tvCountField.value) : 0;
+        var courtesy = Math.min(requested, limit);
+        var annexes = Math.max(requested - limit, 0);
+        var installation = annexes * Number(config.annex_installation_price || 0);
+        var monthly = annexes * Number(config.annex_monthly_price || 0);
+        document.getElementById("tv-courtesy-limit").textContent = limit;
+        document.getElementById("tv-courtesy-granted").textContent = courtesy;
+        document.getElementById("tv-annexes").textContent = annexes;
+        document.getElementById("tv-monthly-charge").textContent = money(monthly);
+        return { annexes: annexes, installation: installation, monthly: monthly };
+    }
+    function renderQuote() {
+        var plan = selectedPlan();
+        var quote = currentQuote();
+        var annex = annexState();
+        var error = document.getElementById("quote-error");
 
-    // Estado inicial: respeta el plan ya elegido (por ejemplo, al
-    // volver a mostrar el formulario tras un error de validación).
+        document.getElementById("plan-generation-category").textContent = plan ? ((plan.generation || "Sin generación") + (plan.category ? " · " + plan.category : "")) : "—";
+
+        if (!quote) {
+            error.classList.add("d-none");
+            document.getElementById("plan-coverage").textContent = "Seleccione domicilio y plan.";
+            return;
+        }
+        if (!quote.available) {
+            error.textContent = quote.message || "El plan no está disponible para este domicilio.";
+            error.classList.remove("d-none");
+            document.getElementById("plan-coverage").textContent = "No disponible";
+            return;
+        }
+        error.classList.add("d-none");
+        document.getElementById("plan-coverage").textContent = "Cobertura: " + quote.coverage;
+
+        var installation = Number(quote.installation_fee || 0);
+        var monthly = Number(quote.monthly_fee || 0);
+        document.getElementById("quote-installation").textContent = money(installation);
+        document.getElementById("quote-monthly").textContent = money(monthly);
+        document.getElementById("quote-annex-installation").textContent = money(annex.installation);
+        document.getElementById("quote-annex-monthly").textContent = money(annex.monthly);
+        document.getElementById("quote-initial-total").textContent = money(installation + monthly + annex.installation + annex.monthly);
+        document.getElementById("quote-recurring-total").textContent = money(monthly + annex.monthly);
+        document.getElementById("quote-policy").textContent = quote.billing_policy || "Sin política asignada";
+        document.getElementById("quote-discount").textContent = Number(quote.discount_amount || 0) > 0 ? "Pronto pago: -" + money(quote.discount_amount) : "Sin descuento por pronto pago";
+    }
+
     renderPlanOptions(serviceTypeField.value, initialPlanValue);
-
-    serviceTypeField.addEventListener("change", function () {
-        renderPlanOptions(serviceTypeField.value, null);
-    });
+    renderQuote();
+    serviceTypeField.addEventListener("change", function () { renderPlanOptions(serviceTypeField.value, null); renderQuote(); });
+    planField.addEventListener("change", renderQuote);
+    addressField.addEventListener("change", renderQuote);
+    if (tvCountField) tvCountField.addEventListener("input", renderQuote);
 })();
 </script>
-
 {% endblock %}

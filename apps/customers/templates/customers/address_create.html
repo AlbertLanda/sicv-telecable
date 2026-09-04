@@ -12,9 +12,21 @@
             </p>
         </div>
 
-        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
-            ← Volver
-        </button>
+        {% if return_to_general %}
+            <a
+                href="{% url 'customers:general_edit' customer.pk %}"
+                class="btn btn-outline-secondary"
+            >
+                ← Volver
+            </a>
+        {% else %}
+            <a
+                href="{% url 'customers:detail' customer.pk %}#bloque-b"
+                class="btn btn-outline-secondary"
+            >
+                ← Volver a la ficha
+            </a>
+        {% endif %}
     </div>
 
     {% if form.non_field_errors %}
@@ -43,6 +55,9 @@
                         {% for error in form.zone.errors %}
                             <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
+                        <div class="form-text">
+                            Pueblo, sector o zona operativa dentro de la sede.
+                        </div>
                     </div>
 
                     <div class="col-md-6">
@@ -76,17 +91,6 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label for="{{ form.meter_number.id_for_label }}" class="form-label">
-                            {{ form.meter_number.label }}
-                        </label>
-                        {{ form.meter_number }}
-                        <div class="form-text">Dato físico del medidor, si corresponde.</div>
-                        {% for error in form.meter_number.errors %}
-                            <div class="text-danger small mt-1">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <div class="col-md-6">
                         <label for="{{ form.electrical_supply_code.id_for_label }}" class="form-label">
                             {{ form.electrical_supply_code.label }}
                         </label>
@@ -103,7 +107,7 @@
                         </div>
 
                         <div class="form-text">
-                            Permite ubicar el domicilio a partir del código del recibo eléctrico.
+                            Dato operativo de referencia para ubicar el domicilio. El número de medidor físico ya no se solicita en el alta nueva.
                         </div>
 
                         <div id="suministro-mensaje" class="small mt-1"></div>
@@ -214,7 +218,7 @@
                         </a>
                     {% else %}
                         <a
-                            href="{% url 'customers:detail' customer.pk %}#bloque-a"
+                            href="{% url 'customers:detail' customer.pk %}#bloque-b"
                             class="btn btn-outline-secondary"
                         >
                             Cancelar

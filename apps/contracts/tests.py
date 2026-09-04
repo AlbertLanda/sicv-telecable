@@ -1077,10 +1077,10 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, "Ver orden de instalación")
 
     # -------------------------------------------------------------
-    # ORDEN CREADA: CANCELAR, IMPRIMIR Y LIQUIDAR
+    # ORDEN CREADA: CANCELAR, IMPRIMIR Y VER ORDEN
     # -------------------------------------------------------------
 
-    def test_orden_ofrece_cancelar_imprimir_y_liquidar_con_permiso(self):
+    def test_orden_ofrece_cancelar_imprimir_y_ver_orden_con_permiso(self):
         self.grant_add_workorder_permission()
         self.grant_view_workorder_permission()
 
@@ -1101,7 +1101,8 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Cancelar")
         self.assertContains(response, "Imprimir")
-        self.assertContains(response, "Liquidar")
+        self.assertContains(response, "Ver orden")
+        self.assertNotContains(response, ">Liquidar<")
 
         detail_url = reverse(
             "work_orders:detail",
@@ -1110,7 +1111,7 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertContains(response, detail_url)
 
-    def test_orden_no_ofrece_liquidar_sin_permiso(self):
+    def test_orden_no_ofrece_ver_orden_sin_permiso(self):
         self.grant_add_workorder_permission()
 
         self.client.post(self.generate_url)
@@ -1127,7 +1128,7 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         response = self.client.get(receipt_url)
 
-        self.assertNotContains(response, "Liquidar")
+        self.assertNotContains(response, "Ver orden")
 
         detail_url = reverse(
             "work_orders:detail",

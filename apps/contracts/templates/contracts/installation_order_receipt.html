@@ -18,8 +18,8 @@
      * válido, nunca se inventan ni se corrigen coordenadas-. NAP, borne, MAC/equipo,
      * precinto, materiales y evidencias siguen sin estar aquí: son la
      * liquidación técnica, exclusiva del técnico asignado, en la ficha de
-     * la orden -enlazada desde el tercer botón de esta pantalla, cuando
-     * el usuario tiene permiso para verla-.
+     * la orden -enlazada desde la acción de consulta de esta pantalla,
+     * cuando el usuario tiene permiso para verla-.
      */
 
     .receipt-toolbar {
@@ -246,20 +246,19 @@
     <div class="receipt-toolbar d-flex justify-content-end align-items-center no-print">
 
         {% comment %}
-            Exactamente tres botones bajo la orden creada: Cancelar,
-            Imprimir y Liquidar (aclaración del 03/09).
+            Tres acciones comerciales bajo la orden creada: Cancelar,
+            Imprimir y Ver orden.
 
             - Cancelar solo cierra esta vista y vuelve a la ficha del
               cliente: no anula ni modifica la orden ya creada.
             - Imprimir usa el mismo documento en pantalla como base del
               PDF/impreso -ver @media print arriba-.
-            - Liquidar navega a la ficha técnica de la orden
-              (work_orders:detail), donde viven NAP, borne, MAC/equipo,
-              precinto, materiales y evidencias. Esa ficha ya es de solo
-              lectura para ATC y editable solo por el técnico asignado
-              (ver WorkOrderDetailView): esta pantalla no reimplementa esa
-              regla, solo enlaza a ella. Se ofrece con el mismo permiso
-              que ya exige esa vista (view_workorder).
+            - Ver orden navega a la ficha de la OT (work_orders:detail).
+              No ejecuta ni ofrece la liquidación técnica desde ATC: NAP,
+              borne, MAC/equipo, precinto, materiales, evidencias y la
+              liquidación corresponden al flujo técnico y a sus propias
+              reglas de estado/autorización. El enlace se ofrece con el
+              mismo permiso que exige la ficha (view_workorder).
         {% endcomment %}
 
         <div class="d-flex gap-2">
@@ -284,7 +283,7 @@
                     href="{% url 'work_orders:detail' order.pk %}"
                     class="btn btn-primary"
                 >
-                    Liquidar
+                    Ver orden
                 </a>
             {% endif %}
 
