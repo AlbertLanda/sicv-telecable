@@ -13,6 +13,7 @@ from apps.services.models import (
     PlanTariff,
     ServiceType,
 )
+from apps.work_orders.models import OrderReason, OrderResult, OrderType
 
 
 class Command(BaseCommand):
@@ -36,6 +37,7 @@ class Command(BaseCommand):
         branches = self._get_branches()
         policies = self._get_policies()
         services = self._load_service_types()
+        order_catalog_stats = self._load_installation_order_catalog()
         plan_stats = self._load_plans(services, policies)
         tariff_stats = self._load_confirmed_cable_tariffs(branches)
         coverage_stats = self._load_confirmed_coverage(branches)
@@ -44,6 +46,11 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Resumen"))
         self.stdout.write(f"  Tipos de servicio: {ServiceType.objects.filter(code__in=services).count()}")
+        self.stdout.write(
+            "  Catalogo de instalacion: "
+            f"{order_catalog_stats['created']} creados / "
+            f"{order_catalog_stats['updated']} actualizados"
+        )
         self.stdout.write(
             f"  Planes: {plan_stats['created']} creados / {plan_stats['updated']} actualizados"
         )
@@ -135,6 +142,59 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("✓ Tipos de servicio: INTERNET / CABLE / DUO"))
         return result
+
+    def _load_installation_order_catalog(self):
+        """Carga el catalogo minimo que el alta comercial necesita para crear OT."""
+        stats = {"created": 0, "updated": 0}
+
+        order_type, created = OrderType.objects.update_or_create(
+            code="INSTALLATION",
+            defaults={
+                "name": "Instalacion",
+                "description": "Instalacion inicial de un servicio contratado.",
+                "is_active": True,
+            },
+        )
+        stats["created" if created else "updated"] += 1
+
+        reason, created = OrderReason.objects.update_or_create(
+            order_type=order_type,
+            code="NEW_CLIENT",
+            defaults={
+                "name": "Cliente nuevo",
+                "classification": OrderReason.Classification.TECHNICAL,
+                "is_active": True,
+            },
+        )
+        reason.full_clean()
+        reason.save()
+        stats["created" if created else "updated"] += 1
+
+        for code, name, is_success in (
+            ("SUCCESSFUL", "Instalacion exitosa", True),
+            ("NOT_COMPLETED", "Instalacion no ejecutada", False),
+        ):
+            result, created = OrderResult.objects.update_or_create(
+                order_type=order_type,
+                code=code,
+                defaults={
+                    "name": name,
+                    "is_success": is_success,
+                    "is_active": True,
+                },
+            )
+            result.full_clean()
+            result.save()
+            stats["created" if created else "updated"] += 1
+
+        order_type.full_clean()
+        order_type.save()
+        self.stdout.write(
+            self.style.SUCCESS(
+                "✓ Catalogo OT de instalacion: INSTALLATION / NEW_CLIENT / resultados"
+            )
+        )
+        return stats
 
     def _load_plans(self, services, policies):
         # Solo se cargan velocidades/precios que fueron confirmados con ATC o
