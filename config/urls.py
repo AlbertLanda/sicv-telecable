@@ -70,6 +70,13 @@ urlpatterns = [
         include("apps.work_orders.urls"),
     ),
 
+    # Portal móvil/responsive del técnico. El shell HTML no usa la sesión
+    # web de ATC; toda lectura y escritura real exige TokenAuthentication.
+    path(
+        "technician/",
+        include("apps.work_orders.technician_urls"),
+    ),
+
     # API del técnico (app/PWA) — canal separado del login web de sesión:
     # autenticación por token, sin cookies ni plantillas.
     #
