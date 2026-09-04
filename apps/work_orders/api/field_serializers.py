@@ -2,13 +2,14 @@
 
 Este módulo integra la ficha creada en el frente web con el canal API del
 técnico. No crea una segunda OT: todos los datos siguen colgando de la misma
-`WorkOrder` mediante ficha, evidencias y metrajes de instalación.
+`WorkOrder` mediante ficha, evidencias, movimientos de materiales y metrajes.
 """
 
 from pathlib import Path
 
 from rest_framework import serializers
 
+from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.services.models import InstallationMaterialRule, InstallationMaterialUsage
 from apps.work_orders.models import WorkOrderEvidence, WorkOrderFieldSheet
 
@@ -67,6 +68,66 @@ class WorkOrderFieldSheetUpdateSerializer(serializers.Serializer):
                 "Debe enviar al menos un campo de la ficha técnica."
             )
         return attrs
+
+
+class MaterialCatalogSerializer(serializers.ModelSerializer):
+    unit_label = serializers.CharField(source="get_unit_of_measure_display", read_only=True)
+
+    class Meta:
+        model = Material
+        fields = ["id", "code", "name", "unit_of_measure", "unit_label"]
+        read_only_fields = fields
+
+
+class WorkOrderMaterialMovementSerializer(serializers.ModelSerializer):
+    material = MaterialCatalogSerializer(read_only=True)
+    movement_label = serializers.CharField(source="get_movement_type_display", read_only=True)
+    recorded_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkOrderMaterialMovement
+        fields = [
+            "id",
+            "movement_type",
+            "movement_label",
+            "material",
+            "quantity",
+            "remarks",
+            "recorded_by",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+    def get_recorded_by(self, movement):
+        return {
+            "id": movement.recorded_by_id,
+            "display_name": str(movement.recorded_by),
+        }
+
+
+class WorkOrderMaterialMovementInputSerializer(serializers.Serializer):
+    material_id = serializers.PrimaryKeyRelatedField(
+        source="material",
+        queryset=Material.objects.filter(is_active=True),
+    )
+    movement_type = serializers.ChoiceField(
+        choices=WorkOrderMaterialMovement.MovementType.choices,
+    )
+    quantity = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0.01,
+    )
+    remarks = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=250,
+        default="",
+    )
+
+
+class WorkOrderMaterialMovementDeleteSerializer(serializers.Serializer):
+    movement_id = serializers.IntegerField(min_value=1)
 
 
 class InstallationMaterialUsageSerializer(serializers.ModelSerializer):
