@@ -10,6 +10,7 @@
         detailId: null,
         detailBackScreen: "mine",
         detailEditable: false,
+        currentOrder: null,
         toastTimer: null,
     };
 
@@ -101,6 +102,75 @@
         }
     }
 
+    function ensureCompletionPanel() {
+        if ($("#completion-panel")) return;
+        const evidenceForm = $("#evidence-form");
+        const evidencePanel = evidenceForm ? evidenceForm.closest(".panel") : null;
+        if (!evidencePanel) return;
+
+        const panel = document.createElement("section");
+        panel.id = "completion-panel";
+        panel.className = "panel";
+        panel.innerHTML = `
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Cierre técnico</p>
+                    <h2>Finalizar Orden Técnica</h2>
+                </div>
+                <span id="completion-status" class="mini-badge">Pendiente</span>
+            </div>
+            <p id="completion-help" class="helper">Inicia la atención antes de finalizar la orden.</p>
+
+            <dl class="data-list two-column">
+                <div><dt>Ficha técnica</dt><dd id="completion-sheet">—</dd></div>
+                <div><dt>Materiales instalados</dt><dd id="completion-installed">0</dd></div>
+                <div><dt>Materiales retirados</dt><dd id="completion-removed">0</dd></div>
+                <div><dt>Metrajes</dt><dd id="completion-meters">0</dd></div>
+                <div><dt>Evidencias</dt><dd id="completion-evidences">0</dd></div>
+                <div><dt>Resultado</dt><dd id="completion-selected-result">Sin registrar</dd></div>
+            </dl>
+
+            <form id="complete-order-form" class="form-grid" hidden>
+                <label class="field field-full">
+                    <span>Resultado de la atención</span>
+                    <select id="completion-result" required>
+                        <option value="">Seleccione resultado...</option>
+                    </select>
+                </label>
+                <label class="field field-full">
+                    <span>Observación final de la atención</span>
+                    <textarea id="completion-remarks" rows="3" maxlength="1000" placeholder="Opcional: observación antes de cerrar la atención"></textarea>
+                </label>
+                <div class="field-full">
+                    <button id="complete-order-submit" class="btn btn-primary btn-block" type="submit">Finalizar atención</button>
+                </div>
+            </form>
+
+            <form id="liquidate-order-form" class="form-grid" hidden>
+                <div class="note-box field-full">
+                    <strong>Atención finalizada</strong>
+                    <p>Revisa el resultado y describe el trabajo ejecutado. Al confirmar, la OT quedará Liquidada y ya no podrá editarse desde campo.</p>
+                </div>
+                <label class="field field-full">
+                    <span>Trabajo ejecutado / solución</span>
+                    <textarea id="liquidation-resolution" rows="4" maxlength="4000" required placeholder="Describe qué se realizó en el domicilio"></textarea>
+                </label>
+                <label class="field field-full">
+                    <span>Observaciones técnicas adicionales</span>
+                    <textarea id="liquidation-notes" rows="3" maxlength="4000" placeholder="Opcional"></textarea>
+                </label>
+                <div class="field-full">
+                    <button id="liquidate-order-submit" class="btn btn-primary btn-block" type="submit">Finalizar orden técnica</button>
+                </div>
+            </form>
+
+            <div id="completion-done" class="empty-state compact" hidden>
+                Orden técnica liquidada. El registro de campo quedó consolidado para su revisión posterior.
+            </div>
+        `;
+        evidencePanel.insertAdjacentElement("afterend", panel);
+    }
+
     function showLogin() {
         $("#login-view").hidden = false;
         $("#app-view").hidden = true;
@@ -126,12 +196,14 @@
         state.technician = null;
         state.detailId = null;
         state.detailEditable = false;
+        state.currentOrder = null;
         sessionStorage.removeItem(tokenKey);
         showLogin();
         if (showMessage) showToast("Sesión cerrada.", "success");
     }
 
     async function bootstrap() {
+        ensureCompletionPanel();
         bindEvents();
         updateNetworkStatus();
         if (!state.token) {
@@ -337,6 +409,7 @@
     }
 
     function renderDetail(order) {
+        state.currentOrder = order;
         setDetailText("#detail-number", order.order_number, "OT");
         setDetailText("#detail-customer", order.customer?.display_name, "Cliente");
         setDetailText("#detail-service", `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`);
@@ -427,6 +500,7 @@
                 loadFieldMaterials(id),
                 loadMaterials(id),
                 loadEvidences(id),
+                loadCompletion(id, order),
             ]);
             content.hidden = false;
             loading.hidden = true;
@@ -481,6 +555,7 @@
                 }),
             });
             showToast("Ficha técnica guardada.", "success");
+            await loadCompletion(state.detailId, state.currentOrder);
         } catch (error) {
             showToast(error.message, "error");
         } finally {
@@ -599,6 +674,7 @@
                 installed ? "Material instalado registrado." : "Material retirado registrado.",
                 "success",
             );
+            await loadCompletion(state.detailId, state.currentOrder);
         } catch (error) {
             showToast(error.message, "error");
         } finally {
@@ -616,6 +692,7 @@
             });
             renderFieldMaterials(payload);
             showToast("Registro de material eliminado.", "success");
+            await loadCompletion(state.detailId, state.currentOrder);
         } catch (error) {
             showToast(error.message, "error");
             setBusy(button, false);
@@ -670,6 +747,7 @@
             $("#material-meters").value = "";
             showToast("Metraje registrado. El exceso fue calculado por el SICV.", "success");
             await loadMaterials(state.detailId);
+            await loadCompletion(state.detailId, state.currentOrder);
         } catch (error) {
             showToast(error.message, "error");
         } finally {
@@ -724,9 +802,122 @@
             $("#evidence-description").value = "";
             showToast("Evidencia registrada.", "success");
             await loadEvidences(state.detailId);
+            await loadCompletion(state.detailId, state.currentOrder);
         } catch (error) {
             showToast(error.message, "error");
         } finally {
+            setBusy(button, false);
+        }
+    }
+
+    function renderCompletion(payload, order) {
+        const summary = payload?.summary || {};
+        $("#completion-status").textContent = payload?.status_display || order?.status_display || "Estado";
+        $("#completion-sheet").textContent = summary.field_sheet_registered ? "Registrada" : "Sin datos";
+        $("#completion-installed").textContent = String(summary.installed_materials || 0);
+        $("#completion-removed").textContent = String(summary.removed_materials || 0);
+        $("#completion-meters").textContent = String(summary.meter_records || 0);
+        $("#completion-evidences").textContent = String(summary.evidences || 0);
+        $("#completion-selected-result").textContent = payload?.selected_result?.name || "Sin registrar";
+
+        const resultSelect = $("#completion-result");
+        const selected = resultSelect.value;
+        resultSelect.replaceChildren();
+        const placeholder = element("option", "", "Seleccione resultado...");
+        placeholder.value = "";
+        resultSelect.append(placeholder);
+        (payload?.results || []).forEach((result) => {
+            const option = element("option", "", result.name);
+            option.value = result.id;
+            resultSelect.append(option);
+        });
+        if (selected && Array.from(resultSelect.options).some((option) => option.value === selected)) {
+            resultSelect.value = selected;
+        }
+
+        const statusCode = payload?.status || order?.status;
+        const completeForm = $("#complete-order-form");
+        const liquidationForm = $("#liquidate-order-form");
+        const done = $("#completion-done");
+        completeForm.hidden = true;
+        liquidationForm.hidden = true;
+        done.hidden = true;
+
+        if (statusCode === "IN_PROGRESS") {
+            $("#completion-help").textContent = "Revisa lo registrado, selecciona el resultado real de la visita y finaliza la atención.";
+            completeForm.hidden = false;
+        } else if (statusCode === "ATTENDED") {
+            $("#completion-help").textContent = "La atención ya terminó. Falta consolidar la liquidación técnica de esta OT.";
+            liquidationForm.hidden = false;
+        } else if (statusCode === "LIQUIDATED") {
+            $("#completion-help").textContent = "La Orden Técnica ya fue finalizada y liquidada.";
+            done.hidden = false;
+        } else {
+            $("#completion-help").textContent = "Inicia la atención antes de finalizar la orden.";
+        }
+    }
+
+    async function loadCompletion(id, order = state.currentOrder) {
+        if (!$("#completion-panel")) return;
+        try {
+            const payload = await api(`${config.workOrdersUrl}${id}/complete/`);
+            renderCompletion(payload, order);
+        } catch (error) {
+            $("#completion-help").textContent = "No se pudo consultar el estado de cierre de la OT.";
+        }
+    }
+
+    async function finalizeAttention(event) {
+        event.preventDefault();
+        if (!state.detailId) return;
+        const resultId = $("#completion-result").value;
+        if (!resultId) {
+            showToast("Selecciona el resultado de la atención.", "error");
+            return;
+        }
+
+        const button = $("#complete-order-submit");
+        setBusy(button, true, "Finalizando…");
+        try {
+            await api(`${config.workOrdersUrl}${state.detailId}/complete/`, {
+                method: "POST",
+                body: JSON.stringify({
+                    result_id: Number(resultId),
+                    remarks: $("#completion-remarks").value.trim(),
+                }),
+            });
+            showToast("Atención finalizada. Revisa y envía la liquidación técnica.", "success");
+            await loadDetail(state.detailId);
+        } catch (error) {
+            showToast(error.message, "error");
+            setBusy(button, false);
+        }
+    }
+
+    async function finalizeLiquidation(event) {
+        event.preventDefault();
+        if (!state.detailId) return;
+        const resolution = $("#liquidation-resolution").value.trim();
+        if (!resolution) {
+            showToast("Describe el trabajo ejecutado antes de finalizar la OT.", "error");
+            return;
+        }
+
+        const button = $("#liquidate-order-submit");
+        setBusy(button, true, "Finalizando…");
+        try {
+            await api(`${config.workOrdersUrl}${state.detailId}/liquidate/`, {
+                method: "POST",
+                body: JSON.stringify({
+                    resolution_detail: resolution,
+                    technical_notes: $("#liquidation-notes").value.trim(),
+                    remarks: "Liquidación técnica finalizada desde el portal de campo.",
+                }),
+            });
+            showToast("Orden Técnica liquidada correctamente.", "success");
+            await loadDetail(state.detailId);
+        } catch (error) {
+            showToast(error.message, "error");
             setBusy(button, false);
         }
     }
@@ -747,6 +938,8 @@
         $("#removed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "REMOVED"));
         $("#materials-form").addEventListener("submit", saveMaterial);
         $("#evidence-form").addEventListener("submit", uploadEvidence);
+        $("#complete-order-form").addEventListener("submit", finalizeAttention);
+        $("#liquidate-order-form").addEventListener("submit", finalizeLiquidation);
         $$('[data-nav]').forEach((button) => {
             button.addEventListener("click", () => navigate(button.dataset.nav));
         });
