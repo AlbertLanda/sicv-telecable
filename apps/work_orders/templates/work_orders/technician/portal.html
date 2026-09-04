@@ -1,0 +1,282 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#123b63">
+    <meta name="color-scheme" content="light">
+    <title>SICV Técnico</title>
+    <link rel="stylesheet" href="{% static 'work_orders/technician/portal.css' %}">
+</head>
+<body>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <main id="login-view" class="login-shell">
+        <section class="login-card" aria-labelledby="login-title">
+            <div class="brand-mark" aria-hidden="true">TC</div>
+            <p class="eyebrow">TELECABLE · SICV</p>
+            <h1 id="login-title">Portal del técnico</h1>
+            <p class="muted">Ingresa con tu usuario técnico para consultar y atender tus órdenes de instalación.</p>
+
+            <form id="login-form" class="stack-lg" autocomplete="on">
+                <label class="field">
+                    <span>Usuario</span>
+                    <input id="login-username" name="username" type="text" autocomplete="username" required>
+                </label>
+                <label class="field">
+                    <span>Contraseña</span>
+                    <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+                </label>
+                <p id="login-error" class="form-error" hidden></p>
+                <button id="login-submit" class="btn btn-primary btn-block" type="submit">Ingresar</button>
+            </form>
+        </section>
+    </main>
+
+    <div id="app-view" class="app-shell" hidden>
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">SICV · CAMPO</p>
+                <strong id="technician-name">Técnico</strong>
+                <small id="technician-branch">Sin sede</small>
+            </div>
+            <button id="logout-button" class="icon-button" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">Salir</button>
+        </header>
+
+        <div id="network-banner" class="network-banner" hidden>Sin conexión. La información mostrada puede estar desactualizada.</div>
+
+        <main class="content">
+            <section id="screen-home" class="screen" data-screen="home">
+                <div class="hero-card">
+                    <p class="eyebrow">Jornada de campo</p>
+                    <h1>¿Qué vas a atender?</h1>
+                    <p>Consulta órdenes disponibles o continúa con las que ya tienes asignadas.</p>
+                </div>
+
+                <div class="stats-grid">
+                    <button class="stat-card" type="button" data-nav="available">
+                        <span class="stat-label">Disponibles</span>
+                        <strong id="home-available-count">—</strong>
+                        <small>Órdenes que puedes tomar</small>
+                    </button>
+                    <button class="stat-card" type="button" data-nav="mine">
+                        <span class="stat-label">Mis órdenes</span>
+                        <strong id="home-mine-count">—</strong>
+                        <small>Trabajo asignado a ti</small>
+                    </button>
+                </div>
+
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Prioridad</p>
+                            <h2>Próxima atención</h2>
+                        </div>
+                        <button class="text-button" type="button" data-nav="mine">Ver todas</button>
+                    </div>
+                    <div id="home-next-order" class="empty-state">Cargando tus órdenes…</div>
+                </section>
+            </section>
+
+            <section id="screen-available" class="screen" data-screen="available" hidden>
+                <div class="screen-heading">
+                    <div>
+                        <p class="eyebrow">Bandeja compartida</p>
+                        <h1>Órdenes disponibles</h1>
+                    </div>
+                    <button id="refresh-available" class="icon-button" type="button">Actualizar</button>
+                </div>
+
+                <label class="toggle-row">
+                    <span>
+                        <strong>Ver todas las sedes</strong>
+                        <small>Por defecto se prioriza tu sede.</small>
+                    </span>
+                    <input id="available-scope-all" type="checkbox">
+                </label>
+
+                <div id="available-loading" class="loading-card" hidden>Cargando órdenes…</div>
+                <div id="available-list" class="order-list"></div>
+                <div id="available-empty" class="empty-state" hidden>No hay órdenes disponibles en este momento.</div>
+            </section>
+
+            <section id="screen-mine" class="screen" data-screen="mine" hidden>
+                <div class="screen-heading">
+                    <div>
+                        <p class="eyebrow">Mi trabajo</p>
+                        <h1>Mis órdenes</h1>
+                    </div>
+                    <button id="refresh-mine" class="icon-button" type="button">Actualizar</button>
+                </div>
+
+                <div id="mine-loading" class="loading-card" hidden>Cargando tus órdenes…</div>
+                <div id="mine-list" class="order-list"></div>
+                <div id="mine-empty" class="empty-state" hidden>No tienes órdenes asignadas.</div>
+            </section>
+
+            <section id="screen-detail" class="screen" data-screen="detail" hidden>
+                <button id="detail-back" class="back-button" type="button">← Volver</button>
+
+                <div id="detail-loading" class="loading-card">Cargando Orden Técnica…</div>
+                <div id="detail-content" hidden>
+                    <section class="order-hero">
+                        <div>
+                            <p id="detail-number" class="eyebrow">OT</p>
+                            <h1 id="detail-customer">Cliente</h1>
+                            <p id="detail-service" class="muted"></p>
+                        </div>
+                        <span id="detail-status" class="status-pill"></span>
+                    </section>
+
+                    <div id="detail-actions" class="action-bar"></div>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Ubicación</p>
+                                <h2>Domicilio del servicio</h2>
+                            </div>
+                        </div>
+                        <dl class="data-list">
+                            <div><dt>Dirección</dt><dd id="detail-address">—</dd></div>
+                            <div><dt>Referencia</dt><dd id="detail-reference">—</dd></div>
+                            <div><dt>Distrito / zona</dt><dd id="detail-district">—</dd></div>
+                        </dl>
+                        <a id="detail-map-link" class="btn btn-secondary btn-block" href="#" target="_blank" rel="noopener noreferrer">Abrir en Google Maps</a>
+                        <p id="detail-gps-note" class="helper"></p>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Orden</p>
+                                <h2>Datos de atención</h2>
+                            </div>
+                        </div>
+                        <dl class="data-list two-column">
+                            <div><dt>Tipo</dt><dd id="detail-type">—</dd></div>
+                            <div><dt>Prioridad</dt><dd id="detail-priority">—</dd></div>
+                            <div><dt>Sede</dt><dd id="detail-branch">—</dd></div>
+                            <div><dt>Motivo</dt><dd id="detail-reason">—</dd></div>
+                            <div><dt>Programada</dt><dd id="detail-scheduled">—</dd></div>
+                            <div><dt>Inicio</dt><dd id="detail-started">—</dd></div>
+                        </dl>
+                        <div class="note-box">
+                            <strong>Detalle</strong>
+                            <p id="detail-description">Sin detalle adicional.</p>
+                        </div>
+                    </section>
+
+                    <section id="field-sheet-panel" class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Ficha técnica</p>
+                                <h2>Datos de campo</h2>
+                            </div>
+                            <span id="field-sheet-mode" class="mini-badge">Solo lectura</span>
+                        </div>
+                        <p id="field-sheet-help" class="helper">Inicia la atención para habilitar el registro técnico.</p>
+                        <form id="field-sheet-form" class="form-grid">
+                            <label class="field">
+                                <span>Caja NAP</span>
+                                <input id="field-nap" name="nap" maxlength="60" placeholder="Ej. NAP-HYO-023">
+                            </label>
+                            <label class="field">
+                                <span>Borne</span>
+                                <input id="field-terminal" name="terminal" maxlength="30" placeholder="Ej. 08">
+                            </label>
+                            <label class="field">
+                                <span>MAC / Equipo</span>
+                                <input id="field-equipment" name="equipment_code" maxlength="120" placeholder="MAC, serie o código">
+                            </label>
+                            <label class="field">
+                                <span>Precinto</span>
+                                <input id="field-seal" name="seal_number" maxlength="60">
+                            </label>
+                            <label class="field field-full">
+                                <span>Observaciones técnicas</span>
+                                <textarea id="field-notes" name="notes" rows="4" placeholder="Describe datos relevantes de la instalación"></textarea>
+                            </label>
+                            <div class="field-full">
+                                <button id="field-save" class="btn btn-primary btn-block" type="submit">Guardar ficha técnica</button>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section id="materials-panel" class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Materiales</p>
+                                <h2>Metraje de instalación</h2>
+                            </div>
+                            <span id="materials-total" class="mini-badge">Exceso S/ 0.00</span>
+                        </div>
+                        <p id="materials-help" class="helper">El técnico registra solo los metros utilizados. El SICV calcula automáticamente los metros incluidos, el exceso y el cobro.</p>
+                        <form id="materials-form" class="form-grid compact-form-grid">
+                            <label class="field">
+                                <span>Material</span>
+                                <select id="material-type" name="material">
+                                    <option value="UTP">Cable UTP</option>
+                                    <option value="RG6">Cable coaxial RG6</option>
+                                    <option value="DROP">Fibra óptica Drop</option>
+                                </select>
+                            </label>
+                            <label class="field">
+                                <span>Metros utilizados</span>
+                                <input id="material-meters" name="meters_used" type="number" min="0" step="0.01" inputmode="decimal" required>
+                            </label>
+                            <div class="field-full">
+                                <button id="material-submit" class="btn btn-primary btn-block" type="submit">Guardar metraje</button>
+                            </div>
+                        </form>
+                        <div id="materials-list" class="material-list"></div>
+                        <div id="materials-empty" class="empty-state compact" hidden>Aún no se registraron metrajes.</div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Evidencias</p>
+                                <h2>Fotos y archivos</h2>
+                            </div>
+                            <span id="evidence-count" class="mini-badge">0</span>
+                        </div>
+
+                        <form id="evidence-form" class="evidence-form">
+                            <label class="upload-box">
+                                <span>Adjuntar foto o PDF</span>
+                                <small>JPG, PNG, WEBP o PDF · máximo 10 MB</small>
+                                <input id="evidence-file" name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf">
+                            </label>
+                            <label class="field">
+                                <span>Descripción</span>
+                                <input id="evidence-description" name="description" maxlength="200" placeholder="Ej. Caja NAP antes de conexión">
+                            </label>
+                            <button id="evidence-submit" class="btn btn-secondary btn-block" type="submit">Subir evidencia</button>
+                        </form>
+
+                        <div id="evidence-list" class="evidence-list"></div>
+                        <div id="evidence-empty" class="empty-state compact" hidden>Aún no hay evidencias registradas.</div>
+                    </section>
+                </div>
+            </section>
+        </main>
+
+        <nav id="bottom-nav" class="bottom-nav" aria-label="Navegación principal">
+            <button type="button" data-nav="home" class="active"><span aria-hidden="true">⌂</span><small>Inicio</small></button>
+            <button type="button" data-nav="available"><span aria-hidden="true">＋</span><small>Disponibles</small></button>
+            <button type="button" data-nav="mine"><span aria-hidden="true">✓</span><small>Mis órdenes</small></button>
+        </nav>
+    </div>
+
+    <script>
+        window.SICV_TECHNICIAN_CONFIG = {
+            loginUrl: "/api/technicians/login/",
+            meUrl: "/api/technicians/me/",
+            workOrdersUrl: "/api/technicians/work-orders/"
+        };
+    </script>
+    <script src="{% static 'work_orders/technician/portal.js' %}" defer></script>
+</body>
+</html>
