@@ -1,10 +1,4 @@
-"""Acciones API del técnico durante la ejecución de una Orden Técnica.
-
-Complementa el MVP de Kevin (`available`, `claim`, `mis órdenes`, `detalle`)
-con la ficha de campo creada por Joleydi. La entidad sigue siendo una sola
-`WorkOrder`: después del claim el técnico inicia la atención, completa la
-ficha y adjunta evidencias sobre esa misma orden.
-"""
+"""Acciones API del técnico durante la ejecución de una Orden Técnica."""
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
@@ -12,7 +6,13 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.services.installation_rules import (
+    record_installation_material_usage,
+    total_installation_excess_charge,
+)
 from apps.work_orders.api.field_serializers import (
+    InstallationMaterialUsageInputSerializer,
+    InstallationMaterialUsageSerializer,
     WorkOrderEvidenceSerializer,
     WorkOrderEvidenceUploadSerializer,
     WorkOrderFieldSheetSerializer,
@@ -42,8 +42,6 @@ def _django_validation_response(exc):
 
 
 class StartWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
-    """POST `<id>/start/`: ASSIGNED/REPROGRAMMED -> IN_PROGRESS."""
-
     serializer_class = WorkOrderStartSerializer
 
     def post(self, request, *args, **kwargs):
@@ -65,8 +63,6 @@ class StartWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
 
 
 class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
-    """GET/PATCH `<id>/field-sheet/` sobre la misma WorkOrder."""
-
     serializer_class = WorkOrderFieldSheetUpdateSerializer
 
     @staticmethod
@@ -78,15 +74,10 @@ class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
 
     def get(self, request, *args, **kwargs):
         order = self.get_object()
-        return Response(
-            WorkOrderFieldSheetSerializer(self._sheet(order)).data
-        )
+        return Response(WorkOrderFieldSheetSerializer(self._sheet(order)).data)
 
     def patch(self, request, *args, **kwargs):
         order = self.get_object()
-
-        # La toma (ASSIGNED) solo adjudica la OT. Los datos de campo empiezan
-        # después de que el técnico declare formalmente el inicio.
         if order.status != WorkOrder.Status.IN_PROGRESS:
             return Response(
                 {"detail": NOT_IN_PROGRESS_DETAIL},
@@ -95,7 +86,6 @@ class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         try:
             sheet = update_field_sheet(
                 order,
@@ -104,20 +94,67 @@ class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
             )
         except DjangoValidationError as exc:
             return _django_validation_response(exc)
-
         return Response(WorkOrderFieldSheetSerializer(sheet).data)
 
-    # POST se acepta como alias práctico para clientes móviles que no tengan
-    # PATCH cómodo; la semántica sigue siendo actualización parcial.
     post = patch
+
+
+class InstallationMaterialUsageListCreateView(
+    TechnicianWorkOrderObjectMixin,
+    GenericAPIView,
+):
+    """
+    GET/POST `<id>/materials/`.
+
+    El técnico registra metros realmente utilizados. El backend resuelve la
+    regla vigente por material/servicio/sede y calcula exceso e importe; el
+    cliente móvil nunca envía precios ni metros gratuitos.
+    """
+
+    serializer_class = InstallationMaterialUsageInputSerializer
+
+    def get(self, request, *args, **kwargs):
+        order = self.get_object()
+        usages = order.installation_material_usages.select_related("rule").all()
+        return Response(
+            {
+                "items": InstallationMaterialUsageSerializer(usages, many=True).data,
+                "total_excess_charge": str(total_installation_excess_charge(order)),
+            }
+        )
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status != WorkOrder.Status.IN_PROGRESS:
+            return Response(
+                {"detail": NOT_IN_PROGRESS_DETAIL},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            usage = record_installation_material_usage(
+                work_order=order,
+                material=serializer.validated_data["material"],
+                meters_used=serializer.validated_data["meters_used"],
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        return Response(
+            {
+                "item": InstallationMaterialUsageSerializer(usage).data,
+                "total_excess_charge": str(total_installation_excess_charge(order)),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class WorkOrderEvidenceListCreateView(
     TechnicianWorkOrderObjectMixin,
     GenericAPIView,
 ):
-    """GET/POST `<id>/evidences/`: fotos/PDF de la atención en campo."""
-
     serializer_class = WorkOrderEvidenceUploadSerializer
     parser_classes = [MultiPartParser, FormParser]
 
@@ -134,7 +171,6 @@ class WorkOrderEvidenceListCreateView(
 
     def post(self, request, *args, **kwargs):
         order = self.get_object()
-
         if order.status != WorkOrder.Status.IN_PROGRESS:
             return Response(
                 {"detail": NOT_IN_PROGRESS_DETAIL},
@@ -143,7 +179,6 @@ class WorkOrderEvidenceListCreateView(
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         try:
             evidence = add_work_order_evidence(
                 order,
