@@ -1,11 +1,17 @@
 """Acciones API del técnico durante la ejecución de una Orden Técnica."""
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.inventory.models import Material, WorkOrderMaterialMovement
+from apps.inventory.services import (
+    delete_work_order_material,
+    record_work_order_material,
+)
 from apps.services.installation_rules import (
     record_installation_material_usage,
     total_installation_excess_charge,
@@ -13,10 +19,14 @@ from apps.services.installation_rules import (
 from apps.work_orders.api.field_serializers import (
     InstallationMaterialUsageInputSerializer,
     InstallationMaterialUsageSerializer,
+    MaterialCatalogSerializer,
     WorkOrderEvidenceSerializer,
     WorkOrderEvidenceUploadSerializer,
     WorkOrderFieldSheetSerializer,
     WorkOrderFieldSheetUpdateSerializer,
+    WorkOrderMaterialMovementDeleteSerializer,
+    WorkOrderMaterialMovementInputSerializer,
+    WorkOrderMaterialMovementSerializer,
     WorkOrderStartSerializer,
 )
 from apps.work_orders.api.serializers import WorkOrderDetailSerializer
@@ -97,6 +107,101 @@ class FieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
         return Response(WorkOrderFieldSheetSerializer(sheet).data)
 
     post = patch
+
+
+class WorkOrderMaterialMovementView(
+    TechnicianWorkOrderObjectMixin,
+    GenericAPIView,
+):
+    """GET/POST/DELETE de materiales instalados y retirados en domicilio.
+
+    Este registro es independiente del metraje que calcula excesos. Aquí se
+    declara qué material o equipo entró/salió del domicilio y en qué cantidad;
+    todavía no modifica stock ni kardex de almacén.
+    """
+
+    serializer_class = WorkOrderMaterialMovementInputSerializer
+
+    @staticmethod
+    def _payload(order):
+        movements = (
+            order.field_material_movements
+            .select_related("material", "recorded_by")
+            .all()
+        )
+        installed = [
+            movement
+            for movement in movements
+            if movement.movement_type == WorkOrderMaterialMovement.MovementType.INSTALLED
+        ]
+        removed = [
+            movement
+            for movement in movements
+            if movement.movement_type == WorkOrderMaterialMovement.MovementType.REMOVED
+        ]
+        catalog = Material.objects.filter(is_active=True).order_by("name")
+        return {
+            "catalog": MaterialCatalogSerializer(catalog, many=True).data,
+            "installed": WorkOrderMaterialMovementSerializer(installed, many=True).data,
+            "removed": WorkOrderMaterialMovementSerializer(removed, many=True).data,
+        }
+
+    def get(self, request, *args, **kwargs):
+        order = self.get_object()
+        return Response(self._payload(order))
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status != WorkOrder.Status.IN_PROGRESS:
+            return Response(
+                {"detail": NOT_IN_PROGRESS_DETAIL},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            movement = record_work_order_material(
+                work_order=order,
+                user=request.user,
+                **serializer.validated_data,
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        return Response(
+            {
+                "item": WorkOrderMaterialMovementSerializer(movement).data,
+                **self._payload(order),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status != WorkOrder.Status.IN_PROGRESS:
+            return Response(
+                {"detail": NOT_IN_PROGRESS_DETAIL},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = WorkOrderMaterialMovementDeleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        movement = get_object_or_404(
+            WorkOrderMaterialMovement,
+            pk=serializer.validated_data["movement_id"],
+            work_order=order,
+        )
+        try:
+            delete_work_order_material(
+                work_order=order,
+                movement=movement,
+                user=request.user,
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        return Response(self._payload(order), status=status.HTTP_200_OK)
 
 
 class InstallationMaterialUsageListCreateView(
