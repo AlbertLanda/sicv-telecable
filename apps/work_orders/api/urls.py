@@ -14,6 +14,11 @@ urlpatterns = [
     path("<int:pk>/start/", field_views.StartWorkOrderView.as_view(), name="start"),
     path("<int:pk>/field-sheet/", field_views.FieldSheetView.as_view(), name="field_sheet"),
     path(
+        "<int:pk>/field-materials/",
+        field_views.WorkOrderMaterialMovementView.as_view(),
+        name="field_materials",
+    ),
+    path(
         "<int:pk>/materials/",
         field_views.InstallationMaterialUsageListCreateView.as_view(),
         name="materials",
