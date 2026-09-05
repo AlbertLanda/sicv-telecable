@@ -1,4 +1,8 @@
-"""Regresiones del retiro de la asignación manual desde el portal web."""
+"""Regresiones del retiro de la asignación manual desde el portal web.
+
+La ficha del cliente debe mostrar la OT y su estado, pero nunca ofrecer una
+acción para adjudicar o reasignar un técnico desde el canal web.
+"""
 
 from django.contrib.auth.models import Permission
 from django.urls import reverse
