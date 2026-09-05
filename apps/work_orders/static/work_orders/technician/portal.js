@@ -429,6 +429,8 @@
             ? "Ubicación GPS validada. La dirección textual se mantiene como referencia."
             : "GPS no disponible o inválido. El mapa buscará usando la dirección registrada.";
 
+        renderPlan(order.plan_details);
+
         setDetailText("#detail-type", order.order_type);
         setDetailText("#detail-priority", order.priority_display || order.priority);
         setDetailText("#detail-branch", order.branch);
@@ -438,6 +440,58 @@
         setDetailText("#detail-description", order.detail, "Sin detalle adicional.");
         renderDetailActions(order);
         configureTechnicalMode(order);
+    }
+
+    function renderPlan(plan) {
+        // El bloque puede no venir: una orden cuya suscripcion se sirviera sin
+        // plan dejaria `plan_details` en null. Se pinta con guiones en vez de
+        // reventar, porque el resto de la ficha -direccion, motivo, horario-
+        // sigue siendo util para ir a trabajar.
+        const data = plan || {};
+
+        setDetailText("#detail-plan-name", data.name, "Sin plan");
+        setDetailText("#detail-plan-service", data.service_type);
+        setDetailText(
+            "#detail-plan-speed",
+            data.speed_mbps ? `${data.speed_mbps} Mbps` : "",
+            "No aplica",
+        );
+        setDetailText("#detail-plan-technology", data.technology, "No registrada");
+        setDetailText(
+            "#detail-plan-tv",
+            // El cero es un dato, no un vacio: "0 puntos" significa que
+            // ninguna salida de TV entra sin cargo, y el tecnico tiene que
+            // saberlo antes de cablear. Por eso se compara contra null y no
+            // se usa un condicional que trate el 0 como ausencia.
+            data.included_tv_points === null || data.included_tv_points === undefined
+                ? ""
+                : `${data.included_tv_points}`,
+        );
+        setDetailText("#detail-plan-category", data.commercial_category_display);
+        setDetailText("#detail-plan-annexes", data.annex_count);
+        setDetailText("#detail-plan-tv-total", data.total_tv_points);
+
+        // El contrato prevalece sobre el catálogo, incluso si su importe es
+        // cero o no existe tarifa geográfica. No inventar precios cuando la
+        // respuesta de una API antigua todavía no incluye estos campos.
+        for (const [selector, amount] of [
+            ["#detail-plan-monthly-base", data.base_monthly_fee],
+            ["#detail-plan-monthly-annexes", data.annex_monthly_charge],
+            ["#detail-plan-monthly", data.total_monthly_price],
+            ["#detail-plan-installation", data.base_installation_fee],
+        ]) {
+            setDetailText(selector, amount == null ? "" : money(amount), "No registrada");
+        }
+
+        const note = $("#detail-plan-note");
+
+        if (!plan) {
+            note.textContent = "La suscripción de esta orden no tiene plan registrado.";
+        } else {
+            note.textContent = "Importes contratados de la suscripción, antes de pronto pago. " +
+                "La mensualidad total incluye los anexos activos. " +
+                "Las cortesías no utilizadas en la instalación inicial no quedan reservadas.";
+        }
     }
 
     function renderDetailActions(order) {

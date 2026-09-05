@@ -771,15 +771,28 @@ class WorkOrder(models.Model):
             })
 
         previous_status = self.status
-        updated_fields = ["status", "updated_at"]
-
-        self.status = new_status
-
+        changes = {"status": new_status, "updated_at": timezone.now()}
         if new_status == self.Status.ATTENDED and not self.attended_at:
-            self.attended_at = timezone.now()
-            updated_fields.append("attended_at")
+            changes["attended_at"] = changes["updated_at"]
 
-        self.save(update_fields=updated_fields)
+        # La instancia puede haberse leído antes de que otra petición
+        # terminara o reprogramara la atención. Comprobar el estado también
+        # en el UPDATE evita sobrescribir ese avance. Funciona en SQLite y
+        # PostgreSQL, sin depender solo de un bloqueo tomado por una vista.
+        # Si falla, la transacción del llamador revierte asimismo fecha,
+        # resultado e históricos que hubiera preparado antes de transicionar.
+        updated = type(self).objects.filter(
+            pk=self.pk, status=previous_status,
+        ).update(**changes)
+        if not updated:
+            raise ValidationError({
+                "status": (
+                    "La orden cambió mientras se procesaba la solicitud. "
+                    "Actualice la ficha antes de volver a intentarlo."
+                )
+            })
+        for field, value in changes.items():
+            setattr(self, field, value)
 
         WorkOrderStatusHistory.objects.create(
             work_order=self,

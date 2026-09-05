@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import dashboard_views, views
 
 
 app_name = "customers"
@@ -73,10 +73,11 @@ urlpatterns = [
         name="work_order_ui_preview",
     ),
 
-    # Ficha del cliente
+    # Ficha ejecutiva del cliente. Reutiliza la lógica y consultas de la vista
+    # histórica, pero prioriza resumen, OT abiertas y accesos operativos.
     path(
         "<int:pk>/",
-        views.CustomerDetailView.as_view(),
+        dashboard_views.CustomerDashboardDetailView.as_view(),
         name="detail",
     ),
 ]

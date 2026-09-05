@@ -74,6 +74,14 @@ class TechnicianChannelMixin:
     # detalle costaría una consulta extra en la toma sin que nadie lo note.
     OBJECT_RELATIONS = (
         "subscription__address",
+        # Plan contratado: la tarifa aplicada y su sede/zona, y la política de
+        # cobro pactada. Van aquí y no en el listado porque solo la ficha
+        # publica `plan_details`; el nombre del plan que muestra la fila ya
+        # viene por `subscription__plan` de LIST_RELATIONS.
+        "subscription__tariff",
+        "subscription__tariff__branch",
+        "subscription__tariff__zone",
+        "subscription__billing_policy",
         "branch",
         "zone",
         "reason",

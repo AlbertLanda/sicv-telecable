@@ -28,7 +28,7 @@ coordenadas son un extra que se acompaña, no un reemplazo: por eso este módulo
 solo decide sobre ellas y jamás toca `address`, `reference` ni `district`.
 """
 
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 
 # Formato del enlace de mapa. Se declara aquí, junto a la regla que decide si
@@ -43,6 +43,23 @@ GPS_LINK_TEMPLATE = (
 # decimal_places=7)` llega hasta 999.9999999.
 LATITUDE_RANGE = (Decimal("-90"), Decimal("90"))
 LONGITUDE_RANGE = (Decimal("-180"), Decimal("180"))
+
+# Precisión con la que el sistema almacena una coordenada: los 7 decimales de
+# `DecimalField(max_digits=10, decimal_places=7)`.
+#
+# Se declara aquí porque el recorte es parte de la normalización, no una
+# cortesía del formulario. Distriluz responde `gpsx`/`gpsy` con 8 decimales, y
+# un valor de 8 decimales atraviesa la validación de este módulo sin objeción
+# —no es cero, es numérico y cae dentro del planeta— para que el
+# `DecimalValidator` del modelo lo rechace después, ya dentro del formulario de
+# alta. El resultado es un autocompletado que produce un dato que el propio
+# sistema no acepta: el operador ve las coordenadas llenas y un error rojo
+# debajo, y tiene que borrar un dígito a mano en los dos campos.
+#
+# El octavo decimal no es información que se pierda: un grado de latitud son
+# ~111.320 m, así que el séptimo decimal vale ~1,1 cm y el octavo ~1,1 mm.
+# Ninguna consulta de suministro eléctrico tiene esa exactitud real.
+COORDINATE_PRECISION = Decimal("0.0000001")
 
 
 def normalize_coordinate(value, limits=None):
@@ -60,6 +77,11 @@ def normalize_coordinate(value, limits=None):
     Acepta cadenas, enteros, flotantes y `Decimal` porque los tres orígenes
     difieren: el servicio SOAP entrega texto, el modelo entrega `Decimal` y un
     formulario puede entregar cualquiera de los dos.
+
+    Lo que sobrevive se devuelve redondeado a `COORDINATE_PRECISION`, la
+    precisión que el modelo almacena. Es lo que evita que el autocompletado de
+    Distriluz —8 decimales— entregue al formulario un valor que el
+    `DecimalValidator` del campo va a rechazar.
     """
     if value is None:
         return None
@@ -79,6 +101,24 @@ def normalize_coordinate(value, limits=None):
         return None
 
     if not number.is_finite():
+        return None
+
+    # El recorte va **antes** de las reglas, no después: lo que se valida debe
+    # ser el valor que el sistema va a almacenar. Al revés se cuela un cero
+    # disfrazado — `0.00000004` no es cero, así que pasaría la comprobación de
+    # abajo, y solo al redondear se convertiría en `0.0000000`: exactamente el
+    # centinela de «sin GPS» que este módulo existe para descartar, publicado
+    # como si fuera una ubicación.
+    try:
+        number = number.quantize(
+            COORDINATE_PRECISION,
+            rounding=ROUND_HALF_UP,
+        )
+
+    except InvalidOperation:
+        # Un número finito pero descomunal (`1E+40`) no cabe en los 10 dígitos
+        # del campo, y `quantize` lo señala en lugar de truncarlo. No es una
+        # coordenada.
         return None
 
     if number == 0:

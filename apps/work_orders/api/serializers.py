@@ -108,6 +108,113 @@ class WorkOrderAddressSerializer(serializers.Serializer):
         return super().to_representation(location_payload(address))
 
 
+class WorkOrderPlanSerializer(serializers.Serializer):
+    """Plan contratado en la suscripción que origina la orden.
+
+    Se alimenta de la **suscripción**, no del plan, porque «lo contratado» no
+    vive entero en el catálogo: el plan aporta qué es el servicio -velocidad,
+    tecnología, puntos de TV incluidos- y la suscripción aporta con qué
+    condiciones se vendió -la tarifa aplicada en esa sede y la política de
+    cobro pactada-. Servir solo `subscription.plan` dejaría fuera justo la
+    mitad que distingue una instalación de otra del mismo plan.
+
+    Es un `Serializer` plano y no un `ModelSerializer`, igual que el de
+    dirección y el de cliente: la forma de la respuesta la decide el canal
+    técnico, no la tabla.
+
+    `monthly_price` y `tariff` se conservan como referencias del catálogo.
+    Los importes contratados salen de la suscripción: una edición posterior
+    del catálogo no cambia lo pactado ni las cortesías ya otorgadas.
+    """
+
+    code = serializers.CharField(source="plan.code", read_only=True)
+    name = serializers.CharField(source="plan.name", read_only=True)
+    service_type = serializers.CharField(
+        source="service_type.name",
+        read_only=True,
+    )
+
+    # Lo que decide el trabajo en campo: qué equipo se instala y cómo se
+    # configura. `technology` puede venir vacío en planes antiguos.
+    speed_mbps = serializers.IntegerField(
+        source="plan.speed_mbps",
+        read_only=True,
+        allow_null=True,
+    )
+    technology = serializers.CharField(source="plan.technology", read_only=True)
+
+    # Cortesías realmente otorgadas, no el máximo del catálogo. Una segunda
+    # TV instalada después del alta siempre es un anexo.
+    included_tv_points = serializers.IntegerField(
+        source="initial_tv_courtesy_granted",
+        read_only=True,
+    )
+    annex_count = serializers.IntegerField(read_only=True)
+    total_tv_points = serializers.IntegerField(read_only=True)
+    base_installation_fee = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    base_monthly_fee = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    annex_monthly_charge = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    total_monthly_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+
+    generation = serializers.IntegerField(
+        source="plan.generation",
+        read_only=True,
+        allow_null=True,
+    )
+    commercial_category = serializers.CharField(
+        source="plan.commercial_category",
+        read_only=True,
+    )
+    commercial_category_display = serializers.CharField(
+        source="plan.get_commercial_category_display",
+        read_only=True,
+    )
+
+    monthly_price = serializers.DecimalField(
+        source="plan.monthly_price",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+        allow_null=True,
+    )
+
+    # Política de cobro pactada en la suscripción. Puede no estar registrada.
+    billing_policy = serializers.CharField(
+        source="billing_policy.name",
+        read_only=True,
+        allow_null=True,
+    )
+
+    tariff = serializers.SerializerMethodField()
+
+    def get_tariff(self, subscription):
+        """Referencia actual de la tarifa, o `null` si no lleva ninguna.
+
+        `null` y no un bloque de ceros: «sin tarifa geográfica» y «tarifa de
+        cero soles» son cosas distintas, y un bloque de ceros las volvería
+        indistinguibles -el mismo criterio que `technical_data`.
+        """
+        tariff = subscription.tariff
+
+        if tariff is None:
+            return None
+
+        return {
+            "installation_fee": str(tariff.installation_fee),
+            "monthly_fee": str(tariff.monthly_fee),
+            "branch": tariff.branch.name,
+            "zone": tariff.zone.name if tariff.zone_id else None,
+        }
+
+
 class WorkOrderListSerializer(serializers.ModelSerializer):
     """Fila del listado «Mis órdenes».
 
@@ -371,11 +478,20 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
     # que manda sigue siendo la del dominio en cada POST.
     can_start_attention = serializers.BooleanField(read_only=True)
 
+    # El plan contratado, completo. El campo `plan` heredado del listado
+    # sigue siendo el nombre a secas: la fila de «Mis órdenes» no necesita
+    # más, y quitárselo rompería a cualquier cliente que ya lo lea.
+    plan_details = WorkOrderPlanSerializer(
+        source="subscription",
+        read_only=True,
+    )
+
     technical_data = serializers.SerializerMethodField()
 
     class Meta(WorkOrderListSerializer.Meta):
         fields = WorkOrderListSerializer.Meta.fields + [
             "address",
+            "plan_details",
             "detail",
             "branch",
             "zone",

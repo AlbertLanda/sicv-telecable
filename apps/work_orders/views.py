@@ -9,23 +9,32 @@ atención-. No construye WorkOrder, no genera correlativos, no cambia status a
 mano y no duplica las reglas del dominio.
 """
 
+import json
+from datetime import datetime, time, timedelta
+from sqlite3 import SQLITE_BUSY, SQLITE_LOCKED
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import OperationalError, transaction
+from django.db.models import Count, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
+from django.utils import formats, timezone
 from django.utils.html import format_html
 from django.views import View
-from django.views.generic import FormView, ListView
+from django.views.generic import FormView, TemplateView
 
 from apps.customers.models import Customer
+from apps.organization.context_processors import get_active_branch
 from apps.services.models import Subscription
 from apps.work_orders.forms import (
     WorkOrderAssignForm,
     WorkOrderCreateForm,
-    WorkOrderDispatchFilterForm,
     WorkOrderEvidenceUploadForm,
     WorkOrderFieldSheetForm,
+    WorkOrderRescheduleForm,
+    WorkOrderScheduleWeekForm,
     WorkOrderStartAttentionForm,
 )
 from apps.work_orders.location import resolve_location_display
@@ -385,120 +394,19 @@ class WorkOrderStartAttentionView(
 
     def get_success_url(self):
         """
-        Vuelta a la bandeja de despacho, que es de donde se lanza la acción.
+        Vuelta a la ficha del cliente, que es donde vive la orden.
 
-        Quien puede iniciar una atención no necesariamente puede ver la
-        bandeja -son permisos distintos-, así que sin view_workorder se
-        redirige a la ficha del cliente, que solo exige estar autenticado.
-        Redirigir a una pantalla prohibida convertiría un éxito en un 403.
+        Era el destino de reserva mientras existió la bandeja de despacho:
+        se usaba para quien podía iniciar una atención pero no ver la
+        bandeja -son permisos distintos-, porque redirigir a una pantalla
+        prohibida convertiría un éxito en un 403. Retirada la bandeja, pasa
+        a ser el único destino, y sigue cumpliendo lo mismo: solo exige
+        estar autenticado.
         """
-        if self.request.user.has_perm("work_orders.view_workorder"):
-            return reverse("work_orders:dispatch")
-
         return reverse(
             "customers:detail",
             kwargs={"pk": self.get_work_order().subscription.customer_id},
         )
-
-
-class WorkOrderDispatchListView(
-    LoginRequiredMixin,
-    PermissionRequiredMixin,
-    ListView,
-):
-    """
-    Bandeja operativa de despacho de órdenes de trabajo.
-
-    Es el paso entre el registro de la OT por ATC y su despacho a un técnico:
-    lista, busca y filtra, y desde ahí enlaza al flujo de asignación que ya
-    existe.
-
-    Decisiones deliberadas:
-
-    - Es una vista de solo lectura. No crea órdenes, no cambia estados y no
-      asigna: la acción Asignar/Reasignar es un enlace a work_orders:assign,
-      que es quien ejecuta la transición contra el dominio.
-    - El permiso de visualización es view_workorder, el permiso por defecto
-      de Django sobre el modelo. No se hardcodea ningún rol en la vista y no
-      hace falta migración para declararlo.
-    - Ver la bandeja y despachar son atribuciones distintas: view_workorder
-      abre el listado, assign_workorder habilita la acción. Un usuario puede
-      tener la primera sin la segunda.
-    - Los filtros se validan en WorkOrderDispatchFilterForm, no aquí. La vista
-      no interpreta parámetros crudos de la URL ni arma consultas a mano.
-    - sede y zona filtran el listado y nada más. WorkOrderAssignForm no se
-      toca: un técnico activo de otra sede sigue siendo elegible para una
-      orden de cualquier sede.
-    """
-
-    permission_required = "work_orders.view_workorder"
-
-    model = WorkOrder
-    template_name = "work_orders/work_order_dispatch.html"
-    context_object_name = "orders"
-    paginate_by = 20
-
-    def get_filter_form(self):
-        """Formulario de filtros, enlazado a la query string de la petición."""
-        if not hasattr(self, "_filter_form"):
-            self._filter_form = WorkOrderDispatchFilterForm(
-                data=self.request.GET,
-            )
-
-        return self._filter_form
-
-    def get_queryset(self):
-        queryset = (
-            WorkOrder.objects
-            # Todo lo que la tabla pinta por fila se trae en la misma consulta.
-            # Sin esto, listar 20 órdenes dispara una consulta por cliente,
-            # sede, zona, tipo y técnico de cada fila.
-            .select_related(
-                "subscription",
-                "subscription__customer",
-                "subscription__address",
-                "subscription__address__zone",
-                "branch",
-                "zone",
-                "order_type",
-                "subtype",
-                "assigned_technician",
-                "assigned_technician__branch",
-            )
-            # Meta.ordering ya ordena por -created_at. Se repite aquí con un
-            # desempate explícito por -pk porque la paginación lo necesita:
-            # con dos órdenes creadas en el mismo instante, un orden no
-            # determinista puede repetir o saltar filas entre páginas.
-            .order_by("-created_at", "-pk")
-        )
-
-        return self.get_filter_form().apply_to(queryset)
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-
-        context["filter_form"] = self.get_filter_form()
-
-        # Los filtros deben sobrevivir a la paginación: se reenvía la query
-        # string sin el parámetro de página, que cada enlace pone por su
-        # cuenta.
-        parameters = self.request.GET.copy()
-        parameters.pop("page", None)
-
-        context["querystring"] = parameters.urlencode()
-
-        # Cuántas órdenes coinciden en total, no cuántas caben en la página.
-        context["total_count"] = (
-            context["paginator"].count
-            if context.get("paginator")
-            else len(context["orders"])
-        )
-
-        # Marca si hay algún filtro aplicado, para distinguir en pantalla
-        # "no hay órdenes todavía" de "ningún resultado para esta búsqueda".
-        context["has_filters"] = bool(context["querystring"])
-
-        return context
 
 
 class WorkOrderDetailView(LoginRequiredMixin, View):
@@ -723,3 +631,302 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
         )
 
         return render(request, self.template_name, context)
+
+
+def _schedule_week(request):
+    form = WorkOrderScheduleWeekForm(request.GET)
+    anchor = timezone.localdate()
+    if form.is_valid():
+        anchor = form.cleaned_data["fecha"] or anchor
+    return anchor - timedelta(days=anchor.weekday())
+
+
+def _open_orders_for_schedule(request):
+    orders = WorkOrder.objects.filter(status__in=WorkOrder.ACTIVE_STATUSES)
+    branch = get_active_branch(request)
+    return orders.filter(branch=branch) if branch is not None else orders
+
+
+def _schedule_stats(orders, week_start, today):
+    # Contar en SQL: no cargar todas las órdenes históricas para mostrar una
+    # semana. __date usa la zona configurada (Lima), igual que las columnas.
+    return orders.aggregate(
+        unscheduled=Count("pk", filter=Q(scheduled_at__isnull=True)),
+        week=Count("pk", filter=Q(scheduled_at__date__range=(
+            week_start, week_start + timedelta(days=6),
+        ))),
+        overdue=Count("pk", filter=Q(scheduled_at__date__lt=today)),
+        unassigned=Count("pk", filter=Q(assigned_technician__isnull=True)),
+    )
+
+
+class WorkOrderScheduleBoardView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    TemplateView,
+):
+    """
+    Tablero de programación: la semana de trabajo de la sede, por día.
+
+    No es un tablero de estados. Las columnas son **días de la semana**, no
+    etapas del flujo: responde «qué hay que atender el jueves», que es la
+    pregunta con la que se planifica. El estado viaja dentro de cada tarjeta
+    como etiqueta, no como su ubicación.
+
+    La semana va de lunes a domingo y se navega con `?fecha=`, que admite
+    cualquier día de la semana que se quiera ver -no solo su lunes-, para que
+    un enlace copiado siga funcionando aunque apunte a media semana.
+
+    Junto a los siete días hay una columna fija, «Sin programar», con las
+    órdenes sin `scheduled_at`. No pertenece a ninguna semana y por eso no se
+    mueve al navegar: es la bandeja de lo que todavía hay que colocar. Es de
+    solo origen, porque `reprogram()` exige una fecha y no sabe expresar
+    «quitarla».
+
+    **Solo se muestran órdenes abiertas** (`ACTIVE_STATUSES`). Una orden
+    atendida, liquidada o anulada ya no se planifica, y llenar el tablero con
+    ellas escondería lo que sí hay que hacer.
+
+    Los contadores de la cabecera miran **todas** las órdenes abiertas de la
+    sede, no solo las de la semana en pantalla. Son el motivo por el que uno
+    navega a otra semana: si «Sin programar» solo contara la semana visible,
+    marcaría cero mientras hay trabajo sin colocar, que es justo el dato que
+    se necesita ver.
+
+    El alcance es la sede activa de la sesión -la que el operador eligió en la
+    barra-, no la sede asignada al usuario: un ATC que consulta Jauja debe ver
+    el tablero de Jauja. Sin sede activa se muestran todas.
+    """
+
+    permission_required = "work_orders.view_workorder"
+    template_name = "work_orders/work_order_schedule_board.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        branch = get_active_branch(self.request)
+        today = timezone.localdate()
+
+        # Lunes de la semana pedida. `weekday()` da 0 para lunes, así que
+        # restarlo lleva cualquier día a su lunes sin condicionales.
+        week_start = _schedule_week(self.request)
+        week_end = week_start + timedelta(days=6)
+
+        open_orders = (
+            _open_orders_for_schedule(self.request)
+            .select_related(
+                "subscription__customer",
+                "order_type",
+                "assigned_technician",
+            )
+            .order_by("scheduled_at", "order_number")
+        )
+
+        stats = _schedule_stats(open_orders, week_start, today)
+        visible_orders = open_orders.filter(
+            Q(scheduled_at__isnull=True)
+            | Q(scheduled_at__date__range=(week_start, week_end))
+        )
+
+        # Las columnas se construyen primero y se llenan después, para que un
+        # día sin órdenes siga apareciendo: el hueco es información -significa
+        # «este día está libre»- y no debe desaparecer del tablero.
+        unscheduled = {
+            "key": "unscheduled",
+            "date": None,
+            "label": "Sin programar",
+            "weekday": "",
+            "is_droppable": False,
+            "is_today": False,
+            "is_past": False,
+            "is_weekend": False,
+            "orders": [],
+        }
+
+        days = []
+        by_date = {}
+
+        for offset in range(7):
+            day = week_start + timedelta(days=offset)
+
+            column = {
+                "key": day.isoformat(),
+                "date": day,
+                "label": formats.date_format(day, "D").capitalize(),
+                "weekday": formats.date_format(day, "j M"),
+                # Hoy puede ser válido si la hora conservada aún es futura.
+                # La validación final de fecha y hora pertenece al dominio.
+                "is_droppable": day >= today,
+                "is_today": day == today,
+                "is_past": day < today,
+                "is_weekend": offset >= 5,
+                "orders": [],
+            }
+
+            days.append(column)
+            by_date[day] = column
+
+        for order in visible_orders:
+            if order.scheduled_at is None:
+                unscheduled["orders"].append(order)
+                continue
+
+            day = timezone.localtime(order.scheduled_at).date()
+
+            if day in by_date:
+                by_date[day]["orders"].append(order)
+
+        context.update({
+            "unscheduled_column": unscheduled,
+            "day_columns": days,
+            "board_branch": branch,
+            "today": today,
+            "week_start": week_start,
+            "week_end": week_end,
+            "week_number": week_start.isocalendar().week,
+            "is_current_week": week_start <= today <= week_end,
+            "previous_week": (week_start - timedelta(days=7)).isoformat(),
+            "next_week": (week_start + timedelta(days=7)).isoformat(),
+            "stats": stats,
+            # El dominio decide qué es arrastrable, no la plantilla: se publica
+            # la lista para que la interfaz use el mismo criterio que valida el
+            # servidor, en vez de mantener su propia copia.
+            "reschedulable_statuses": [
+                status
+                for status in WorkOrder.Status.values
+                if WorkOrder.Status.REPROGRAMMED
+                in WorkOrder.ALLOWED_TRANSITIONS.get(status, [])
+            ],
+        })
+
+        return context
+
+
+class WorkOrderRescheduleView(LoginRequiredMixin, View):
+    """
+    Reprogramación desde el tablero: recibe una fecha y delega en el dominio.
+
+    Es el destino de soltar una tarjeta en otra columna. No cambia `status`,
+    no escribe `scheduled_at` y no crea el histórico: todo eso lo hace
+    `WorkOrder.reprogram()`, que además es quien rechaza una fecha pasada, una
+    fecha igual a la vigente o un estado que no admite reprogramación.
+
+    **El permiso es `assign_workorder`, no `view_workorder`.** Reprogramar es
+    despachar: decide cuándo trabaja un técnico. Quien solo consulta el tablero
+    lo ve entero, pero no mueve nada.
+
+    Responde JSON porque el tablero es una interfaz de arrastre: recargar la
+    página tras cada movimiento perdería el scroll y la sensación de
+    manipulación directa. Los errores del dominio viajan con su mensaje tal
+    cual, para que el operador lea la razón real -«la nueva fecha de atención
+    debe ser futura»- y no un genérico.
+    """
+
+    def post(self, request, pk):
+        if not request.user.has_perm("work_orders.assign_workorder"):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": (
+                        "No tiene permiso para reprogramar órdenes de trabajo."
+                    ),
+                },
+                status=403,
+            )
+
+        try:
+            payload = json.loads(request.body or "{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse(
+                {"ok": False, "message": "Solicitud inválida."},
+                status=400,
+            )
+
+        if not isinstance(payload, dict) or any(
+            not isinstance(payload.get(field, ""), str)
+            for field in ("date", "reason")
+        ):
+            return JsonResponse(
+                {"ok": False, "message": "Solicitud inválida: fecha y motivo deben ser texto."},
+                status=400,
+            )
+
+        form = WorkOrderRescheduleForm(payload)
+        if not form.is_valid():
+            return JsonResponse({
+                "ok": False,
+                "message": " ".join(message for errors in form.errors.values() for message in errors),
+            }, status=400)
+
+        try:
+            with transaction.atomic():
+                # Leer bajo bloqueo antes de validar. En SQLite el UPDATE
+                # condicional de change_status también rechaza estados viejos.
+                order = get_object_or_404(
+                    WorkOrder.objects.select_for_update(of=("self",)), pk=pk,
+                )
+                new_schedule = self._schedule_for(order, form.cleaned_data["date"])
+                reprogramming = order.reprogram(
+                    new_schedule=new_schedule,
+                    user=request.user,
+                    reason=form.cleaned_data["reason"],
+                )
+
+        except ValidationError as exc:
+            # Los mensajes del dominio son los que explican la regla. Se
+            # aplanan porque ValidationError puede traerlos por campo y el
+            # tablero solo tiene un sitio donde mostrarlos.
+            return JsonResponse(
+                {"ok": False, "message": " ".join(exc.messages)},
+                status=400,
+            )
+
+        except OperationalError as exc:
+            # SQLite serializa las escrituras; un cruce puede rechazar el
+            # intento antes del UPDATE condicional. Informar el conflicto
+            # sin reintentar una acción cuyo estado ya puede haber cambiado.
+            error_code = getattr(exc.__cause__, "sqlite_errorcode", None)
+            if error_code is None or error_code & 0xFF not in (SQLITE_BUSY, SQLITE_LOCKED):
+                raise
+            return JsonResponse({
+                "ok": False,
+                "message": "Otra operación está actualizando las órdenes. Actualice el tablero y vuelva a intentarlo.",
+            }, status=409)
+
+        order.refresh_from_db()
+        local_schedule = timezone.localtime(order.scheduled_at)
+
+        return JsonResponse({
+            "ok": True,
+            "order_number": order.order_number,
+            "status": order.status,
+            "status_display": order.get_status_display(),
+            "scheduled_at": local_schedule.isoformat(),
+            "date": local_schedule.date().isoformat(),
+            "reprogramming_id": reprogramming.pk,
+            "stats": _schedule_stats(
+                _open_orders_for_schedule(request), _schedule_week(request), timezone.localdate(),
+            ),
+            "message": (
+                f"Orden {order.order_number} reprogramada para el "
+                f"{formats.date_format(local_schedule, 'j N')}."
+            ),
+        })
+
+    @staticmethod
+    def _schedule_for(order, new_date):
+        """Combina el día soltado con una hora de atención.
+
+        Arrastrar una tarjeta indica un día, no una hora. Se conserva la hora
+        que la orden ya tenía -si el técnico iba a las 9, sigue yendo a las 9,
+        otro día- y solo se inventa una para las órdenes sin programar, donde
+        no hay nada que conservar.
+        """
+        if order.scheduled_at is not None:
+            time_of_day = timezone.localtime(order.scheduled_at).time()
+        else:
+            time_of_day = time(9, 0)
+
+        naive = datetime.combine(new_date, time_of_day)
+
+        return timezone.make_aware(naive, timezone.get_current_timezone())
