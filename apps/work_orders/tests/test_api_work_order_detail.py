@@ -12,11 +12,14 @@ dirección, suscripción, catálogos y los usuarios `technician`,
 `other_technician` y `atc_user`.
 """
 
+from decimal import Decimal
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apps.services.models import PlanTariff
 from apps.work_orders.services import attend_order, liquidate_order
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -110,6 +113,7 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "created_at",
                 # Propios del detalle.
                 "address",
+                "plan_details",
                 "detail",
                 "branch",
                 "zone",
@@ -120,6 +124,73 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "technical_data",
             },
         )
+
+    def test_plan_details_publishes_what_the_field_work_needs(self):
+        """El bloque del plan trae lo que decide el trabajo en campo.
+
+        Velocidad, tecnología y puntos de TV incluidos son lo que el técnico
+        necesita **antes** de cablear: qué equipo instala, cómo lo configura y
+        cuántas salidas entran sin cargo.
+        """
+        order = self.create_assigned_order()
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertEqual(plan["code"], "PLAN100")
+        self.assertEqual(plan["name"], "Fibra 100 Mbps")
+        self.assertEqual(plan["service_type"], "Internet")
+        self.assertEqual(plan["speed_mbps"], 100)
+        self.assertEqual(plan["monthly_price"], "80.00")
+
+    def test_plan_details_serves_null_tariff_instead_of_zeros(self):
+        """Sin tarifa aplicada el bloque es `null`, no ceros.
+
+        «Sin tarifa geográfica» y «tarifa de cero soles» son estados
+        distintos. Un bloque de ceros los volvería indistinguibles, que es el
+        mismo criterio con el que `technical_data` distingue «aún no liquidó»
+        de «liquidó dejando campos en blanco».
+        """
+        order = self.create_assigned_order()
+
+        self.assertIsNone(order.subscription.tariff)
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertIsNone(plan["tariff"])
+
+    def test_plan_details_publishes_the_applied_tariff_when_there_is_one(self):
+        """Con tarifa, viaja el importe real y dónde se aplica.
+
+        `monthly_price` es el precio referencial del catálogo y
+        `tariff.monthly_fee` lo que se cobra en esa sede. Viajan los dos y con
+        valores distintos a propósito: si el serializador confundiera uno con
+        otro, esta prueba lo detecta.
+        """
+        tariff = PlanTariff.objects.create(
+            plan=self.plan,
+            branch=self.branch,
+            installation_fee=Decimal("150.00"),
+            monthly_fee=Decimal("95.00"),
+        )
+
+        self.subscription.tariff = tariff
+        self.subscription.save(update_fields=["tariff"])
+
+        order = self.create_assigned_order()
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertEqual(plan["monthly_price"], "80.00")
+        self.assertEqual(plan["tariff"]["monthly_fee"], "95.00")
+        self.assertEqual(plan["tariff"]["installation_fee"], "150.00")
+        self.assertEqual(plan["tariff"]["branch"], self.branch.name)
+        self.assertIsNone(plan["tariff"]["zone"])
 
     def test_detail_keeps_the_list_criteria_for_choices(self):
         """Los choices heredados siguen viajando con código y etiqueta."""

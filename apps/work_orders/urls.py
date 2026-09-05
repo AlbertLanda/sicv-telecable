@@ -8,14 +8,22 @@ app_name = "work_orders"
 
 urlpatterns = [
 
-    # Bandeja operativa de despacho.
+    # Tablero de programacion: las ordenes abiertas de la sede por dia.
     #
-    # Listado de solo lectura: busca, filtra y enlaza al flujo de asignación.
-    # No ejecuta ninguna transición por sí misma.
+    # Las columnas son fechas, no estados. Solo lectura salvo el arrastre,
+    # que va contra reprogramar/ y exige su propio permiso.
     path(
-        "dispatch/",
-        views.WorkOrderDispatchListView.as_view(),
-        name="dispatch",
+        "schedule/",
+        views.WorkOrderScheduleBoardView.as_view(),
+        name="schedule_board",
+    ),
+
+    # Reprogramar una orden. Endpoint JSON del arrastre del tablero: no
+    # renderiza nada y delega toda la regla en WorkOrder.reprogram().
+    path(
+        "<int:pk>/reschedule/",
+        views.WorkOrderRescheduleView.as_view(),
+        name="reschedule",
     ),
 
     # Registrar una nueva orden de trabajo para un cliente.

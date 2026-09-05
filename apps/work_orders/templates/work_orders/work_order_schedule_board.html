@@ -1,0 +1,622 @@
+{% extends "base.html" %}
+
+{% block title %}Programación de órdenes - SICV{% endblock %}
+
+{% block extra_css %}
+<style>
+    /*
+     * Tablero de programación semanal.
+     *
+     * Los colores de estado salen de la paleta de estado reservada, y ninguno
+     * carga significado por sí solo: cada tarjeta lleva SIEMPRE su etiqueta de
+     * estado en texto, y el color solo la refuerza. Es lo que permite leer el
+     * tablero con daltonismo, impreso en gris o en modo de alto contraste.
+     */
+    :root {
+        --board-good: #0CA30C;      /* asignada: lista para salir  */
+        --board-warning: #FAB219;   /* pendiente: le falta técnico */
+        --board-serious: #EC835A;   /* reprogramada: ya se movió   */
+        --board-critical: #D03B3B;  /* vencida: la fecha ya pasó   */
+    }
+
+    /* --- Cabecera de semana ------------------------------------------- */
+
+    .board-week {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+        padding: 0.9rem 1.1rem;
+    }
+
+    .board-week-eyebrow {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .board-week-range {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--sicv-azul);
+        margin: 0;
+    }
+
+    .board-nav .btn { border-radius: 8px; }
+
+    /* --- Fila de indicadores ------------------------------------------ */
+
+    .board-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .stat-tile {
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-left: 3px solid var(--sicv-linea);
+        border-radius: 10px;
+        padding: 0.7rem 0.9rem;
+    }
+
+    .stat-label {
+        font-size: 0.72rem;
+        color: var(--sicv-tinta-tenue);
+        margin: 0 0 0.15rem;
+    }
+
+    /* Figuras proporcionales, no tabulares: un número suelto y grande se ve
+       flojo si cada dígito ocupa el ancho de un cero. Lo tabular se reserva
+       para columnas que deben alinearse verticalmente. */
+    .stat-value {
+        font-size: 1.6rem;
+        font-weight: 600;
+        line-height: 1.1;
+        color: var(--sicv-tinta);
+    }
+
+    .stat-tile.is-actionable { border-left-color: var(--board-warning); }
+    .stat-tile.is-critical   { border-left-color: var(--board-critical); }
+    .stat-tile.is-neutral    { border-left-color: var(--sicv-azul); }
+
+    /* El cero no se pinta como alarma: si no hay nada vencido, la casilla no
+       debe gritar. El color marca el dato que pide acción, no la categoría. */
+    .stat-tile.is-empty { border-left-color: var(--sicv-linea); }
+
+    .stat-tile.is-empty .stat-value {
+        color: var(--sicv-tinta-tenue);
+        font-weight: 500;
+    }
+
+    /* --- Tablero ------------------------------------------------------ */
+
+    .board-scroll {
+        overflow-x: auto;
+        padding-bottom: 0.75rem;
+    }
+
+    .board-track {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .board-column {
+        flex: 0 0 232px;
+        background: var(--sicv-superficie-azul);
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        max-height: 68vh;
+    }
+
+    /* La bandeja de lo no programado se separa visualmente de los días: no es
+       una fecha, es trabajo sin colocar. */
+    .board-column.is-tray {
+        background: #FFFDF6;
+        border-color: #F0DFB4;
+    }
+
+    .board-column.is-today {
+        border-color: var(--sicv-azul);
+        box-shadow: 0 0 0 1px var(--sicv-azul);
+        background: var(--sicv-superficie);
+    }
+
+    /* Un día pasado se atenúa: sigue visible porque su trabajo importa, pero
+       no compite con lo que todavía se puede planificar. */
+    .board-column.is-past { opacity: 0.72; }
+
+    .board-column.is-weekend .board-column-head { background: #EEF1F4; }
+
+    .board-column-head {
+        padding: 0.6rem 0.8rem;
+        border-bottom: 1px solid var(--sicv-linea);
+        border-radius: 12px 12px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .board-column-title {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--sicv-azul);
+        line-height: 1.2;
+    }
+
+    .board-column-date {
+        font-size: 0.7rem;
+        color: var(--sicv-tinta-tenue);
+    }
+
+    .board-column-count {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: var(--sicv-tinta-suave);
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-radius: 999px;
+        min-width: 1.55rem;
+        text-align: center;
+        padding: 0.05rem 0.4rem;
+    }
+
+    .board-column.is-today .board-column-count {
+        background: var(--sicv-azul);
+        border-color: var(--sicv-azul);
+        color: #FFFFFF;
+    }
+
+    .board-column-body {
+        padding: 0.6rem;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 5.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Estado de arrastre: solo las columnas que aceptan la tarjeta se
+       iluminan, las demás se atenúan. El operador ve dónde puede soltar antes
+       de intentarlo, en vez de descubrirlo con un error. */
+    .board-column.drop-ready .board-column-body {
+        outline: 2px dashed var(--sicv-azul);
+        outline-offset: -5px;
+        border-radius: 8px;
+        background: rgba(27, 58, 92, 0.04);
+    }
+
+    .board-column.drop-blocked { opacity: 0.35; }
+
+    /* --- Tarjetas ----------------------------------------------------- */
+
+    .board-card {
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-left: 3px solid var(--sicv-tinta-tenue);
+        border-radius: 8px;
+        padding: 0.55rem 0.65rem;
+        font-size: 0.78rem;
+        box-shadow: 0 1px 2px rgba(31, 41, 55, 0.06);
+        transition: box-shadow 0.12s ease, transform 0.12s ease;
+    }
+
+    .board-card:hover {
+        box-shadow: 0 4px 12px rgba(31, 41, 55, 0.12);
+        transform: translateY(-1px);
+    }
+
+    .board-card.status-PENDING      { border-left-color: var(--board-warning); }
+    .board-card.status-ASSIGNED     { border-left-color: var(--board-good); }
+    .board-card.status-IN_PROGRESS  { border-left-color: var(--sicv-azul); }
+    .board-card.status-REPROGRAMMED { border-left-color: var(--board-serious); }
+    .board-card.is-overdue          { border-left-color: var(--board-critical); }
+
+    .board-card.is-draggable { cursor: grab; }
+    .board-card.is-draggable:active { cursor: grabbing; }
+
+    /* Una tarjeta que no se puede mover no finge que sí: sin cursor de
+       arrastre y con el fondo apagado. El motivo se explica en su title. */
+    .board-card.is-locked { background: #FAFBFC; }
+
+    .board-card.is-dragging { opacity: 0.35; }
+
+    .board-card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.4rem;
+    }
+
+    .board-card-number {
+        font-weight: 700;
+        font-size: 0.76rem;
+        color: var(--sicv-azul);
+        text-decoration: none;
+    }
+
+    .board-card-number:hover { text-decoration: underline; }
+
+    .board-card-time {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--sicv-tinta-suave);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .board-card-customer {
+        color: var(--sicv-tinta);
+        font-weight: 500;
+        margin: 0.2rem 0 0.35rem;
+        line-height: 1.25;
+    }
+
+    .board-card-meta {
+        font-size: 0.7rem;
+        color: var(--sicv-tinta-tenue);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.25rem 0.5rem;
+    }
+
+    /* El punto de color acompaña a la etiqueta, nunca la sustituye. */
+    .status-dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        display: inline-block;
+        flex: 0 0 auto;
+        background: var(--sicv-tinta-tenue);
+    }
+
+    .status-PENDING      .status-dot { background: var(--board-warning); }
+    .status-ASSIGNED     .status-dot { background: var(--board-good); }
+    .status-IN_PROGRESS  .status-dot { background: var(--sicv-azul); }
+    .status-REPROGRAMMED .status-dot { background: var(--board-serious); }
+
+    .board-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: var(--sicv-tinta-suave);
+    }
+
+    .board-card-tech.is-missing {
+        color: #A16207;
+        font-weight: 600;
+    }
+
+    .board-overdue-flag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        font-size: 0.66rem;
+        font-weight: 700;
+        color: var(--board-critical);
+    }
+
+    .board-empty {
+        font-size: 0.72rem;
+        color: var(--sicv-tinta-tenue);
+        text-align: center;
+        padding: 1.2rem 0;
+        margin: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    {# El token se emite aquí aunque no haya formulario: el arrastre hace un #}
+    {# POST por fetch y necesita el valor. Emitirlo garantiza además que la  #}
+    {# cookie exista, en vez de confiar en que otra pantalla la haya puesto. #}
+    {% csrf_token %}
+
+    <div class="mb-3">
+        <h1 class="h4 mb-1">Programación de órdenes</h1>
+        <p class="text-muted mb-0 small">
+            Órdenes abiertas de
+            {% if board_branch %}{{ board_branch.name }}{% else %}todas las sedes{% endif %},
+            agrupadas por día de atención.
+            {% if perms.work_orders.assign_workorder %}
+                Arrastre una tarjeta a otro día para reprogramarla.
+            {% else %}
+                Solo lectura: reprogramar requiere permiso de asignación.
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="board-week mb-3">
+        <div>
+            <div class="board-week-eyebrow">
+                Semana {{ week_number }}{% if is_current_week %} · actual{% endif %}
+            </div>
+            <p class="board-week-range">
+                Del {{ week_start|date:"j \d\e F" }} al {{ week_end|date:"j \d\e F \d\e Y" }}
+            </p>
+        </div>
+
+        <div class="board-nav d-flex gap-2">
+            <a
+                href="?fecha={{ previous_week }}"
+                class="btn btn-outline-secondary btn-sm"
+                title="Semana anterior"
+                aria-label="Semana anterior"
+            >&lsaquo;</a>
+
+            <a
+                href="{% url 'work_orders:schedule_board' %}"
+                class="btn btn-sm {% if is_current_week %}btn-outline-secondary disabled{% else %}btn-outline-primary{% endif %}"
+            >Hoy</a>
+
+            <a
+                href="?fecha={{ next_week }}"
+                class="btn btn-outline-secondary btn-sm"
+                title="Semana siguiente"
+                aria-label="Semana siguiente"
+            >&rsaquo;</a>
+        </div>
+    </div>
+
+    {#                                                                      #}
+    {# Los indicadores miran TODAS las órdenes abiertas de la sede, no solo #}
+    {# la semana en pantalla: son el motivo por el que uno navega a otra    #}
+    {# semana. Contar solo lo visible marcaría cero mientras queda trabajo  #}
+    {# sin colocar, que es justo el dato que hay que ver.                   #}
+    {#                                                                      #}
+    <div class="board-stats mb-3">
+
+        <div class="stat-tile {% if stats.unscheduled %}is-actionable{% else %}is-empty{% endif %}">
+            <p class="stat-label">Sin programar</p>
+            <div class="stat-value">{{ stats.unscheduled }}</div>
+        </div>
+
+        <div class="stat-tile {% if stats.overdue %}is-critical{% else %}is-empty{% endif %}">
+            <p class="stat-label">Con fecha vencida</p>
+            <div class="stat-value">{{ stats.overdue }}</div>
+        </div>
+
+        <div class="stat-tile {% if stats.unassigned %}is-actionable{% else %}is-empty{% endif %}">
+            <p class="stat-label">Sin técnico asignado</p>
+            <div class="stat-value">{{ stats.unassigned }}</div>
+        </div>
+
+        <div class="stat-tile {% if stats.week %}is-neutral{% else %}is-empty{% endif %}">
+            <p class="stat-label">Programadas esta semana</p>
+            <div class="stat-value">{{ stats.week }}</div>
+        </div>
+
+    </div>
+
+    {% if perms.work_orders.assign_workorder %}
+        <p class="text-muted small mb-3">
+            Solo se mueven las órdenes <strong>Asignada</strong> y
+            <strong>En atención</strong>, y únicamente a días futuros. Al
+            reprogramarla pasa a <strong>Reprogramada</strong> y no admite otro
+            movimiento hasta que se le reasigne técnico.
+        </p>
+    {% endif %}
+
+    <div class="board-scroll">
+        <div
+            class="board-track"
+            id="board"
+            data-reschedule-url="{% url 'work_orders:reschedule' 0 %}"
+        >
+
+            {% include "work_orders/_schedule_column.html" with column=unscheduled_column %}
+
+            {% for column in day_columns %}
+                {% include "work_orders/_schedule_column.html" with column=column %}
+            {% endfor %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const board = document.getElementById("board");
+
+    if (!board) {
+        return;
+    }
+
+    const canReschedule = {% if perms.work_orders.assign_workorder %}true{% else %}false{% endif %};
+
+    if (!canReschedule) {
+        // Sin permiso las tarjetas ni siquiera se declaran arrastrables: es
+        // preferible que la accion no exista a que exista y falle con un 403.
+        board.querySelectorAll(".board-card").forEach(function (card) {
+            card.removeAttribute("draggable");
+            card.classList.remove("is-draggable");
+        });
+        return;
+    }
+
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value
+        || document.cookie.match(/csrftoken=([^;]+)/)?.[1]
+        || "";
+
+    let dragged = null;
+
+    function columns() {
+        return Array.from(board.querySelectorAll(".board-column"));
+    }
+
+    function markDropTargets(active) {
+        columns().forEach(function (column) {
+            column.classList.remove("drop-ready", "drop-blocked");
+
+            if (!active) {
+                return;
+            }
+
+            // Una columna es destino valido si acepta sueltas y no es la de
+            // origen: soltar donde ya estaba no es reprogramar, y el dominio
+            // lo rechazaria con "la nueva fecha debe ser diferente".
+            const isOrigin = dragged && column.dataset.column === dragged.dataset.from;
+
+            if (column.dataset.droppable === "1" && !isOrigin) {
+                column.classList.add("drop-ready");
+            } else {
+                column.classList.add("drop-blocked");
+            }
+        });
+    }
+
+    board.addEventListener("dragstart", function (event) {
+        const card = event.target.closest(".board-card.is-draggable");
+
+        if (!card) {
+            return;
+        }
+
+        dragged = card;
+        card.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        // Firefox no inicia el arrastre sin datos en el portapapeles.
+        event.dataTransfer.setData("text/plain", card.dataset.order);
+        markDropTargets(true);
+    });
+
+    board.addEventListener("dragend", function () {
+        if (dragged) {
+            dragged.classList.remove("is-dragging");
+        }
+        dragged = null;
+        markDropTargets(false);
+    });
+
+    board.addEventListener("dragover", function (event) {
+        if (event.target.closest(".board-column.drop-ready")) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+        }
+    });
+
+    board.addEventListener("drop", async function (event) {
+        const column = event.target.closest(".board-column.drop-ready");
+
+        if (!column || !dragged) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const card = dragged;
+        const targetBody = column.querySelector(".board-column-body");
+
+        // La tarjeta se mueve antes de la respuesta para que el arrastre se
+        // sienta inmediato, y se devuelve a su sitio si el servidor rechaza.
+        const placeholder = document.createComment("origen");
+        card.parentNode.insertBefore(placeholder, card);
+
+        const emptyNote = targetBody.querySelector(".board-empty");
+        if (emptyNote) {
+            emptyNote.remove();
+        }
+
+        targetBody.appendChild(card);
+        markDropTargets(false);
+        dragged = null;
+
+        try {
+            const response = await fetch(
+                board.dataset.rescheduleUrl.replace("/0/", "/" + card.dataset.order + "/"),
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrfToken,
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: JSON.stringify({ date: column.dataset.column }),
+                }
+            );
+
+            const result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(result.message || "No se pudo reprogramar la orden.");
+            }
+
+            // La orden quedo en Reprogramada: deja de ser arrastrable, y la
+            // tarjeta tiene que reflejarlo o el operador lo descubriria al
+            // intentar moverla otra vez. Deja de estar vencida por definicion:
+            // acaba de recibir una fecha futura.
+            card.dataset.from = result.date;
+            card.classList.remove("is-draggable", "is-overdue");
+            card.classList.add("is-locked");
+            card.className = card.className.replace(
+                /status-[A-Z_]+/,
+                "status-" + result.status
+            );
+            card.removeAttribute("draggable");
+            card.title = "Una orden en estado " + result.status_display +
+                " no admite reprogramacion hasta que se le reasigne tecnico.";
+
+            const label = card.querySelector(".status-label");
+            if (label) {
+                label.textContent = result.status_display;
+            }
+
+            const flag = card.querySelector(".board-overdue-flag");
+            if (flag) {
+                flag.remove();
+            }
+
+            notify(result.message, "success");
+
+        } catch (error) {
+            placeholder.parentNode.insertBefore(card, placeholder);
+            notify(error.message, "danger");
+        } finally {
+            placeholder.remove();
+            refreshCounts();
+        }
+    });
+
+    function refreshCounts() {
+        columns().forEach(function (column) {
+            const body = column.querySelector(".board-column-body");
+            const count = body.querySelectorAll(".board-card").length;
+            column.querySelector(".board-column-count").textContent = count;
+
+            if (count === 0 && !body.querySelector(".board-empty")) {
+                const empty = document.createElement("p");
+                empty.className = "board-empty";
+                empty.textContent = "Sin órdenes";
+                body.appendChild(empty);
+            }
+        });
+    }
+
+    function notify(message, kind) {
+        const box = document.createElement("div");
+        box.className = "alert alert-" + kind + " position-fixed shadow";
+        box.style.cssText = "bottom:1rem;right:1rem;z-index:1080;max-width:22rem;";
+        box.textContent = message;
+        document.body.appendChild(box);
+        setTimeout(function () { box.remove(); }, 5000);
+    }
+});
+</script>
+{% endblock %}

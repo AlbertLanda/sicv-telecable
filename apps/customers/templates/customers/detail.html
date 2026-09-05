@@ -1,5 +1,36 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+<style>
+    /*
+     * Botones de solo icono de la columna Acciones.
+     *
+     * Se pasa a icono porque con el texto la columna competia con los datos
+     * de la fila: dos botones anchos por orden empujaban el resto de las
+     * celdas y la tabla se leia peor que la informacion que contiene.
+     *
+     * Un icono sin texto necesita SIEMPRE nombre accesible. Cada boton lleva
+     * `aria-label` -lo que anuncia un lector de pantalla- y `title` -lo que
+     * ve quien pasa el raton-, porque un dibujo no explica por si solo si
+     * lleva a la ficha o al panel de asignacion.
+     */
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        line-height: 1;
+    }
+
+    .btn-icon svg {
+        width: 1rem;
+        height: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -1072,10 +1103,11 @@
                                         {% if perms.work_orders.view_workorder %}
                                             <a
                                                 href="{% url 'work_orders:detail' order.pk %}"
-                                                class="btn btn-outline-secondary btn-sm"
+                                                class="btn btn-outline-secondary btn-sm btn-icon"
                                                 title="Abrir la ficha técnica de esta orden."
+                                                aria-label="Ver ficha de la orden {{ order.order_number }}"
                                             >
-                                                Ver ficha
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                                             </a>
                                         {% endif %}
 
@@ -1083,13 +1115,21 @@
 
                                             <a
                                                 href="{% url 'work_orders:assign' order.pk %}"
-                                                class="btn btn-outline-primary btn-sm"
-                                                title="Asignar o reasignar el técnico de esta orden."
+                                                class="btn btn-outline-primary btn-sm btn-icon"
+                                                {% if order.assigned_technician %}
+                                                    title="Reasignar la orden {{ order.order_number }}, hoy a cargo de {{ order.assigned_technician.get_full_name|default:order.assigned_technician.username }}."
+                                                    aria-label="Reasignar el técnico de la orden {{ order.order_number }}"
+                                                {% else %}
+                                                    title="Asignar un técnico a la orden {{ order.order_number }}."
+                                                    aria-label="Asignar técnico a la orden {{ order.order_number }}"
+                                                {% endif %}
                                             >
                                                 {% if order.assigned_technician %}
-                                                    Reasignar
+                                                    {# Persona con flecha: ya tiene tecnico y se cambia. #}
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="17 5 21 9 17 13"/><path d="M21 9h-5"/></svg>
                                                 {% else %}
-                                                    Asignar
+                                                    {# Persona con signo mas: todavia no tiene tecnico. #}
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
                                                 {% endif %}
                                             </a>
 

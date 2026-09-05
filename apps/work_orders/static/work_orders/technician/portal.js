@@ -429,6 +429,8 @@
             ? "Ubicación GPS validada. La dirección textual se mantiene como referencia."
             : "GPS no disponible o inválido. El mapa buscará usando la dirección registrada.";
 
+        renderPlan(order.plan_details);
+
         setDetailText("#detail-type", order.order_type);
         setDetailText("#detail-priority", order.priority_display || order.priority);
         setDetailText("#detail-branch", order.branch);
@@ -438,6 +440,65 @@
         setDetailText("#detail-description", order.detail, "Sin detalle adicional.");
         renderDetailActions(order);
         configureTechnicalMode(order);
+    }
+
+    function renderPlan(plan) {
+        // El bloque puede no venir: una orden cuya suscripcion se sirviera sin
+        // plan dejaria `plan_details` en null. Se pinta con guiones en vez de
+        // reventar, porque el resto de la ficha -direccion, motivo, horario-
+        // sigue siendo util para ir a trabajar.
+        const data = plan || {};
+
+        setDetailText("#detail-plan-name", data.name, "Sin plan");
+        setDetailText("#detail-plan-service", data.service_type);
+        setDetailText(
+            "#detail-plan-speed",
+            data.speed_mbps ? `${data.speed_mbps} Mbps` : "",
+            "No aplica",
+        );
+        setDetailText("#detail-plan-technology", data.technology, "No registrada");
+        setDetailText(
+            "#detail-plan-tv",
+            // El cero es un dato, no un vacio: "0 puntos" significa que
+            // ninguna salida de TV entra sin cargo, y el tecnico tiene que
+            // saberlo antes de cablear. Por eso se compara contra null y no
+            // se usa un condicional que trate el 0 como ausencia.
+            data.included_tv_points === null || data.included_tv_points === undefined
+                ? ""
+                : `${data.included_tv_points}`,
+        );
+        setDetailText("#detail-plan-category", data.commercial_category_display);
+
+        // La tarifa aplicada manda sobre el precio de catalogo: es lo que se
+        // cobra en esta sede. Sin tarifa se muestra el referencial, marcado
+        // como tal en la nota de abajo para que nadie lo lea como definitivo.
+        const tariff = data.tariff || null;
+
+        // `money()` convierte null en "S/ 0.00", asi que se decide antes si
+        // hay importe. Un cero inventado leeria como servicio gratuito.
+        const monthly = tariff ? tariff.monthly_fee : data.monthly_price;
+
+        setDetailText(
+            "#detail-plan-monthly",
+            monthly === null || monthly === undefined ? "" : money(monthly),
+            "No registrada",
+        );
+        setDetailText(
+            "#detail-plan-installation",
+            tariff ? money(tariff.installation_fee) : "",
+            "No tarifada",
+        );
+
+        const note = $("#detail-plan-note");
+
+        if (!plan) {
+            note.textContent = "La suscripción de esta orden no tiene plan registrado.";
+        } else if (tariff) {
+            note.textContent = `Tarifa aplicada en ${text(tariff.branch, "la sede")}` +
+                (tariff.zone ? ` · zona ${tariff.zone}` : "") + ".";
+        } else {
+            note.textContent = "Sin tarifa por sede: los importes son referenciales del catálogo.";
+        }
     }
 
     function renderDetailActions(order) {
