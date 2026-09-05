@@ -24,7 +24,8 @@ interfaz prometa funciones inexistentes y permite ir activando cada opción sin
 rediseñar nuevamente la navegación.
 
 El menú lateral puede colapsarse en escritorio y funciona como panel deslizable
-en pantallas pequeñas.
+en pantallas pequeñas. Este shell vive en `base.html`, por lo que toda pantalla
+que herede de la plantilla base adopta automáticamente la misma identidad visual.
 
 ## Ficha del abonado
 
