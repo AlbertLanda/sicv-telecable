@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import scheduling_views, views
+from . import legacy_views, scheduling_views, views
 
 
 app_name = "work_orders"
@@ -35,12 +35,13 @@ urlpatterns = [
         name="create",
     ),
 
-    # Ruta web histórica de asignación. Se conserva de momento para no romper
-    # referencias existentes; el flujo operativo vigente es que el técnico
-    # toma la OT desde /api/technicians/work-orders/<id>/claim/.
+    # Compatibilidad temporal con enlaces antiguos. La asignación manual web
+    # está retirada: este endpoint no acepta ningún técnico ni cambia estado.
+    # La única adjudicación operativa ocurre cuando el técnico toma una OT
+    # disponible desde el canal técnico /claim/.
     path(
         "<int:pk>/assign/",
-        views.WorkOrderAssignView.as_view(),
+        legacy_views.RetiredWebAssignmentView.as_view(),
         name="assign",
     ),
 

@@ -334,9 +334,9 @@
             {% if board_branch %}{{ board_branch.name }}{% else %}todas las sedes{% endif %},
             agrupadas por día de atención.
             {% if perms.work_orders.assign_workorder %}
-                Arrastre una tarjeta a otro día para reprogramarla.
+                Arrastre una tarjeta a otro día para programarla o reprogramarla.
             {% else %}
-                Solo lectura: reprogramar requiere permiso de asignación.
+                Solo lectura: programar o reprogramar requiere permiso operativo de programación.
             {% endif %}
         </p>
         <p class="text-muted mb-0 small">
@@ -409,13 +409,14 @@
 
     {% if perms.work_orders.assign_workorder %}
         <p class="text-muted small mb-3">
-            Solo se mueven las órdenes <strong>Asignada</strong> y
-            <strong>En atención</strong>, y únicamente a una fecha y hora futuras.
-            Hoy se admite si la hora prevista todavía no pasó. Se conserva la
-            hora anterior; si no tenía fecha, se propone las 09:00. Al
-            reprogramarla pasa a <strong>Reprogramada</strong> y no admite otro
-            movimiento desde ese estado. El técnico asignado puede iniciar
-            o retomar su atención desde el aplicativo.
+            Las órdenes <strong>Pendientes</strong> se pueden programar antes de que
+            un técnico las tome y continúan en estado <strong>Pendiente</strong>, sin
+            asignar a nadie. Las órdenes <strong>Asignadas</strong> y
+            <strong>En atención</strong> también se pueden reprogramar; en esos casos
+            pasan a <strong>Reprogramada</strong> y no admiten otro movimiento desde
+            ese estado. Solo se aceptan fechas y horas futuras. Se conserva la
+            hora anterior y, si todavía no existía una fecha, temporalmente se
+            propone las 09:00. La programación nunca adjudica un técnico.
         </p>
     {% endif %}
 
