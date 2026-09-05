@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import legacy_views, scheduling_views, views
+from . import legacy_views, print_views, scheduling_views, views
 
 
 app_name = "work_orders"
@@ -33,6 +33,15 @@ urlpatterns = [
         "customers/<int:customer_pk>/create/",
         views.WorkOrderCreateView.as_view(),
         name="create",
+    ),
+
+    # Presentación administrativa de la OT emitida. Deliberadamente excluye
+    # ficha técnica, evidencias y liquidación para separar solicitud inicial
+    # de la ejecución registrada después por el técnico.
+    path(
+        "<int:pk>/initial/",
+        print_views.WorkOrderInitialPrintView.as_view(),
+        name="initial_print",
     ),
 
     # Compatibilidad temporal con enlaces antiguos. La asignación manual web
