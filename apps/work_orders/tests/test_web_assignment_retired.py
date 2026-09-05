@@ -2,7 +2,7 @@
 
 from django.urls import reverse
 
-from apps.work_orders.models import WorkOrderAssignment
+from apps.work_orders.models import WorkOrder, WorkOrderAssignment
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -44,11 +44,17 @@ class RetiredWebAssignmentTests(WorkOrderTestCase):
         self.assertEqual(response.status_code, 405)
 
         self.order.refresh_from_db()
-        self.assertEqual(self.order.status, self.order.Status.PENDING)
+        self.assertEqual(self.order.status, WorkOrder.Status.PENDING)
         self.assertIsNone(self.order.assigned_technician_id)
         self.assertFalse(WorkOrderAssignment.objects.filter(work_order=self.order).exists())
 
-    def test_unknown_and_existing_ids_have_same_get_response(self):
+    def test_unknown_and_existing_ids_have_same_public_contract(self):
+        """El pk no cambia lo observable ni revela si la OT existe.
+
+        No se comparan bytes completos porque el template base incorpora un
+        token CSRF distinto en cada respuesta. Lo estable y relevante para no
+        enumerar órdenes es el código HTTP y el mismo aviso funcional.
+        """
         self.client.login(username="atc1", password="test1234")
 
         existing = self.client.get(self.url)
@@ -56,6 +62,15 @@ class RetiredWebAssignmentTests(WorkOrderTestCase):
             reverse("work_orders:assign", kwargs={"pk": self.order.pk + 9999})
         )
 
-        self.assertEqual(existing.status_code, 410)
-        self.assertEqual(unknown.status_code, 410)
-        self.assertEqual(existing.content, unknown.content)
+        for response in (existing, unknown):
+            self.assertEqual(response.status_code, 410)
+            self.assertContains(
+                response,
+                "La asignación de órdenes ya no se realiza desde el portal web.",
+                status_code=410,
+            )
+            self.assertNotContains(
+                response,
+                self.order.order_number,
+                status_code=410,
+            )
