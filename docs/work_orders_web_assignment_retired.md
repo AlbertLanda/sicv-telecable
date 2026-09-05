@@ -28,9 +28,13 @@ ASSIGNED
 ## Compatibilidad temporal
 
 El nombre de URL `work_orders:assign` se conserva temporalmente para enlaces
-históricos, pero el endpoint responde HTTP 410 Gone y no procesa POST de
-asignación. No consulta la existencia de la OT ni modifica estado, técnico o
-historial.
+históricos, pero el recurso operativo ya no existe. Un GET autenticado devuelve
+HTTP 410 Gone con una explicación para el operador; los métodos de escritura no
+están habilitados y, por tanto, no pueden asignar ni reasignar técnicos.
+
+El endpoint tampoco consulta la existencia de la OT indicada por `pk`. Así, un
+enlace histórico no se convierte en un mecanismo para enumerar órdenes y las
+rutas antiguas pueden retirarse más adelante sin reabrir la operación manual.
 
 La pantalla asociada solo informa al operador que la adjudicación ocurre en el
 portal técnico.
