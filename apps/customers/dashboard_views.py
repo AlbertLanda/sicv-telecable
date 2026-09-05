@@ -65,6 +65,20 @@ class CustomerDashboardDetailView(CustomerDetailView):
 
         recent_activity = list(context["recent_activity"])
 
+        map_embed_url = ""
+        if (
+            primary_address
+            and getattr(primary_address, "map_link", "")
+            and primary_address.latitude is not None
+            and primary_address.longitude is not None
+        ):
+            latitude = str(primary_address.latitude)
+            longitude = str(primary_address.longitude)
+            map_embed_url = (
+                "https://maps.google.com/maps"
+                f"?q={latitude},{longitude}&z=16&output=embed"
+            )
+
         context.update(
             {
                 "addresses": addresses,
@@ -84,6 +98,7 @@ class CustomerDashboardDetailView(CustomerDetailView):
                     for subscription in subscriptions
                     if subscription.status == Subscription.Status.ACTIVE
                 ),
+                "map_embed_url": map_embed_url,
             }
         )
 
