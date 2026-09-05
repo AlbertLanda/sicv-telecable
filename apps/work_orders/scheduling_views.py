@@ -18,10 +18,10 @@ from sqlite3 import SQLITE_BUSY, SQLITE_LOCKED
 from django.core.exceptions import ValidationError
 from django.db import OperationalError, transaction
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
 from django.utils import formats, timezone
 from django.views import View
 
+from apps.work_orders import views as legacy_views
 from apps.work_orders.forms import WorkOrderRescheduleForm
 from apps.work_orders.models import WorkOrder, WorkOrderReprogramming
 from apps.work_orders.views import (
@@ -107,7 +107,10 @@ class WorkOrderRescheduleView(View):
 
         try:
             with transaction.atomic():
-                order = get_object_or_404(
+                # Se resuelve a través del módulo histórico para conservar el
+                # mismo punto de parcheo de las regresiones de concurrencia.
+                # En producción sigue siendo django.shortcuts.get_object_or_404.
+                order = legacy_views.get_object_or_404(
                     WorkOrder.objects.select_for_update(of=("self",)),
                     pk=pk,
                 )
