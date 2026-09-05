@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Orden {{ order.order_number }} - SICV{% endblock %}
+
+{% block extra_css %}
+<style>
+    .print-sheet {
+        max-width: 900px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid var(--sicv-linea);
+        border-radius: 14px;
+        padding: 2rem;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    }
+
+    .print-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding-bottom: 1rem;
+        margin-bottom: 1.25rem;
+        border-bottom: 2px solid var(--sicv-azul);
+    }
+
+    .brand-mark {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        background: #E8F1F8;
+        color: var(--sicv-azul);
+        margin-right: .65rem;
+    }
+
+    .section-label {
+        display: inline-block;
+        background: var(--sicv-azul);
+        color: #fff;
+        border-radius: 5px;
+        padding: .3rem .55rem;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: .75rem;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem 1.5rem;
+    }
+
+    .info-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .info-label {
+        color: var(--sicv-tinta-tenue);
+        font-size: .72rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        margin-bottom: .15rem;
+    }
+
+    .info-value {
+        color: var(--sicv-tinta);
+        font-weight: 600;
+    }
+
+    .note-box {
+        border: 1px dashed var(--sicv-linea);
+        border-radius: 9px;
+        padding: .9rem 1rem;
+        background: #FAFBFC;
+        color: var(--sicv-tinta-suave);
+        font-size: .86rem;
+    }
+
+    .screen-actions {
+        max-width: 900px;
+        margin: 0 auto 1rem;
+        display: flex;
+        gap: .6rem;
+        justify-content: flex-end;
+    }
+
+    @media (max-width: 767.98px) {
+        .print-sheet { padding: 1.2rem; }
+        .print-head { flex-direction: column; }
+        .info-grid,
+        .info-grid.two { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+        header,
+        nav,
+        aside,
+        .sidebar,
+        .screen-actions,
+        footer {
+            display: none !important;
+        }
+
+        body,
+        main,
+        .content-wrapper,
+        .container-fluid {
+            background: #fff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .print-sheet {
+            max-width: none;
+            width: 100%;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+        }
+
+        @page { margin: 14mm; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="screen-actions">
+    <a href="{% url 'work_orders:detail' order.pk %}" class="btn btn-outline-secondary">
+        Ver ficha técnica
+    </a>
+    <button type="button" class="btn btn-primary" onclick="window.print()">
+        Imprimir orden
+    </button>
+</div>
+
+<section class="print-sheet">
+    <div class="print-head">
+        <div class="d-flex align-items-center">
+            <div class="brand-mark">TC</div>
+            <div>
+                <div class="fw-bold fs-5 text-primary">TELECABLE</div>
+                <div class="text-muted small">{{ order.branch.name }}</div>
+            </div>
+        </div>
+
+        <div class="text-end">
+            <div class="fw-bold text-uppercase">Orden de {{ order.order_type.name }}</div>
+            <div class="border rounded px-3 py-2 mt-1 fw-bold text-primary">
+                N.º {{ order.order_number }}
+            </div>
+            <div class="small text-muted mt-1">
+                Estado actual: {{ order.get_status_display }}
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <div class="section-label">Datos del cliente</div>
+        <div class="info-grid">
+            <div>
+                <div class="info-label">Cliente</div>
+                <div class="info-value">{{ customer }}</div>
+            </div>
+            <div>
+                <div class="info-label">Código de cliente</div>
+                <div class="info-value">{{ customer.code }}</div>
+            </div>
+            <div>
+                <div class="info-label">Teléfono</div>
+                <div class="info-value">{{ customer.phone|default:"No registrado" }}</div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="info-label">Dirección</div>
+                <div class="info-value">{{ address.address }}</div>
+            </div>
+            <div>
+                <div class="info-label">Distrito</div>
+                <div class="info-value">{{ address.district|default:"No registrado" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Código de suministro</div>
+                <div class="info-value">{{ address.electrical_supply_number|default:"No registrado" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Servicio / plan</div>
+                <div class="info-value">{{ subscription.plan.name }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <div class="section-label">Datos de la orden emitida</div>
+        <div class="info-grid">
+            <div>
+                <div class="info-label">Fecha y hora de emisión</div>
+                <div class="info-value">{{ order.created_at|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Prioridad</div>
+                <div class="info-value">{{ order.get_priority_display }}</div>
+            </div>
+            <div>
+                <div class="info-label">Tipo de atención</div>
+                <div class="info-value">{{ order.get_attention_type_display }}</div>
+            </div>
+            <div>
+                <div class="info-label">Tipo de orden</div>
+                <div class="info-value">{{ order.order_type.name }}</div>
+            </div>
+            <div>
+                <div class="info-label">Subtipo</div>
+                <div class="info-value">{{ order.subtype.name|default:"-" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Motivo</div>
+                <div class="info-value">{{ order.reason.name|default:"-" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Vendedor</div>
+                <div class="info-value">{{ order.seller|default:"Sin vendedor registrado" }}</div>
+            </div>
+            <div>
+                <div class="info-label">Fecha programada vigente</div>
+                <div class="info-value">
+                    {% if order.scheduled_at %}
+                        {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                    {% else %}
+                        Sin programar
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="info-label">Técnico actual</div>
+                <div class="info-value">
+                    {{ order.assigned_technician|default:"Pendiente de asignar" }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <div class="section-label">Observaciones de emisión</div>
+        <div class="note-box">
+            {{ order.notes|default:"Sin observaciones" }}
+        </div>
+    </div>
+
+    <div class="note-box">
+        Esta impresión representa la orden administrativa emitida por ATC.
+        La ficha técnica, evidencias, materiales y resultado registrados por el
+        técnico se consultan por separado en la ficha técnica de la orden.
+    </div>
+
+    <div class="d-flex justify-content-between mt-4 pt-3 border-top small text-muted">
+        <span>Generado por {{ order.created_by|default:"SICV" }} el {{ order.created_at|date:"d/m/Y H:i" }}</span>
+        <span>SICV · Telecable</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{% if auto_print %}
+<script>
+window.addEventListener("load", function () {
+    window.print();
+});
+</script>
+{% endif %}
+{% endblock %}
