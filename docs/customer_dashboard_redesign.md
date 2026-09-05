@@ -19,7 +19,9 @@ y cuenta del usuario. La navegación lateral agrupa opciones por dominio:
 - Reportes.
 
 Solo las funcionalidades ya construidas son enlaces. Los módulos pendientes se
-muestran como referencia, pero no como rutas falsas.
+muestran como referencia, pero no como rutas falsas. Esta decisión evita que la
+interfaz prometa funciones inexistentes y permite ir activando cada opción sin
+rediseñar nuevamente la navegación.
 
 El menú lateral puede colapsarse en escritorio y funciona como panel deslizable
 en pantallas pequeñas.
