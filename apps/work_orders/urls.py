@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import scheduling_views, views
 
 
 app_name = "work_orders"
@@ -8,21 +8,20 @@ app_name = "work_orders"
 
 urlpatterns = [
 
-    # Tablero de programacion: las ordenes abiertas de la sede por dia.
-    #
-    # Las columnas son fechas, no estados. Solo lectura salvo el arrastre,
-    # que va contra reprogramar/ y exige su propio permiso.
+    # Tablero de programación: las órdenes abiertas de la sede por día.
+    # No asigna técnicos; organiza cuándo se espera atender cada OT.
     path(
         "schedule/",
-        views.WorkOrderScheduleBoardView.as_view(),
+        scheduling_views.WorkOrderScheduleBoardView.as_view(),
         name="schedule_board",
     ),
 
-    # Reprogramar una orden. Endpoint JSON del arrastre del tablero: no
-    # renderiza nada y delega toda la regla en WorkOrder.reprogram().
+    # Reprogramar una orden desde el tablero. Una OT PENDING puede cambiar de
+    # fecha sin que nadie tenga que tomarla primero; sigue PENDING hasta que
+    # un técnico la reclame desde la API técnica.
     path(
         "<int:pk>/reschedule/",
-        views.WorkOrderRescheduleView.as_view(),
+        scheduling_views.WorkOrderRescheduleView.as_view(),
         name="reschedule",
     ),
 
@@ -36,14 +35,16 @@ urlpatterns = [
         name="create",
     ),
 
-    # Asignar una orden de trabajo pendiente a un técnico.
+    # Ruta web histórica de asignación. Se conserva de momento para no romper
+    # referencias existentes; el flujo operativo vigente es que el técnico
+    # toma la OT desde /api/technicians/work-orders/<id>/claim/.
     path(
         "<int:pk>/assign/",
         views.WorkOrderAssignView.as_view(),
         name="assign",
     ),
 
-    # Iniciar la atención de una orden ya despachada.
+    # Inicio web histórico. El canal técnico dispone de su endpoint propio.
     path(
         "<int:pk>/start/",
         views.WorkOrderStartAttentionView.as_view(),

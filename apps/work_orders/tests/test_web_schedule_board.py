@@ -425,19 +425,22 @@ class RescheduleEndpointTests(ScheduleBoardTestCase):
         self.assertIn("futura", response.json()["message"])
         self.assertEqual(order.status, WorkOrder.Status.ASSIGNED)
 
-    def test_a_status_that_does_not_allow_it_is_rejected(self):
-        """Una orden pendiente no se reprograma: primero se asigna."""
+    def test_pending_order_can_be_programmed_before_assignment(self):
+        """Programar una OT PENDING no obliga a asignar un técnico."""
         order = self.create_order()
 
         self.assertEqual(order.status, WorkOrder.Status.PENDING)
+        self.assertIsNone(order.assigned_technician_id)
 
         self.login(self.dispatcher)
 
         response = self.reschedule(order, self.future())
         order.refresh_from_db()
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(order.status, WorkOrder.Status.PENDING)
+        self.assertIsNone(order.assigned_technician_id)
+        self.assertEqual(order.reprogrammings.count(), 1)
 
     def test_a_second_move_is_rejected_until_it_is_reassigned(self):
         """La restricción que el tablero anuncia por adelantado.
