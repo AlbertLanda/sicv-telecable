@@ -1,0 +1,87 @@
+{#                                                                          #}
+{# Una columna del tablero de programación.                                 #}
+{#                                                                          #}
+{# Vive aparte porque la usan dos llamadas -la bandeja «Sin programar» y    #}
+{# los siete días- y el marcado de la tarjeta es idéntico en ambas. Escrito #}
+{# dos veces, un cambio en la tarjeta se aplicaría a la mitad del tablero.  #}
+{#                                                                          #}
+{# Espera en el contexto: `column` (dict de la vista), `today` y            #}
+{# `reschedulable_statuses`.                                                #}
+{#                                                                          #}
+<section
+    class="board-column{% if column.key == 'unscheduled' %} is-tray{% endif %}{% if column.is_today %} is-today{% endif %}{% if column.is_past %} is-past{% endif %}{% if column.is_weekend %} is-weekend{% endif %}"
+    data-column="{{ column.key }}"
+    data-droppable="{% if column.is_droppable %}1{% else %}0{% endif %}"
+>
+    <header class="board-column-head">
+        <div>
+            <div class="board-column-title">
+                {% if column.is_today %}Hoy · {% endif %}{{ column.label }}
+            </div>
+            {% if column.weekday %}
+                <div class="board-column-date">{{ column.weekday }}</div>
+            {% endif %}
+        </div>
+        <span class="board-column-count">{{ column.orders|length }}</span>
+    </header>
+
+    <div class="board-column-body">
+        {% for order in column.orders %}
+            {% if perms.work_orders.assign_workorder and order.status in reschedulable_statuses %}
+                <article
+                    class="board-card is-draggable status-{{ order.status }}{% if column.is_past %} is-overdue{% endif %}"
+                    draggable="true"
+                    data-order="{{ order.pk }}"
+                    data-from="{{ column.key }}"
+                >
+            {% else %}
+                <article
+                    class="board-card is-locked status-{{ order.status }}{% if column.is_past %} is-overdue{% endif %}"
+                    data-order="{{ order.pk }}"
+                    title="{% if not perms.work_orders.assign_workorder %}Solo lectura.{% else %}Una orden en estado {{ order.get_status_display }} no admite reprogramación.{% endif %}"
+                >
+            {% endif %}
+
+                <div class="board-card-top">
+                    <a
+                        href="{% url 'work_orders:detail' order.pk %}"
+                        class="board-card-number"
+                    >{{ order.order_number }}</a>
+
+                    {% if order.scheduled_at %}
+                        <span class="board-card-time">{{ order.scheduled_at|date:"H:i" }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="board-card-customer">
+                    {{ order.subscription.customer }}
+                </div>
+
+                <div class="board-card-meta">
+                    {# El punto de color acompaña a la etiqueta, nunca la     #}
+                    {# sustituye: el estado se lee igual sin distinguir color.#}
+                    <span class="board-chip">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span class="status-label">{{ order.get_status_display }}</span>
+                    </span>
+
+                    <span>{{ order.order_type.name }}</span>
+
+                    {% if order.assigned_technician %}
+                        <span class="board-card-tech">
+                            {{ order.assigned_technician.get_full_name|default:order.assigned_technician.username }}
+                        </span>
+                    {% else %}
+                        <span class="board-card-tech is-missing">Sin técnico</span>
+                    {% endif %}
+
+                    {% if column.is_past %}
+                        <span class="board-overdue-flag">Vencida</span>
+                    {% endif %}
+                </div>
+            </article>
+        {% empty %}
+            <p class="board-empty">Sin órdenes</p>
+        {% endfor %}
+    </div>
+</section>

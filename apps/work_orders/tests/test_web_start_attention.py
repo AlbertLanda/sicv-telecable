@@ -34,8 +34,6 @@ class WorkOrderWebStartAttentionTestCase(WorkOrderTestCase):
             kwargs={"pk": self.order.pk},
         )
 
-        self.dispatch_url = reverse("work_orders:dispatch")
-
         self.customer_url = reverse(
             "customers:detail",
             kwargs={"pk": self.customer.pk},
@@ -280,7 +278,7 @@ class WorkOrderStartAttentionSuccessTests(WorkOrderWebStartAttentionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.redirect_chain[0][0],
-            self.dispatch_url,
+            self.customer_url,
         )
 
         text = " ".join(
@@ -571,39 +569,3 @@ class WorkOrderStartAttentionSafetyTests(WorkOrderWebStartAttentionTestCase):
             list(WorkOrderStartAttentionForm().fields),
             ["remarks"],
         )
-
-
-class WorkOrderStartAttentionUITests(WorkOrderWebStartAttentionTestCase):
-    """Prueba 18: la bandeja solo ofrece la acción a quien puede ejecutarla."""
-
-    def test_dispatch_board_offers_the_action_with_permission(self):
-        response = self.client.get(self.dispatch_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, self.url)
-        self.assertContains(response, "Iniciar atención")
-
-    def test_dispatch_board_hides_the_action_without_permission(self):
-        """Sin start_workorder la acción no se ofrece en el listado."""
-        self.starter.user_permissions.remove(self.start_permission)
-
-        self.client.logout()
-        self.client.login(username="supervisor1", password="test1234")
-
-        response = self.client.get(self.dispatch_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, self.url)
-        self.assertNotContains(response, "Iniciar atención")
-
-    def test_dispatch_board_hides_the_action_for_non_startable_orders(self):
-        """Una OT sin despachar no ofrece iniciar, aun teniendo permiso."""
-        self.order.delete()
-
-        pending = self.create_order()
-
-        response = self.client.get(self.dispatch_url)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, self.start_url_for(pending))
-        self.assertNotContains(response, "Iniciar atención")

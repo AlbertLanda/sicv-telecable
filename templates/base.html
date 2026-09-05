@@ -423,19 +423,6 @@
             <div class="collapse navbar-collapse">
 
                 <ul class="navbar-nav me-auto ms-5">
-                    {# La bandeja solo se ofrece a quien puede verla. Ocultar #}
-                    {# el enlace es comodidad: el control real es el permiso  #}
-                    {# de la vista, que responde 403 si se escribe la URL.    #}
-                    {% if perms.work_orders.view_workorder %}
-                        <li class="nav-item">
-                            <a
-                                class="nav-link"
-                                href="{% url 'work_orders:dispatch' %}"
-                            >
-                                Bandeja de Despacho
-                            </a>
-                        </li>
-                    {% endif %}
                 </ul>
 
                 <!-- Rol del usuario autenticado -->

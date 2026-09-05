@@ -34,7 +34,7 @@ aportan nada que no esté ya en estas tres secciones.
         {% endcomment %}
         <div
             class="accordion-item sidebar-box"
-            data-section="clientes buscar cliente nuevo cliente bandeja de despacho {{ sidebar_clientes_pending_items|join:" " }}"
+            data-section="clientes buscar cliente nuevo cliente programacion de ordenes tablero {{ sidebar_clientes_pending_items|join:" " }}"
         >
             <h2 class="accordion-header">
                 <button
@@ -53,9 +53,8 @@ aportan nada que no esté ya en estas tres secciones.
                         <a class="sidebar-link" href="{% url 'customers:create' %}">Nuevo cliente</a>
                     {% endif %}
                     {% if perms.work_orders.view_workorder %}
-                        <a class="sidebar-link" href="{% url 'work_orders:dispatch' %}">Bandeja de despacho</a>
+                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}">Programacion de ordenes</a>
                     {% endif %}
-
                     {% for item in sidebar_clientes_pending_items %}
                         <span class="sidebar-link-pending">
                             <span>{{ item }}</span>
