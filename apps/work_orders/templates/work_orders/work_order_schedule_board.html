@@ -339,6 +339,10 @@
                 Solo lectura: reprogramar requiere permiso de asignación.
             {% endif %}
         </p>
+        <p class="text-muted mb-0 small">
+            ATC registra y consulta las órdenes. Los técnicos se organizan y
+            toman las órdenes disponibles desde su aplicativo.
+        </p>
     </div>
 
     <div class="board-week mb-3">
@@ -381,22 +385,22 @@
     {#                                                                      #}
     <div class="board-stats mb-3">
 
-        <div class="stat-tile {% if stats.unscheduled %}is-actionable{% else %}is-empty{% endif %}">
+        <div class="stat-tile {% if stats.unscheduled %}is-actionable{% else %}is-empty{% endif %}" data-stat="unscheduled" data-active-class="is-actionable">
             <p class="stat-label">Sin programar</p>
             <div class="stat-value">{{ stats.unscheduled }}</div>
         </div>
 
-        <div class="stat-tile {% if stats.overdue %}is-critical{% else %}is-empty{% endif %}">
+        <div class="stat-tile {% if stats.overdue %}is-critical{% else %}is-empty{% endif %}" data-stat="overdue" data-active-class="is-critical">
             <p class="stat-label">Con fecha vencida</p>
             <div class="stat-value">{{ stats.overdue }}</div>
         </div>
 
-        <div class="stat-tile {% if stats.unassigned %}is-actionable{% else %}is-empty{% endif %}">
+        <div class="stat-tile {% if stats.unassigned %}is-actionable{% else %}is-empty{% endif %}" data-stat="unassigned" data-active-class="is-actionable">
             <p class="stat-label">Sin técnico asignado</p>
             <div class="stat-value">{{ stats.unassigned }}</div>
         </div>
 
-        <div class="stat-tile {% if stats.week %}is-neutral{% else %}is-empty{% endif %}">
+        <div class="stat-tile {% if stats.week %}is-neutral{% else %}is-empty{% endif %}" data-stat="week" data-active-class="is-neutral">
             <p class="stat-label">Programadas esta semana</p>
             <div class="stat-value">{{ stats.week }}</div>
         </div>
@@ -406,9 +410,12 @@
     {% if perms.work_orders.assign_workorder %}
         <p class="text-muted small mb-3">
             Solo se mueven las órdenes <strong>Asignada</strong> y
-            <strong>En atención</strong>, y únicamente a días futuros. Al
+            <strong>En atención</strong>, y únicamente a una fecha y hora futuras.
+            Hoy se admite si la hora prevista todavía no pasó. Se conserva la
+            hora anterior; si no tenía fecha, se propone las 09:00. Al
             reprogramarla pasa a <strong>Reprogramada</strong> y no admite otro
-            movimiento hasta que se le reasigne técnico.
+            movimiento desde ese estado. El técnico asignado puede iniciar
+            o retomar su atención desde el aplicativo.
         </p>
     {% endif %}
 
@@ -417,6 +424,7 @@
             class="board-track"
             id="board"
             data-reschedule-url="{% url 'work_orders:reschedule' 0 %}"
+            data-week-start="{{ week_start|date:'Y-m-d' }}"
         >
 
             {% include "work_orders/_schedule_column.html" with column=unscheduled_column %}
@@ -456,6 +464,7 @@ document.addEventListener("DOMContentLoaded", function () {
         || "";
 
     let dragged = null;
+    let saving = false;
 
     function columns() {
         return Array.from(board.querySelectorAll(".board-column"));
@@ -483,6 +492,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     board.addEventListener("dragstart", function (event) {
+        if (saving) {
+            event.preventDefault();
+            return;
+        }
         const card = event.target.closest(".board-card.is-draggable");
 
         if (!card) {
@@ -515,13 +528,16 @@ document.addEventListener("DOMContentLoaded", function () {
     board.addEventListener("drop", async function (event) {
         const column = event.target.closest(".board-column.drop-ready");
 
-        if (!column || !dragged) {
+        if (!column || !dragged || saving) {
             return;
         }
 
         event.preventDefault();
 
         const card = dragged;
+        saving = true;
+        board.setAttribute("aria-busy", "true");
+        card.classList.remove("is-dragging");
         const targetBody = column.querySelector(".board-column-body");
 
         // La tarjeta se mueve antes de la respuesta para que el arrastre se
@@ -540,7 +556,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         try {
             const response = await fetch(
-                board.dataset.rescheduleUrl.replace("/0/", "/" + card.dataset.order + "/"),
+                board.dataset.rescheduleUrl.replace("/0/", "/" + card.dataset.order + "/") +
+                    "?fecha=" + encodeURIComponent(board.dataset.weekStart),
                 {
                     method: "POST",
                     headers: {
@@ -571,7 +588,7 @@ document.addEventListener("DOMContentLoaded", function () {
             );
             card.removeAttribute("draggable");
             card.title = "Una orden en estado " + result.status_display +
-                " no admite reprogramacion hasta que se le reasigne tecnico.";
+                " no admite otra reprogramación desde ese estado.";
 
             const label = card.querySelector(".status-label");
             if (label) {
@@ -583,6 +600,31 @@ document.addEventListener("DOMContentLoaded", function () {
                 flag.remove();
             }
 
+            // La hora asignada también debe aparecer al mover una OT que
+            // antes no tenía fecha. Ordenar sin depender de la zona del PC.
+            let timeLabel = card.querySelector(".board-card-time");
+            if (!timeLabel) {
+                timeLabel = document.createElement("span");
+                timeLabel.className = "board-card-time";
+                card.querySelector(".board-card-top").appendChild(timeLabel);
+            }
+            timeLabel.textContent = result.scheduled_at.slice(11, 16);
+            const cards = Array.from(targetBody.querySelectorAll(".board-card"));
+            cards.sort(function (a, b) {
+                const timeA = a.querySelector(".board-card-time")?.textContent || "";
+                const timeB = b.querySelector(".board-card-time")?.textContent || "";
+                return timeA.localeCompare(timeB) ||
+                    a.querySelector(".board-card-number").textContent.localeCompare(
+                        b.querySelector(".board-card-number").textContent
+                    );
+            });
+            cards.forEach(function (item) { targetBody.appendChild(item); });
+            document.querySelectorAll("[data-stat]").forEach(function (tile) {
+                const value = result.stats[tile.dataset.stat];
+                tile.querySelector(".stat-value").textContent = value;
+                tile.classList.toggle("is-empty", value === 0);
+                tile.classList.toggle(tile.dataset.activeClass, value > 0);
+            });
             notify(result.message, "success");
 
         } catch (error) {
@@ -590,6 +632,9 @@ document.addEventListener("DOMContentLoaded", function () {
             notify(error.message, "danger");
         } finally {
             placeholder.remove();
+            saving = false;
+            board.removeAttribute("aria-busy");
+            card.classList.remove("is-dragging");
             refreshCounts();
         }
     });

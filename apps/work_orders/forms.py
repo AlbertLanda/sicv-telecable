@@ -1,5 +1,6 @@
+from datetime import date, timedelta
+
 from django import forms
-from django.db.models import Q
 
 from apps.accounts.models import User
 from apps.organization.models import Branch, Zone
@@ -441,3 +442,25 @@ class WorkOrderEvidenceUploadForm(forms.ModelForm):
             "file": "Archivo o fotografía",
             "description": "Descripción",
         }
+
+
+def validate_scheduling_date(value):
+    # Dejar margen para navegar una semana y convertir entre UTC y Lima sin
+    # desbordar datetime en los extremos de los años 1 y 9999.
+    if not date.min + timedelta(days=14) <= value <= date.max - timedelta(days=14):
+        raise forms.ValidationError("La fecha está fuera del intervalo admitido.")
+
+
+class WorkOrderScheduleWeekForm(forms.Form):
+    fecha = forms.DateField(required=False, validators=[validate_scheduling_date])
+
+
+class WorkOrderRescheduleForm(forms.Form):
+    date = forms.DateField(
+        validators=[validate_scheduling_date],
+        error_messages={
+            "required": "Debe indicar la nueva fecha.",
+            "invalid": "Debe indicar una fecha válida.",
+        },
+    )
+    reason = forms.CharField(required=False)

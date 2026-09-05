@@ -11,17 +11,19 @@ mano y no duplica las reglas del dominio.
 
 import json
 from datetime import datetime, time, timedelta
+from sqlite3 import SQLITE_BUSY, SQLITE_LOCKED
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import OperationalError, transaction
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import formats, timezone
-from django.utils.dateparse import parse_date
 from django.utils.html import format_html
 from django.views import View
-from django.views.generic import FormView, ListView, TemplateView
+from django.views.generic import FormView, TemplateView
 
 from apps.customers.models import Customer
 from apps.organization.context_processors import get_active_branch
@@ -31,6 +33,8 @@ from apps.work_orders.forms import (
     WorkOrderCreateForm,
     WorkOrderEvidenceUploadForm,
     WorkOrderFieldSheetForm,
+    WorkOrderRescheduleForm,
+    WorkOrderScheduleWeekForm,
     WorkOrderStartAttentionForm,
 )
 from apps.work_orders.location import resolve_location_display
@@ -629,6 +633,33 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
         return render(request, self.template_name, context)
 
 
+def _schedule_week(request):
+    form = WorkOrderScheduleWeekForm(request.GET)
+    anchor = timezone.localdate()
+    if form.is_valid():
+        anchor = form.cleaned_data["fecha"] or anchor
+    return anchor - timedelta(days=anchor.weekday())
+
+
+def _open_orders_for_schedule(request):
+    orders = WorkOrder.objects.filter(status__in=WorkOrder.ACTIVE_STATUSES)
+    branch = get_active_branch(request)
+    return orders.filter(branch=branch) if branch is not None else orders
+
+
+def _schedule_stats(orders, week_start, today):
+    # Contar en SQL: no cargar todas las órdenes históricas para mostrar una
+    # semana. __date usa la zona configurada (Lima), igual que las columnas.
+    return orders.aggregate(
+        unscheduled=Count("pk", filter=Q(scheduled_at__isnull=True)),
+        week=Count("pk", filter=Q(scheduled_at__date__range=(
+            week_start, week_start + timedelta(days=6),
+        ))),
+        overdue=Count("pk", filter=Q(scheduled_at__date__lt=today)),
+        unassigned=Count("pk", filter=Q(assigned_technician__isnull=True)),
+    )
+
+
 class WorkOrderScheduleBoardView(
     LoginRequiredMixin,
     PermissionRequiredMixin,
@@ -678,13 +709,11 @@ class WorkOrderScheduleBoardView(
 
         # Lunes de la semana pedida. `weekday()` da 0 para lunes, así que
         # restarlo lleva cualquier día a su lunes sin condicionales.
-        anchor = parse_date(self.request.GET.get("fecha", "")) or today
-        week_start = anchor - timedelta(days=anchor.weekday())
+        week_start = _schedule_week(self.request)
         week_end = week_start + timedelta(days=6)
 
         open_orders = (
-            WorkOrder.objects
-            .filter(status__in=WorkOrder.ACTIVE_STATUSES)
+            _open_orders_for_schedule(self.request)
             .select_related(
                 "subscription__customer",
                 "order_type",
@@ -693,8 +722,11 @@ class WorkOrderScheduleBoardView(
             .order_by("scheduled_at", "order_number")
         )
 
-        if branch is not None:
-            open_orders = open_orders.filter(branch=branch)
+        stats = _schedule_stats(open_orders, week_start, today)
+        visible_orders = open_orders.filter(
+            Q(scheduled_at__isnull=True)
+            | Q(scheduled_at__date__range=(week_start, week_end))
+        )
 
         # Las columnas se construyen primero y se llenan después, para que un
         # día sin órdenes siga apareciendo: el hueco es información -significa
@@ -722,10 +754,9 @@ class WorkOrderScheduleBoardView(
                 "date": day,
                 "label": formats.date_format(day, "D").capitalize(),
                 "weekday": formats.date_format(day, "j M"),
-                # Solo los días futuros aceptan sueltas: `reprogram()` exige
-                # fecha futura, así que hoy y el pasado se muestran -hay que
-                # verlos- pero no reciben tarjetas.
-                "is_droppable": day > today,
+                # Hoy puede ser válido si la hora conservada aún es futura.
+                # La validación final de fecha y hora pertenece al dominio.
+                "is_droppable": day >= today,
                 "is_today": day == today,
                 "is_past": day < today,
                 "is_weekend": offset >= 5,
@@ -735,28 +766,15 @@ class WorkOrderScheduleBoardView(
             days.append(column)
             by_date[day] = column
 
-        unscheduled_count = 0
-        overdue_count = 0
-        unassigned_count = 0
-
-        for order in open_orders:
-            if order.assigned_technician_id is None:
-                unassigned_count += 1
-
+        for order in visible_orders:
             if order.scheduled_at is None:
-                unscheduled_count += 1
                 unscheduled["orders"].append(order)
                 continue
 
             day = timezone.localtime(order.scheduled_at).date()
 
-            if day < today:
-                overdue_count += 1
-
             if day in by_date:
                 by_date[day]["orders"].append(order)
-
-        week_count = sum(len(column["orders"]) for column in days)
 
         context.update({
             "unscheduled_column": unscheduled,
@@ -769,12 +787,7 @@ class WorkOrderScheduleBoardView(
             "is_current_week": week_start <= today <= week_end,
             "previous_week": (week_start - timedelta(days=7)).isoformat(),
             "next_week": (week_start + timedelta(days=7)).isoformat(),
-            "stats": {
-                "unscheduled": unscheduled_count,
-                "week": week_count,
-                "overdue": overdue_count,
-                "unassigned": unassigned_count,
-            },
+            "stats": stats,
             # El dominio decide qué es arrastrable, no la plantilla: se publica
             # la lista para que la interfaz use el mismo criterio que valida el
             # servidor, en vez de mantener su propia copia.
@@ -821,32 +834,43 @@ class WorkOrderRescheduleView(LoginRequiredMixin, View):
                 status=403,
             )
 
-        order = get_object_or_404(WorkOrder, pk=pk)
-
         try:
             payload = json.loads(request.body or "{}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return JsonResponse(
                 {"ok": False, "message": "Solicitud inválida."},
                 status=400,
             )
 
-        new_date = parse_date(str(payload.get("date", "")))
-
-        if new_date is None:
+        if not isinstance(payload, dict) or any(
+            not isinstance(payload.get(field, ""), str)
+            for field in ("date", "reason")
+        ):
             return JsonResponse(
-                {"ok": False, "message": "Debe indicar la nueva fecha."},
+                {"ok": False, "message": "Solicitud inválida: fecha y motivo deben ser texto."},
                 status=400,
             )
 
-        try:
-            new_schedule = self._schedule_for(order, new_date)
+        form = WorkOrderRescheduleForm(payload)
+        if not form.is_valid():
+            return JsonResponse({
+                "ok": False,
+                "message": " ".join(message for errors in form.errors.values() for message in errors),
+            }, status=400)
 
-            reprogramming = order.reprogram(
-                new_schedule=new_schedule,
-                user=request.user,
-                reason=str(payload.get("reason", "")).strip(),
-            )
+        try:
+            with transaction.atomic():
+                # Leer bajo bloqueo antes de validar. En SQLite el UPDATE
+                # condicional de change_status también rechaza estados viejos.
+                order = get_object_or_404(
+                    WorkOrder.objects.select_for_update(of=("self",)), pk=pk,
+                )
+                new_schedule = self._schedule_for(order, form.cleaned_data["date"])
+                reprogramming = order.reprogram(
+                    new_schedule=new_schedule,
+                    user=request.user,
+                    reason=form.cleaned_data["reason"],
+                )
 
         except ValidationError as exc:
             # Los mensajes del dominio son los que explican la regla. Se
@@ -856,6 +880,18 @@ class WorkOrderRescheduleView(LoginRequiredMixin, View):
                 {"ok": False, "message": " ".join(exc.messages)},
                 status=400,
             )
+
+        except OperationalError as exc:
+            # SQLite serializa las escrituras; un cruce puede rechazar el
+            # intento antes del UPDATE condicional. Informar el conflicto
+            # sin reintentar una acción cuyo estado ya puede haber cambiado.
+            error_code = getattr(exc.__cause__, "sqlite_errorcode", None)
+            if error_code is None or error_code & 0xFF not in (SQLITE_BUSY, SQLITE_LOCKED):
+                raise
+            return JsonResponse({
+                "ok": False,
+                "message": "Otra operación está actualizando las órdenes. Actualice el tablero y vuelva a intentarlo.",
+            }, status=409)
 
         order.refresh_from_db()
         local_schedule = timezone.localtime(order.scheduled_at)
@@ -868,6 +904,9 @@ class WorkOrderRescheduleView(LoginRequiredMixin, View):
             "scheduled_at": local_schedule.isoformat(),
             "date": local_schedule.date().isoformat(),
             "reprogramming_id": reprogramming.pk,
+            "stats": _schedule_stats(
+                _open_orders_for_schedule(request), _schedule_week(request), timezone.localdate(),
+            ),
             "message": (
                 f"Orden {order.order_number} reprogramada para el "
                 f"{formats.date_format(local_schedule, 'j N')}."

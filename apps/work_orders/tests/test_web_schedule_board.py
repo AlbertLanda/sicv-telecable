@@ -241,17 +241,13 @@ class ScheduleBoardColumnTests(ScheduleBoardTestCase):
 
         self.assertFalse(self.board().context["unscheduled_column"]["is_droppable"])
 
-    def test_today_and_past_days_are_shown_but_do_not_accept_drops(self):
-        """Se ven —su trabajo importa— pero no reciben tarjetas.
-
-        El dominio exige fecha futura, así que ofrecerlos como destino sería
-        ofrecer un movimiento que siempre falla.
-        """
+    def test_past_days_are_locked_and_today_is_checked_by_its_time(self):
+        """Hoy puede recibir la OT si la hora todavía es futura."""
         self.login(self.viewer)
 
         for column in self.board().context["day_columns"]:
             with self.subTest(dia=column["date"]):
-                if column["date"] <= self.today:
+                if column["date"] < self.today:
                     self.assertFalse(column["is_droppable"])
                 else:
                     self.assertTrue(column["is_droppable"])

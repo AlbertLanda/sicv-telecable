@@ -122,11 +122,9 @@ class WorkOrderPlanSerializer(serializers.Serializer):
     dirección y el de cliente: la forma de la respuesta la decide el canal
     técnico, no la tabla.
 
-    **`monthly_price` y `tariff.monthly_fee` no son lo mismo y por eso viajan
-    los dos.** El primero es el precio referencial del catálogo; el segundo,
-    lo que realmente se cobra en esa sede, y puede no existir -hay planes sin
-    tarifa geográfica-. Publicar solo uno obligaría al cliente a adivinar
-    cuál está mirando.
+    `monthly_price` y `tariff` se conservan como referencias del catálogo.
+    Los importes contratados salen de la suscripción: una edición posterior
+    del catálogo no cambia lo pactado ni las cortesías ya otorgadas.
     """
 
     code = serializers.CharField(source="plan.code", read_only=True)
@@ -145,11 +143,25 @@ class WorkOrderPlanSerializer(serializers.Serializer):
     )
     technology = serializers.CharField(source="plan.technology", read_only=True)
 
-    # Cuántos puntos de TV entran sin cargo en la instalación inicial. El
-    # técnico lo necesita antes de cablear, no después.
+    # Cortesías realmente otorgadas, no el máximo del catálogo. Una segunda
+    # TV instalada después del alta siempre es un anexo.
     included_tv_points = serializers.IntegerField(
-        source="plan.included_tv_points",
+        source="initial_tv_courtesy_granted",
         read_only=True,
+    )
+    annex_count = serializers.IntegerField(read_only=True)
+    total_tv_points = serializers.IntegerField(read_only=True)
+    base_installation_fee = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    base_monthly_fee = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    annex_monthly_charge = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    total_monthly_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
     )
 
     generation = serializers.IntegerField(
@@ -184,7 +196,7 @@ class WorkOrderPlanSerializer(serializers.Serializer):
     tariff = serializers.SerializerMethodField()
 
     def get_tariff(self, subscription):
-        """La tarifa aplicada, o `null` si la suscripción no lleva ninguna.
+        """Referencia actual de la tarifa, o `null` si no lleva ninguna.
 
         `null` y no un bloque de ceros: «sin tarifa geográfica» y «tarifa de
         cero soles» son cosas distintas, y un bloque de ceros las volvería

@@ -162,6 +162,57 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
 
         self.assertIsNone(plan["tariff"])
 
+    def test_plan_details_reports_granted_courtesies_and_annexes(self):
+        self.service_type.supports_tv_annexes = True
+        self.service_type.annex_monthly_price = Decimal("5.00")
+        self.service_type.save()
+        self.plan.included_tv_points = 2
+        self.plan.save()
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+
+        for granted, annexes, total in ((1, 0, 1), (1, 1, 2), (2, 3, 5)):
+            with self.subTest(granted=granted, annexes=annexes):
+                self.subscription.initial_tv_courtesy_granted = granted
+                self.subscription.annex_count = annexes
+                self.subscription.save()
+                details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+                self.assertEqual(details["included_tv_points"], granted)
+                self.assertEqual(details["annex_count"], annexes)
+                self.assertEqual(details["total_tv_points"], total)
+
+    def test_contract_prices_survive_catalog_changes_and_include_annexes(self):
+        self.service_type.supports_tv_annexes = True
+        self.service_type.annex_monthly_price = Decimal("5.00")
+        self.service_type.save()
+        tariff = PlanTariff.objects.create(
+            plan=self.plan, branch=self.branch,
+            installation_fee=Decimal("90.00"), monthly_fee=Decimal("85.00"),
+        )
+        self.subscription.tariff = tariff
+        self.subscription.base_installation_fee = Decimal("50.00")
+        self.subscription.base_monthly_fee = Decimal("50.00")
+        self.subscription.annex_count = 3
+        self.subscription.save()
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+
+        for applied_tariff in (tariff, None):
+            with self.subTest(tariff=applied_tariff):
+                self.subscription.tariff = applied_tariff
+                self.subscription.save(update_fields=["tariff"])
+                details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+                self.assertEqual(details["base_installation_fee"], "50.00")
+                self.assertEqual(details["base_monthly_fee"], "50.00")
+                self.assertEqual(details["annex_monthly_charge"], "15.00")
+                self.assertEqual(details["total_monthly_price"], "65.00")
+
+    def test_free_contracted_installation_is_reported_as_zero_without_tariff(self):
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+        details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+        self.assertEqual(details["base_installation_fee"], "0.00")
+
     def test_plan_details_publishes_the_applied_tariff_when_there_is_one(self):
         """Con tarifa, viaja el importe real y dónde se aplica.
 

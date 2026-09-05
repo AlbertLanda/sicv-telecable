@@ -468,36 +468,29 @@
                 : `${data.included_tv_points}`,
         );
         setDetailText("#detail-plan-category", data.commercial_category_display);
+        setDetailText("#detail-plan-annexes", data.annex_count);
+        setDetailText("#detail-plan-tv-total", data.total_tv_points);
 
-        // La tarifa aplicada manda sobre el precio de catalogo: es lo que se
-        // cobra en esta sede. Sin tarifa se muestra el referencial, marcado
-        // como tal en la nota de abajo para que nadie lo lea como definitivo.
-        const tariff = data.tariff || null;
-
-        // `money()` convierte null en "S/ 0.00", asi que se decide antes si
-        // hay importe. Un cero inventado leeria como servicio gratuito.
-        const monthly = tariff ? tariff.monthly_fee : data.monthly_price;
-
-        setDetailText(
-            "#detail-plan-monthly",
-            monthly === null || monthly === undefined ? "" : money(monthly),
-            "No registrada",
-        );
-        setDetailText(
-            "#detail-plan-installation",
-            tariff ? money(tariff.installation_fee) : "",
-            "No tarifada",
-        );
+        // El contrato prevalece sobre el catálogo, incluso si su importe es
+        // cero o no existe tarifa geográfica. No inventar precios cuando la
+        // respuesta de una API antigua todavía no incluye estos campos.
+        for (const [selector, amount] of [
+            ["#detail-plan-monthly-base", data.base_monthly_fee],
+            ["#detail-plan-monthly-annexes", data.annex_monthly_charge],
+            ["#detail-plan-monthly", data.total_monthly_price],
+            ["#detail-plan-installation", data.base_installation_fee],
+        ]) {
+            setDetailText(selector, amount == null ? "" : money(amount), "No registrada");
+        }
 
         const note = $("#detail-plan-note");
 
         if (!plan) {
             note.textContent = "La suscripción de esta orden no tiene plan registrado.";
-        } else if (tariff) {
-            note.textContent = `Tarifa aplicada en ${text(tariff.branch, "la sede")}` +
-                (tariff.zone ? ` · zona ${tariff.zone}` : "") + ".";
         } else {
-            note.textContent = "Sin tarifa por sede: los importes son referenciales del catálogo.";
+            note.textContent = "Importes contratados de la suscripción, antes de pronto pago. " +
+                "La mensualidad total incluye los anexos activos. " +
+                "Las cortesías no utilizadas en la instalación inicial no quedan reservadas.";
         }
     }
 
