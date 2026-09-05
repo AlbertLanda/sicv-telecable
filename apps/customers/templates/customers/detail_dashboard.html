@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+
+{% block title %}Ficha de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+<style>
+    .customer-shell { max-width: 1500px; margin: 0 auto; }
+
+    .customer-hero,
+    .ops-card,
+    .summary-card,
+    .detail-card {
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+    }
+
+    .customer-hero { padding: 1.25rem 1.35rem; }
+
+    .customer-avatar {
+        width: 62px;
+        height: 62px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        background: #EAF2F8;
+        color: var(--sicv-azul);
+        font-weight: 800;
+        font-size: 1.15rem;
+    }
+
+    .hero-name { color: var(--sicv-azul); font-weight: 800; margin: 0; }
+    .hero-meta { color: var(--sicv-tinta-suave); font-size: .88rem; }
+    .hero-contact { display: flex; flex-wrap: wrap; gap: .45rem 1.1rem; margin-top: .45rem; }
+
+    .hero-stat {
+        min-width: 110px;
+        background: #F8FAFC;
+        border: 1px solid var(--sicv-linea);
+        border-radius: 10px;
+        padding: .8rem .9rem;
+        text-align: center;
+    }
+
+    .hero-stat strong { display: block; font-size: 1.35rem; color: var(--sicv-azul); }
+    .hero-stat span { color: var(--sicv-tinta-tenue); font-size: .75rem; }
+
+    .ops-card {
+        border-left: 5px solid #F4B400;
+        background: #FFFDF7;
+        padding: 1rem 1.15rem;
+    }
+
+    .ops-card.is-progress { border-left-color: var(--sicv-azul); background: #F8FBFF; }
+    .ops-card.is-reprogrammed { border-left-color: #D97706; }
+
+    .ops-eyebrow {
+        color: #A16207;
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .ops-number { color: var(--sicv-azul); font-size: 1.25rem; font-weight: 800; }
+    .ops-meta { color: var(--sicv-tinta-suave); font-size: .86rem; }
+
+    .customer-tabs {
+        display: flex;
+        overflow-x: auto;
+        background: var(--sicv-superficie);
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+    }
+
+    .customer-tabs a {
+        flex: 1 0 auto;
+        text-align: center;
+        color: var(--sicv-tinta-suave);
+        text-decoration: none;
+        padding: .75rem 1rem;
+        border-bottom: 3px solid transparent;
+        font-size: .86rem;
+        font-weight: 600;
+    }
+
+    .customer-tabs a:hover { color: var(--sicv-azul); border-bottom-color: var(--sicv-azul); }
+
+    .summary-card,
+    .detail-card { height: 100%; overflow: hidden; }
+
+    .card-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .9rem 1rem;
+        border-bottom: 1px solid var(--sicv-linea);
+        background: #FBFCFD;
+    }
+
+    .card-titlebar h3 { margin: 0; color: var(--sicv-azul); font-size: .95rem; font-weight: 800; }
+    .card-body-compact { padding: 1rem; }
+
+    .data-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.1rem; }
+    .data-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .data-label { color: var(--sicv-tinta-tenue); font-size: .72rem; margin-bottom: .08rem; }
+    .data-value { color: var(--sicv-tinta); font-size: .88rem; font-weight: 600; }
+
+    .section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: 1.75rem 0 .75rem;
+    }
+
+    .section-heading h2 { font-size: 1.05rem; margin: 0; color: var(--sicv-azul); font-weight: 800; }
+
+    .clean-table { margin: 0; }
+    .clean-table thead th {
+        color: var(--sicv-tinta-tenue);
+        font-size: .7rem;
+        text-transform: uppercase;
+        font-weight: 800;
+        background: #FBFCFD;
+        border-bottom-width: 1px;
+        white-space: nowrap;
+    }
+    .clean-table td { font-size: .83rem; vertical-align: middle; }
+
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+    }
+
+    .activity-list { list-style: none; margin: 0; padding: 0; }
+    .activity-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .7rem 0;
+        border-bottom: 1px solid var(--sicv-linea);
+    }
+    .activity-list li:last-child { border-bottom: 0; }
+
+    .empty-state { color: var(--sicv-tinta-tenue); font-size: .86rem; padding: 1rem; text-align: center; }
+
+    @media (max-width: 991.98px) {
+        .data-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 575.98px) {
+        .customer-hero { padding: 1rem; }
+        .data-grid,
+        .data-grid.four { grid-template-columns: 1fr; }
+        .hero-stat { flex: 1 1 45%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="customer-shell py-3">
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <div class="small text-muted">Clientes / Ficha del cliente</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="btn btn-outline-primary btn-sm">
+                Editar datos
+            </a>
+            {% if perms.work_orders.add_workorder %}
+                <a href="{% url 'work_orders:create' customer.pk %}" class="btn btn-primary btn-sm">
+                    Nueva orden de trabajo
+                </a>
+            {% endif %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                Imprimir ficha
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="history.back()">Volver</button>
+        </div>
+    </div>
+
+    <section class="customer-hero mb-3">
+        <div class="row align-items-center g-3">
+            <div class="col-lg-8">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="customer-avatar">
+                        {% if customer.person_type == 'LEGAL' %}E{% else %}{{ customer.first_name|slice:':1' }}{{ customer.paternal_surname|slice:':1' }}{% endif %}
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h1 class="hero-name h4">
+                                {% if customer.person_type == 'LEGAL' %}
+                                    {{ customer.business_name }}
+                                {% else %}
+                                    {{ customer.first_name }} {{ customer.paternal_surname }} {{ customer.maternal_surname }}
+                                {% endif %}
+                            </h1>
+                            {% if customer.is_active %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactivo</span>
+                            {% endif %}
+                        </div>
+                        <div class="hero-meta mt-1">
+                            Código: <strong>{{ customer.code }}</strong>
+                            &nbsp;·&nbsp; {{ customer.document_type }}: <strong>{{ customer.document_number }}</strong>
+                            &nbsp;·&nbsp; {{ customer.branch.name }}
+                        </div>
+                        <div class="hero-contact">
+                            <span>☎ {{ customer.phone|default:"No registrado" }}</span>
+                            <span>✉ {{ customer.email|default:"No registrado" }}</span>
+                            {% if primary_address %}<span>⌖ {{ primary_address.district|default:"Sin distrito" }}</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="d-flex justify-content-lg-end flex-wrap gap-2">
+                    <div class="hero-stat">
+                        <strong>{{ active_subscription_count }}</strong>
+                        <span>Servicio{{ active_subscription_count|pluralize }} activo{{ active_subscription_count|pluralize }}</span>
+                    </div>
+                    <div class="hero-stat">
+                        <strong>{{ open_order_count }}</strong>
+                        <span>OT abierta{{ open_order_count|pluralize }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% if featured_open_order %}
+        <section class="ops-card mb-3 {% if featured_open_order.status == 'IN_PROGRESS' %}is-progress{% elif featured_open_order.status == 'REPROGRAMMED' %}is-reprogrammed{% endif %}">
+            <div class="row align-items-center g-3">
+                <div class="col-lg-7">
+                    <div class="ops-eyebrow">Orden de trabajo abierta</div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mt-1">
+                        <span class="ops-number">{{ featured_open_order.order_number }}</span>
+                        <span class="badge bg-light text-dark border">{{ featured_open_order.order_type.name }}</span>
+                        {% if featured_open_order.status == 'PENDING' %}
+                            <span class="badge bg-warning text-dark">Pendiente</span>
+                        {% elif featured_open_order.status == 'ASSIGNED' %}
+                            <span class="badge bg-primary">Asignada</span>
+                        {% elif featured_open_order.status == 'IN_PROGRESS' %}
+                            <span class="badge bg-primary">En atención</span>
+                        {% elif featured_open_order.status == 'REPROGRAMMED' %}
+                            <span class="badge bg-warning text-dark">Reprogramada</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ featured_open_order.get_status_display }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="ops-meta mt-2">
+                        <strong>Motivo:</strong> {{ featured_open_order.reason.name|default:"Sin motivo registrado" }}
+                        &nbsp;·&nbsp;
+                        <strong>Programada:</strong>
+                        {% if featured_open_order.scheduled_at %}{{ featured_open_order.scheduled_at|date:"d/m/Y H:i" }}{% else %}Sin programar{% endif %}
+                    </div>
+                    <div class="ops-meta mt-1">
+                        <strong>Técnico:</strong> {{ featured_open_order.assigned_technician|default:"Sin asignar" }}
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <a href="{% url 'work_orders:initial_print' featured_open_order.pk %}" class="btn btn-primary w-100 btn-sm">Ver orden inicial</a>
+                        </div>
+                        <div class="col-sm-6">
+                            <a href="{% url 'work_orders:initial_print' featured_open_order.pk %}?print=1" class="btn btn-outline-primary w-100 btn-sm">Imprimir orden inicial</a>
+                        </div>
+                        <div class="col-sm-6">
+                            <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="btn btn-outline-secondary w-100 btn-sm">Ver ficha técnica</a>
+                        </div>
+                        <div class="col-sm-6">
+                            <a href="{% url 'work_orders:schedule_board' %}" class="btn btn-outline-secondary w-100 btn-sm">Programar / reprogramar</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    {% endif %}
+
+    <nav class="customer-tabs mb-3" aria-label="Secciones de la ficha">
+        <a href="#resumen">Resumen</a>
+        <a href="#direcciones">Direcciones</a>
+        <a href="#suscripciones">Suscripciones</a>
+        <a href="#contratos">Contratos</a>
+        <a href="#ordenes">Órdenes de trabajo</a>
+        <a href="#actividad">Actividad reciente</a>
+    </nav>
+
+    <section id="resumen" class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar">
+                    <h3>Datos del cliente</h3>
+                    <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="btn btn-outline-primary btn-sm">Editar</a>
+                </div>
+                <div class="card-body-compact data-grid">
+                    <div><div class="data-label">Nombre / razón social</div><div class="data-value">{{ customer }}</div></div>
+                    <div><div class="data-label">Código de abonado</div><div class="data-value">{{ customer.code }}</div></div>
+                    <div><div class="data-label">Documento</div><div class="data-value">{{ customer.document_type }} {{ customer.document_number }}</div></div>
+                    <div><div class="data-label">Tipo de persona</div><div class="data-value">{{ customer.get_person_type_display }}</div></div>
+                    <div><div class="data-label">Teléfono principal</div><div class="data-value">{{ customer.phone|default:"No registrado" }}</div></div>
+                    <div><div class="data-label">Teléfono secundario</div><div class="data-value">{{ customer.secondary_phone|default:"No registrado" }}</div></div>
+                    <div><div class="data-label">Correo electrónico</div><div class="data-value">{{ customer.email|default:"No registrado" }}</div></div>
+                    <div><div class="data-label">Fecha de registro</div><div class="data-value">{{ customer.created_at|date:"d/m/Y H:i" }}</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar">
+                    <h3>Dirección principal</h3>
+                    {% if primary_address and primary_address.map_link %}
+                        <a href="{{ primary_address.map_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">Ver ubicación GPS</a>
+                    {% endif %}
+                </div>
+                {% if primary_address %}
+                    <div class="card-body-compact data-grid">
+                        <div style="grid-column:1/-1;"><div class="data-label">Dirección</div><div class="data-value">{{ primary_address.address }}</div></div>
+                        <div><div class="data-label">Referencia</div><div class="data-value">{{ primary_address.reference|default:"No registrada" }}</div></div>
+                        <div><div class="data-label">Distrito</div><div class="data-value">{{ primary_address.district|default:"No registrado" }}</div></div>
+                        <div><div class="data-label">Zona</div><div class="data-value">{% if primary_address.zone %}{{ primary_address.zone.name }}{% else %}No registrada{% endif %}</div></div>
+                        <div><div class="data-label">Suministro eléctrico</div><div class="data-value">{{ primary_address.electrical_supply_number|default:"No registrado" }}</div></div>
+                        <div><div class="data-label">Latitud</div><div class="data-value">{{ primary_address.map_latitude|default:"No registrada" }}</div></div>
+                        <div><div class="data-label">Longitud</div><div class="data-value">{{ primary_address.map_longitude|default:"No registrada" }}</div></div>
+                    </div>
+                {% else %}
+                    <div class="empty-state">El cliente no tiene direcciones registradas.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar">
+                    <h3>Servicio principal</h3>
+                    <a href="#suscripciones" class="btn btn-outline-primary btn-sm">Ver servicios</a>
+                </div>
+                {% if primary_subscription %}
+                    <div class="card-body-compact data-grid">
+                        <div><div class="data-label">Tipo de servicio</div><div class="data-value">{{ primary_subscription.service_type.name }}</div></div>
+                        <div><div class="data-label">Plan</div><div class="data-value">{{ primary_subscription.plan.name }}</div></div>
+                        <div><div class="data-label">Velocidad</div><div class="data-value">{% if primary_subscription.plan.speed_mbps %}{{ primary_subscription.plan.speed_mbps }} Mbps{% else %}No especificada{% endif %}</div></div>
+                        <div><div class="data-label">Tecnología</div><div class="data-value">{{ primary_subscription.plan.technology|default:"No especificada" }}</div></div>
+                        <div><div class="data-label">Estado</div><div class="data-value">{{ primary_subscription.get_status_display }}</div></div>
+                        <div><div class="data-label">Número de servicio</div><div class="data-value">#{{ primary_subscription.service_number }}</div></div>
+                    </div>
+                {% else %}
+                    <div class="empty-state">El cliente no tiene suscripciones registradas.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar">
+                    <h3>Contrato activo</h3>
+                    <a href="#contratos" class="btn btn-outline-primary btn-sm">Ver contratos</a>
+                </div>
+                {% if active_contract %}
+                    <div class="card-body-compact data-grid">
+                        <div><div class="data-label">N.º de contrato</div><div class="data-value">{{ active_contract.contract_number }}</div></div>
+                        <div><div class="data-label">Suscripción</div><div class="data-value">#{{ active_contract.subscription.id }}</div></div>
+                        <div><div class="data-label">Fecha de inicio</div><div class="data-value">{{ active_contract.start_date|date:"d/m/Y" }}</div></div>
+                        <div><div class="data-label">Fecha de fin</div><div class="data-value">{% if active_contract.end_date %}{{ active_contract.end_date|date:"d/m/Y" }}{% else %}-{% endif %}</div></div>
+                        <div><div class="data-label">Estado</div><div class="data-value">{{ active_contract.get_status_display }}</div></div>
+                    </div>
+                {% else %}
+                    <div class="empty-state">El cliente no tiene contratos registrados.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar"><h3>Últimas órdenes de trabajo</h3><a href="#ordenes" class="btn btn-outline-primary btn-sm">Ver todas</a></div>
+                {% if recent_work_orders %}
+                    <div class="table-responsive">
+                        <table class="table clean-table table-hover">
+                            <thead><tr><th>N.º Orden</th><th>Tipo</th><th>Estado</th><th>Programada</th><th></th></tr></thead>
+                            <tbody>
+                                {% for order in recent_work_orders %}
+                                    <tr>
+                                        <td><a href="{% url 'work_orders:detail' order.pk %}" class="fw-bold text-decoration-none">{{ order.order_number }}</a></td>
+                                        <td>{{ order.order_type.name }}</td>
+                                        <td>{{ order.get_status_display }}</td>
+                                        <td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td>
+                                        <td class="text-end"><a href="{% url 'work_orders:detail' order.pk %}" class="btn btn-outline-secondary btn-sm">Ver</a></td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}<div class="empty-state">No hay órdenes registradas.</div>{% endif %}
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="summary-card">
+                <div class="card-titlebar"><h3>Actividad reciente</h3><a href="#actividad" class="btn btn-outline-primary btn-sm">Ver toda</a></div>
+                <div class="card-body-compact">
+                    {% if recent_activity_preview %}
+                        <ul class="activity-list">
+                            {% for event in recent_activity_preview %}
+                                <li>
+                                    <div><span class="badge {{ event.badge_class }} me-1">{{ event.title }}</span><strong>{{ event.reference }}</strong>{% if event.detail %}<span class="text-muted"> — {{ event.detail }}</span>{% endif %}</div>
+                                    <small class="text-muted text-nowrap">{{ event.timestamp|date:"d/m/Y H:i" }}</small>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}<div class="empty-state">No se registran actividades recientes para este cliente.</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="direcciones">
+        <div class="section-heading">
+            <h2>Direcciones</h2>
+            <a href="{% url 'customers:address_create' customer.pk %}" class="btn btn-outline-primary btn-sm">Nueva dirección</a>
+        </div>
+        <div class="row g-3">
+            {% for addr in addresses %}
+                <div class="col-lg-6">
+                    <div class="detail-card">
+                        <div class="card-titlebar">
+                            <h3>Dirección {{ forloop.counter }}</h3>
+                            {% if addr.is_primary %}<span class="badge bg-success">Principal</span>{% endif %}
+                        </div>
+                        <div class="card-body-compact data-grid">
+                            <div style="grid-column:1/-1;"><div class="data-label">Dirección</div><div class="data-value">{{ addr.address }}</div></div>
+                            <div><div class="data-label">Distrito</div><div class="data-value">{{ addr.district|default:"No registrado" }}</div></div>
+                            <div><div class="data-label">Referencia</div><div class="data-value">{{ addr.reference|default:"No registrada" }}</div></div>
+                            <div><div class="data-label">Número de medidor</div><div class="data-value">{{ addr.meter_number|default:"No registrado" }}</div></div>
+                            <div><div class="data-label">Número de suministro eléctrico</div><div class="data-value">{{ addr.electrical_supply_number|default:"No registrado" }}</div></div>
+                            <div><div class="data-label">Latitud</div><div class="data-value">{{ addr.map_latitude|default:"No registrada" }}</div></div>
+                            <div><div class="data-label">Longitud</div><div class="data-value">{{ addr.map_longitude|default:"No registrada" }}</div></div>
+                            {% if addr.map_link %}
+                                <div style="grid-column:1/-1;"><a href="{{ addr.map_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">Ver ubicación GPS</a></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="col-12"><div class="detail-card empty-state">El cliente no tiene direcciones registradas.</div></div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section id="suscripciones">
+        <div class="section-heading"><h2>Suscripciones y servicios</h2>{% if addresses %}<a href="{% url 'services:subscription_create' customer.pk %}" class="btn btn-outline-primary btn-sm">Nueva suscripción</a>{% endif %}</div>
+        <div class="detail-card">
+            {% if subscriptions %}
+                <div class="table-responsive"><table class="table clean-table table-hover">
+                    <thead><tr><th>Servicio</th><th>Plan</th><th>Dirección</th><th>Velocidad</th><th>Tecnología</th><th>Instalación</th><th>Estado</th></tr></thead>
+                    <tbody>
+                        {% for sub in subscriptions %}
+                            <tr>
+                                <td>#{{ sub.service_number }} · {{ sub.service_type.name }}</td>
+                                <td><strong>{{ sub.plan.name }}</strong></td>
+                                <td>{{ sub.address.address }}</td>
+                                <td>{% if sub.plan.speed_mbps %}{{ sub.plan.speed_mbps }} Mbps{% else %}-{% endif %}</td>
+                                <td>{{ sub.plan.technology|default:"-" }}</td>
+                                <td>{% if sub.installation_date %}{{ sub.installation_date|date:"d/m/Y" }}{% else %}-{% endif %}</td>
+                                <td>{{ sub.get_status_display }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table></div>
+            {% else %}<div class="empty-state">El cliente no tiene suscripciones registradas.</div>{% endif %}
+        </div>
+    </section>
+
+    <section id="contratos">
+        <div class="section-heading"><h2>Contratos</h2>{% if subscriptions %}<a href="{% url 'contracts:contract_create' customer.pk %}" class="btn btn-outline-primary btn-sm">Nuevo contrato</a>{% endif %}</div>
+        <div class="detail-card">
+            {% if contracts %}
+                <div class="table-responsive"><table class="table clean-table table-hover">
+                    <thead><tr><th>N.º Contrato</th><th>Suscripción</th><th>Fecha inicio</th><th>Fecha fin</th><th>Estado</th></tr></thead>
+                    <tbody>{% for contract in contracts %}<tr><td><strong>{{ contract.contract_number }}</strong></td><td>#{{ contract.subscription.id }}</td><td>{{ contract.start_date|date:"d/m/Y" }}</td><td>{% if contract.end_date %}{{ contract.end_date|date:"d/m/Y" }}{% else %}-{% endif %}</td><td>{{ contract.get_status_display }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty-state">El cliente no tiene contratos registrados.</div>{% endif %}
+        </div>
+    </section>
+
+    <section id="ordenes">
+        <div class="section-heading"><h2>Órdenes de trabajo</h2>{% if perms.work_orders.add_workorder %}<a href="{% url 'work_orders:create' customer.pk %}" class="btn btn-primary btn-sm">Nueva orden de trabajo</a>{% endif %}</div>
+        <div class="detail-card">
+            {% if work_orders %}
+                <div class="table-responsive"><table class="table clean-table table-hover align-middle">
+                    <thead><tr><th>N.º Orden</th><th>Servicio</th><th>Tipo</th><th>Motivo</th><th>Estado</th><th>Prioridad</th><th>Técnico</th><th>Resultado</th><th>Programada</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                        {% for order in work_orders %}
+                            <tr>
+                                <td><a href="{% url 'work_orders:detail' order.pk %}" class="fw-bold text-decoration-none">{{ order.order_number }}</a></td>
+                                <td>#{{ order.subscription.service_number }}</td>
+                                <td>{{ order.order_type.name }}{% if order.subtype %}<div class="small text-muted">{{ order.subtype.name }}</div>{% endif %}</td>
+                                <td>{% if order.reason %}{{ order.reason.name }}{% else %}-{% endif %}</td>
+                                <td>{{ order.get_status_display }}</td>
+                                <td>{{ order.get_priority_display }}</td>
+                                <td>{{ order.assigned_technician|default:"Sin asignar" }}</td>
+                                <td>{% if order.result %}{{ order.result.name }}{% else %}-{% endif %}</td>
+                                <td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td>
+                                <td class="text-nowrap">
+                                    <a href="{% url 'work_orders:initial_print' order.pk %}" class="btn btn-outline-primary btn-sm" title="Ver orden inicial">Inicial</a>
+                                    {% if perms.work_orders.view_workorder %}<a href="{% url 'work_orders:detail' order.pk %}" class="btn btn-outline-secondary btn-sm" title="Ver ficha técnica">Técnica</a>{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table></div>
+            {% else %}<div class="empty-state">El cliente no tiene órdenes de trabajo registradas.</div>{% endif %}
+        </div>
+    </section>
+
+    <section id="actividad" class="mb-4">
+        <div class="section-heading"><h2>Actividad reciente</h2></div>
+        <div class="detail-card">
+            <div class="card-body-compact">
+                <div class="row g-2 mb-3">
+                    <div class="col-6 col-md-3"><div class="hero-stat w-100"><strong>{{ operational_summary.total_subscriptions }}</strong><span>Suscripciones</span></div></div>
+                    <div class="col-6 col-md-3"><div class="hero-stat w-100"><strong>{{ operational_summary.total_contracts }}</strong><span>Contratos</span></div></div>
+                    <div class="col-6 col-md-3"><div class="hero-stat w-100"><strong>{{ operational_summary.total_work_orders }}</strong><span>OT totales</span></div></div>
+                    <div class="col-6 col-md-3"><div class="hero-stat w-100"><strong>{{ operational_summary.open_work_orders }}</strong><span>OT abiertas</span></div></div>
+                </div>
+                {% if recent_activity %}
+                    <ul class="activity-list">
+                        {% for event in recent_activity %}
+                            <li><div><span class="badge {{ event.badge_class }} me-1">{{ event.title }}</span><strong>{{ event.reference }}</strong>{% if event.detail %}<span class="text-muted"> — {{ event.detail }}</span>{% endif %}</div><small class="text-muted text-nowrap">{{ event.timestamp|date:"d/m/Y H:i" }}</small></li>
+                        {% endfor %}
+                    </ul>
+                {% else %}<div class="empty-state">No se registran actividades recientes para este cliente.</div>{% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
