@@ -1,5 +1,6 @@
 """Regresiones del retiro de la asignación manual desde el portal web."""
 
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.work_orders.models import WorkOrder, WorkOrderAssignment
@@ -74,3 +75,19 @@ class RetiredWebAssignmentTests(WorkOrderTestCase):
                 self.order.order_number,
                 status_code=410,
             )
+
+    def test_customer_detail_never_links_manual_assignment_even_with_permission(self):
+        """El permiso histórico no debe revivir el botón de asignación web."""
+        permission = Permission.objects.get(codename="assign_workorder")
+        self.atc_user.user_permissions.add(permission)
+        self.client.login(username="atc1", password="test1234")
+
+        response = self.client.get(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.order.order_number)
+        self.assertNotContains(response, f'href="{self.url}"')
+        self.assertNotContains(response, "aria-label=\"Asignar técnico")
+        self.assertNotContains(response, "aria-label=\"Reasignar el técnico")
