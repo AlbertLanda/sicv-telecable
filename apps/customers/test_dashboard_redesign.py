@@ -107,7 +107,7 @@ class CustomerDashboardRedesignTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "customers/detail_dashboard.html")
-        self.assertContains(response, "Orden de trabajo")
+        self.assertContains(response, "Orden de trabajo abierta")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "Ver orden inicial")
         self.assertContains(response, "Imprimir orden inicial")
@@ -115,19 +115,17 @@ class CustomerDashboardRedesignTests(TestCase):
         self.assertContains(response, "CONT-000001")
         self.assertContains(response, "Duo 600 Mbps - Estandar 2026")
 
-    def test_dashboard_matches_the_operational_shell_and_embeds_the_map(self):
-        response = self.client.get(
-            reverse("customers:detail", kwargs={"pk": self.customer.pk})
-        )
+    def test_global_shell_is_present_on_regular_authenticated_pages(self):
+        response = self.client.get(reverse("customers:search"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "TELECABLE")
-        self.assertContains(response, "Programación de órdenes")
-        self.assertContains(response, "Actividad reciente")
-        self.assertContains(response, "Abrir en Google Maps")
-        self.assertContains(response, "maps.google.com/maps")
-        self.assertContains(response, "-11.7861026")
-        self.assertContains(response, "-75.4900202")
+        self.assertContains(response, "sicv-topbar")
+        self.assertContains(response, "Módulos principales")
+        self.assertContains(response, "Clientes")
+        self.assertContains(response, "Operaciones")
+        self.assertContains(response, "Comercial")
+        self.assertContains(response, "Reportes")
+        self.assertContains(response, "sidebarToggleBtn")
 
     def test_dashboard_never_offers_manual_assignment(self):
         assign_permission = Permission.objects.get(codename="assign_workorder")
