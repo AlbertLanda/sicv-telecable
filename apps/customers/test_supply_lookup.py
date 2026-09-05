@@ -66,6 +66,35 @@ SOAP_WITH_ZERO_GPS = """<?xml version="1.0" encoding="utf-8"?>
 
 class DistriluzGPSServiceTests(TestCase):
     @patch("apps.customers.services.distriluz_gps.requests.post")
+    def test_eight_decimal_coordinates_can_be_saved_by_the_address_form(self, post):
+        from apps.customers.forms import CustomerAddressForm
+        from apps.customers.models import Customer
+
+        post.return_value = Mock(ok=True, text=SOAP_WITH_GPS.replace(
+            "-11.7861026", "-11.78610265",
+        ).replace("-75.4900202", "-75.49002025"))
+        location = consultar_suministro_gps("75018907")
+        branch = Branch.objects.create(code="GPSQA", name="Sede GPS")
+        customer = Customer.objects.create(
+            code="GPS-QA", branch=branch, document_number="12345678",
+            first_name="Cliente", paternal_surname="Prueba",
+        )
+        form = CustomerAddressForm(data={
+            "address": location["address"], "district": location["district"],
+            "electrical_supply_code": location["supply_code"],
+            "latitude": str(location["latitude"]),
+            "longitude": str(location["longitude"]),
+            "gps_link": location["gps_link"],
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        address = form.save(commit=False)
+        address.customer = customer
+        address.save()
+        address.refresh_from_db()
+        self.assertEqual(address.latitude, Decimal("-11.7861027"))
+        self.assertEqual(address.longitude, Decimal("-75.4900203"))
+
+    @patch("apps.customers.services.distriluz_gps.requests.post")
     def test_returns_only_location_data_with_exact_coordinates(self, post):
         response = Mock(ok=True, text=SOAP_WITH_GPS)
         post.return_value = response

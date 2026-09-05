@@ -12,11 +12,14 @@ dirección, suscripción, catálogos y los usuarios `technician`,
 `other_technician` y `atc_user`.
 """
 
+from decimal import Decimal
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apps.services.models import PlanTariff
 from apps.work_orders.services import attend_order, liquidate_order
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -110,6 +113,7 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "created_at",
                 # Propios del detalle.
                 "address",
+                "plan_details",
                 "detail",
                 "branch",
                 "zone",
@@ -120,6 +124,124 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "technical_data",
             },
         )
+
+    def test_plan_details_publishes_what_the_field_work_needs(self):
+        """El bloque del plan trae lo que decide el trabajo en campo.
+
+        Velocidad, tecnología y puntos de TV incluidos son lo que el técnico
+        necesita **antes** de cablear: qué equipo instala, cómo lo configura y
+        cuántas salidas entran sin cargo.
+        """
+        order = self.create_assigned_order()
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertEqual(plan["code"], "PLAN100")
+        self.assertEqual(plan["name"], "Fibra 100 Mbps")
+        self.assertEqual(plan["service_type"], "Internet")
+        self.assertEqual(plan["speed_mbps"], 100)
+        self.assertEqual(plan["monthly_price"], "80.00")
+
+    def test_plan_details_serves_null_tariff_instead_of_zeros(self):
+        """Sin tarifa aplicada el bloque es `null`, no ceros.
+
+        «Sin tarifa geográfica» y «tarifa de cero soles» son estados
+        distintos. Un bloque de ceros los volvería indistinguibles, que es el
+        mismo criterio con el que `technical_data` distingue «aún no liquidó»
+        de «liquidó dejando campos en blanco».
+        """
+        order = self.create_assigned_order()
+
+        self.assertIsNone(order.subscription.tariff)
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertIsNone(plan["tariff"])
+
+    def test_plan_details_reports_granted_courtesies_and_annexes(self):
+        self.service_type.supports_tv_annexes = True
+        self.service_type.annex_monthly_price = Decimal("5.00")
+        self.service_type.save()
+        self.plan.included_tv_points = 2
+        self.plan.save()
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+
+        for granted, annexes, total in ((1, 0, 1), (1, 1, 2), (2, 3, 5)):
+            with self.subTest(granted=granted, annexes=annexes):
+                self.subscription.initial_tv_courtesy_granted = granted
+                self.subscription.annex_count = annexes
+                self.subscription.save()
+                details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+                self.assertEqual(details["included_tv_points"], granted)
+                self.assertEqual(details["annex_count"], annexes)
+                self.assertEqual(details["total_tv_points"], total)
+
+    def test_contract_prices_survive_catalog_changes_and_include_annexes(self):
+        self.service_type.supports_tv_annexes = True
+        self.service_type.annex_monthly_price = Decimal("5.00")
+        self.service_type.save()
+        tariff = PlanTariff.objects.create(
+            plan=self.plan, branch=self.branch,
+            installation_fee=Decimal("90.00"), monthly_fee=Decimal("85.00"),
+        )
+        self.subscription.tariff = tariff
+        self.subscription.base_installation_fee = Decimal("50.00")
+        self.subscription.base_monthly_fee = Decimal("50.00")
+        self.subscription.annex_count = 3
+        self.subscription.save()
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+
+        for applied_tariff in (tariff, None):
+            with self.subTest(tariff=applied_tariff):
+                self.subscription.tariff = applied_tariff
+                self.subscription.save(update_fields=["tariff"])
+                details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+                self.assertEqual(details["base_installation_fee"], "50.00")
+                self.assertEqual(details["base_monthly_fee"], "50.00")
+                self.assertEqual(details["annex_monthly_charge"], "15.00")
+                self.assertEqual(details["total_monthly_price"], "65.00")
+
+    def test_free_contracted_installation_is_reported_as_zero_without_tariff(self):
+        order = self.create_assigned_order()
+        self.authenticate(self.technician)
+        details = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+        self.assertEqual(details["base_installation_fee"], "0.00")
+
+    def test_plan_details_publishes_the_applied_tariff_when_there_is_one(self):
+        """Con tarifa, viaja el importe real y dónde se aplica.
+
+        `monthly_price` es el precio referencial del catálogo y
+        `tariff.monthly_fee` lo que se cobra en esa sede. Viajan los dos y con
+        valores distintos a propósito: si el serializador confundiera uno con
+        otro, esta prueba lo detecta.
+        """
+        tariff = PlanTariff.objects.create(
+            plan=self.plan,
+            branch=self.branch,
+            installation_fee=Decimal("150.00"),
+            monthly_fee=Decimal("95.00"),
+        )
+
+        self.subscription.tariff = tariff
+        self.subscription.save(update_fields=["tariff"])
+
+        order = self.create_assigned_order()
+
+        self.authenticate(self.technician)
+
+        plan = self.api.get(self.detail_url(order.pk)).data["plan_details"]
+
+        self.assertEqual(plan["monthly_price"], "80.00")
+        self.assertEqual(plan["tariff"]["monthly_fee"], "95.00")
+        self.assertEqual(plan["tariff"]["installation_fee"], "150.00")
+        self.assertEqual(plan["tariff"]["branch"], self.branch.name)
+        self.assertIsNone(plan["tariff"]["zone"])
 
     def test_detail_keeps_the_list_criteria_for_choices(self):
         """Los choices heredados siguen viajando con código y etiqueta."""

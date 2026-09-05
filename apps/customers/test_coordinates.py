@@ -98,6 +98,58 @@ class NormalizeCoordinateTests(SimpleTestCase):
             Decimal("-90"),
         )
 
+    def test_extra_precision_is_trimmed_to_the_stored_precision(self):
+        """8 decimales se recortan a 7, los que el modelo almacena.
+
+        Es el caso real del autocompletado: Distriluz responde `gpsx`/`gpsy`
+        con 8 decimales y el campo es `decimal_places=7`, así que sin este
+        recorte el valor atraviesa la normalización sin objeción —no es cero,
+        es numérico, cae dentro del planeta— y lo rechaza después el
+        `DecimalValidator` del modelo, ya dentro del formulario de alta. El
+        operador veía las coordenadas llenas con un error rojo debajo y tenía
+        que borrar un dígito a mano en cada campo.
+
+        Se comprueba el número de decimales explícitamente porque `Decimal`
+        compara por valor: `Decimal("-11.78610260") == Decimal("-11.7861026")`
+        es cierto, así que un `assertEqual` solo no distinguiría si el recorte
+        ocurrió.
+        """
+        for value, expected in (
+            ("-11.78610260", "-11.7861026"),
+            ("-75.49002020", "-75.4900202"),
+            # El octavo decimal redondea, no se trunca.
+            ("-6.22900005", "-6.2290001"),
+            ("-6.22900004", "-6.2290000"),
+        ):
+            with self.subTest(valor=value):
+                result = normalize_coordinate(value)
+
+                self.assertEqual(result, Decimal(expected))
+                self.assertEqual(-result.as_tuple().exponent, 7)
+
+    def test_precision_is_trimmed_before_the_zero_rule_is_applied(self):
+        """Un valor que redondea a cero es «sin GPS», no una ubicación.
+
+        `0.00000004` no es cero, así que pasaría la regla del centinela si el
+        recorte se aplicara después de validar. Al redondear se convertiría en
+        `0.0000000` y se publicaría como coordenada — el mismo dato falso que
+        el módulo evita, entrando por la puerta del redondeo.
+        """
+        for value in ("0.00000004", "-0.00000004", "0.0000000499"):
+            with self.subTest(valor=value):
+                self.assertIsNone(normalize_coordinate(value))
+
+    def test_absurdly_large_numbers_do_not_raise(self):
+        """Lo que no cabe en el campo se descarta, no revienta.
+
+        `quantize` señala el desborde con `InvalidOperation` en lugar de
+        truncar. Sin `limits` no hay rango que filtre antes, así que el
+        contrato de «no levantar excepciones» tiene que sostenerse aquí.
+        """
+        for value in ("1E+40", "-1E+40", "9" * 40):
+            with self.subTest(valor=value):
+                self.assertIsNone(normalize_coordinate(value))
+
 
 class NormalizeCoordinatePairTests(SimpleTestCase):
     """El par es indivisible."""

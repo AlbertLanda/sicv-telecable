@@ -3,689 +3,497 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SICV - Telecable{% endblock %}</title>
 
-    <title>{% block title %}SICV - Sistema de Control{% endblock %}</title>
-
-    <!-- Bootstrap 5 -->
-    <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-        rel="stylesheet"
-    >
-
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet"
-    >
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <style>
-        /*
-         * Paleta SICV — Opción A: azul corporativo.
-         * Se define una vez aquí y se aplica a todo el sitio sobreescribiendo
-         * las variables de Bootstrap 5, no reescribiendo cada plantilla.
-         */
         :root {
-            --sicv-fondo: #F4F6F8;
-            --sicv-superficie: #FFFFFF;
-            --sicv-superficie-azul: #EAF0F5;
-            --sicv-azul: #1B3A5C;
-            --sicv-azul-oscuro: #14293F;
-            --sicv-tinta: #1F2937;
-            --sicv-tinta-suave: #4B5563;
-            --sicv-tinta-tenue: #6B7280;
-            --sicv-linea: #DCE1E6;
+            --sicv-bg: #f4f7fb;
+            --sicv-surface: #ffffff;
+            --sicv-primary: #0f4f82;
+            --sicv-primary-2: #135f99;
+            --sicv-primary-dark: #0a3b65;
+            --sicv-sidebar: #ffffff;
+            --sicv-text: #15385d;
+            --sicv-muted: #64748b;
+            --sicv-line: #dce5ee;
+            --sicv-soft: #eef5fb;
+            --sicv-success: #1b9a59;
+            --sicv-warning: #f4b51f;
 
-            /* Overrides de Bootstrap: el resto del sitio hereda la paleta
-               sin que cada plantilla tenga que cambiar sus clases. */
-            --bs-body-bg: var(--sicv-fondo);
-            --bs-body-color: var(--sicv-tinta);
-            --bs-primary: var(--sicv-azul);
-            --bs-primary-rgb: 27, 58, 92;
-            --bs-border-color: var(--sicv-linea);
+            /* Alias para plantillas existentes. */
+            --sicv-fondo: var(--sicv-bg);
+            --sicv-superficie: var(--sicv-surface);
+            --sicv-superficie-azul: var(--sicv-soft);
+            --sicv-azul: var(--sicv-primary);
+            --sicv-azul-oscuro: var(--sicv-primary-dark);
+            --sicv-tinta: #1f2d3d;
+            --sicv-tinta-suave: #526477;
+            --sicv-tinta-tenue: #718096;
+            --sicv-linea: var(--sicv-line);
+
+            --bs-primary: var(--sicv-primary);
+            --bs-primary-rgb: 15, 79, 130;
+            --bs-body-bg: var(--sicv-bg);
+            --bs-body-color: #1f2d3d;
+            --bs-border-color: var(--sicv-line);
             --bs-font-sans-serif: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
+        * { box-sizing: border-box; }
+        html, body { min-height: 100%; }
         body {
+            margin: 0;
+            background: var(--sicv-bg);
+            color: #1f2d3d;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 14px;
         }
-
-        h1, h2, h3 {
-            font-weight: 700;
-        }
-
-        .card-custom {
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(31,41,55,0.05), 0 16px 32px -20px rgba(31,41,55,0.22);
-        }
+        h1, h2, h3, h4, h5, h6 { color: #102f50; font-weight: 700; }
+        a { color: var(--sicv-primary); }
 
         .btn-primary {
-            background-color: var(--sicv-azul);
-            border-color: var(--sicv-azul);
+            background: var(--sicv-primary);
+            border-color: var(--sicv-primary);
         }
-        .btn-primary:hover, .btn-primary:focus {
-            background-color: var(--sicv-azul-oscuro);
-            border-color: var(--sicv-azul-oscuro);
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background: var(--sicv-primary-dark);
+            border-color: var(--sicv-primary-dark);
         }
-
-        /* Barra de navegación: blanca con acento azul marino, no oscura. */
-        .navbar.navbar-sicv {
-            background-color: #FFFFFF;
-            border-bottom: 1px solid var(--sicv-linea);
+        .btn-outline-primary {
+            color: #0e6fd8;
+            border-color: #2486f2;
         }
-        .navbar-sicv .navbar-brand {
-            color: var(--sicv-azul);
-            font-weight: 800;
-            font-size: 1.4rem;
-            letter-spacing: .07em;
-        }
-        .navbar-sicv .nav-link {
-            color: var(--sicv-tinta);
-            font-weight: 600;
-            padding-left: .9rem;
-            padding-right: .9rem;
-            border-bottom: 2px solid transparent;
-        }
-        .navbar-sicv .nav-link:hover,
-        .navbar-sicv .nav-link.active {
-            color: var(--sicv-azul);
-            border-bottom-color: var(--sicv-azul);
+        .btn-outline-primary:hover {
+            background: #0e6fd8;
+            border-color: #0e6fd8;
         }
 
-        /* Botón para mostrar/ocultar el menú lateral. */
+        /* ---------- Barra superior global ---------- */
+        .sicv-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1040;
+            min-height: 64px;
+            background: linear-gradient(90deg, #10598f 0%, #0c456f 56%, #0a3b61 100%);
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(10, 46, 79, .18);
+        }
+        .sicv-topbar-inner {
+            min-height: 64px;
+            display: flex;
+            align-items: center;
+            padding: 0 18px;
+            gap: 18px;
+        }
+        .sicv-brand-wrap {
+            display: flex;
+            align-items: center;
+            min-width: 210px;
+        }
         .sidebar-toggle-btn {
+            width: 38px;
+            height: 38px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 38px;
-            height: 38px;
-            border: 1px solid var(--sicv-linea);
+            padding: 0;
+            margin-right: 10px;
+            border: 1px solid rgba(255,255,255,.2);
             border-radius: 8px;
-            background: transparent;
-            color: var(--sicv-tinta);
-            margin-right: 14px;
+            background: rgba(255,255,255,.04);
+            color: #fff;
+            font-size: 1.15rem;
         }
-        .sidebar-toggle-btn:hover {
-            background: var(--sicv-fondo);
-            color: var(--sicv-azul);
-        }
-        .sidebar-toggle-btn svg {
-            width: 19px;
-            height: 19px;
-        }
-
-        /* Oculta el menú lateral; el ancho que libera lo recupera
-           .sicv-main más abajo, junto al resto del layout. */
-        body.sidebar-collapsed .sicv-sidebar {
-            display: none;
-        }
-
-        .role-chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 2px 10px 2px 8px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: .02em;
-            background: var(--sicv-superficie-azul);
-            color: var(--sicv-azul);
-            border: 1px solid rgba(27,58,92,.18);
-        }
-        .role-chip .pip {
-            width: 6px; height: 6px; border-radius: 50%;
-            background: var(--sicv-azul);
-            display: inline-block;
-        }
-
-        .account-menu .dropdown-toggle {
-            color: var(--sicv-tinta);
+        .sidebar-toggle-btn:hover { background: rgba(255,255,255,.12); }
+        .sicv-brand {
+            color: #fff;
             text-decoration: none;
-        }
-        .account-menu .dropdown-menu {
-            border-color: var(--sicv-linea);
-            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
-        }
-
-        .field-readonly {
-            background: var(--sicv-fondo);
-            border: 1px solid var(--sicv-linea);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: var(--sicv-tinta-suave);
-        }
-
-        .identity-note {
-            background: var(--sicv-fondo);
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 0.85rem;
-            color: var(--sicv-tinta-tenue);
-        }
-
-        .lock-icon { width: 13px; height: 13px; vertical-align: -2px; }
-        .branch-icon { width: 15px; height: 15px; vertical-align: -3px; }
-
-        .branch-switch .dropdown-toggle {
-            color: var(--sicv-tinta-suave);
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 600;
-        }
-        .branch-switch .dropdown-toggle:hover {
-            color: var(--sicv-azul);
-        }
-        .branch-switch .dropdown-menu {
-            border-color: var(--sicv-linea);
-            box-shadow: 0 12px 28px -18px rgba(31,41,55,0.3);
-        }
-        .branch-switch .dropdown-item.active {
-            background-color: var(--sicv-superficie-azul);
-            color: var(--sicv-azul);
-            font-weight: 700;
-        }
-
-        /* ---------- Menú lateral ---------- */
-
-        /*
-         * El lateral abre en el mismo margen que la barra superior (24px,
-         * el px-4 del navbar) y reserva a su derecha el aire que separa el
-         * menú del contenido. El contenido nunca queda pegado al borde:
-         * su padding lo pone esta plantilla, no cada pantalla -las hay que
-         * usan .container, otras container-fluid y otras nada.
-         */
-        .sicv-sidebar {
-            position: fixed;
-            top: 74px;
-            left: 0;
-            bottom: 0;
-            width: 320px;
-            padding: 18px 20px 28px 24px;
-            overflow-y: auto;
-        }
-
-        .sicv-main {
-            margin-left: 320px;
-            padding: 0 24px 40px;
-        }
-
-        /* Con el menú oculto el contenido recupera el ancho, pero conserva
-           el mismo margen lateral: pegarlo al borde recorta el texto. */
-        body.sidebar-collapsed .sicv-main {
-            margin-left: 0;
-        }
-
-        /* Bajo 992px el lateral pasa a ser una franja normal sobre el
-           contenido, en lugar de comerse la mitad de la pantalla. */
-        @media (max-width: 991.98px) {
-            .sicv-sidebar {
-                position: static;
-                width: auto;
-                padding: 0 24px 12px;
-            }
-            .sicv-main {
-                margin-left: 0;
-            }
-        }
-
-        .sidebar-search {
-            position: relative;
-            margin-bottom: 14px;
-        }
-        .sidebar-search svg {
-            position: absolute;
-            left: 11px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 15px;
-            height: 15px;
-            color: var(--sicv-tinta-tenue);
-            pointer-events: none;
-        }
-        .sidebar-search .form-control {
-            padding-left: 33px;
-            border-radius: 8px;
-            border-color: var(--sicv-linea);
-            font-size: .875rem;
-        }
-        .sidebar-search .form-control:focus {
-            border-color: var(--sicv-azul);
-            box-shadow: 0 0 0 3px var(--sicv-superficie-azul);
-        }
-
-        .sidebar-box {
-            background: var(--sicv-superficie);
-            border: 1px solid var(--sicv-linea);
-            border-radius: 10px;
-            margin-bottom: 10px;
-            overflow: hidden;
-            box-shadow: 0 1px 2px rgba(31,41,55,0.04);
-        }
-        .sidebar-box .accordion-button {
-            background: var(--sicv-superficie);
-            color: var(--sicv-tinta);
-            font-weight: 700;
-            font-size: .9rem;
-            padding: 13px 16px;
-            box-shadow: none;
-        }
-        .sidebar-box .accordion-button:not(.collapsed) {
-            color: var(--sicv-azul);
-            background: var(--sicv-superficie-azul);
-        }
-        .sidebar-box .accordion-button:focus {
-            box-shadow: 0 0 0 3px var(--sicv-superficie-azul);
-        }
-        .sidebar-box .accordion-body {
-            padding: 6px 10px 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .sidebar-link {
-            display: block;
-            padding: 8px 12px;
-            border-radius: 7px;
-            color: var(--sicv-tinta-suave);
-            text-decoration: none;
-            font-size: .875rem;
-            font-weight: 500;
-        }
-        .sidebar-link:hover {
-            background: var(--sicv-fondo);
-            color: var(--sicv-azul);
-        }
-
-        /*
-         * Opción que el sistema anterior tenía y que todavía no
-         * construimos. Se muestra en su sitio, dentro de su sección, para
-         * que el operador reconozca el menú que ya conoce, pero apagada y
-         * marcada: así se ve qué falta sin ofrecer un enlace muerto.
-         */
-        .sidebar-link-pending {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 6px;
-            padding: 8px 10px;
-            border-radius: 7px;
-            color: var(--sicv-tinta-tenue);
-            font-size: .84rem;
-            font-weight: 500;
-            cursor: default;
-        }
-        /* En el lateral la etiqueta va en minúscula y estrecha: con una
-           versalita por fila los nombres largos -"Comprobantes de pago"-
-           se parten en dos líneas y la columna queda ilegible. */
-        .sidebar-link-pending .pending-tag {
-            flex: none;
-            margin-left: 0;
-            font-size: .58rem;
-            font-weight: 600;
-            text-transform: none;
-            letter-spacing: 0;
-            padding: 1px 5px;
-        }
-        /* ---------- Paneles y tablas del sistema ---------- */
-
-        /* Cabecera azul del panel, como en el sistema anterior. */
-        .panel-head {
-            background-color: var(--sicv-azul);
-            color: #FFFFFF;
-            font-weight: 700;
-            font-size: .95rem;
-            border-bottom: none;
-        }
-        .panel-head-note {
-            font-weight: 500;
-            font-size: .8rem;
-            opacity: .85;
-        }
-
-        .search-field {
-            max-width: 460px;
-        }
-
-        .sicv-table thead th {
-            background: var(--sicv-fondo);
-            color: var(--sicv-azul);
-            font-size: .78rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .03em;
-            border-bottom: 1px solid var(--sicv-linea);
+            font-weight: 800;
+            font-size: 1.35rem;
+            letter-spacing: .01em;
             white-space: nowrap;
         }
-        .sicv-table tbody td {
-            font-size: .875rem;
-            border-color: var(--sicv-linea);
+        .sicv-topnav {
+            display: flex;
+            align-items: stretch;
+            align-self: stretch;
+            gap: 2px;
+            min-width: 0;
         }
-        .tabular {
-            font-variant-numeric: tabular-nums;
+        .sicv-topnav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 0 15px;
+            color: rgba(255,255,255,.88);
+            text-decoration: none;
+            font-size: .84rem;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+        }
+        .sicv-topnav-link:hover,
+        .sicv-topnav-link:focus {
+            color: #fff;
+            background: rgba(255,255,255,.08);
+            border-bottom-color: rgba(255,255,255,.7);
+        }
+        .sicv-topbar-spacer { flex: 1; }
+        .topbar-control {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: rgba(255,255,255,.92) !important;
+            text-decoration: none;
+            font-size: .8rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .topbar-control:hover { color: #fff !important; }
+        .topbar-separator {
+            width: 1px;
+            height: 28px;
+            background: rgba(255,255,255,.18);
+        }
+        .user-avatar-mini {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #dcecff;
+            color: #0d5ea1;
+            font-weight: 800;
+            border: 2px solid rgba(255,255,255,.7);
+        }
+        .account-copy { line-height: 1.05; }
+        .account-role { display:block; color:rgba(255,255,255,.64); font-size:.65rem; margin-top:3px; }
+        .sicv-topbar .dropdown-menu {
+            border-color: var(--sicv-line);
+            box-shadow: 0 16px 36px rgba(16, 47, 80, .18);
         }
 
-        .service-tag {
-            display: inline-block;
-            font-size: .72rem;
+        /* ---------- Layout global ---------- */
+        .sicv-sidebar {
+            position: fixed;
+            top: 64px;
+            left: 0;
+            bottom: 0;
+            width: 280px;
+            z-index: 1030;
+            background: var(--sicv-sidebar);
+            border-right: 1px solid #d9e3ed;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: transform .22s ease;
+        }
+        .sicv-main {
+            margin-left: 280px;
+            min-height: calc(100vh - 64px);
+            padding: 22px 24px 40px;
+            transition: margin-left .22s ease;
+        }
+        body.sidebar-collapsed .sicv-sidebar { transform: translateX(-100%); }
+        body.sidebar-collapsed .sicv-main { margin-left: 0; }
+
+        /* ---------- Menú lateral ---------- */
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            height: 66px;
+            padding: 0 18px;
+            background: linear-gradient(90deg, #10598f, #0f4f82);
+            color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+        }
+        .sidebar-header-brand { font-size: 1.18rem; font-weight: 800; letter-spacing: .02em; }
+        .sidebar-inner { padding: 16px 12px 24px; }
+        .sidebar-search {
+            position: relative;
+            margin-bottom: 13px;
+        }
+        .sidebar-search i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #7690aa;
+        }
+        .sidebar-search .form-control {
+            height: 38px;
+            padding-left: 36px;
+            border-radius: 7px;
+            border-color: #d9e3ed;
+            font-size: .8rem;
+            background: #f9fbfd;
+        }
+        .sidebar-section { margin-bottom: 8px; }
+        .sidebar-section-title {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 10px 10px;
+            border: 0;
+            background: transparent;
+            color: #15385d;
+            font-size: .8rem;
+            font-weight: 800;
+            text-align: left;
+        }
+        .sidebar-section-title .chev { margin-left: auto; font-size: .7rem; transition: transform .18s ease; }
+        .sidebar-section-title[aria-expanded="true"] .chev { transform: rotate(180deg); }
+        .sidebar-section-title i:first-child { width: 18px; text-align:center; color:#0f64aa; }
+        .sidebar-links { padding: 0 0 3px; }
+        .sidebar-link,
+        .sidebar-link-pending {
+            min-height: 38px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px 8px 36px;
+            margin: 1px 0;
+            border-radius: 7px;
+            color: #365b80;
+            text-decoration: none;
+            font-size: .8rem;
+            font-weight: 500;
+        }
+        .sidebar-link i { width: 16px; color:#0f64aa; margin-left:-26px; text-align:center; }
+        .sidebar-link:hover,
+        .sidebar-link.active {
+            color: #0c4d82;
+            background: #eaf3fb;
             font-weight: 700;
-            color: var(--sicv-azul);
-            background: var(--sicv-superficie-azul);
-            border: 1px solid rgba(27,58,92,.15);
-            border-radius: 20px;
-            padding: 1px 9px;
-            margin-right: 3px;
         }
-
+        .sidebar-link-pending { color:#8a9bad; cursor:default; justify-content:space-between; }
         .pending-tag {
-            margin-left: 8px;
-            font-size: .65rem;
+            font-size: .58rem;
+            font-weight: 600;
+            padding: 1px 6px;
+            border: 1px solid #d9e3ed;
+            border-radius: 999px;
+            background:#f8fafc;
+            color:#8795a5;
+        }
+
+        /* ---------- Apariencia compartida de páginas ---------- */
+        .card-custom,
+        .card {
+            border-color: var(--sicv-line);
+            border-radius: 10px;
+        }
+        .card-custom { box-shadow: 0 8px 24px rgba(16, 47, 80, .055); }
+        .panel-head,
+        .card-header.panel-head {
+            background: var(--sicv-primary);
+            color: #fff;
+            border-bottom: 0;
             font-weight: 700;
+        }
+        .form-control,
+        .form-select {
+            border-color: #d8e1ea;
+            border-radius: 7px;
+        }
+        .form-control:focus,
+        .form-select:focus {
+            border-color: #4c9df0;
+            box-shadow: 0 0 0 .2rem rgba(44, 139, 236, .13);
+        }
+        .table { --bs-table-bg: transparent; }
+        .table thead th,
+        .sicv-table thead th {
+            color: #15385d;
+            background: #f6f9fc;
+            font-size: .7rem;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: .05em;
-            color: var(--sicv-tinta-tenue);
-            background: var(--sicv-fondo);
-            border: 1px solid var(--sicv-linea);
-            border-radius: 20px;
-            padding: 1px 7px;
+            border-color: var(--sicv-line);
+        }
+        .table tbody td,
+        .sicv-table tbody td { border-color: #e5ebf1; }
+        .role-chip { display:none; }
+        .field-readonly { background:#f6f9fc; border:1px solid var(--sicv-line); border-radius:7px; padding:8px 11px; }
+        .identity-note { background:#f6f9fc; color:#6d7f92; border-radius:7px; padding:9px 11px; }
+        .service-tag { display:inline-block; padding:2px 8px; border-radius:999px; background:#edf4fa; color:#164d79; border:1px solid #d4e0ea; font-size:.7rem; font-weight:700; }
+        .tabular { font-variant-numeric: tabular-nums; }
+
+        @media (max-width: 1199.98px) {
+            .sicv-topnav { display:none; }
+            .sicv-brand-wrap { min-width:auto; }
+        }
+        @media (max-width: 991.98px) {
+            .sicv-sidebar { transform:translateX(-100%); width:270px; box-shadow:8px 0 30px rgba(16,47,80,.18); }
+            .sicv-main { margin-left:0; padding:18px 14px 32px; }
+            body.sidebar-mobile-open .sicv-sidebar { transform:translateX(0); }
+            .topbar-office { display:none !important; }
+        }
+        @media (max-width: 575.98px) {
+            .sicv-topbar-inner { padding:0 10px; gap:8px; }
+            .sicv-brand { font-size:1.1rem; }
+            .topbar-branch-label { display:none; }
+            .account-copy { display:none; }
+            .sicv-main { padding:14px 10px 28px; }
+        }
+
+        @media print {
+            .sicv-topbar, .sicv-sidebar { display:none !important; }
+            .sicv-main { margin:0 !important; padding:0 !important; }
+            body { background:#fff; }
         }
     </style>
 
     {% block extra_css %}{% endblock %}
 </head>
-
 <body>
 
-    {% if user.is_authenticated %}
-    <!-- Navegación del sistema -->
-    <nav class="navbar navbar-expand-lg navbar-sicv mb-4">
-        <div class="container-fluid px-4">
-
+{% if user.is_authenticated %}
+<header class="sicv-topbar">
+    <div class="sicv-topbar-inner">
+        <div class="sicv-brand-wrap">
             {% if not hide_sidebar %}
-                <button
-                    type="button"
-                    id="sidebarToggleBtn"
-                    class="sidebar-toggle-btn"
-                    aria-label="Mostrar u ocultar el menú lateral"
-                >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-                </button>
+            <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Mostrar u ocultar menú">
+                <i class="bi bi-list"></i>
+            </button>
             {% endif %}
-
-            <a
-                class="navbar-brand"
-                href="{% url 'customers:search' %}"
-            >
-                TELECABLE
-            </a>
-
-            <div class="collapse navbar-collapse">
-
-                <ul class="navbar-nav me-auto ms-5">
-                    {# La bandeja solo se ofrece a quien puede verla. Ocultar #}
-                    {# el enlace es comodidad: el control real es el permiso  #}
-                    {# de la vista, que responde 403 si se escribe la URL.    #}
-                    {% if perms.work_orders.view_workorder %}
-                        <li class="nav-item">
-                            <a
-                                class="nav-link"
-                                href="{% url 'work_orders:dispatch' %}"
-                            >
-                                Bandeja de Despacho
-                            </a>
-                        </li>
-                    {% endif %}
-                </ul>
-
-                <!-- Rol del usuario autenticado -->
-                <span class="role-chip me-4"><span class="pip"></span>{{ user.get_role_display }}</span>
-
-                {# Oficina activa: desde qué local se atiende. Hoy es solo    #}
-                {# contexto visible; la necesitará el flujo de caja, donde    #}
-                {# cada cobro se hace en una oficina concreta.                #}
-                {% if available_offices %}
-                    <div class="dropdown branch-switch me-4">
-                        <a
-                            href="#"
-                            class="dropdown-toggle d-inline-flex align-items-center"
-                            id="officeMenuToggle"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
-                            {{ active_office.name|default:"Oficina" }}
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="officeMenuToggle">
-                            {% for office in available_offices %}
-                                <li>
-                                    <form
-                                        method="post"
-                                        action="{% url 'organization:set_active_office' %}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="office" value="{{ office.pk }}">
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button
-                                            type="submit"
-                                            class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}"
-                                        >
-                                            {{ office.name }}
-                                        </button>
-                                    </form>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                {% endif %}
-
-                {# Sede activa: desde qué sede se consulta ahora, no la sede #}
-                {# asignada al usuario. ATC atiende a un abonado de otra     #}
-                {# sede cambiando aquí, sin derivar la llamada.              #}
-                {% if available_branches %}
-                    <div class="dropdown branch-switch me-4">
-                        <a
-                            href="#"
-                            class="dropdown-toggle d-inline-flex align-items-center"
-                            id="branchMenuToggle"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            <svg class="branch-icon me-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5"/></svg>
-                            {{ active_branch.name|default:"Sede" }}
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="branchMenuToggle">
-                            {% for branch in available_branches %}
-                                <li>
-                                    <form
-                                        method="post"
-                                        action="{% url 'organization:set_active_branch' %}"
-                                    >
-                                        {% csrf_token %}
-                                        <input type="hidden" name="branch" value="{{ branch.pk }}">
-                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                        <button
-                                            type="submit"
-                                            class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}"
-                                        >
-                                            {{ branch.name }}
-                                        </button>
-                                    </form>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                {% endif %}
-
-                <!-- Menú de cuenta -->
-
-                <div class="dropdown account-menu">
-                    <a
-                        href="#"
-                        class="dropdown-toggle d-inline-flex align-items-center"
-                        id="accountMenuToggle"
-                        role="button"
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
-                    >
-                        {{ user.get_full_name|default:user.username }}
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="accountMenuToggle">
-                        <li>
-                            <a class="dropdown-item" href="{% url 'accounts:profile' %}">Mi perfil</a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item" href="{% url 'accounts:password_change' %}">Cambiar clave</a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <form
-                                method="post"
-                                action="{% url 'logout' %}"
-                                class="px-3"
-                            >
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
-                                    Cerrar sesión
-                                </button>
-                            </form>
-                        </li>
-                    </ul>
-                </div>
-
-            </div>
+            <a class="sicv-brand" href="{% url 'customers:search' %}">TELECABLE</a>
         </div>
-    </nav>
-    {% endif %}
 
-    {% comment %}
-    Contenido de cada pantalla.
+        <nav class="sicv-topnav" aria-label="Módulos principales">
+            <a class="sicv-topnav-link" href="{% url 'customers:search' %}"><i class="bi bi-people"></i> Clientes</a>
+            {% if perms.work_orders.view_workorder %}
+            <a class="sicv-topnav-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-clipboard2-check"></i> Órdenes de trabajo</a>
+            {% endif %}
+            <span class="sicv-topnav-link opacity-50"><i class="bi bi-bar-chart"></i> Reportes</span>
+            <a class="sicv-topnav-link" href="{% url 'accounts:profile' %}"><i class="bi bi-gear"></i> Configuración</a>
+        </nav>
 
-    El menú lateral acompaña a las pantallas del sistema, pero no al login
-    ni a ninguna pantalla que pida ocupar todo el ancho (`hide_sidebar`).
-    El bloque `content` se define una sola vez y son las clases del
-    contenedor las que cambian: definirlo dos veces, una por rama, es un
-    error de plantilla en Django.
-    {% endcomment %}
-    {% if user.is_authenticated and not hide_sidebar %}
-        {% include "_sidebar.html" %}
-    {% endif %}
+        <div class="sicv-topbar-spacer"></div>
 
-    <main class="{% if user.is_authenticated and not hide_sidebar %}sicv-main{% endif %}">
-        {% block content %}
-        {% endblock %}
-    </main>
+        {% if available_offices %}
+        <div class="dropdown topbar-office">
+            <a href="#" class="topbar-control dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-geo-alt-fill"></i>
+                <span>{{ active_office.name|default:"Oficina" }}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                {% for office in available_offices %}
+                <li>
+                    <form method="post" action="{% url 'organization:set_active_office' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="office" value="{{ office.pk }}">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office.name }}</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
-    <!-- Bootstrap 5 -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        {% if available_branches %}
+        <div class="dropdown">
+            <a href="#" class="topbar-control dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-building"></i>
+                <span class="topbar-branch-label">{{ active_branch.name|default:"Sede" }}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                {% for branch in available_branches %}
+                <li>
+                    <form method="post" action="{% url 'organization:set_active_branch' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="branch" value="{{ branch.pk }}">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}">{{ branch.name }}</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
-    <script>
-        /*
-         * Filtro del menú lateral.
-         *
-         * Oculta las cajas que no coinciden con lo escrito -busca tanto en
-         * el nombre de la sección como en sus opciones- y abre las que sí,
-         * para que la coincidencia se vea sin tener que desplegarla a
-         * mano. Es comodidad de navegación, no una búsqueda de datos: no
-         * consulta al servidor ni cambia lo que el usuario puede abrir.
-         */
-        (function () {
-            var filter = document.getElementById("sidebarFilter");
+        <div class="topbar-separator"></div>
 
-            if (!filter) {
-                return;
+        <div class="dropdown account-menu">
+            <a href="#" class="topbar-control dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <span class="user-avatar-mini">{{ user.username|slice:':2'|upper }}</span>
+                <span class="account-copy">
+                    {{ user.get_full_name|default:user.username }}
+                    <span class="account-role">{{ user.get_role_display }}</span>
+                </span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'accounts:profile' %}"><i class="bi bi-person me-2"></i>Mi perfil</a></li>
+                <li><a class="dropdown-item" href="{% url 'accounts:password_change' %}"><i class="bi bi-key me-2"></i>Cambiar clave</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form method="post" action="{% url 'logout' %}" class="px-2">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </div>
+</header>
+{% endif %}
+
+{% if user.is_authenticated and not hide_sidebar %}
+    {% include "_sidebar.html" %}
+{% endif %}
+
+<main class="{% if user.is_authenticated and not hide_sidebar %}sicv-main{% endif %}">
+    {% block content %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(function () {
+    var filter = document.getElementById('sidebarFilter');
+    if (!filter) return;
+    var sections = Array.prototype.slice.call(document.querySelectorAll('[data-sidebar-section]'));
+    filter.addEventListener('input', function () {
+        var term = filter.value.trim().toLowerCase();
+        sections.forEach(function (section) {
+            var matches = (section.dataset.sidebarSection || '').toLowerCase().indexOf(term) !== -1;
+            section.hidden = !!term && !matches;
+            if (term && matches) {
+                var panel = section.querySelector('.collapse');
+                if (panel) bootstrap.Collapse.getOrCreateInstance(panel, {toggle:false}).show();
             }
+        });
+    });
+})();
 
-            var boxes = Array.prototype.map.call(
-                document.querySelectorAll(".sidebar-box"),
-                function (box) {
-                    var panel = box.querySelector(".accordion-collapse");
+(function () {
+    var toggle = document.getElementById('sidebarToggleBtn');
+    if (!toggle) return;
+    var STORAGE_KEY = 'sicv-sidebar-collapsed';
+    var mobile = function () { return window.matchMedia('(max-width: 991.98px)').matches; };
 
-                    return {
-                        el: box,
-                        panel: panel,
-                        button: box.querySelector(".accordion-button"),
-                        text: (box.dataset.section || "").toLowerCase(),
-                        // Estado con el que se pintó la página: al borrar
-                        // el filtro se vuelve a él, no a uno inventado.
-                        openByDefault: panel ? panel.classList.contains("show") : false,
-                    };
-                }
-            );
+    if (!mobile()) {
+        try { document.body.classList.toggle('sidebar-collapsed', localStorage.getItem(STORAGE_KEY) === '1'); } catch(e) {}
+    }
 
-            function setOpen(box, open) {
-                if (!box.panel) {
-                    return;
-                }
-                box.panel.classList.toggle("show", open);
-                if (box.button) {
-                    box.button.classList.toggle("collapsed", !open);
-                }
-            }
-
-            filter.addEventListener("input", function () {
-                var term = filter.value.trim().toLowerCase();
-
-                boxes.forEach(function (box) {
-                    if (term === "") {
-                        box.el.hidden = false;
-                        setOpen(box, box.openByDefault);
-                        return;
-                    }
-
-                    var matches = box.text.indexOf(term) !== -1;
-                    box.el.hidden = !matches;
-                    setOpen(box, matches);
-                });
-            });
-        })();
-    </script>
-
-    <script>
-        /*
-         * Mostrar/ocultar el menú lateral.
-         *
-         * Comodidad de pantalla, no una preferencia del sistema: se recuerda
-         * en este navegador (localStorage) para que no vuelva a expandirse
-         * en cada carga, pero no viaja al servidor ni afecta a otro usuario.
-         */
-        (function () {
-            var toggle = document.getElementById("sidebarToggleBtn");
-
-            if (!toggle) {
-                return;
-            }
-
-            var STORAGE_KEY = "sicv-sidebar-collapsed";
-
-            function apply(collapsed) {
-                document.body.classList.toggle("sidebar-collapsed", collapsed);
-            }
-
-            var stored = null;
-            try {
-                stored = localStorage.getItem(STORAGE_KEY);
-            } catch (e) {
-                // Almacenamiento no disponible (navegación privada, etc.): se
-                // ignora y el menú simplemente no recuerda su estado.
-            }
-            apply(stored === "1");
-
-            toggle.addEventListener("click", function () {
-                var collapsed = !document.body.classList.contains("sidebar-collapsed");
-                apply(collapsed);
-                try {
-                    localStorage.setItem(STORAGE_KEY, collapsed ? "1" : "0");
-                } catch (e) {
-                    // Igual que arriba: sin almacenamiento, solo no persiste.
-                }
-            });
-        })();
-    </script>
-
-    {% block extra_js %}{% endblock %}
-
+    toggle.addEventListener('click', function () {
+        if (mobile()) {
+            document.body.classList.toggle('sidebar-mobile-open');
+            return;
+        }
+        var collapsed = !document.body.classList.contains('sidebar-collapsed');
+        document.body.classList.toggle('sidebar-collapsed', collapsed);
+        try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); } catch(e) {}
+    });
+})();
+</script>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

@@ -1,99 +1,93 @@
 {% comment %}
-Menú lateral del SICV.
+Navegación lateral global del SICV.
 
-Tres secciones, las mismas del sistema anterior: Clientes, Caja y
-Reportes. Todas se abren y se recorren con normalidad; lo que está
-marcado como pendiente es cada opción, porque es la opción la que
-todavía no tiene pantalla. Cada una deja de estar pendiente en cuanto se
-construye y pasa a ser un enlace real, como "Buscar cliente".
-
-No se replican del sistema anterior "Soporte" -ahí el proveedor atendía
-sus propias incidencias técnicas y ese rol ya no existe: el soporte lo
-damos nosotros-, ni "Cliente2", "Programar" y "Configurar", que no
-aportan nada que no esté ya en estas tres secciones.
+La barra se organiza por dominio funcional, no por pantallas aisladas:
+Clientes, Operaciones, Comercial y Reportes. Solo los módulos construidos son
+enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
 {% endcomment %}
 
-<aside class="sicv-sidebar">
-
-    <div class="sidebar-search">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input
-            type="text"
-            id="sidebarFilter"
-            class="form-control"
-            placeholder="Buscar opción..."
-            autocomplete="off"
-        >
+<aside class="sicv-sidebar" aria-label="Navegación principal">
+    <div class="sidebar-header d-lg-none">
+        <i class="bi bi-list"></i>
+        <span class="sidebar-header-brand">TELECABLE</span>
     </div>
 
-    <div class="accordion" id="sidebarAccordion">
+    <div class="sidebar-inner">
+        <div class="sidebar-search">
+            <i class="bi bi-search"></i>
+            <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
+        </div>
 
-        {% comment %}
-        Clientes abre por defecto: es la sección desde la que se trabaja
-        todo el día, y es donde vive la pantalla que se ve al entrar.
-        {% endcomment %}
-        <div
-            class="accordion-item sidebar-box"
-            data-section="clientes buscar cliente nuevo cliente bandeja de despacho {{ sidebar_clientes_pending_items|join:" " }}"
-        >
-            <h2 class="accordion-header">
-                <button
-                    class="accordion-button"
-                    type="button"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#sec-clientes"
-                >
-                    Clientes
-                </button>
-            </h2>
-            <div id="sec-clientes" class="accordion-collapse collapse show" data-bs-parent="#sidebarAccordion">
-                <div class="accordion-body">
-                    <a class="sidebar-link" href="{% url 'customers:search' %}">Buscar cliente</a>
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente programacion ordenes">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
+                <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarClientes">
+                <div class="sidebar-links">
+                    <a class="sidebar-link" href="{% url 'customers:search' %}"><i class="bi bi-search"></i>Buscar cliente</a>
                     {% if perms.customers.add_customer %}
-                        <a class="sidebar-link" href="{% url 'customers:create' %}">Nuevo cliente</a>
+                        <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
                     {% endif %}
                     {% if perms.work_orders.view_workorder %}
-                        <a class="sidebar-link" href="{% url 'work_orders:dispatch' %}">Bandeja de despacho</a>
+                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Programación de órdenes</a>
                     {% endif %}
+                </div>
+            </div>
+        </section>
 
+        <section class="sidebar-section" data-sidebar-section="operaciones ordenes trabajo agenda calendario tecnicos">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOperaciones" aria-expanded="true">
+                <i class="bi bi-briefcase"></i><span>Operaciones</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarOperaciones">
+                <div class="sidebar-links">
+                    {% if perms.work_orders.view_workorder %}
+                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-clipboard2-check"></i>Órdenes de trabajo</a>
+                    {% endif %}
+                    <span class="sidebar-link-pending"><span>Agenda / Calendario</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Técnicos</span><span class="pending-tag">pendiente</span></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="sidebar-section" data-sidebar-section="comercial contratos suscripciones comprobantes pagos servicios">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarComercial" aria-expanded="true">
+                <i class="bi bi-file-earmark-text"></i><span>Comercial</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarComercial">
+                <div class="sidebar-links">
+                    <span class="sidebar-link-pending"><span>Contratos</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Suscripciones</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Comprobantes</span><span class="pending-tag">pendiente</span></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="sidebar-section" data-sidebar-section="reportes dashboard actividad reciente">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
+                <i class="bi bi-pie-chart"></i><span>Reportes</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarReportes">
+                <div class="sidebar-links">
+                    <span class="sidebar-link-pending"><span>Dashboard</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Actividad reciente</span><span class="pending-tag">pendiente</span></span>
+                </div>
+            </div>
+        </section>
+
+        {% if sidebar_clientes_pending_items %}
+        <section class="sidebar-section" data-sidebar-section="otros clientes {{ sidebar_clientes_pending_items|join:' ' }}">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOtrosClientes" aria-expanded="false">
+                <i class="bi bi-three-dots"></i><span>Próximos módulos</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse" id="sidebarOtrosClientes">
+                <div class="sidebar-links">
                     {% for item in sidebar_clientes_pending_items %}
-                        <span class="sidebar-link-pending">
-                            <span>{{ item }}</span>
-                            <span class="pending-tag">pendiente</span>
-                        </span>
+                        <span class="sidebar-link-pending"><span>{{ item }}</span><span class="pending-tag">pendiente</span></span>
                     {% endfor %}
                 </div>
             </div>
-        </div>
-
-        {% for section in sidebar_pending_sections %}
-            <div
-                class="accordion-item sidebar-box"
-                data-section="{{ section.name }} {{ section.items|join:" " }}"
-            >
-                <h2 class="accordion-header">
-                    <button
-                        class="accordion-button collapsed"
-                        type="button"
-                        data-bs-toggle="collapse"
-                        data-bs-target="#sec-{{ section.name|slugify }}"
-                    >
-                        {{ section.name }}
-                    </button>
-                </h2>
-                <div id="sec-{{ section.name|slugify }}" class="accordion-collapse collapse" data-bs-parent="#sidebarAccordion">
-                    <div class="accordion-body">
-                        {% for item in section.items %}
-                            <span class="sidebar-link-pending">
-                                <span>{{ item }}</span>
-                                <span class="pending-tag">pendiente</span>
-                            </span>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        {% endfor %}
-
+        </section>
+        {% endif %}
     </div>
-
 </aside>

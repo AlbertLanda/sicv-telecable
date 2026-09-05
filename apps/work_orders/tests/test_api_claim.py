@@ -186,6 +186,7 @@ class ClaimSuccessTests(ClaimWorkOrderAPITestCase):
                 "scheduled_at",
                 "created_at",
                 "address",
+                "plan_details",
                 "detail",
                 "branch",
                 "zone",
