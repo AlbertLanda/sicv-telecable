@@ -107,13 +107,27 @@ class CustomerDashboardRedesignTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "customers/detail_dashboard.html")
-        self.assertContains(response, "Orden de trabajo abierta")
+        self.assertContains(response, "Orden de trabajo")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "Ver orden inicial")
         self.assertContains(response, "Imprimir orden inicial")
         self.assertContains(response, "Ver ficha técnica")
         self.assertContains(response, "CONT-000001")
         self.assertContains(response, "Duo 600 Mbps - Estandar 2026")
+
+    def test_dashboard_matches_the_operational_shell_and_embeds_the_map(self):
+        response = self.client.get(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "TELECABLE")
+        self.assertContains(response, "Programación de órdenes")
+        self.assertContains(response, "Actividad reciente")
+        self.assertContains(response, "Abrir en Google Maps")
+        self.assertContains(response, "maps.google.com/maps")
+        self.assertContains(response, "-11.7861026")
+        self.assertContains(response, "-75.4900202")
 
     def test_dashboard_never_offers_manual_assignment(self):
         assign_permission = Permission.objects.get(codename="assign_workorder")
