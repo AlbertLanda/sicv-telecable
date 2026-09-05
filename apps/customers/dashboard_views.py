@@ -15,6 +15,18 @@ from .views import CustomerDetailView
 class CustomerDashboardDetailView(CustomerDetailView):
     template_name = "customers/detail_dashboard.html"
 
+    def get_template_names(self):
+        """Mantiene accesible la explicación del permiso histórico.
+
+        `assign_workorder` todavía existe y se reutiliza temporalmente para
+        programación, aunque la asignación manual web ya fue retirada. Para
+        usuarios que aún lo poseen se añade solo una aclaración accesible; no
+        se renderiza enlace, botón ni formulario de asignación.
+        """
+        if self.request.user.has_perm("work_orders.assign_workorder"):
+            return ["customers/detail_dashboard_legacy_permission.html"]
+        return [self.template_name]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
