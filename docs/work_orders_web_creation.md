@@ -10,7 +10,9 @@ correlativo transaccional están en
 asignación, atención y liquidación, en
 [`work_orders_workflow.md`](work_orders_workflow.md), y la pantalla que
 despacha la OT a un técnico, en
-[`work_orders_web_assignment.md`](work_orders_web_assignment.md).
+[`work_orders_web_assignment.md`](work_orders_web_assignment.md). El
+encadenado Suscripción → Servicio → Motivo que acota los selectores está
+en [`work_orders_service_catalog.md`](work_orders_service_catalog.md).
 
 ---
 

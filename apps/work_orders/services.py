@@ -5,6 +5,8 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.services.models import Subscription
 from apps.work_orders.models import (
+    DEFINITIVE_CUT_REASONS,
+    TEMPORARY_CUT_REASONS,
     OrderType,
     WorkOrder,
     WorkOrderEvidence,
@@ -1053,9 +1055,9 @@ def _apply_cut_result(order, result_code):
     if result_code != "SUCCESSFUL":
         return
 
-    if not order.subtype:
+    if not order.reason:
         raise ValidationError(
-            "Las órdenes de corte deben indicar si el corte es temporal o definitivo."
+            "Las órdenes de corte deben indicar el motivo del corte."
         )
 
     try:
@@ -1068,19 +1070,23 @@ def _apply_cut_result(order, result_code):
     cut_detail.full_clean()
 
     subscription = order.subscription
-    subtype_code = order.subtype.code
+    reason_code = order.reason.code
 
-    if subtype_code == "TEMPORARY":
+    if reason_code in TEMPORARY_CUT_REASONS:
         subscription.status = Subscription.Status.SUSPENDED
         subscription.cut_date = timezone.localdate()
 
-    elif subtype_code == "DEFINITIVE":
+    elif reason_code in DEFINITIVE_CUT_REASONS:
         subscription.status = Subscription.Status.CANCELLED
         subscription.cut_date = timezone.localdate()
 
     else:
+        # Un motivo nuevo en el catálogo no puede cerrar un corte por
+        # omisión: decidir si suspende o cancela una suscripción es una
+        # regla explícita, no un valor por defecto.
         raise ValidationError(
-            "El subtipo de corte no es válido."
+            f"El motivo «{order.reason.name}» no indica si el corte es "
+            "temporal o definitivo."
         )
 
     subscription.save(

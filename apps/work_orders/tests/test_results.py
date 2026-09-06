@@ -48,7 +48,7 @@ class OrderResultTests(WorkOrderTestCase):
 
         order = self.create_order_in_progress(
             order_type=self.cut_type,
-            subtype=self.temporary_subtype,
+            reason=self.cut_reason,
         )
 
         CutDetail.objects.create(
@@ -70,7 +70,7 @@ class OrderResultTests(WorkOrderTestCase):
 
         order = self.create_order_in_progress(
             order_type=self.cut_type,
-            subtype=self.definitive_subtype,
+            reason=self.definitive_cut_reason,
         )
 
         CutDetail.objects.create(

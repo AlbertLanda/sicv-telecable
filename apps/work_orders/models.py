@@ -11,6 +11,49 @@ from apps.services.models import Subscription
 from apps.customers.models import CustomerAddress
 
 
+# Efecto de un corte sobre la suscripción, según su motivo.
+#
+# El catálogo ya distingue el corte temporal del definitivo en el propio
+# motivo —CORTE VOLUNTARIO frente a DEFINITIVO - MEJOR OFERTA, etc.—, así
+# que la decisión se lee de ahí. Pedir además un subtipo obligaba al ATC a
+# declarar dos veces lo mismo, con el riesgo de que se contradijeran.
+TEMPORARY_CUT_REASONS = frozenset({
+    "VOLUNTARY",
+    "DELINQUENCY",
+    "NON_PAYMENT",
+})
+
+DEFINITIVE_CUT_REASONS = frozenset({
+    "DEF_BETTER_OFFER",
+    "DEF_BAD_EXPERIENCE",
+    "DEF_MOVING",
+})
+
+
+class OrderTypeQuerySet(models.QuerySet):
+    """Consultas del catálogo de tipos de orden."""
+
+    def for_service_type(self, service_type):
+        """
+        Tipos de orden ofrecibles sobre un servicio concreto.
+
+        Un tipo sin servicios declarados es transversal: se ofrece sobre
+        cualquier suscripción. Restringir requiere declararlo de forma
+        explícita, así que un catálogo a medio configurar nunca esconde
+        opciones que el operador esperaba ver.
+        """
+
+        service_type_id = getattr(service_type, "pk", service_type)
+
+        if service_type_id is None:
+            return self.filter(service_types__isnull=True)
+
+        return self.filter(
+            models.Q(service_types__isnull=True)
+            | models.Q(service_types=service_type_id)
+        ).distinct()
+
+
 class OrderType(models.Model):
     """Catálogo de tipos de orden: Instalación, Avería, Corte, Reconexión, etc."""
 
@@ -30,6 +73,17 @@ class OrderType(models.Model):
         verbose_name="Descripción"
     )
 
+    service_types = models.ManyToManyField(
+        "services.ServiceType",
+        blank=True,
+        related_name="order_types",
+        verbose_name="Servicios que lo ofrecen",
+        help_text=(
+            "Servicios sobre los que se puede emitir este tipo de orden. "
+            "Sin marcar ninguno queda disponible para todos."
+        )
+    )
+
     is_active = models.BooleanField(
         default=True,
         verbose_name="Activo"
@@ -43,6 +97,8 @@ class OrderType(models.Model):
         auto_now=True
     )
 
+    objects = OrderTypeQuerySet.as_manager()
+
     class Meta:
         verbose_name = "Tipo de orden"
         verbose_name_plural = "Tipos de orden"
@@ -50,6 +106,18 @@ class OrderType(models.Model):
 
     def __str__(self):
         return self.name
+
+    def applies_to_service_type(self, service_type):
+        """¿Este tipo de orden es emitible sobre ese servicio?"""
+
+        service_type_id = getattr(service_type, "pk", service_type)
+
+        allowed = list(self.service_types.values_list("pk", flat=True))
+
+        if not allowed:
+            return True
+
+        return service_type_id in allowed
 
 class OrderSubtype(models.Model):
     """
@@ -361,8 +429,8 @@ class WorkOrder(models.Model):
         URGENT = "URGENT", "Urgente"
 
     class AttentionType(models.TextChoices):
-        SYSTEM = "SYSTEM", "Sistema / NOC"
-        FIELD = "FIELD", "Campo"
+        SYSTEM = "SYSTEM", "Sistema"
+        FIELD = "FIELD", "Física"
 
     # Matriz oficial de transiciones. Un estado que no aparece como clave,
     # o cuya lista está vacía, es un estado terminal: no admite salidas.
@@ -1174,17 +1242,16 @@ class CutDetail(models.Model):
                 )
             })
 
-        subtype = self.work_order.subtype
+        reason = self.work_order.reason
 
-        if not subtype:
+        if not reason:
             raise ValidationError({
                 "work_order": (
-                    "La orden de corte debe indicar si es "
-                    "temporal o definitiva."
+                    "La orden de corte debe indicar su motivo."
                 )
             })
 
-        if subtype.code == "TEMPORARY":
+        if reason.code in TEMPORARY_CUT_REASONS:
             if not self.expected_return_date:
                 raise ValidationError({
                     "expected_return_date": (
@@ -1201,7 +1268,7 @@ class CutDetail(models.Model):
                     )
                 })
 
-        elif subtype.code == "DEFINITIVE":
+        elif reason.code in DEFINITIVE_CUT_REASONS:
             if self.expected_return_date:
                 raise ValidationError({
                     "expected_return_date": (
@@ -1212,7 +1279,10 @@ class CutDetail(models.Model):
 
         else:
             raise ValidationError({
-                "work_order": "El subtipo de corte no es válido."
+                "work_order": (
+                    f"El motivo «{reason.name}» no indica si el corte "
+                    "es temporal o definitivo."
+                )
             })
 
     def __str__(self):

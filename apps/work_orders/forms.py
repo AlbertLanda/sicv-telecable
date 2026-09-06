@@ -1,13 +1,12 @@
 from datetime import date, timedelta
 
 from django import forms
+from django.db import models
 
 from apps.accounts.models import User
-from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     OrderReason,
-    OrderSubtype,
     OrderType,
     WorkOrder,
     WorkOrderEvidence,
@@ -15,7 +14,57 @@ from apps.work_orders.models import (
 )
 
 
+class SubscriptionChoiceField(forms.ModelChoiceField):
+    """
+    Suscripciones sin el nombre del abonado.
+
+    `Subscription.__str__` antepone el cliente, útil donde la suscripción
+    aparece suelta. Aquí no: el alta ocurre dentro de la ficha de ese
+    cliente, así que repetir su nombre en cada opción solo desplaza fuera
+    de la vista lo que sí distingue una suscripción de otra.
+    """
+
+    def label_from_instance(self, obj):
+        return str(obj.plan)
+
+
+class ReasonChoiceField(forms.ModelChoiceField):
+    """
+    Motivos sin el servicio delante.
+
+    `OrderReason.__str__` antepone el tipo de orden, necesario donde un
+    motivo aparece suelto —dos servicios pueden tener un «SIN SEÑAL»—.
+    Aquí no: el selector ya está filtrado por el servicio elegido justo
+    encima, así que el prefijo se repite en cada opción y empuja fuera de
+    la vista la única parte que las distingue.
+    """
+
+    def label_from_instance(self, obj):
+        return obj.name
+
+
 class WorkOrderCreateForm(forms.ModelForm):
+    subscription = SubscriptionChoiceField(
+        queryset=Subscription.objects.none(),
+        label="Suscripción",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    reason = ReasonChoiceField(
+        queryset=OrderReason.objects.none(),
+        required=False,
+        label="Motivo",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
     scheduled_at = forms.DateTimeField(
         required=False,
         label="Fecha programada",
@@ -40,10 +89,7 @@ class WorkOrderCreateForm(forms.ModelForm):
         fields = [
             "subscription",
             "order_type",
-            "subtype",
             "reason",
-            "branch",
-            "zone",
             "attention_type",
             "priority",
             "scheduled_at",
@@ -51,32 +97,7 @@ class WorkOrderCreateForm(forms.ModelForm):
         ]
 
         widgets = {
-            "subscription": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
             "order_type": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "subtype": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "reason": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "branch": forms.Select(
-                attrs={
-                    "class": "form-select",
-                }
-            ),
-            "zone": forms.Select(
                 attrs={
                     "class": "form-select",
                 }
@@ -103,12 +124,7 @@ class WorkOrderCreateForm(forms.ModelForm):
         }
 
         labels = {
-            "subscription": "Suscripción",
-            "order_type": "Tipo de orden",
-            "subtype": "Subtipo",
-            "reason": "Motivo",
-            "branch": "Sede",
-            "zone": "Zona",
+            "order_type": "Servicio",
             "attention_type": "Tipo de atención",
             "priority": "Prioridad",
             "detail": "Detalle de la solicitud",
@@ -128,13 +144,14 @@ class WorkOrderCreateForm(forms.ModelForm):
         # formulario vacío antes que uno que muestre datos de terceros.
         # ---------------------------------------------------------
 
+        # La sede y la zona no se piden: el dominio las deriva del cliente
+        # y de la dirección de la suscripción, y rechaza cualquier otra.
+        # Pedirlas solo ofrecía al operador una elección que no existía.
+
         if customer is None:
             self.fields["subscription"].queryset = (
                 Subscription.objects.none()
             )
-
-            self.fields["branch"].queryset = Branch.objects.none()
-            self.fields["zone"].queryset = Zone.objects.none()
 
         else:
             # Solo las suscripciones del cliente mostrado. Una suscripción
@@ -149,45 +166,32 @@ class WorkOrderCreateForm(forms.ModelForm):
                 .order_by("-created_at")
             )
 
-            # La sede de la orden es siempre la del cliente: se muestra para
-            # que el operador la vea, pero no es una elección abierta.
-            self.fields["branch"].queryset = (
-                Branch.objects.filter(pk=customer.branch_id)
-            )
-
-            self.fields["branch"].initial = customer.branch_id
-            self.fields["branch"].empty_label = None
-
-            # Solo zonas activas de esa sede: una zona de otra sede no es
-            # una opción válida del formulario.
-            self.fields["zone"].queryset = (
-                Zone.objects
-                .filter(
-                    branch=customer.branch_id,
-                    is_active=True,
-                )
-                .order_by("name")
-            )
-
         # ---------------------------------------------------------
         # CATÁLOGOS ACTIVOS
         #
         # Un catálogo inactivo no se ofrece ni se acepta. La coherencia
-        # entre tipo, subtipo y motivo la valida el dominio.
+        # entre servicio y motivo la valida el dominio.
         # ---------------------------------------------------------
 
-        self.fields["order_type"].queryset = (
-            OrderType.objects
-            .filter(is_active=True)
-            .order_by("name")
-        )
+        # El catálogo se acota a lo emitible sobre los servicios que el
+        # cliente realmente tiene. Ofrecer "AVERÍA CABLE" a un abonado
+        # solo-internet no es una opción: es una orden imposible que
+        # alguien acabaría creando.
+        order_types = OrderType.objects.filter(is_active=True)
 
-        self.fields["subtype"].queryset = (
-            OrderSubtype.objects
-            .filter(is_active=True)
-            .select_related("order_type")
-            .order_by("order_type__name", "name")
-        )
+        if customer is not None:
+            service_type_ids = list(
+                self.fields["subscription"].queryset
+                .values_list("service_type_id", flat=True)
+                .distinct()
+            )
+
+            order_types = order_types.filter(
+                models.Q(service_types__isnull=True)
+                | models.Q(service_types__in=service_type_ids)
+            ).distinct()
+
+        self.fields["order_type"].queryset = order_types.order_by("name")
 
         self.fields["reason"].queryset = (
             OrderReason.objects
@@ -205,21 +209,93 @@ class WorkOrderCreateForm(forms.ModelForm):
         )
 
         self.fields["order_type"].empty_label = (
-            "Seleccione el tipo de orden..."
+            "Seleccione el servicio..."
         )
 
-        self.fields["subtype"].empty_label = "Sin subtipo"
         self.fields["reason"].empty_label = "Sin motivo"
-        self.fields["zone"].empty_label = "Zona de la dirección del servicio"
 
-        self.fields["subtype"].required = False
-        self.fields["reason"].required = False
-        self.fields["zone"].required = False
-
-        self.fields["zone"].help_text = (
-            "Opcional. Si se deja vacía se usa la zona de la dirección "
-            "de la suscripción."
+        self.fields["order_type"].help_text = (
+            "Las opciones dependen del servicio de la suscripción elegida."
         )
+
+        self.fields["reason"].help_text = (
+            "Las opciones dependen del servicio elegido."
+        )
+        self.fields["reason"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        subscription = cleaned_data.get("subscription")
+        order_type = cleaned_data.get("order_type")
+
+        # -------------------------------------------------------------
+        # COHERENCIA SERVICIO <-> SUSCRIPCIÓN
+        #
+        # El encadenado del formulario ya evita elegir un servicio que no
+        # corresponde, pero el navegador no es la última palabra: un POST
+        # armado a mano llegaría igual. La regla se vuelve a comprobar
+        # aquí, donde sí es vinculante.
+        # -------------------------------------------------------------
+
+        if (
+            subscription is not None
+            and order_type is not None
+            and not order_type.applies_to_service_type(
+                subscription.service_type_id
+            )
+        ):
+            self.add_error(
+                "order_type",
+                (
+                    f"«{order_type.name}» no se emite sobre una suscripción "
+                    f"{subscription.service_type}."
+                ),
+            )
+
+        return cleaned_data
+
+    def cascade_data(self):
+        """
+        Mapa que el formulario usa para encadenar los selectores.
+
+        Se resuelve en el servidor y viaja como JSON: encadenar pidiendo
+        el catálogo por AJAX en cada cambio añadiría latencia y un
+        endpoint más que autorizar, para datos que ya están cargados.
+        """
+
+        subscriptions = {
+            str(subscription.pk): {
+                "serviceType": subscription.service_type_id,
+                "serviceCode": subscription.service_type.code,
+            }
+            for subscription in self.fields["subscription"].queryset
+        }
+
+        order_types = {
+            str(order_type.pk): {
+                "name": order_type.name,
+                # Lista vacía = transversal, se ofrece sobre cualquier
+                # servicio.
+                "serviceTypes": [
+                    service_type.pk
+                    for service_type in order_type.service_types.all()
+                ],
+            }
+            for order_type in (
+                self.fields["order_type"].queryset
+                .prefetch_related("service_types")
+            )
+        }
+
+        return {
+            "subscriptions": subscriptions,
+            "orderTypes": order_types,
+            "reasons": {
+                str(reason.pk): reason.order_type_id
+                for reason in self.fields["reason"].queryset
+            },
+        }
 
     def service_arguments(self):
         data = self.cleaned_data
@@ -228,9 +304,6 @@ class WorkOrderCreateForm(forms.ModelForm):
             "subscription": data["subscription"],
             "order_type": data["order_type"],
             "customer": self.customer,
-            "branch": data.get("branch"),
-            "zone": data.get("zone"),
-            "subtype": data.get("subtype"),
             "reason": data.get("reason"),
             "attention_type": data.get("attention_type"),
             "priority": data.get("priority"),

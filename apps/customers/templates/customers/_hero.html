@@ -1,0 +1,44 @@
+{% comment %}
+    Resumen del abonado. Se pinta con el tag `customer_hero`; los estilos
+    viven en base.html porque el bloque se comparte entre la ficha del
+    cliente y el alta de órdenes.
+{% endcomment %}
+<section class="tc-hero">
+
+    <div class="tc-hero-main">
+
+        <div class="tc-avatar">{% if customer.person_type == 'LEGAL' %}E{% else %}{{ customer.first_name|slice:':1' }}{{ customer.paternal_surname|slice:':1' }}{% endif %}</div>
+
+        <div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                {% if heading_level == 1 %}
+                    <h1 class="tc-name">{{ customer }}</h1>
+                {% else %}
+                    <h2 class="tc-name">{{ customer }}</h2>
+                {% endif %}
+                {% if customer.is_active %}<span class="tc-active">Activo</span>{% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
+            </div>
+
+            <div class="tc-ident">Código: <strong>{{ customer.code }}</strong> &nbsp;|&nbsp; {{ customer.document_type }}: <strong>{{ customer.document_number }}</strong></div>
+
+            <div class="tc-contact">
+                <span><i class="bi bi-telephone-fill"></i>{{ customer.phone|default:"No registrado" }}</span>
+                <span><i class="bi bi-envelope"></i>{{ customer.email|default:"No registrado" }}</span>
+            </div>
+        </div>
+
+        {% if primary_address %}
+        <div class="tc-location">
+            <i class="bi bi-geo-alt-fill"></i>
+            <div><strong>{{ primary_address.district|default:customer.branch.name }}</strong>{{ primary_address.address }}{% if primary_address.district %}<br>{{ primary_address.district }}{% endif %}</div>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <div class="tc-stats">
+        <div class="tc-stat"><div class="metric">{{ active_subscription_count }} <i class="bi bi-wifi"></i></div><div class="label">Servicio activo</div></div>
+        <div class="tc-stat"><div class="metric">{{ open_order_count }} <i class="bi bi-tools"></i></div><div class="label">OT abierta</div></div>
+    </div>
+
+</section>

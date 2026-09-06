@@ -17,7 +17,6 @@ from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.work_orders.models import (
-    OrderSubtype,
     OrderType,
     WorkOrder,
     WorkOrderSequence,
@@ -52,10 +51,7 @@ class WorkOrderWebCreationTestCase(WorkOrderTestCase):
         payload = {
             "subscription": self.subscription.pk,
             "order_type": self.installation_type.pk,
-            "subtype": "",
             "reason": self.installation_reason.pk,
-            "branch": self.branch.pk,
-            "zone": self.zone.pk,
             "attention_type": WorkOrder.AttentionType.FIELD,
             "priority": WorkOrder.Priority.NORMAL,
             "scheduled_at": "",
@@ -268,7 +264,7 @@ class WorkOrderCreateViewSuccessTests(WorkOrderWebCreationTestCase):
     def test_optional_fields_may_be_omitted(self):
         response = self.client.post(
             self.url,
-            self.valid_payload(reason="", zone="", detail=""),
+            self.valid_payload(reason="", detail=""),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -276,7 +272,7 @@ class WorkOrderCreateViewSuccessTests(WorkOrderWebCreationTestCase):
         order = WorkOrder.objects.get()
 
         self.assertIsNone(order.reason)
-        # Sin zona explícita el servicio toma la de la dirección del servicio.
+        # El alta no pide zona: la toma de la dirección del servicio.
         self.assertEqual(order.zone, self.zone)
 
 
@@ -305,7 +301,8 @@ class WorkOrderCreateViewScopeTests(WorkOrderWebCreationTestCase):
         self.assertIn(self.subscription, offered)
         self.assertNotIn(foreign_subscription, offered)
 
-    def test_rejects_a_zone_from_another_branch(self):
+    def test_a_zone_sent_by_hand_does_not_displace_the_address_zone(self):
+        """El alta no pide zona: la deriva, y no acepta que se la impongan."""
         other_branch = Branch.objects.create(code="SED02", name="Sede Sur")
 
         other_zone = Zone.objects.create(
@@ -318,11 +315,13 @@ class WorkOrderCreateViewScopeTests(WorkOrderWebCreationTestCase):
             self.valid_payload(zone=other_zone.pk),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("zone", response.context["form"].errors)
-        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
 
-    def test_rejects_a_branch_that_is_not_the_customer_branch(self):
+        order = WorkOrder.objects.get()
+
+        self.assertEqual(order.zone, self.zone)
+
+    def test_a_branch_sent_by_hand_does_not_displace_the_customer_branch(self):
         other_branch = Branch.objects.create(code="SED03", name="Sede Este")
 
         response = self.client.post(
@@ -330,9 +329,11 @@ class WorkOrderCreateViewScopeTests(WorkOrderWebCreationTestCase):
             self.valid_payload(branch=other_branch.pk),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("branch", response.context["form"].errors)
-        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
+
+        order = WorkOrder.objects.get()
+
+        self.assertEqual(order.branch, self.customer.branch)
 
 
 class WorkOrderCreateViewCatalogTests(WorkOrderWebCreationTestCase):
@@ -352,23 +353,6 @@ class WorkOrderCreateViewCatalogTests(WorkOrderWebCreationTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("order_type", response.context["form"].errors)
-        self.assertEqual(WorkOrder.objects.count(), 0)
-
-    def test_rejects_an_inactive_subtype(self):
-        inactive_subtype = OrderSubtype.objects.create(
-            order_type=self.installation_type,
-            code="AERIAL",
-            name="Instalación aérea",
-            is_active=False,
-        )
-
-        response = self.client.post(
-            self.url,
-            self.valid_payload(subtype=inactive_subtype.pk),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("subtype", response.context["form"].errors)
         self.assertEqual(WorkOrder.objects.count(), 0)
 
     def test_rejects_an_inactive_reason(self):
@@ -392,16 +376,16 @@ class WorkOrderCreateViewCatalogTests(WorkOrderWebCreationTestCase):
         self.assertIn(self.installation_type, offered)
         self.assertNotIn(self.cut_type, offered)
 
-    def test_rejects_a_subtype_from_another_order_type(self):
-        """Prueba 5: el subtipo de Corte no vale para una Instalación."""
+    def test_a_subtype_sent_by_hand_never_reaches_the_order(self):
+        """El alta no expone subtipo, así que tampoco lo acepta por detrás."""
         response = self.client.post(
             self.url,
             self.valid_payload(subtype=self.temporary_subtype.pk),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("subtype", response.context["form"].errors)
-        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
+
+        self.assertIsNone(WorkOrder.objects.get().subtype)
 
     def test_rejects_a_reason_from_another_order_type(self):
         response = self.client.post(

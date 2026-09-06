@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load customer_ui %}
 
 {% block title %}Nueva orden de trabajo - {{ customer }}{% endblock %}
 
@@ -31,6 +32,16 @@
     </div>
 
 
+    {% comment %}
+        Sobre quién se emite la orden. Mismo bloque que la ficha del
+        cliente: el ATC no debería tener que reconocer dos resúmenes
+        distintos del mismo abonado.
+    {% endcomment %}
+    <div class="mb-4">
+        {% customer_hero customer %}
+    </div>
+
+
     <div class="card card-custom shadow-sm">
 
         <div class="card-header bg-primary text-white fw-bold">
@@ -38,27 +49,6 @@
         </div>
 
         <div class="card-body">
-
-            <!-- CLIENTE: CONTEXTO DE SERVIDOR, NO EDITABLE -->
-
-            <div class="alert alert-info">
-
-                <strong>Cliente:</strong>
-                {{ customer.code }} - {{ customer }}
-
-                {% if customer.document_number %}
-                    <span class="ms-2">
-                        {{ customer.document_type }}
-                        {{ customer.document_number }}
-                    </span>
-                {% endif %}
-
-                <span class="ms-2">
-                    <strong>Sede:</strong> {{ customer.branch }}
-                </span>
-
-            </div>
-
 
             {% if not has_subscriptions %}
 
@@ -111,7 +101,7 @@
                     </div>
 
 
-                    <!-- TIPO DE ORDEN -->
+                    <!-- SERVICIO -->
 
                     <div class="col-md-6">
 
@@ -129,28 +119,8 @@
                             <div class="text-danger small">{{ error }}</div>
                         {% endfor %}
 
-                    </div>
-
-
-                    <!-- SUBTIPO -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.subtype.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.subtype.label }}
-                        </label>
-
-                        {{ form.subtype }}
-
-                        {% for error in form.subtype.errors %}
-                            <div class="text-danger small">{{ error }}</div>
-                        {% endfor %}
-
                         <div class="form-text">
-                            Solo cuando el tipo de orden lo requiera.
+                            {{ form.order_type.help_text }}
                         </div>
 
                     </div>
@@ -174,55 +144,7 @@
                         {% endfor %}
 
                         <div class="form-text">
-                            Debe corresponder al tipo de orden seleccionado.
-                        </div>
-
-                    </div>
-
-
-                    <!-- SEDE -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.branch.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.branch.label }}
-                        </label>
-
-                        {{ form.branch }}
-
-                        {% for error in form.branch.errors %}
-                            <div class="text-danger small">{{ error }}</div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            La sede de la orden es la del cliente.
-                        </div>
-
-                    </div>
-
-
-                    <!-- ZONA -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.zone.id_for_label }}"
-                            class="form-label fw-semibold"
-                        >
-                            {{ form.zone.label }}
-                        </label>
-
-                        {{ form.zone }}
-
-                        {% for error in form.zone.errors %}
-                            <div class="text-danger small">{{ error }}</div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            {{ form.zone.help_text }}
+                            {{ form.reason.help_text }}
                         </div>
 
                     </div>
@@ -348,4 +270,148 @@
 
 </div>
 
+{% endblock %}
+
+
+{% block extra_js %}
+{{ form.cascade_data|json_script:"wo-cascade" }}
+<script>
+(function () {
+    "use strict";
+
+    var payload = document.getElementById("wo-cascade");
+    var subscription = document.getElementById("id_subscription");
+    var orderType = document.getElementById("id_order_type");
+    var reason = document.getElementById("id_reason");
+
+    if (!payload || !subscription || !orderType) {
+        return;
+    }
+
+    var data = JSON.parse(payload.textContent);
+
+    // Copia de las opciones tal como las envió el servidor. Filtrar
+    // borra nodos del DOM, así que sin esta copia no habría a dónde
+    // volver cuando el operador cambia de suscripción.
+    function snapshot(select) {
+        return Array.prototype.map.call(select.options, function (option) {
+            return { value: option.value, label: option.textContent.trim() };
+        });
+    }
+
+    var original = {
+        orderType: snapshot(orderType),
+        reason: reason ? snapshot(reason) : []
+    };
+
+    // Repinta un selector conservando lo elegido, pero solo si sigue
+    // siendo una opción válida: mantener una selección que ya no aplica
+    // enviaría al servidor algo que el formulario va a rechazar.
+    function render(select, options) {
+        var previous = select.value;
+
+        var survives = options.some(function (option) {
+            return option.value === previous;
+        });
+
+        select.innerHTML = "";
+
+        options.forEach(function (option) {
+            var node = document.createElement("option");
+            node.value = option.value;
+            node.textContent = option.label;
+            select.appendChild(node);
+        });
+
+        select.value = survives ? previous : "";
+    }
+
+    function currentService() {
+        return data.subscriptions[subscription.value] || null;
+    }
+
+    function refreshOrderTypes() {
+        var service = currentService();
+
+        var options = original.orderType
+            .filter(function (option) {
+                if (!option.value) {
+                    return true;
+                }
+
+                if (!service) {
+                    return true;
+                }
+
+                var meta = data.orderTypes[option.value];
+
+                if (!meta) {
+                    return true;
+                }
+
+                // Sin servicios declarados el tipo es transversal.
+                return (
+                    meta.serviceTypes.length === 0 ||
+                    meta.serviceTypes.indexOf(service.serviceType) !== -1
+                );
+            })
+            .map(function (option) {
+                if (!option.value || !service) {
+                    return option;
+                }
+
+                var meta = data.orderTypes[option.value];
+
+                return {
+                    value: option.value,
+                    label:
+                        service.serviceCode +
+                        " - " +
+                        (meta ? meta.name : option.label)
+                };
+            });
+
+        render(orderType, options);
+    }
+
+    function refreshDependant(select, options, ownerByOption) {
+        if (!select) {
+            return;
+        }
+
+        var chosen = orderType.value;
+
+        render(
+            select,
+            options.filter(function (option) {
+                if (!option.value) {
+                    return true;
+                }
+
+                if (!chosen) {
+                    return false;
+                }
+
+                return String(ownerByOption[option.value]) === chosen;
+            })
+        );
+    }
+
+    function refreshBelowOrderType() {
+        refreshDependant(reason, original.reason, data.reasons);
+    }
+
+    subscription.addEventListener("change", function () {
+        refreshOrderTypes();
+        refreshBelowOrderType();
+    });
+
+    orderType.addEventListener("change", refreshBelowOrderType);
+
+    // Primera pasada: la página puede llegar con una suscripción ya
+    // elegida, o repintada tras un POST inválido.
+    refreshOrderTypes();
+    refreshBelowOrderType();
+})();
+</script>
 {% endblock %}

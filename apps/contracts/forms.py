@@ -269,7 +269,10 @@ class InstallationWorkOrderForm(forms.Form):
     # invalidado por ChoiceField antes de llamar al dominio.
     attention_type = forms.ChoiceField(
         choices=[
-            (WorkOrder.AttentionType.FIELD, "Campo"),
+            (
+                WorkOrder.AttentionType.FIELD,
+                WorkOrder.AttentionType.FIELD.label,
+            ),
         ],
         required=False,
         initial=WorkOrder.AttentionType.FIELD,

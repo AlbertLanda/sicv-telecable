@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load customer_ui %}
 
 {% block title %}Ficha de {{ customer }} - SICV{% endblock %}
 
@@ -18,34 +19,9 @@
         --tc-success: #0b9a52;
     }
 
-    body { background: var(--tc-bg) !important; color: var(--tc-text); }
-    body > .navbar-sicv, .sicv-sidebar { display: none !important; }
-    .sicv-main { margin-left: 0 !important; padding: 0 !important; }
+    body { color: var(--tc-text); }
 
-    .tc-topbar {
-        position: sticky; top: 0; z-index: 1040;
-        height: 60px; background: linear-gradient(90deg, #104c7f 0%, #0b416f 100%);
-        color: #fff; display: flex; align-items: center; padding: 0 18px;
-        box-shadow: 0 2px 8px rgba(8, 45, 78, .18);
-    }
-    .tc-brand { display:flex; align-items:center; gap:14px; min-width: 250px; }
-    .tc-brand .menu-icon { font-size: 1.25rem; opacity:.95; }
-    .tc-brand strong { font-size: 1.35rem; letter-spacing:.035em; }
-    .tc-topnav { display:flex; gap: 6px; align-items:center; flex:1; }
-    .tc-topnav a { color:#fff; text-decoration:none; padding:10px 14px; border-radius:5px; font-size:.86rem; font-weight:600; opacity:.92; }
-    .tc-topnav a.active, .tc-topnav a:hover { background:rgba(255,255,255,.12); opacity:1; }
-    .tc-top-actions { display:flex; align-items:center; gap:16px; font-size:.84rem; }
-    .tc-avatar-sm { width:34px; height:34px; border-radius:50%; background:#e8f3ff; color:#2370c7; display:flex; align-items:center; justify-content:center; font-weight:700; }
-
-    .tc-layout { display:grid; grid-template-columns: 220px minmax(0,1fr); min-height: calc(100vh - 60px); }
-    .tc-sidebar { background:#fff; border-right:1px solid var(--tc-border); padding:16px 10px; }
-    .tc-side-title { font-size:.78rem; font-weight:800; color:#27496f; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; }
-    .tc-side-link { display:flex; align-items:center; gap:10px; color:#47617f; text-decoration:none; padding:9px 12px; border-radius:5px; font-size:.8rem; margin-bottom:2px; }
-    .tc-side-link:hover, .tc-side-link.active { background:#eef5fb; color:var(--tc-blue); font-weight:600; }
-    .tc-side-link i { width:18px; color:#315f8d; }
-    .tc-side-separator { margin-top:14px; }
-
-    .tc-content { padding: 20px 22px 14px; min-width:0; }
+    .tc-content { min-width:0; }
     .tc-breadcrumb { font-size:.77rem; color:#6f8197; margin-bottom:18px; }
     .tc-breadcrumb strong { color:#24486f; }
     .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -59,22 +35,9 @@
 
     .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
 
-    .tc-hero { margin-top:14px; padding:14px 16px; display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:18px; align-items:center; }
-    .tc-hero-main { display:grid; grid-template-columns:74px minmax(0,1fr) minmax(220px, 330px); gap:16px; align-items:center; }
-    .tc-avatar { width:62px; height:62px; border-radius:50%; background:linear-gradient(145deg,#1c7dff,#2f67e8); color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.45rem; font-weight:700; }
-    .tc-name { font-size:1.12rem; font-weight:800; margin:0 0 4px; color:#123c6d; text-transform:uppercase; }
-    .tc-active { display:inline-flex; align-items:center; background:#d9f5e5; border:1px solid #9fddb9; color:#197a46; border-radius:5px; padding:2px 10px; font-size:.72rem; font-weight:700; }
-    .tc-ident { font-size:.78rem; color:#4e6581; }
-    .tc-contact { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; font-size:.8rem; color:#18426e; }
-    .tc-contact i { margin-right:6px; }
-    .tc-location { display:flex; gap:10px; align-items:flex-start; font-size:.78rem; color:#4d6178; }
-    .tc-location i { color:var(--tc-blue); font-size:1.1rem; margin-top:2px; }
-    .tc-location strong { color:#153f6f; display:block; margin-bottom:2px; }
-    .tc-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .tc-stat { background:#f8fafc; border:1px solid #edf1f5; border-radius:7px; padding:15px 10px; text-align:center; min-height:90px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-    .tc-stat .metric { font-size:1.25rem; color:#123f70; font-weight:700; }
-    .tc-stat .label { font-size:.72rem; color:#64748b; margin-top:4px; }
-    .tc-stat i { margin-left:4px; color:#12a465; }
+    /* El resumen del abonado (.tc-hero) se define en base.html: lo
+       comparte con el alta de órdenes. Aquí solo su separación. */
+    .tc-hero { margin-top:14px; }
 
     .tc-order { margin-top:12px; padding:14px 16px; background:linear-gradient(90deg,#fff9e7 0%,#fffefa 100%); border:1px solid #f2ce63; border-left:6px solid var(--tc-warning); display:grid; grid-template-columns:70px minmax(0,1fr) 360px; gap:16px; align-items:center; }
     .tc-order-icon { width:56px; height:56px; border-radius:50%; background:#ffbd22; color:#111; display:flex; align-items:center; justify-content:center; font-size:1.65rem; }
@@ -118,28 +81,17 @@
     .tc-footer { display:flex; justify-content:space-between; font-size:.66rem; color:#8897a8; margin-top:18px; padding:0 2px 8px; }
 
     @media (max-width: 1200px) {
-        .tc-layout { grid-template-columns: 190px minmax(0,1fr); }
-        .tc-brand { min-width: 210px; }
-        .tc-topnav a { padding:9px 10px; }
         .tc-order { grid-template-columns:60px minmax(0,1fr); }
         .tc-order-actions { grid-column:1/-1; }
-        .tc-hero { grid-template-columns:1fr; }
     }
     @media (max-width: 900px) {
-        .tc-sidebar, .tc-topnav { display:none; }
-        .tc-layout { grid-template-columns:1fr; }
-        .tc-brand { min-width:0; flex:1; }
         .tc-grid { grid-template-columns:1fr; }
         .tc-tabs { grid-template-columns:repeat(3,1fr); }
-        .tc-hero-main { grid-template-columns:64px 1fr; }
-        .tc-location { grid-column:1/-1; }
     }
     @media (max-width: 600px) {
-        .tc-content { padding:14px 10px; }
-        .tc-top-actions .branch-name, .tc-top-actions .user-name { display:none; }
         .tc-order { grid-template-columns:1fr; }
         .tc-order-icon { display:none; }
-        .tc-order-actions, .tc-stats, .tc-tabs { grid-template-columns:1fr 1fr; }
+        .tc-order-actions, .tc-tabs { grid-template-columns:1fr 1fr; }
         .tc-data-grid, .tc-map-layout { grid-template-columns:1fr; }
         .tc-map { height:190px; }
     }
@@ -147,49 +99,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="tc-topbar">
-    <div class="tc-brand">
-        <i class="bi bi-list menu-icon"></i>
-        <strong>TELECABLE</strong>
-    </div>
-    <nav class="tc-topnav">
-        <a href="{% url 'customers:search' %}" class="active"><i class="bi bi-people me-2"></i>Clientes</a>
-        <a href="#ordenes"><i class="bi bi-clipboard2-check me-2"></i>Órdenes de trabajo</a>
-        <a href="#actividad"><i class="bi bi-bar-chart-line me-2"></i>Reportes</a>
-        <a href="#"><i class="bi bi-gear me-2"></i>Configuración</a>
-    </nav>
-    <div class="tc-top-actions">
-        <span class="branch-name"><i class="bi bi-geo-alt-fill me-1"></i>{{ active_branch.name|default:customer.branch.name }} <i class="bi bi-chevron-down ms-1"></i></span>
-        <i class="bi bi-bell"></i>
-        <div class="tc-avatar-sm">{{ user.username|slice:':2'|upper }}</div>
-        <span class="user-name"><strong>{{ user.username }}</strong><br><small>{{ user.get_role_display }}</small></span>
-        <i class="bi bi-chevron-down"></i>
-    </div>
-</div>
-
-<div class="tc-layout">
-    <aside class="tc-sidebar">
-        <div class="tc-side-title"><span><i class="bi bi-people me-2"></i>Clientes</span><i class="bi bi-chevron-down"></i></div>
-        <a class="tc-side-link" href="{% url 'customers:search' %}"><i class="bi bi-search"></i>Buscar cliente</a>
-        <a class="tc-side-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
-        <a class="tc-side-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar-event"></i>Programación de órdenes</a>
-
-        <div class="tc-side-title tc-side-separator"><span><i class="bi bi-briefcase me-2"></i>Operaciones</span><i class="bi bi-chevron-down"></i></div>
-        <a class="tc-side-link active" href="#ordenes"><i class="bi bi-clipboard2-check"></i>Órdenes de trabajo</a>
-        <a class="tc-side-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar3"></i>Agenda / Calendario</a>
-        <a class="tc-side-link" href="#"><i class="bi bi-people"></i>Técnicos</a>
-
-        <div class="tc-side-title tc-side-separator"><span><i class="bi bi-file-earmark-text me-2"></i>Comercial</span><i class="bi bi-chevron-down"></i></div>
-        <a class="tc-side-link" href="#contratos"><i class="bi bi-file-earmark-text"></i>Contratos</a>
-        <a class="tc-side-link" href="#suscripciones"><i class="bi bi-wifi"></i>Suscripciones</a>
-        <a class="tc-side-link" href="#"><i class="bi bi-receipt"></i>Comprobantes</a>
-
-        <div class="tc-side-title tc-side-separator"><span><i class="bi bi-pie-chart me-2"></i>Reportes</span><i class="bi bi-chevron-down"></i></div>
-        <a class="tc-side-link" href="#actividad"><i class="bi bi-bar-chart-line"></i>Dashboard</a>
-        <a class="tc-side-link" href="#actividad"><i class="bi bi-clock-history"></i>Actividad reciente</a>
-    </aside>
-
-    <main class="tc-content">
+<div class="tc-content">
         <div class="tc-toolbar">
             <div class="tc-breadcrumb">Clientes <i class="bi bi-chevron-right mx-2"></i><strong>Ficha del cliente</strong></div>
             <div class="tc-toolbar-actions">
@@ -202,32 +112,8 @@
 
         {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }} mt-3">{{ message }}</div>{% endfor %}{% endif %}
 
-        <section class="tc-card tc-hero">
-            <div class="tc-hero-main">
-                <div class="tc-avatar">{% if customer.person_type == 'LEGAL' %}E{% else %}{{ customer.first_name|slice:':1' }}{{ customer.paternal_surname|slice:':1' }}{% endif %}</div>
-                <div>
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <h1 class="tc-name">{{ customer }}</h1>
-                        {% if customer.is_active %}<span class="tc-active">Activo</span>{% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
-                    </div>
-                    <div class="tc-ident">Código: <strong>{{ customer.code }}</strong> &nbsp;|&nbsp; {{ customer.document_type }}: <strong>{{ customer.document_number }}</strong></div>
-                    <div class="tc-contact">
-                        <span><i class="bi bi-telephone-fill"></i>{{ customer.phone|default:"No registrado" }}</span>
-                        <span><i class="bi bi-envelope"></i>{{ customer.email|default:"No registrado" }}</span>
-                    </div>
-                </div>
-                {% if primary_address %}
-                <div class="tc-location">
-                    <i class="bi bi-geo-alt-fill"></i>
-                    <div><strong>{{ primary_address.district|default:customer.branch.name }}</strong>{{ primary_address.address }}{% if primary_address.district %}<br>{{ primary_address.district }}{% endif %}</div>
-                </div>
-                {% endif %}
-            </div>
-            <div class="tc-stats">
-                <div class="tc-stat"><div class="metric">{{ active_subscription_count }} <i class="bi bi-wifi"></i></div><div class="label">Servicio activo</div></div>
-                <div class="tc-stat"><div class="metric">{{ open_order_count }} <i class="bi bi-tools"></i></div><div class="label">OT abierta</div></div>
-            </div>
-        </section>
+        {# El abonado encabeza su propia ficha: aquí sí es el h1. #}
+        {% customer_hero customer heading_level=1 %}
 
         {% if featured_open_order %}
         <section class="tc-card tc-order">
@@ -364,6 +250,5 @@
         </section>
 
         <footer class="tc-footer"><span>© 2026 Telecable. Todos los derechos reservados.</span><span>SICV - Sistema Integral Comercial y de Operaciones &nbsp;&nbsp; v1.0.0</span></footer>
-    </main>
 </div>
 {% endblock %}
