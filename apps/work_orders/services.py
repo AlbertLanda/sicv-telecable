@@ -136,7 +136,7 @@ def _resolve_zone(subscription, zone, branch):
     return resolved_zone
 
 
-def _validate_creation_catalogs(order_type, subtype, reason, cause):
+def _validate_creation_catalogs(subscription, order_type, subtype, reason, cause):
     if order_type is None or order_type.pk is None:
         raise ValidationError(
             "Debe indicar un tipo de orden registrado."
@@ -146,6 +146,11 @@ def _validate_creation_catalogs(order_type, subtype, reason, cause):
         raise ValidationError(
             "El tipo de orden seleccionado no está activo."
         )
+
+    if not order_type.applies_to_service_type(subscription.service_type_id):
+        raise ValidationError({
+            "order_type": f"«{order_type.name}» no se emite sobre una suscripción {subscription.service_type}."
+        })
 
     if subtype is not None and not subtype.is_active:
         raise ValidationError(
@@ -273,7 +278,7 @@ def create_work_order(
         )
 
     _validate_creation_subscription(subscription, customer)
-    _validate_creation_catalogs(order_type, subtype, reason, cause)
+    _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
 
     branch = _resolve_branch(subscription, branch)

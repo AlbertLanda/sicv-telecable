@@ -18,7 +18,9 @@ from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.forms import WorkOrderCreateForm
 from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 from apps.work_orders.tests.base import WorkOrderTestCase
+from django.core.exceptions import ValidationError
 
+from apps.work_orders.services import create_work_order
 
 class OrderTypeScopeTests(WorkOrderTestCase):
     """Ámbito por servicio del catálogo de tipos de orden."""
@@ -156,6 +158,35 @@ class WorkOrderCreateFormScopeTests(OrderTypeScopeTests):
             data["reasons"][str(self.installation_reason.pk)],
             self.installation_type.pk,
         )
+
+class CreateWorkOrderServiceScopeTests(OrderTypeScopeTests):
+    """create_work_order() aplica el ámbito aunque no medie el formulario.
+
+    Antes de esto la coherencia servicio<->tipo de orden solo se validaba
+    en WorkOrderCreateForm.clean(); un llamador que no pase por ahí -la API
+    técnica, create_installation_work_order(), un POST armado a mano-
+    la saltaba.
+    """
+
+    def test_create_work_order_rechaza_un_tipo_que_no_corresponde_al_servicio(self):
+        with self.assertRaises(ValidationError) as ctx:
+            create_work_order(
+                subscription=self.subscription,  # INTERNET
+                order_type=self.cable_fault,      # solo CABLE
+                created_by=self.atc_user,
+            )
+
+        self.assertIn("AVERÍA CABLE", str(ctx.exception))
+
+    def test_create_work_order_acepta_un_tipo_transversal(self):
+        order = create_work_order(
+            subscription=self.subscription,
+            order_type=self.installation_type,
+            created_by=self.atc_user,
+            reason=self.installation_reason,
+        )
+
+        self.assertEqual(order.order_type, self.installation_type)
 
 
 class WorkOrderCreateViewCascadeTests(WorkOrderTestCase):
