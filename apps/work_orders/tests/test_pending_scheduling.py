@@ -36,10 +36,8 @@ class PendingWorkOrderSchedulingTests(ScheduleBoardTestCase):
         self.assertTrue(response.json()["ok"])
         self.assertEqual(order.status, WorkOrder.Status.PENDING)
         self.assertIsNone(order.assigned_technician)
-        self.assertEqual(
-            timezone.localtime(order.scheduled_at).date(),
-            target,
-        )
+        self.assertIsNone(order.scheduled_at)
+        self.assertEqual(order.scheduled_date, target)
         self.assertEqual(order.reprogrammings.count(), 1)
         self.assertEqual(order.status_history.count(), 0)
 

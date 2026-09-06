@@ -653,6 +653,17 @@ class WorkOrder(models.Model):
         verbose_name="Fecha programada de atención"
     )
 
+    scheduled_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Día programado (sin hora)",
+        help_text=(
+            "Se usa cuando el cliente solo comprometió un día de atención, "
+            "sin hora. Nunca coexiste con scheduled_at: si hay hora pactada, "
+            "va en scheduled_at y este campo queda vacío."
+        ),
+    )
+
     started_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -708,6 +719,14 @@ class WorkOrder(models.Model):
 
     def clean(self):
         super().clean()
+
+        if self.scheduled_at and self.scheduled_date:
+            raise ValidationError({
+                "scheduled_date": (
+                    "No puede coexistir con scheduled_at: o hay hora "
+                    "pactada, o solo día."
+                )
+            })
 
         if (
             self.subtype
@@ -776,6 +795,13 @@ class WorkOrder(models.Model):
         solo evita ofrecer una acción que el dominio va a rechazar.
         """
         return self.status in self.ASSIGNABLE_STATUSES
+
+    @property
+    def agenda_date(self):
+        """Día para agenda/calendario, exista o no una hora pactada."""
+        if self.scheduled_at:
+            return timezone.localtime(self.scheduled_at).date()
+        return self.scheduled_date
 
     @property
     def can_start_attention(self):
@@ -969,16 +995,26 @@ class WorkOrder(models.Model):
         return self.started_at
 
     @transaction.atomic
-    def reprogram(self, new_schedule, user=None, reason=""):
+    def reprogram(self, new_schedule=None, new_schedule_date=None, user=None, reason=""):
         """
         Reprograma la atención conservando el histórico.
 
-        Guarda la fecha anterior en WorkOrderReprogramming, actualiza
-        scheduled_at y mueve la orden a REPROGRAMMED.
+        Acepta fecha+hora (`new_schedule`, datetime) o solo día
+        (`new_schedule_date`, date) -exactamente uno de los dos-, para el
+        caso en que el cliente solo comprometió el día. Guarda el estado
+        anterior en WorkOrderReprogramming, actualiza
+        scheduled_at/scheduled_date y mueve la orden a REPROGRAMMED.
         """
-        if new_schedule is None:
+        if new_schedule is None and new_schedule_date is None:
             raise ValidationError({
                 "scheduled_at": "Debe indicar la nueva fecha de atención."
+            })
+
+        if new_schedule is not None and new_schedule_date is not None:
+            raise ValidationError({
+                "scheduled_at": (
+                    "No puede indicar hora y día-sin-hora a la vez."
+                )
             })
 
         if not self.can_transition_to(self.Status.REPROGRAMMED):
@@ -990,8 +1026,13 @@ class WorkOrder(models.Model):
             })
 
         previous_schedule = self.scheduled_at
+        previous_schedule_date = self.scheduled_date
 
-        if previous_schedule and new_schedule == previous_schedule:
+        if (
+            new_schedule is not None
+            and previous_schedule
+            and new_schedule == previous_schedule
+        ):
             raise ValidationError({
                 "scheduled_at": (
                     "La nueva fecha debe ser diferente "
@@ -999,23 +1040,45 @@ class WorkOrder(models.Model):
                 )
             })
 
-        if new_schedule <= timezone.now():
+        if (
+            new_schedule_date is not None
+            and previous_schedule is None
+            and previous_schedule_date == new_schedule_date
+        ):
+            raise ValidationError({
+                "scheduled_date": (
+                    "El nuevo día debe ser diferente "
+                    "al día programado actual."
+                )
+            })
+
+        if new_schedule is not None and new_schedule <= timezone.now():
             raise ValidationError({
                 "scheduled_at": (
                     "La nueva fecha de atención debe ser futura."
                 )
             })
 
+        if new_schedule_date is not None and new_schedule_date < timezone.localdate():
+            raise ValidationError({
+                "scheduled_date": (
+                    "El nuevo día de atención debe ser hoy o una fecha futura."
+                )
+            })
+
         reprogramming = WorkOrderReprogramming.objects.create(
             work_order=self,
             previous_schedule=previous_schedule,
+            previous_schedule_date=previous_schedule_date,
             new_schedule=new_schedule,
+            new_schedule_date=new_schedule_date,
             reason=reason,
             created_by=user,
         )
 
         self.scheduled_at = new_schedule
-        self.save(update_fields=["scheduled_at", "updated_at"])
+        self.scheduled_date = new_schedule_date
+        self.save(update_fields=["scheduled_at", "scheduled_date", "updated_at"])
 
         self.change_status(
             self.Status.REPROGRAMMED,
@@ -1157,9 +1220,23 @@ class WorkOrderReprogramming(models.Model):
         verbose_name="Fecha programada anterior"
     )
 
+    previous_schedule_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Día programado anterior (sin hora)"
+    )
+
     new_schedule = models.DateTimeField(
+        null=True,
+        blank=True,
         verbose_name="Nueva fecha programada"
     )
+
+    new_schedule_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Nuevo día programado (sin hora)"
+    )    
 
     reason = models.TextField(
         blank=True,
@@ -1189,8 +1266,20 @@ class WorkOrderReprogramming(models.Model):
             models.Index(fields=["work_order"], name="wo_reprog_order_idx"),
         ]
 
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(new_schedule__isnull=False, new_schedule_date__isnull=True)
+                    | models.Q(new_schedule__isnull=True, new_schedule_date__isnull=False)
+                ),
+                name="wo_reprog_exactly_one_new_schedule",
+            ),
+        ]
+
     def __str__(self):
-        return f"{self.work_order.order_number}: {self.new_schedule:%d/%m/%Y %H:%M}"
+        if self.new_schedule:
+            return f"{self.work_order.order_number}: {self.new_schedule:%d/%m/%Y %H:%M}"
+        return f"{self.work_order.order_number}: {self.new_schedule_date:%d/%m/%Y} (sin hora)"
 
 
 class CutDetail(models.Model):

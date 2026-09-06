@@ -648,14 +648,19 @@ def _open_orders_for_schedule(request):
 
 
 def _schedule_stats(orders, week_start, today):
-    # Contar en SQL: no cargar todas las órdenes históricas para mostrar una
-    # semana. __date usa la zona configurada (Lima), igual que las columnas.
+    week_end = week_start + timedelta(days=6)
     return orders.aggregate(
-        unscheduled=Count("pk", filter=Q(scheduled_at__isnull=True)),
-        week=Count("pk", filter=Q(scheduled_at__date__range=(
-            week_start, week_start + timedelta(days=6),
-        ))),
-        overdue=Count("pk", filter=Q(scheduled_at__date__lt=today)),
+        unscheduled=Count("pk", filter=Q(
+            scheduled_at__isnull=True, scheduled_date__isnull=True,
+        )),
+        week=Count("pk", filter=(
+            Q(scheduled_at__isnull=False, scheduled_at__date__range=(week_start, week_end))
+            | Q(scheduled_at__isnull=True, scheduled_date__range=(week_start, week_end))
+        )),
+        overdue=Count("pk", filter=(
+            Q(scheduled_at__isnull=False, scheduled_at__date__lt=today)
+            | Q(scheduled_at__isnull=True, scheduled_date__lt=today)
+        )),
         unassigned=Count("pk", filter=Q(assigned_technician__isnull=True)),
     )
 
@@ -719,13 +724,14 @@ class WorkOrderScheduleBoardView(
                 "order_type",
                 "assigned_technician",
             )
-            .order_by("scheduled_at", "order_number")
+            .order_by("scheduled_at", "scheduled_date", "order_number")
         )
 
         stats = _schedule_stats(open_orders, week_start, today)
         visible_orders = open_orders.filter(
-            Q(scheduled_at__isnull=True)
-            | Q(scheduled_at__date__range=(week_start, week_end))
+            Q(scheduled_at__isnull=True, scheduled_date__isnull=True)
+            | Q(scheduled_at__isnull=False, scheduled_at__date__range=(week_start, week_end))
+            | Q(scheduled_at__isnull=True, scheduled_date__range=(week_start, week_end))
         )
 
         # Las columnas se construyen primero y se llenan después, para que un
@@ -767,11 +773,11 @@ class WorkOrderScheduleBoardView(
             by_date[day] = column
 
         for order in visible_orders:
-            if order.scheduled_at is None:
+            day = order.agenda_date
+
+            if day is None:
                 unscheduled["orders"].append(order)
                 continue
-
-            day = timezone.localtime(order.scheduled_at).date()
 
             if day in by_date:
                 by_date[day]["orders"].append(order)

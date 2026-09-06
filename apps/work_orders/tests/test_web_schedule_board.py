@@ -395,17 +395,17 @@ class RescheduleEndpointTests(ScheduleBoardTestCase):
 
         self.assertEqual((moved.hour, moved.minute), (15, 30))
 
-    def test_an_unscheduled_order_gets_a_default_time(self):
-        """Sin hora previa no hay nada que conservar: se usa la de apertura."""
+    def test_an_unscheduled_order_gets_only_a_day_without_a_time(self):
+        """Sin hora previa no se inventa ninguna: queda como día-sin-hora."""
         order = self.create_assigned_order(scheduled_at=None)
 
         self.login(self.dispatcher)
         self.reschedule(order, self.future(2))
 
         order.refresh_from_db()
-        moved = timezone.localtime(order.scheduled_at)
 
-        self.assertEqual((moved.hour, moved.minute), (9, 0))
+        self.assertIsNone(order.scheduled_at)
+        self.assertEqual(order.scheduled_date, self.future(2))
 
     def test_a_past_date_is_rejected_with_the_domain_message(self):
         """El mensaje es el del dominio, no uno genérico.

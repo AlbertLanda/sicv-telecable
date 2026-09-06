@@ -48,20 +48,21 @@ class WorkOrderScheduleBoardView(LegacyScheduleBoardView):
         context["reschedulable_statuses"] = statuses
         return context
 
-
 class WorkOrderRescheduleView(View):
     """Mueve una OT a otro día sin forzar una asignación de técnico.
 
-    Para PENDING se actualiza únicamente la agenda y se registra
-    WorkOrderReprogramming; el estado sigue siendo PENDING. Para los estados
-    que ya soportaban la transición a REPROGRAMMED se delega en el método de
-    dominio existente, preservando compatibilidad con el flujo probado.
+    Para PENDING se acepta programar con hora o solo con día -"día
+    acordado, sin hora"-: si no llega una hora explícita y la orden no
+    tenía ninguna previa, se guarda únicamente el día (scheduled_date) en
+    vez de inventar una (ver docs/work_orders_schedule_followups.md). El
+    estado sigue siendo PENDING y no se toca assigned_technician.
+
+    Para los estados que ya soportaban la transición a REPROGRAMMED se
+    sigue delegando en WorkOrder.reprogram(), que exige una hora: mover una
+    orden ya asignada sin hora pactada queda fuera de este alcance.
     """
 
     def post(self, request, pk):
-        # Temporalmente se conserva el permiso funcional existente. Separar
-        # `reschedule_workorder` será una migración independiente para no
-        # mezclar permisos con esta corrección de flujo.
         if not request.user.has_perm("work_orders.assign_workorder"):
             return JsonResponse(
                 {
@@ -79,14 +80,18 @@ class WorkOrderRescheduleView(View):
                 status=400,
             )
 
-        if not isinstance(payload, dict) or any(
-            not isinstance(payload.get(field, ""), str)
-            for field in ("date", "reason")
+        if (
+            not isinstance(payload, dict)
+            or any(
+                not isinstance(payload.get(field, ""), str)
+                for field in ("date", "reason")
+            )
+            or ("time" in payload and not isinstance(payload["time"], str))
         ):
             return JsonResponse(
                 {
                     "ok": False,
-                    "message": "Solicitud inválida: fecha y motivo deben ser texto.",
+                    "message": "Solicitud inválida: fecha, hora y motivo deben ser texto.",
                 },
                 status=400,
             )
@@ -107,31 +112,32 @@ class WorkOrderRescheduleView(View):
 
         try:
             with transaction.atomic():
-                # Se resuelve a través del módulo histórico para conservar el
-                # mismo punto de parcheo de las regresiones de concurrencia.
-                # En producción sigue siendo django.shortcuts.get_object_or_404.
                 order = legacy_views.get_object_or_404(
                     WorkOrder.objects.select_for_update(of=("self",)),
                     pk=pk,
                 )
-                new_schedule = self._schedule_for(
+                new_scheduled_at, new_scheduled_date = self._resolve_schedule(
                     order,
                     form.cleaned_data["date"],
+                    form.cleaned_data.get("time"),
                 )
 
                 if order.status == WorkOrder.Status.PENDING:
                     reprogramming = self._schedule_pending(
                         order,
-                        new_schedule,
+                        new_scheduled_at,
+                        new_scheduled_date,
                         request.user,
                         form.cleaned_data["reason"],
                     )
                 else:
                     reprogramming = order.reprogram(
-                        new_schedule=new_schedule,
+                        new_schedule=new_scheduled_at,
+                        new_schedule_date=new_scheduled_date,
                         user=request.user,
                         reason=form.cleaned_data["reason"],
                     )
+
 
         except ValidationError as exc:
             return JsonResponse(
@@ -158,7 +164,7 @@ class WorkOrderRescheduleView(View):
             )
 
         order.refresh_from_db()
-        local_schedule = timezone.localtime(order.scheduled_at)
+        agenda_date = order.agenda_date
 
         return JsonResponse(
             {
@@ -166,8 +172,12 @@ class WorkOrderRescheduleView(View):
                 "order_number": order.order_number,
                 "status": order.status,
                 "status_display": order.get_status_display(),
-                "scheduled_at": local_schedule.isoformat(),
-                "date": local_schedule.date().isoformat(),
+                "scheduled_at": (
+                    timezone.localtime(order.scheduled_at).isoformat()
+                    if order.scheduled_at
+                    else None
+                ),
+                "date": agenda_date.isoformat(),
                 "reprogramming_id": reprogramming.pk,
                 "stats": _schedule_stats(
                     _open_orders_for_schedule(request),
@@ -176,17 +186,48 @@ class WorkOrderRescheduleView(View):
                 ),
                 "message": (
                     f"Orden {order.order_number} programada para el "
-                    f"{formats.date_format(local_schedule, 'j N')}."
+                    f"{formats.date_format(agenda_date, 'j N')}."
                 ),
             }
         )
 
     @staticmethod
-    def _schedule_pending(order, new_schedule, user, reason):
+    def _resolve_schedule(order, new_date, submitted_time):
+        """Decide si el nuevo compromiso lleva hora o es solo día.
+
+        - Si llega una hora explícita, se usa esa.
+        - Si no llega hora pero la orden ya tenía una (scheduled_at), se
+          conserva: arrastrar una tarjeta cambia el día, no la hora.
+        - Si no hay hora ni previa ni nueva, el compromiso es solo de día:
+          no se inventa ninguna.
+
+        Devuelve (scheduled_at, scheduled_date): exactamente uno de los
+        dos queda con valor, el otro en None.
+        """
+        if submitted_time is not None:
+            time_of_day = submitted_time
+        elif order.scheduled_at is not None:
+            time_of_day = timezone.localtime(order.scheduled_at).time()
+        else:
+            time_of_day = None
+
+        if time_of_day is None:
+            return None, new_date
+
+        naive = datetime.combine(new_date, time_of_day)
+        return timezone.make_aware(naive, timezone.get_current_timezone()), None
+
+    @staticmethod
+    def _schedule_pending(order, new_scheduled_at, new_scheduled_date, user, reason):
         """Cambia agenda de una PENDING y conserva su estado operativo."""
         previous_schedule = order.scheduled_at
+        previous_schedule_date = order.scheduled_date
 
-        if previous_schedule and new_schedule == previous_schedule:
+        if (
+            new_scheduled_at is not None
+            and previous_schedule
+            and new_scheduled_at == previous_schedule
+        ):
             raise ValidationError(
                 {
                     "scheduled_at": (
@@ -196,11 +237,35 @@ class WorkOrderRescheduleView(View):
                 }
             )
 
-        if new_schedule <= timezone.now():
+        if (
+            new_scheduled_date is not None
+            and previous_schedule is None
+            and previous_schedule_date == new_scheduled_date
+        ):
+            raise ValidationError(
+                {
+                    "scheduled_date": (
+                        "El nuevo día debe ser diferente "
+                        "al día programado actual."
+                    )
+                }
+            )
+
+        if new_scheduled_at is not None and new_scheduled_at <= timezone.now():
             raise ValidationError(
                 {
                     "scheduled_at": (
                         "La nueva fecha de atención debe ser futura."
+                    )
+                }
+            )
+
+        if new_scheduled_date is not None and new_scheduled_date < timezone.localdate():
+            raise ValidationError(
+                {
+                    "scheduled_date": (
+                        "El nuevo día de atención debe ser hoy "
+                        "o una fecha futura."
                     )
                 }
             )
@@ -210,8 +275,10 @@ class WorkOrderRescheduleView(View):
             pk=order.pk,
             status=WorkOrder.Status.PENDING,
             scheduled_at=previous_schedule,
+            scheduled_date=previous_schedule_date,
         ).update(
-            scheduled_at=new_schedule,
+            scheduled_at=new_scheduled_at,
+            scheduled_date=new_scheduled_date,
             updated_at=now,
         )
         if not updated:
@@ -224,30 +291,16 @@ class WorkOrderRescheduleView(View):
                 }
             )
 
-        order.scheduled_at = new_schedule
+        order.scheduled_at = new_scheduled_at
+        order.scheduled_date = new_scheduled_date
         order.updated_at = now
 
         return WorkOrderReprogramming.objects.create(
             work_order=order,
             previous_schedule=previous_schedule,
-            new_schedule=new_schedule,
+            previous_schedule_date=previous_schedule_date,
+            new_schedule=new_scheduled_at,
+            new_schedule_date=new_scheduled_date,
             reason=reason,
             created_by=user,
         )
-
-    @staticmethod
-    def _schedule_for(order, new_date):
-        """Combina el nuevo día con la hora ya comprometida, si existe.
-
-        El tablero semanal todavía trabaja con DateTimeField. Si la OT no
-        tenía fecha se conserva el comportamiento actual de las 09:00. El
-        caso «día acordado, sin hora» se modelará aparte para no inventar que
-        las 09:00 sean una promesa al cliente.
-        """
-        if order.scheduled_at is not None:
-            time_of_day = timezone.localtime(order.scheduled_at).time()
-        else:
-            time_of_day = time(9, 0)
-
-        naive = datetime.combine(new_date, time_of_day)
-        return timezone.make_aware(naive, timezone.get_current_timezone())

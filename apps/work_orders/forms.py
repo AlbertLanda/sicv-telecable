@@ -536,4 +536,8 @@ class WorkOrderRescheduleForm(forms.Form):
             "invalid": "Debe indicar una fecha válida.",
         },
     )
+    time = forms.TimeField(
+        required=False,
+        error_messages={"invalid": "Debe indicar una hora válida."},
+    )
     reason = forms.CharField(required=False)
