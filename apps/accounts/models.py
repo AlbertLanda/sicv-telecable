@@ -17,6 +17,24 @@ class User(AbstractUser):
         RETENTION = "RETENTION", "Retenciones"
         ACCOUNTING = "ACCOUNTING", "Contabilidad"
 
+    # Capacidades mínimas que nacen del rol operativo y no dependen de que
+    # un administrador haya marcado permisos uno por uno en Django Admin.
+    #
+    # ATC necesita poder completar el ciclo que realmente realiza en oficina:
+    # registrar abonados, emitir/consultar OT y gestionar su programación.
+    # La asignación de técnicos NO forma parte de este conjunto: los técnicos
+    # se autoasignan/toman las órdenes desde su canal propio.
+    ROLE_BASELINE_PERMISSIONS = {
+        Role.ATC: frozenset(
+            {
+                "customers.add_customer",
+                "work_orders.add_workorder",
+                "work_orders.view_workorder",
+                "work_orders.schedule_workorder",
+            }
+        ),
+    }
+
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
@@ -57,6 +75,24 @@ class User(AbstractUser):
     updated_at = models.DateTimeField(
         auto_now=True
     )
+
+    def has_perm(self, perm, obj=None):
+        """Aplica permisos explícitos de Django más la matriz base del rol.
+
+        La matriz no reemplaza ``user_permissions`` ni grupos: únicamente
+        garantiza el mínimo operativo de cada rol. Los permisos adicionales
+        siguen pudiendo concederse por los mecanismos estándar de Django.
+        """
+        if not self.is_active:
+            return False
+
+        if self.is_superuser:
+            return True
+
+        if perm in self.ROLE_BASELINE_PERMISSIONS.get(self.role, frozenset()):
+            return True
+
+        return super().has_perm(perm, obj=obj)
 
     def __str__(self):
         return self.get_full_name() or self.username

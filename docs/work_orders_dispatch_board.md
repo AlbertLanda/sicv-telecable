@@ -1,5 +1,9 @@
 # Bandeja operativa de despacho de órdenes de trabajo
 
+> Documento histórico: esta bandeja fue retirada por decisión operativa.
+> ATC registra y consulta; los técnicos se organizan y toman las órdenes desde
+> su aplicativo. Ver [Programación y toma de órdenes](work_orders_schedule_board.md).
+
 Documentación técnica de la bandeja que permite al personal autorizado
 consultar las OT registradas por ATC, organizarlas y llevarlas al flujo de
 asignación existente (SICV — Telecable / Fiber The Andes).

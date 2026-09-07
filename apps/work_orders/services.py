@@ -5,6 +5,8 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.services.models import Subscription
 from apps.work_orders.models import (
+    DEFINITIVE_CUT_REASONS,
+    TEMPORARY_CUT_REASONS,
     OrderType,
     WorkOrder,
     WorkOrderEvidence,
@@ -134,7 +136,7 @@ def _resolve_zone(subscription, zone, branch):
     return resolved_zone
 
 
-def _validate_creation_catalogs(order_type, subtype, reason, cause):
+def _validate_creation_catalogs(subscription, order_type, subtype, reason, cause):
     if order_type is None or order_type.pk is None:
         raise ValidationError(
             "Debe indicar un tipo de orden registrado."
@@ -144,6 +146,11 @@ def _validate_creation_catalogs(order_type, subtype, reason, cause):
         raise ValidationError(
             "El tipo de orden seleccionado no está activo."
         )
+
+    if not order_type.applies_to_service_type(subscription.service_type_id):
+        raise ValidationError({
+            "order_type": f"«{order_type.name}» no se emite sobre una suscripción {subscription.service_type}."
+        })
 
     if subtype is not None and not subtype.is_active:
         raise ValidationError(
@@ -271,7 +278,7 @@ def create_work_order(
         )
 
     _validate_creation_subscription(subscription, customer)
-    _validate_creation_catalogs(order_type, subtype, reason, cause)
+    _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
 
     branch = _resolve_branch(subscription, branch)
@@ -1053,9 +1060,9 @@ def _apply_cut_result(order, result_code):
     if result_code != "SUCCESSFUL":
         return
 
-    if not order.subtype:
+    if not order.reason:
         raise ValidationError(
-            "Las órdenes de corte deben indicar si el corte es temporal o definitivo."
+            "Las órdenes de corte deben indicar el motivo del corte."
         )
 
     try:
@@ -1068,19 +1075,23 @@ def _apply_cut_result(order, result_code):
     cut_detail.full_clean()
 
     subscription = order.subscription
-    subtype_code = order.subtype.code
+    reason_code = order.reason.code
 
-    if subtype_code == "TEMPORARY":
+    if reason_code in TEMPORARY_CUT_REASONS:
         subscription.status = Subscription.Status.SUSPENDED
         subscription.cut_date = timezone.localdate()
 
-    elif subtype_code == "DEFINITIVE":
+    elif reason_code in DEFINITIVE_CUT_REASONS:
         subscription.status = Subscription.Status.CANCELLED
         subscription.cut_date = timezone.localdate()
 
     else:
+        # Un motivo nuevo en el catálogo no puede cerrar un corte por
+        # omisión: decidir si suspende o cancela una suscripción es una
+        # regla explícita, no un valor por defecto.
         raise ValidationError(
-            "El subtipo de corte no es válido."
+            f"El motivo «{order.reason.name}» no indica si el corte es "
+            "temporal o definitivo."
         )
 
     subscription.save(

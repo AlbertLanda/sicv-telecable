@@ -150,8 +150,8 @@ class Command(BaseCommand):
         order_type, created = OrderType.objects.update_or_create(
             code="INSTALLATION",
             defaults={
-                "name": "Instalacion",
-                "description": "Instalacion inicial de un servicio contratado.",
+                "name": "INSTALACIÓN",
+                "description": "Instalación inicial de un servicio contratado.",
                 "is_active": True,
             },
         )
@@ -161,7 +161,7 @@ class Command(BaseCommand):
             order_type=order_type,
             code="NEW_CLIENT",
             defaults={
-                "name": "Cliente nuevo",
+                "name": "CLIENTE NUEVO",
                 "classification": OrderReason.Classification.TECHNICAL,
                 "is_active": True,
             },

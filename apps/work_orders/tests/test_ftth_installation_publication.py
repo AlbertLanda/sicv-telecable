@@ -275,7 +275,7 @@ class InstallationPublicationTrapTests(InstallationPublicationTestCase):
         """`attention_type=SYSTEM` publica en el canal equivocado.
 
         Si el formulario comercial deja elegir el tipo de atención y alguien
-        marca «Sistema / NOC», la OT se crea, queda PENDING y no aparece
+        marca «Sistema», la OT se crea, queda PENDING y no aparece
         jamás en la app del técnico. Recomendación para el flujo FTTH: no
         exponer el campo y dejar que aplique el valor por defecto.
         """

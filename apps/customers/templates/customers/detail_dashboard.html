@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% load customer_ui %}
+
+{% block title %}Ficha de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+    :root {
+        --tc-blue: #0f4c7f;
+        --tc-blue-dark: #0a3b66;
+        --tc-blue-soft: #eef6fd;
+        --tc-text: #17355f;
+        --tc-muted: #64748b;
+        --tc-border: #d9e4ef;
+        --tc-bg: #f3f7fb;
+        --tc-warning: #f6b700;
+        --tc-warning-bg: #fff9e8;
+        --tc-success: #0b9a52;
+    }
+
+    body { color: var(--tc-text); }
+
+    .tc-content { min-width:0; }
+    .tc-breadcrumb { font-size:.77rem; color:#6f8197; margin-bottom:18px; }
+    .tc-breadcrumb strong { color:#24486f; }
+    .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .tc-toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+
+    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; }
+    .tc-btn:hover { color:#0c4f9e; background:#f7fbff; }
+    .tc-btn.primary { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
+    .tc-btn.muted { border-color:#afc0d1; color:#31516f; }
+    .tc-btn.square { width:38px; padding:0; }
+
+    .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
+
+    /* El resumen del abonado (.tc-hero) se define en base.html: lo
+       comparte con el alta de órdenes. Aquí solo su separación. */
+    .tc-hero { margin-top:14px; }
+
+    .tc-order { margin-top:12px; padding:14px 16px; background:linear-gradient(90deg,#fff9e7 0%,#fffefa 100%); border:1px solid #f2ce63; border-left:6px solid var(--tc-warning); display:grid; grid-template-columns:70px minmax(0,1fr) 360px; gap:16px; align-items:center; }
+    .tc-order-icon { width:56px; height:56px; border-radius:50%; background:#ffbd22; color:#111; display:flex; align-items:center; justify-content:center; font-size:1.65rem; }
+    .tc-order-title { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.9rem; font-weight:800; color:#173d68; }
+    .tc-order-number { font-size:1.17rem; font-weight:800; color:#123c6d; margin-top:2px; }
+    .tc-pill { display:inline-flex; align-items:center; padding:3px 11px; border-radius:5px; background:#e7edf3; color:#284c70; font-size:.7rem; font-weight:700; border:1px solid #d2dde8; }
+    .tc-pill.warning { background:#ffc928; color:#2e2600; border-color:#eeb90a; }
+    .tc-order-meta { font-size:.77rem; color:#2e4763; margin-top:7px; }
+    .tc-order-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    .tc-tabs { display:grid; grid-template-columns:repeat(6,1fr); margin-top:12px; background:#fff; border:1px solid var(--tc-border); border-radius:7px; overflow:hidden; }
+    .tc-tabs a { text-decoration:none; color:#345a80; padding:13px 10px; text-align:center; font-size:.77rem; border-right:1px solid #e5edf4; display:flex; gap:8px; justify-content:center; align-items:center; }
+    .tc-tabs a:last-child { border-right:0; }
+    .tc-tabs a.active { color:#1766c2; font-weight:700; background:#f4f9ff; box-shadow:inset 0 -3px 0 #2f7df6; }
+
+    .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+    .tc-section { overflow:hidden; }
+    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+    .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
+    .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
+    .tc-section-body { padding:0 14px 14px; }
+    .tc-data-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px 28px; }
+    .tc-data-label { font-size:.69rem; color:#74859a; margin-bottom:2px; }
+    .tc-data-value { font-size:.78rem; color:#1b385d; font-weight:500; }
+    .tc-map-layout { display:grid; grid-template-columns:minmax(0,1fr) 185px; gap:12px; align-items:stretch; }
+    .tc-map { height:150px; border-radius:6px; border:1px solid #d9e4ef; overflow:hidden; background:#edf2f7; position:relative; }
+    .tc-map iframe { width:100%; height:100%; border:0; }
+    .tc-map-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#718096; font-size:.72rem; padding:12px; }
+    .tc-map-btn { margin-top:8px; width:100%; }
+
+    .tc-table { width:100%; margin:0; border-collapse:collapse; }
+    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:8px 9px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
+    .tc-table td { color:#334f6b; font-size:.69rem; padding:9px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
+    .tc-table tr:last-child td { border-bottom:0; }
+    .tc-table a { color:#1473d4; text-decoration:none; font-weight:700; }
+    .tc-table .status-warning { display:inline-block; padding:2px 7px; border-radius:5px; background:#ffc928; color:#332900; font-weight:700; }
+    .tc-table .status-success { display:inline-block; padding:2px 7px; border-radius:4px; background:#0aa25c; color:#fff; font-weight:700; }
+    .tc-icon-btn { width:31px; height:31px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #aebfd0; border-radius:5px; color:#516a84; background:#fff; text-decoration:none; }
+
+    .tc-full { margin-top:14px; }
+    .tc-footer { display:flex; justify-content:space-between; font-size:.66rem; color:#8897a8; margin-top:18px; padding:0 2px 8px; }
+
+    @media (max-width: 1200px) {
+        .tc-order { grid-template-columns:60px minmax(0,1fr); }
+        .tc-order-actions { grid-column:1/-1; }
+    }
+    @media (max-width: 900px) {
+        .tc-grid { grid-template-columns:1fr; }
+        .tc-tabs { grid-template-columns:repeat(3,1fr); }
+    }
+    @media (max-width: 600px) {
+        .tc-order { grid-template-columns:1fr; }
+        .tc-order-icon { display:none; }
+        .tc-order-actions, .tc-tabs { grid-template-columns:1fr 1fr; }
+        .tc-data-grid, .tc-map-layout { grid-template-columns:1fr; }
+        .tc-map { height:190px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tc-content">
+        <div class="tc-toolbar">
+            <div class="tc-breadcrumb">Clientes <i class="bi bi-chevron-right mx-2"></i><strong>Ficha del cliente</strong></div>
+            <div class="tc-toolbar-actions">
+                <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="tc-btn"><i class="bi bi-pencil"></i>Editar datos</a>
+                {% if perms.work_orders.add_workorder %}<a href="{% url 'work_orders:create' customer.pk %}" class="tc-btn primary"><i class="bi bi-sliders2"></i>Nueva orden de trabajo</a>{% endif %}
+                <button class="tc-btn muted" type="button" onclick="window.print()"><i class="bi bi-printer"></i>Imprimir ficha</button>
+                <button class="tc-btn muted square" type="button" aria-label="Más opciones"><i class="bi bi-three-dots-vertical"></i></button>
+            </div>
+        </div>
+
+        {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }} mt-3">{{ message }}</div>{% endfor %}{% endif %}
+
+        {# El abonado encabeza su propia ficha: aquí sí es el h1. #}
+        {% customer_hero customer heading_level=1 %}
+
+        {% if featured_open_order %}
+        <section class="tc-card tc-order">
+            <div class="tc-order-icon"><i class="bi bi-wrench-adjustable"></i></div>
+            <div>
+                <div class="tc-order-title">
+                    <span>{% if featured_open_order.status == 'PENDING' %}Orden de trabajo pendiente{% else %}Orden de trabajo abierta{% endif %}</span>
+                    <span class="tc-pill">{{ featured_open_order.order_type.name }}</span>
+                    <span class="tc-pill warning">{{ featured_open_order.get_status_display }}</span>
+                </div>
+                <div class="tc-order-number">{{ featured_open_order.order_number }}</div>
+                <div class="tc-order-meta"><strong>Motivo:</strong> {{ featured_open_order.reason.name|default:"Sin motivo registrado" }} &nbsp;|&nbsp; <strong>Programada:</strong> {% if featured_open_order.scheduled_at %}{{ featured_open_order.scheduled_at|date:"d/m/Y H:i" }}{% else %}Sin programar{% endif %}</div>
+                <div class="tc-order-meta"><strong>Técnico:</strong> {{ featured_open_order.assigned_technician|default:"Sin asignar" }}</div>
+            </div>
+            <div class="tc-order-actions">
+                <a aria-label="Ver orden inicial" href="{% url 'work_orders:initial_print' featured_open_order.pk %}" class="tc-btn primary"><i class="bi bi-file-earmark-text"></i>Ver orden</a>
+                <a href="{% url 'work_orders:initial_print' featured_open_order.pk %}?print=1" class="tc-btn"><i class="bi bi-printer"></i>Imprimir orden inicial</a>
+                <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="tc-btn muted"><i class="bi bi-file-earmark-text"></i>Ver liquidación técnica<span class="visually-hidden">Ver ficha técnica</span></a>
+                <a href="{% url 'work_orders:schedule_board' %}" class="tc-btn"><i class="bi bi-calendar3"></i>Reprogramar</a>
+            </div>
+        </section>
+        {% endif %}
+
+        <nav class="tc-tabs">
+            <a class="active" href="#resumen"><i class="bi bi-house-door-fill"></i>Resumen</a>
+            <a href="#direcciones"><i class="bi bi-geo-alt-fill"></i>Direcciones</a>
+            <a href="#suscripciones"><i class="bi bi-wifi"></i>Suscripciones</a>
+            <a href="#contratos"><i class="bi bi-file-earmark-text-fill"></i>Contratos</a>
+            <a href="#ordenes"><i class="bi bi-wrench-adjustable"></i>Órdenes de trabajo</a>
+            <a href="#actividad"><i class="bi bi-clock"></i>Actividad reciente</a>
+        </nav>
+
+        <section id="resumen" class="tc-grid">
+            <article class="tc-card tc-section">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-person-fill"></i>Datos del cliente</h2><a class="tc-btn" href="{% url 'customers:general_edit' customer_pk=customer.pk %}"><i class="bi bi-pencil"></i>Editar</a></div>
+                <div class="tc-section-body tc-data-grid">
+                    <div><div class="tc-data-label">Nombre completo</div><div class="tc-data-value">{{ customer }}</div></div>
+                    <div><div class="tc-data-label">Código de abonado</div><div class="tc-data-value">{{ customer.code }}</div></div>
+                    <div><div class="tc-data-label">Documento</div><div class="tc-data-value">{{ customer.document_type }} {{ customer.document_number }}</div></div>
+                    <div><div class="tc-data-label">Tipo de persona</div><div class="tc-data-value">{{ customer.get_person_type_display }}</div></div>
+                    <div><div class="tc-data-label">Teléfono principal</div><div class="tc-data-value">{{ customer.phone|default:"No registrado" }}</div></div>
+                    <div><div class="tc-data-label">Teléfono secundario</div><div class="tc-data-value">{{ customer.secondary_phone|default:"No registrado" }}</div></div>
+                    <div><div class="tc-data-label">Correo electrónico</div><div class="tc-data-value">{{ customer.email|default:"No registrado" }}</div></div>
+                    <div><div class="tc-data-label">Sede</div><div class="tc-data-value">{{ customer.branch.name }}</div></div>
+                    <div><div class="tc-data-label">Fecha de registro</div><div class="tc-data-value">{{ customer.created_at|date:"d/m/Y H:i" }}</div></div>
+                    <div><div class="tc-data-label">Estado</div><div class="tc-data-value">{% if customer.is_active %}<span class="tc-table status-success">Activo</span>{% else %}Inactivo{% endif %}</div></div>
+                </div>
+            </article>
+
+            <article class="tc-card tc-section">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-geo-alt-fill"></i>Dirección principal</h2>{% if primary_address.map_link %}<a href="{{ primary_address.map_link }}" target="_blank" rel="noopener noreferrer" class="tc-btn"><i class="bi bi-geo-alt"></i>Ver en Google Maps</a>{% endif %}</div>
+                <div class="tc-section-body tc-map-layout">
+                    {% if primary_address %}
+                    <div class="tc-data-grid">
+                        <div style="grid-column:1/-1"><div class="tc-data-label">Dirección</div><div class="tc-data-value">{{ primary_address.address }}</div></div>
+                        <div style="grid-column:1/-1"><div class="tc-data-label">Referencia</div><div class="tc-data-value">{{ primary_address.reference|default:"No registrada" }}</div></div>
+                        <div><div class="tc-data-label">Distrito</div><div class="tc-data-value">{{ primary_address.district|default:"No registrado" }}</div></div>
+                        <div><div class="tc-data-label">Zona</div><div class="tc-data-value">{{ primary_address.zone.name|default:"No registrada" }}</div></div>
+                        <div><div class="tc-data-label">Latitud</div><div class="tc-data-value">{{ primary_address.map_latitude|default:"No registrada" }}</div></div>
+                        <div><div class="tc-data-label">Longitud</div><div class="tc-data-value">{{ primary_address.map_longitude|default:"No registrada" }}</div></div>
+                    </div>
+                    <div>
+                        <div class="tc-map">{% if map_embed_url %}<iframe loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="{{ map_embed_url }}" title="Mapa de ubicación del cliente"></iframe>{% else %}<div class="tc-map-empty"><div><i class="bi bi-map fs-3 d-block mb-2"></i>Ubicación GPS no disponible</div></div>{% endif %}</div>
+                        {% if primary_address.map_link %}<a href="{{ primary_address.map_link }}" target="_blank" rel="noopener noreferrer" class="tc-btn tc-map-btn"><i class="bi bi-google"></i>Abrir en Google Maps</a>{% endif %}
+                    </div>
+                    {% else %}<div class="tc-map-empty">No hay dirección principal registrada.</div>{% endif %}
+                </div>
+            </article>
+
+            <article class="tc-card tc-section" id="suscripciones">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wifi"></i>Servicio principal</h2><a class="tc-btn" href="#suscripciones-completo">Ver todos los servicios</a></div>
+                <div class="tc-section-body tc-data-grid">
+                    {% if primary_subscription %}
+                    <div><div class="tc-data-label">Tipo de servicio</div><div class="tc-data-value"><span class="tc-pill">{{ primary_subscription.service_type.name }}</span></div></div>
+                    <div><div class="tc-data-label">Plan</div><div class="tc-data-value">{{ primary_subscription.plan.name }}</div></div>
+                    <div><div class="tc-data-label">Velocidad</div><div class="tc-data-value">{% if primary_subscription.plan.speed_mbps %}{{ primary_subscription.plan.speed_mbps }} Mbps{% else %}-{% endif %}</div></div>
+                    <div><div class="tc-data-label">Tecnología</div><div class="tc-data-value">{{ primary_subscription.plan.technology|default:"No especificada" }}</div></div>
+                    <div><div class="tc-data-label">Fecha de instalación</div><div class="tc-data-value">{% if primary_subscription.installation_date %}{{ primary_subscription.installation_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</div></div>
+                    <div><div class="tc-data-label">Estado</div><div class="tc-data-value">{{ primary_subscription.get_status_display }}</div></div>
+                    {% else %}<div class="tc-data-value">Sin servicios registrados.</div>{% endif %}
+                </div>
+            </article>
+
+            <article class="tc-card tc-section" id="contratos">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-file-earmark-text-fill"></i>Contrato activo</h2><a class="tc-btn" href="#contratos-completo">Ver todos los contratos</a></div>
+                <div class="tc-section-body tc-data-grid">
+                    {% if active_contract %}
+                    <div><div class="tc-data-label">N.º de contrato</div><div class="tc-data-value"><strong>{{ active_contract.contract_number }}</strong></div></div>
+                    <div><div class="tc-data-label">Fecha de inicio</div><div class="tc-data-value">{{ active_contract.start_date|date:"d/m/Y" }}</div></div>
+                    <div><div class="tc-data-label">Fecha de fin</div><div class="tc-data-value">{% if active_contract.end_date %}{{ active_contract.end_date|date:"d/m/Y" }}{% else %}-{% endif %}</div></div>
+                    <div><div class="tc-data-label">Estado</div><div class="tc-data-value"><span class="tc-table status-success">{{ active_contract.get_status_display }}</span></div></div>
+                    {% else %}<div class="tc-data-value">Sin contratos registrados.</div>{% endif %}
+                </div>
+            </article>
+
+            <article class="tc-card tc-section">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wrench-adjustable"></i>Últimas órdenes de trabajo</h2><a class="tc-btn" href="#ordenes">Ver todas las órdenes</a></div>
+                <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Orden</th><th>Tipo</th><th>Estado</th><th>Programada</th><th>Técnico</th><th>Resultado</th><th>Acciones</th></tr></thead><tbody>
+                    {% for order in recent_work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>{{ order.order_type.name }}</td><td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden"><i class="bi bi-file-earmark-text"></i></a></td></tr>{% empty %}<tr><td colspan="7">Sin órdenes registradas.</td></tr>{% endfor %}
+                </tbody></table></div>
+            </article>
+
+            <article class="tc-card tc-section">
+                <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-clock-fill"></i>Actividad reciente</h2><a class="tc-btn" href="#actividad">Ver toda la actividad</a></div>
+                <div class="table-responsive"><table class="tc-table"><thead><tr><th>Fecha</th><th>Evento</th><th>Usuario</th></tr></thead><tbody>
+                    {% for event in recent_activity_preview %}<tr><td>{{ event.timestamp|date:"d/m/Y H:i" }}</td><td>{{ event.reference }} {{ event.title|lower }}{% if event.detail %} — {{ event.detail }}{% endif %}</td><td>SICV</td></tr>{% empty %}<tr><td colspan="3">Sin actividad reciente.</td></tr>{% endfor %}
+                </tbody></table></div>
+            </article>
+        </section>
+
+        <section id="direcciones" class="tc-card tc-section tc-full">
+            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-geo-alt-fill"></i>Direcciones</h2><a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}">Nueva dirección</a></div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>Dirección</th><th>Distrito</th><th>Referencia</th><th>Suministro</th><th>GPS</th></tr></thead><tbody>{% for addr in addresses %}<tr><td>{{ addr.address }}{% if addr.is_primary %} <span class="tc-pill">Principal</span>{% endif %}</td><td>{{ addr.district|default:"-" }}</td><td>{{ addr.reference|default:"-" }}</td><td>{{ addr.electrical_supply_number|default:"-" }}</td><td>{% if addr.map_link %}<a href="{{ addr.map_link }}" target="_blank">Google Maps</a>{% else %}-{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Sin direcciones registradas.</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+
+        <section id="suscripciones-completo" class="tc-card tc-section tc-full">
+            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wifi"></i>Suscripciones</h2>{% if addresses %}<a class="tc-btn" href="{% url 'services:subscription_create' customer.pk %}">Nueva suscripción</a>{% endif %}</div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>Servicio</th><th>Plan</th><th>Dirección</th><th>Velocidad</th><th>Tecnología</th><th>Instalación</th><th>Estado</th></tr></thead><tbody>{% for sub in subscriptions %}<tr><td>#{{ sub.service_number }} · {{ sub.service_type.name }}</td><td>{{ sub.plan.name }}</td><td>{{ sub.address.address }}</td><td>{% if sub.plan.speed_mbps %}{{ sub.plan.speed_mbps }} Mbps{% else %}-{% endif %}</td><td>{{ sub.plan.technology|default:"-" }}</td><td>{% if sub.installation_date %}{{ sub.installation_date|date:"d/m/Y" }}{% else %}-{% endif %}</td><td>{{ sub.get_status_display }}</td></tr>{% empty %}<tr><td colspan="7">Sin suscripciones registradas.</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+
+        <section id="contratos-completo" class="tc-card tc-section tc-full">
+            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-file-earmark-text-fill"></i>Contratos</h2>{% if subscriptions %}<a class="tc-btn" href="{% url 'contracts:contract_create' customer.pk %}">Nuevo contrato</a>{% endif %}</div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Contrato</th><th>Suscripción</th><th>Fecha inicio</th><th>Fecha fin</th><th>Estado</th></tr></thead><tbody>{% for contract in contracts %}<tr><td>{{ contract.contract_number }}</td><td>#{{ contract.subscription.id }}</td><td>{{ contract.start_date|date:"d/m/Y" }}</td><td>{% if contract.end_date %}{{ contract.end_date|date:"d/m/Y" }}{% else %}-{% endif %}</td><td>{{ contract.get_status_display }}</td></tr>{% empty %}<tr><td colspan="5">Sin contratos registrados.</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+
+        <section id="ordenes" class="tc-card tc-section tc-full">
+            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wrench-adjustable"></i>Órdenes de trabajo</h2>{% if perms.work_orders.add_workorder %}<a class="tc-btn primary" href="{% url 'work_orders:create' customer.pk %}">Nueva orden de trabajo</a>{% endif %}</div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Orden</th><th>Servicio</th><th>Tipo</th><th>Motivo</th><th>Estado</th><th>Prioridad</th><th>Técnico</th><th>Resultado</th><th>Programada</th><th>Acciones</th></tr></thead><tbody>{% for order in work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>#{{ order.subscription.service_number }}</td><td>{{ order.order_type.name }}</td><td>{{ order.reason.name|default:"-" }}</td><td>{{ order.get_status_display }}</td><td>{{ order.get_priority_display }}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>{% if perms.work_orders.view_workorder %} <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>{% endif %}</td></tr>{% empty %}<tr><td colspan="10">Sin órdenes registradas.</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+
+        <section id="actividad" class="tc-card tc-section tc-full">
+            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-clock-history"></i>Actividad reciente</h2></div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>Fecha</th><th>Evento</th><th>Detalle</th></tr></thead><tbody>{% for event in recent_activity %}<tr><td>{{ event.timestamp|date:"d/m/Y H:i" }}</td><td>{{ event.title }} — {{ event.reference }}</td><td>{{ event.detail|default:"-" }}</td></tr>{% empty %}<tr><td colspan="3">Sin actividad reciente.</td></tr>{% endfor %}</tbody></table></div>
+        </section>
+
+        <footer class="tc-footer"><span>© 2026 Telecable. Todos los derechos reservados.</span><span>SICV - Sistema Integral Comercial y de Operaciones &nbsp;&nbsp; v1.0.0</span></footer>
+</div>
+{% endblock %}

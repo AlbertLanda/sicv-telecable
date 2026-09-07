@@ -1,5 +1,10 @@
 # Flujo web de inicio de atención de órdenes de trabajo
 
+> Referencia histórica de la entrada web. La bandeja de despacho fue retirada;
+> el inicio web existente vuelve a la ficha del cliente. El flujo operativo
+> actual usa la toma y el inicio desde el aplicativo del técnico. Ver
+> [Programación y toma de órdenes](work_orders_schedule_board.md).
+
 Documentación técnica de la capa web que inicia la atención de una OT ya
 despachada en SICV (SICV — Telecable / Fiber The Andes).
 

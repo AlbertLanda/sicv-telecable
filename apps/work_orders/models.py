@@ -11,6 +11,49 @@ from apps.services.models import Subscription
 from apps.customers.models import CustomerAddress
 
 
+# Efecto de un corte sobre la suscripción, según su motivo.
+#
+# El catálogo ya distingue el corte temporal del definitivo en el propio
+# motivo —CORTE VOLUNTARIO frente a DEFINITIVO - MEJOR OFERTA, etc.—, así
+# que la decisión se lee de ahí. Pedir además un subtipo obligaba al ATC a
+# declarar dos veces lo mismo, con el riesgo de que se contradijeran.
+TEMPORARY_CUT_REASONS = frozenset({
+    "VOLUNTARY",
+    "DELINQUENCY",
+    "NON_PAYMENT",
+})
+
+DEFINITIVE_CUT_REASONS = frozenset({
+    "DEF_BETTER_OFFER",
+    "DEF_BAD_EXPERIENCE",
+    "DEF_MOVING",
+})
+
+
+class OrderTypeQuerySet(models.QuerySet):
+    """Consultas del catálogo de tipos de orden."""
+
+    def for_service_type(self, service_type):
+        """
+        Tipos de orden ofrecibles sobre un servicio concreto.
+
+        Un tipo sin servicios declarados es transversal: se ofrece sobre
+        cualquier suscripción. Restringir requiere declararlo de forma
+        explícita, así que un catálogo a medio configurar nunca esconde
+        opciones que el operador esperaba ver.
+        """
+
+        service_type_id = getattr(service_type, "pk", service_type)
+
+        if service_type_id is None:
+            return self.filter(service_types__isnull=True)
+
+        return self.filter(
+            models.Q(service_types__isnull=True)
+            | models.Q(service_types=service_type_id)
+        ).distinct()
+
+
 class OrderType(models.Model):
     """Catálogo de tipos de orden: Instalación, Avería, Corte, Reconexión, etc."""
 
@@ -30,6 +73,17 @@ class OrderType(models.Model):
         verbose_name="Descripción"
     )
 
+    service_types = models.ManyToManyField(
+        "services.ServiceType",
+        blank=True,
+        related_name="order_types",
+        verbose_name="Servicios que lo ofrecen",
+        help_text=(
+            "Servicios sobre los que se puede emitir este tipo de orden. "
+            "Sin marcar ninguno queda disponible para todos."
+        )
+    )
+
     is_active = models.BooleanField(
         default=True,
         verbose_name="Activo"
@@ -43,6 +97,8 @@ class OrderType(models.Model):
         auto_now=True
     )
 
+    objects = OrderTypeQuerySet.as_manager()
+
     class Meta:
         verbose_name = "Tipo de orden"
         verbose_name_plural = "Tipos de orden"
@@ -50,6 +106,18 @@ class OrderType(models.Model):
 
     def __str__(self):
         return self.name
+
+    def applies_to_service_type(self, service_type):
+        """¿Este tipo de orden es emitible sobre ese servicio?"""
+
+        service_type_id = getattr(service_type, "pk", service_type)
+
+        allowed = list(self.service_types.values_list("pk", flat=True))
+
+        if not allowed:
+            return True
+
+        return service_type_id in allowed
 
 class OrderSubtype(models.Model):
     """
@@ -361,8 +429,8 @@ class WorkOrder(models.Model):
         URGENT = "URGENT", "Urgente"
 
     class AttentionType(models.TextChoices):
-        SYSTEM = "SYSTEM", "Sistema / NOC"
-        FIELD = "FIELD", "Campo"
+        SYSTEM = "SYSTEM", "Sistema"
+        FIELD = "FIELD", "Física"
 
     # Matriz oficial de transiciones. Un estado que no aparece como clave,
     # o cuya lista está vacía, es un estado terminal: no admite salidas.
@@ -585,6 +653,17 @@ class WorkOrder(models.Model):
         verbose_name="Fecha programada de atención"
     )
 
+    scheduled_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Día programado (sin hora)",
+        help_text=(
+            "Se usa cuando el cliente solo comprometió un día de atención, "
+            "sin hora. Nunca coexiste con scheduled_at: si hay hora pactada, "
+            "va en scheduled_at y este campo queda vacío."
+        ),
+    )
+
     started_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -640,6 +719,14 @@ class WorkOrder(models.Model):
 
     def clean(self):
         super().clean()
+
+        if self.scheduled_at and self.scheduled_date:
+            raise ValidationError({
+                "scheduled_date": (
+                    "No puede coexistir con scheduled_at: o hay hora "
+                    "pactada, o solo día."
+                )
+            })
 
         if (
             self.subtype
@@ -710,6 +797,13 @@ class WorkOrder(models.Model):
         return self.status in self.ASSIGNABLE_STATUSES
 
     @property
+    def agenda_date(self):
+        """Día para agenda/calendario, exista o no una hora pactada."""
+        if self.scheduled_at:
+            return timezone.localtime(self.scheduled_at).date()
+        return self.scheduled_date
+
+    @property
     def can_start_attention(self):
         """
         La orden admite iniciar la atención.
@@ -771,15 +865,28 @@ class WorkOrder(models.Model):
             })
 
         previous_status = self.status
-        updated_fields = ["status", "updated_at"]
-
-        self.status = new_status
-
+        changes = {"status": new_status, "updated_at": timezone.now()}
         if new_status == self.Status.ATTENDED and not self.attended_at:
-            self.attended_at = timezone.now()
-            updated_fields.append("attended_at")
+            changes["attended_at"] = changes["updated_at"]
 
-        self.save(update_fields=updated_fields)
+        # La instancia puede haberse leído antes de que otra petición
+        # terminara o reprogramara la atención. Comprobar el estado también
+        # en el UPDATE evita sobrescribir ese avance. Funciona en SQLite y
+        # PostgreSQL, sin depender solo de un bloqueo tomado por una vista.
+        # Si falla, la transacción del llamador revierte asimismo fecha,
+        # resultado e históricos que hubiera preparado antes de transicionar.
+        updated = type(self).objects.filter(
+            pk=self.pk, status=previous_status,
+        ).update(**changes)
+        if not updated:
+            raise ValidationError({
+                "status": (
+                    "La orden cambió mientras se procesaba la solicitud. "
+                    "Actualice la ficha antes de volver a intentarlo."
+                )
+            })
+        for field, value in changes.items():
+            setattr(self, field, value)
 
         WorkOrderStatusHistory.objects.create(
             work_order=self,
@@ -888,16 +995,26 @@ class WorkOrder(models.Model):
         return self.started_at
 
     @transaction.atomic
-    def reprogram(self, new_schedule, user=None, reason=""):
+    def reprogram(self, new_schedule=None, new_schedule_date=None, user=None, reason=""):
         """
         Reprograma la atención conservando el histórico.
 
-        Guarda la fecha anterior en WorkOrderReprogramming, actualiza
-        scheduled_at y mueve la orden a REPROGRAMMED.
+        Acepta fecha+hora (`new_schedule`, datetime) o solo día
+        (`new_schedule_date`, date) -exactamente uno de los dos-, para el
+        caso en que el cliente solo comprometió el día. Guarda el estado
+        anterior en WorkOrderReprogramming, actualiza
+        scheduled_at/scheduled_date y mueve la orden a REPROGRAMMED.
         """
-        if new_schedule is None:
+        if new_schedule is None and new_schedule_date is None:
             raise ValidationError({
                 "scheduled_at": "Debe indicar la nueva fecha de atención."
+            })
+
+        if new_schedule is not None and new_schedule_date is not None:
+            raise ValidationError({
+                "scheduled_at": (
+                    "No puede indicar hora y día-sin-hora a la vez."
+                )
             })
 
         if not self.can_transition_to(self.Status.REPROGRAMMED):
@@ -909,8 +1026,13 @@ class WorkOrder(models.Model):
             })
 
         previous_schedule = self.scheduled_at
+        previous_schedule_date = self.scheduled_date
 
-        if previous_schedule and new_schedule == previous_schedule:
+        if (
+            new_schedule is not None
+            and previous_schedule
+            and new_schedule == previous_schedule
+        ):
             raise ValidationError({
                 "scheduled_at": (
                     "La nueva fecha debe ser diferente "
@@ -918,23 +1040,45 @@ class WorkOrder(models.Model):
                 )
             })
 
-        if new_schedule <= timezone.now():
+        if (
+            new_schedule_date is not None
+            and previous_schedule is None
+            and previous_schedule_date == new_schedule_date
+        ):
+            raise ValidationError({
+                "scheduled_date": (
+                    "El nuevo día debe ser diferente "
+                    "al día programado actual."
+                )
+            })
+
+        if new_schedule is not None and new_schedule <= timezone.now():
             raise ValidationError({
                 "scheduled_at": (
                     "La nueva fecha de atención debe ser futura."
                 )
             })
 
+        if new_schedule_date is not None and new_schedule_date < timezone.localdate():
+            raise ValidationError({
+                "scheduled_date": (
+                    "El nuevo día de atención debe ser hoy o una fecha futura."
+                )
+            })
+
         reprogramming = WorkOrderReprogramming.objects.create(
             work_order=self,
             previous_schedule=previous_schedule,
+            previous_schedule_date=previous_schedule_date,
             new_schedule=new_schedule,
+            new_schedule_date=new_schedule_date,
             reason=reason,
             created_by=user,
         )
 
         self.scheduled_at = new_schedule
-        self.save(update_fields=["scheduled_at", "updated_at"])
+        self.scheduled_date = new_schedule_date
+        self.save(update_fields=["scheduled_at", "scheduled_date", "updated_at"])
 
         self.change_status(
             self.Status.REPROGRAMMED,
@@ -1076,9 +1220,23 @@ class WorkOrderReprogramming(models.Model):
         verbose_name="Fecha programada anterior"
     )
 
+    previous_schedule_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Día programado anterior (sin hora)"
+    )
+
     new_schedule = models.DateTimeField(
+        null=True,
+        blank=True,
         verbose_name="Nueva fecha programada"
     )
+
+    new_schedule_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Nuevo día programado (sin hora)"
+    )    
 
     reason = models.TextField(
         blank=True,
@@ -1108,8 +1266,20 @@ class WorkOrderReprogramming(models.Model):
             models.Index(fields=["work_order"], name="wo_reprog_order_idx"),
         ]
 
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(new_schedule__isnull=False, new_schedule_date__isnull=True)
+                    | models.Q(new_schedule__isnull=True, new_schedule_date__isnull=False)
+                ),
+                name="wo_reprog_exactly_one_new_schedule",
+            ),
+        ]
+
     def __str__(self):
-        return f"{self.work_order.order_number}: {self.new_schedule:%d/%m/%Y %H:%M}"
+        if self.new_schedule:
+            return f"{self.work_order.order_number}: {self.new_schedule:%d/%m/%Y %H:%M}"
+        return f"{self.work_order.order_number}: {self.new_schedule_date:%d/%m/%Y} (sin hora)"
 
 
 class CutDetail(models.Model):
@@ -1161,17 +1331,16 @@ class CutDetail(models.Model):
                 )
             })
 
-        subtype = self.work_order.subtype
+        reason = self.work_order.reason
 
-        if not subtype:
+        if not reason:
             raise ValidationError({
                 "work_order": (
-                    "La orden de corte debe indicar si es "
-                    "temporal o definitiva."
+                    "La orden de corte debe indicar su motivo."
                 )
             })
 
-        if subtype.code == "TEMPORARY":
+        if reason.code in TEMPORARY_CUT_REASONS:
             if not self.expected_return_date:
                 raise ValidationError({
                     "expected_return_date": (
@@ -1188,7 +1357,7 @@ class CutDetail(models.Model):
                     )
                 })
 
-        elif subtype.code == "DEFINITIVE":
+        elif reason.code in DEFINITIVE_CUT_REASONS:
             if self.expected_return_date:
                 raise ValidationError({
                     "expected_return_date": (
@@ -1199,7 +1368,10 @@ class CutDetail(models.Model):
 
         else:
             raise ValidationError({
-                "work_order": "El subtipo de corte no es válido."
+                "work_order": (
+                    f"El motivo «{reason.name}» no indica si el corte "
+                    "es temporal o definitivo."
+                )
             })
 
     def __str__(self):

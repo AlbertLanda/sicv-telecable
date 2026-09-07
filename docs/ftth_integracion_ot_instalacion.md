@@ -126,7 +126,7 @@ su cierre en `::InstallationServiceTests`.
 
 El formulario web actual **expone ese campo** (`WorkOrderCreateForm`, campo
 `attention_type`). Si el flujo FTTH lo hereda tal cual y alguien marca
-«Sistema / NOC», la instalación se crea, queda PENDING y no aparece jamás en
+«Sistema», la instalación se crea, queda PENDING y no aparece jamás en
 la app.
 
 > **Recomendación:** en el flujo de instalación FTTH **no exponer el campo**.

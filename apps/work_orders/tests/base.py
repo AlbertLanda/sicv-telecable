@@ -213,10 +213,19 @@ class WorkOrderTestCase(TestCase):
             classification=OrderReason.Classification.TECHNICAL,
         )
 
+        # Corte temporal: la suscripción queda suspendida.
         self.cut_reason = OrderReason.objects.create(
             order_type=self.cut_type,
             code="NON_PAYMENT",
             name="Falta de pago",
+            classification=OrderReason.Classification.ADMINISTRATIVE,
+        )
+
+        # Corte definitivo: la suscripción se cancela.
+        self.definitive_cut_reason = OrderReason.objects.create(
+            order_type=self.cut_type,
+            code="DEF_MOVING",
+            name="DEFINITIVO - CAMBIO DE RESIDENCIA",
             classification=OrderReason.Classification.ADMINISTRATIVE,
         )
 
