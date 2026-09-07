@@ -18,7 +18,7 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
         </div>
 
-        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente programacion ordenes">
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
                 <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>
             </button>
@@ -28,23 +28,19 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     {% if perms.customers.add_customer %}
                         <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
                     {% endif %}
-                    {% if perms.work_orders.view_workorder %}
-                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Programación de órdenes</a>
-                    {% endif %}
                 </div>
             </div>
         </section>
 
-        <section class="sidebar-section" data-sidebar-section="operaciones ordenes trabajo agenda calendario tecnicos">
+        <section class="sidebar-section" data-sidebar-section="operaciones agenda calendario tecnicos">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOperaciones" aria-expanded="true">
                 <i class="bi bi-briefcase"></i><span>Operaciones</span><i class="bi bi-chevron-down chev"></i>
             </button>
             <div class="collapse show" id="sidebarOperaciones">
                 <div class="sidebar-links">
                     {% if perms.work_orders.view_workorder %}
-                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-clipboard2-check"></i>Órdenes de trabajo</a>
+                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Agenda / Calendario</a>
                     {% endif %}
-                    <span class="sidebar-link-pending"><span>Agenda / Calendario</span><span class="pending-tag">pendiente</span></span>
                     <span class="sidebar-link-pending"><span>Técnicos</span><span class="pending-tag">pendiente</span></span>
                 </div>
             </div>
