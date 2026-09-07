@@ -18,7 +18,7 @@
 
     <div class="board-column-body">
         {% for order in column.orders %}
-            {% if perms.work_orders.assign_workorder and order.status in reschedulable_statuses %}
+            {% if perms.work_orders.schedule_workorder and order.status in reschedulable_statuses %}
                 <article
                     class="board-card is-draggable status-{{ order.status }}{% if column.is_past %} is-overdue{% endif %}"
                     draggable="true"
@@ -32,7 +32,7 @@
                     data-order="{{ order.pk }}"
                     data-from="{{ column.key }}"
                     data-status="{{ order.status }}"
-                    title="{% if not perms.work_orders.assign_workorder %}Solo lectura.{% else %}Una orden en estado {{ order.get_status_display }} no admite reprogramación.{% endif %}"
+                    title="{% if not perms.work_orders.schedule_workorder %}Solo lectura.{% else %}Una orden en estado {{ order.get_status_display }} no admite reprogramación.{% endif %}"
                 >
             {% endif %}
 
