@@ -48,26 +48,27 @@ class WorkOrderScheduleBoardView(LegacyScheduleBoardView):
         context["reschedulable_statuses"] = statuses
         return context
 
+
 class WorkOrderRescheduleView(View):
     """Mueve una OT a otro día sin forzar una asignación de técnico.
 
     Para PENDING se acepta programar con hora o solo con día -"día
     acordado, sin hora"-: si no llega una hora explícita y la orden no
     tenía ninguna previa, se guarda únicamente el día (scheduled_date) en
-    vez de inventar una (ver docs/work_orders_schedule_followups.md). El
-    estado sigue siendo PENDING y no se toca assigned_technician.
+    vez de inventar una. El estado sigue siendo PENDING y no se toca
+    assigned_technician.
 
-    Para los estados que ya soportaban la transición a REPROGRAMMED se
-    sigue delegando en WorkOrder.reprogram(), que exige una hora: mover una
-    orden ya asignada sin hora pactada queda fuera de este alcance.
+    Programar es una capacidad distinta de asignar técnico. El endpoint exige
+    `work_orders.schedule_workorder`; el rol ATC recibe esa capacidad como
+    permiso base desde accounts.User, sin recibir `assign_workorder`.
     """
 
     def post(self, request, pk):
-        if not request.user.has_perm("work_orders.assign_workorder"):
+        if not request.user.has_perm("work_orders.schedule_workorder"):
             return JsonResponse(
                 {
                     "ok": False,
-                    "message": "No tiene permiso para reprogramar órdenes de trabajo.",
+                    "message": "No tiene permiso para programar o reprogramar órdenes de trabajo.",
                 },
                 status=403,
             )
@@ -95,6 +96,20 @@ class WorkOrderRescheduleView(View):
                 },
                 status=400,
             )
+
+        # La reprogramación es una acción auditada: no se acepta un cambio de
+        # compromiso sin explicar por qué. Así el historial puede responder
+        # quién cambió la OT, cuándo lo hizo y por qué.
+        reason = payload.get("reason", "").strip()
+        if not reason:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": "Debe indicar el motivo de la programación o reprogramación.",
+                },
+                status=400,
+            )
+        payload["reason"] = reason
 
         form = WorkOrderRescheduleForm(payload)
         if not form.is_valid():
@@ -128,16 +143,15 @@ class WorkOrderRescheduleView(View):
                         new_scheduled_at,
                         new_scheduled_date,
                         request.user,
-                        form.cleaned_data["reason"],
+                        reason,
                     )
                 else:
                     reprogramming = order.reprogram(
                         new_schedule=new_scheduled_at,
                         new_schedule_date=new_scheduled_date,
                         user=request.user,
-                        reason=form.cleaned_data["reason"],
+                        reason=reason,
                     )
-
 
         except ValidationError as exc:
             return JsonResponse(
@@ -220,6 +234,11 @@ class WorkOrderRescheduleView(View):
     @staticmethod
     def _schedule_pending(order, new_scheduled_at, new_scheduled_date, user, reason):
         """Cambia agenda de una PENDING y conserva su estado operativo."""
+        if not reason or not reason.strip():
+            raise ValidationError(
+                {"reason": "Debe indicar el motivo de la programación o reprogramación."}
+            )
+
         previous_schedule = order.scheduled_at
         previous_schedule_date = order.scheduled_date
 
@@ -301,6 +320,6 @@ class WorkOrderRescheduleView(View):
             previous_schedule_date=previous_schedule_date,
             new_schedule=new_scheduled_at,
             new_schedule_date=new_scheduled_date,
-            reason=reason,
+            reason=reason.strip(),
             created_by=user,
         )
