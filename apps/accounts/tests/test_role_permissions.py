@@ -1,11 +1,11 @@
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from apps.accounts.models import User
 
 
-class ATCRoleBaselinePermissionTests(SimpleTestCase):
+class ATCRoleBaselinePermissionTests(TestCase):
     def setUp(self):
-        self.user = User(
+        self.user = User.objects.create_user(
             username="atc_test",
             role=User.Role.ATC,
             is_active=True,
