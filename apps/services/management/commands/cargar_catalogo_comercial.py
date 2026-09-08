@@ -306,26 +306,76 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("✓ Tarifas Cable confirmadas para Jauja y Huancayo"))
         return stats
 
+    # Niveles de la linea 2026. La regla de La Oroya se expresa excluyendo las
+    # lineas anteriores, no exigiendo un nivel: ver _load_confirmed_coverage.
+    RETIRED_2026_CATEGORIES = (
+        Plan.Category.ECONOMIC,
+        Plan.Category.SUPER_ECONOMIC,
+    )
+
     def _load_confirmed_coverage(self, branches):
-        # Regla confirmada a nivel de toda La Oroya: en 2026 la categoria
-        # Estandar es obligatoria. Las reglas zonales de Jauja/Huancayo se
-        # cargaran cuando se valide el catalogo oficial de zonas.
-        rule, created = CommercialCoverageRule.objects.update_or_create(
+        """Cobertura confirmada de La Oroya para la linea 2026.
+
+        En La Oroya se vende la linea 2026 y no las anteriores. Eso se
+        expresaba con una sola regla -«Estandar obligatorio»- porque los ocho
+        planes de 2026 eran Estandar: exigir esa categoria equivalia a exigir
+        la linea.
+
+        Al partirse 2026 en cuatro niveles (Telecable, Estandar, Premium y
+        Premium Plus) esa forma dejo de servir: REQUIRED admite una sola
+        categoria, asi que seguia dejando pasar solo el nivel Estandar y
+        bloqueaba los otros tres, que si son vendibles ahi.
+
+        Ahora se expresa al reves y sin ambiguedad: se bloquean las lineas
+        Economico y Super Economico, y todo nivel de 2026 queda permitido. La
+        regla vieja se desactiva en lugar de borrarse, para que el historico
+        siga explicando que se vendia antes.
+        """
+        oroya = branches["OROYA"]
+        valid_from = date(2026, 8, 27)
+        stats = {"created": 0, "updated": 0}
+
+        retired = CommercialCoverageRule.objects.filter(
             generation=2026,
-            commercial_category=Plan.Category.STANDARD,
-            branch=branches["OROYA"],
+            branch=oroya,
             zone=None,
-            valid_from=date(2026, 8, 27),
-            defaults={
-                "availability": CommercialCoverageRule.Availability.REQUIRED,
-                "valid_until": None,
-                "is_active": True,
-            },
+            commercial_category=Plan.Category.STANDARD,
+            availability=CommercialCoverageRule.Availability.REQUIRED,
+            is_active=True,
+        ).update(is_active=False)
+
+        for category in self.RETIRED_2026_CATEGORIES:
+            rule, created = CommercialCoverageRule.objects.update_or_create(
+                generation=2026,
+                commercial_category=category,
+                branch=oroya,
+                zone=None,
+                valid_from=valid_from,
+                defaults={
+                    "availability": (
+                        CommercialCoverageRule.Availability.NOT_AVAILABLE
+                    ),
+                    "valid_until": None,
+                    "is_active": True,
+                },
+            )
+            rule.full_clean()
+            rule.save()
+            stats["created" if created else "updated"] += 1
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "✓ Cobertura 2026 confirmada: La Oroya vende la linea 2026 "
+                "(se bloquean Economico y Super Economico)"
+            )
         )
-        rule.full_clean()
-        rule.save()
-        self.stdout.write(self.style.SUCCESS("✓ Cobertura 2026 confirmada: La Oroya = Estandar obligatorio"))
-        return {"created": int(created), "updated": int(not created)}
+
+        if retired:
+            self.stdout.write(
+                "  Se desactivo la regla anterior de Estandar obligatorio."
+            )
+
+        return stats
 
     def _load_installation_rules(self, branches, services):
         valid_from = date(2026, 8, 27)
