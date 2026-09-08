@@ -23,7 +23,9 @@ def seed_billing_policies(apps, schema_editor):
             "name": "Aniversario - pronto pago S/ 10",
             "billing_mode": "ANNIVERSARY",
             "discount_amount": Decimal("10.00"),
-            "discount_days_before_due": 3,
+            # Confirmado con negocio: 2 dias. Ver 0009_pronto_pago_dos_dias,
+            # que corrige las bases creadas antes de esta aclaracion.
+            "discount_days_before_due": 2,
             "cut_days_after_due": 1,
             "first_month_required": True,
         },

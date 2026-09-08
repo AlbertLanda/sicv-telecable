@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Deudas de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "payments/_account_header.html" with active_tab="debt" account_title="Deudas" %}
+
+    {% comment %}
+    Un solo formulario envuelve la tabla y los botones: «Cobrar» y
+    «Compromiso» actúan sobre las filas marcadas, así que los checks y los
+    botones tienen que viajar juntos. Cada botón declara su propio destino con
+    formaction, en lugar de que la pantalla elija uno solo.
+    {% endcomment %}
+    <form method="get" id="deudasForm">
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-cash-stack"></i>Deudas
+                </h2>
+                {% if debt.charges %}
+                    <span class="tc-pill">{{ debt.charges|length }} pendiente{{ debt.charges|length|pluralize }}</span>
+                {% endif %}
+            </div>
+
+            {% if debt.charges %}
+
+                <div class="table-responsive">
+                    <table class="tc-table">
+                        <thead>
+                            <tr>
+                                <th>Abonado</th>
+                                <th>Fecha</th>
+                                <th class="num">Cantidad</th>
+                                <th>Detalle</th>
+                                <th>Periodo</th>
+                                <th>Moneda</th>
+                                <th class="num">Monto</th>
+                                <th>Documento</th>
+                                <th>Vencimiento</th>
+                                <th class="text-center">Cobrar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for charge in debt.charges %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'customers:detail' pk=customer.pk %}">
+                                            {{ customer.code }}
+                                        </a>
+                                    </td>
+                                    <td>{{ charge.issued_on|date:"d/m/Y" }}</td>
+                                    <td class="num">{{ charge.quantity|floatformat:5 }}</td>
+                                    <td>
+                                        {{ charge.description }}
+                                        <span class="tc-sub">{{ charge.get_concept_display }}</span>
+                                    </td>
+                                    <td>{{ charge.period_label|default:"—" }}</td>
+                                    <td>{{ charge.currency }}</td>
+                                    <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
+                                    <td>
+                                        {% for receipt in charge.paying_receipts %}
+                                            <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}">
+                                                {{ receipt.full_number }}
+                                            </a>
+                                        {% empty %}
+                                            <span class="text-muted">—</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {{ charge.due_date|date:"d/m/Y" }}
+                                        {% if charge.is_overdue %}
+                                            <span class="tc-sub"><span class="tc-pill danger">Vencido</span></span>
+                                        {% endif %}
+                                        {% with commitment=charge.active_commitment %}
+                                            {% if commitment %}
+                                                <span class="tc-sub">
+                                                    <span class="tc-pill info">
+                                                        Compromiso {{ commitment.committed_date|date:"d/m/Y" }}
+                                                    </span>
+                                                </span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="form-check-input"
+                                               name="charges"
+                                               value="{{ charge.pk }}"
+                                               aria-label="Seleccionar {{ charge.description }}">
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="6" class="num">Total adeudado</th>
+                                <th class="num">S/ {{ debt.total|floatformat:2 }}</th>
+                                <th colspan="3"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="tc-section-body" style="padding:12px 14px;">
+                    <div class="d-flex justify-content-end">
+                        <select name="filas"
+                                class="tc-input tc-w-md"
+                                aria-label="Filas por página"
+                                onchange="document.getElementById('deudasForm').submit();">
+                            {% for size in page_sizes %}
+                                <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+                                    {{ size }} filas
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+            {% else %}
+
+                <div class="tc-empty">
+                    <i class="bi bi-check-circle text-success"></i>
+                    El abonado no tiene deudas pendientes.
+                </div>
+
+            {% endif %}
+
+        </section>
+
+        <div class="tc-actions">
+            {% if can_create_charge %}
+                <button type="submit"
+                        class="tc-btn primary"
+                        formaction="{% url 'payments:charge_create' pk=customer.pk %}">
+                    <i class="bi bi-plus-lg"></i>Nuevo
+                </button>
+            {% endif %}
+            {% if can_register_payment and debt.charges %}
+                <button type="submit"
+                        class="tc-btn primary"
+                        formaction="{% url 'payments:register' pk=customer.pk %}">
+                    <i class="bi bi-cash"></i>Cobrar
+                </button>
+            {% endif %}
+            {% if can_grant_commitment and debt.charges %}
+                <button type="submit"
+                        class="tc-btn"
+                        formaction="{% url 'payments:commitment_create' pk=customer.pk %}">
+                    <i class="bi bi-hand-thumbs-up"></i>Compromiso
+                </button>
+            {% endif %}
+        </div>
+
+    </form>
+
+    {% if active_commitments %}
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-hand-thumbs-up"></i>Compromisos de pago vigentes
+                </h2>
+            </div>
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha de pago</th>
+                            <th class="num">Monto</th>
+                            <th>Deuda comprometida</th>
+                            <th>Autoriza</th>
+                            {% if can_grant_commitment %}<th></th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for commitment in active_commitments %}
+                            <tr>
+                                <td>{{ commitment.committed_date|date:"d/m/Y" }}</td>
+                                <td class="num">S/ {{ commitment.amount|floatformat:2 }}</td>
+                                <td>
+                                    {% for charge in commitment.charges.all %}
+                                        {{ charge.description }}
+                                        {% if charge.period_label %}
+                                            <span class="tc-sub">{{ charge.period_label }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                    <span class="tc-sub">{{ commitment.reason }}</span>
+                                </td>
+                                <td>{{ commitment.authorized_by|default:commitment.granted_by }}</td>
+                                {% if can_grant_commitment %}
+                                    <td class="text-end">
+                                        <form method="post"
+                                              action="{% url 'payments:commitment_cancel' pk=commitment.pk %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="tc-icon-btn" title="Anular compromiso">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+    {% endif %}
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}
+SICV - Planes
+{% endblock %}
+
+{% block content %}
+
+<div class="py-3">
+
+    <div class="card card-custom mb-3">
+
+        <div class="card-header panel-head d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>Planes del catálogo</span>
+            {% if can_create %}
+                <a href="{% url 'services:plan_create' %}" class="btn btn-sm btn-light">
+                    <i class="bi bi-plus-lg"></i> Nuevo plan
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="card-body border-bottom">
+            <form method="get" class="d-flex flex-wrap align-items-center gap-2">
+
+                <select name="servicio" class="form-select" style="max-width: 14rem;">
+                    <option value="">Todos los servicios</option>
+                    {% for service in service_types %}
+                        <option value="{{ service.code }}"
+                            {% if current_service == service.code %}selected{% endif %}>
+                            {{ service.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <div class="form-check">
+                    <input type="checkbox"
+                           class="form-check-input"
+                           name="activos"
+                           value="1"
+                           id="soloActivos"
+                           {% if only_active %}checked{% endif %}>
+                    <label class="form-check-label" for="soloActivos">Solo activos</label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+
+                {% if current_service or only_active %}
+                    <a href="{% url 'services:plan_list' %}" class="btn btn-outline-secondary">
+                        Limpiar
+                    </a>
+                {% endif %}
+
+            </form>
+        </div>
+
+        {% if plans %}
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Plan</th>
+                            <th>Servicio</th>
+                            <th>Nivel</th>
+                            <th class="text-end">Velocidad</th>
+                            <th class="text-end">Pronto pago</th>
+                            <th class="text-end">Normal</th>
+                            <th>Política de cobro</th>
+                            <th>Estado</th>
+                            {% if can_edit %}<th></th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for plan in plans %}
+                            <tr {% if not plan.is_active %}class="text-muted"{% endif %}>
+                                <td>
+                                    <div class="fw-semibold">{{ plan.name }}</div>
+                                    <div class="text-muted small">{{ plan.code }}</div>
+                                </td>
+                                <td>{{ plan.service_type.name }}</td>
+                                <td>{{ plan.get_commercial_category_display|default:"—" }}</td>
+                                <td class="text-end">
+                                    {% if plan.speed_mbps %}{{ plan.speed_mbps }} MG{% else %}—{% endif %}
+                                </td>
+                                <td class="text-end fw-bold text-success">
+                                    S/ {{ plan.early_payment_price|floatformat:2 }}
+                                </td>
+                                <td class="text-end fw-bold">
+                                    S/ {{ plan.monthly_price|floatformat:2 }}
+                                </td>
+                                <td class="small">
+                                    {% if plan.billing_policy %}
+                                        {{ plan.billing_policy.name }}
+                                        {% if plan.billing_policy.discount_days_before_due %}
+                                            <div class="text-muted">
+                                                Pronto pago {{ plan.billing_policy.discount_days_before_due }} día{{ plan.billing_policy.discount_days_before_due|pluralize }}
+                                                antes del vencimiento
+                                            </div>
+                                        {% elif plan.billing_policy.discount_deadline_day %}
+                                            <div class="text-muted">
+                                                Pronto pago hasta el día {{ plan.billing_policy.discount_deadline_day }}
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-danger">Sin política</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if plan.is_active %}
+                                        <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                {% if can_edit %}
+                                    <td class="text-end">
+                                        <a href="{% url 'services:plan_edit' pk=plan.pk %}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Editar
+                                        </a>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card-body">
+                <div class="text-muted small">
+                    El precio de pronto pago no se guarda: es la mensualidad
+                    normal menos el descuento de la política de cobro del plan.
+                    Un plan sin política no ofrece pronto pago.
+                </div>
+            </div>
+
+        {% else %}
+
+            <div class="card-body">
+                <div class="alert alert-info mb-0">
+                    No hay planes que coincidan con el filtro.
+                </div>
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+{% endblock %}

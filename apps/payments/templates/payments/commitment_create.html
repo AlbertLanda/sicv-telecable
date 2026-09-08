@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}Compromiso de pago de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "payments/_account_header.html" with active_tab="debt" account_title="Compromiso de pago" %}
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-hand-thumbs-up"></i>Datos
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+
+                <div class="alert alert-info" style="font-size:.76rem;">
+                    El compromiso no cancela deuda: el abonado sigue debiendo lo
+                    mismo. Lo que cambia es que las deudas elegidas dejan de
+                    empujarlo al corte hasta la fecha prometida.
+                </div>
+
+                <div class="tc-form">
+
+                    <div class="tc-form-label">Código</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Fecha y hora</div>
+                    <div class="tc-form-field">
+                        <div class="d-flex flex-wrap gap-2">
+                            <input type="text" class="tc-input tc-readonly tc-w-md"
+                                   value="{{ now|date:'d/m/Y' }}" disabled>
+                            <input type="text" class="tc-input tc-readonly tc-w-sm"
+                                   value="{{ now|date:'H:i' }}" disabled>
+                        </div>
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.committed_date.id_for_label }}">
+                        Fecha de pago
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-md">{{ form.committed_date }}</div>
+                        {% for error in form.committed_date.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.authorized_by.id_for_label }}">
+                        Autoriza
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-lg">{{ form.authorized_by }}</div>
+                        <div class="tc-form-hint">
+                            Quien responde por aplazar el corte. Se registra aparte
+                            de quien lo teclea.
+                        </div>
+                        {% for error in form.authorized_by.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    {% if charges %}
+
+                        <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
+                            Monto comprometido
+                        </label>
+                        <div class="tc-form-field">
+                            <div class="tc-w-sm">{{ form.amount }}</div>
+                            <div class="tc-form-hint">
+                                En blanco se compromete el saldo completo de lo
+                                elegido. Puede ser menor, nunca mayor.
+                            </div>
+                            {% for error in form.amount.errors %}
+                                <div class="tc-form-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <label class="tc-form-label" for="{{ form.reason.id_for_label }}">
+                            Motivo
+                        </label>
+                        <div class="tc-form-field">
+                            <div class="tc-w-xl">{{ form.reason }}</div>
+                            <div class="tc-form-hint">
+                                Aplazar el corte de quien ya debe es una decisión
+                                que alguien tiene que poder explicar después.
+                            </div>
+                            {% for error in form.reason.errors %}
+                                <div class="tc-form-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </section>
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-cash-stack"></i>Deuda que se compromete
+                </h2>
+                {% if selected_total %}
+                    <span class="tc-pill info">
+                        Elegido: S/ {{ selected_total|floatformat:2 }}
+                    </span>
+                {% endif %}
+            </div>
+
+            {% if charges %}
+
+                {# Se eligen deudas concretas: el compromiso protege las que
+                   cubre, no la deuda que aparezca después. #}
+                <div class="table-responsive">
+                    <table class="tc-table">
+                        <thead>
+                            <tr>
+                                <th style="width:3rem;"></th>
+                                <th>Detalle</th>
+                                <th>Periodo</th>
+                                <th>Vencimiento</th>
+                                <th class="num">Saldo</th>
+                                <th>Compromiso vigente</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for charge in charges %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="form-check-input"
+                                               name="charges"
+                                               value="{{ charge.pk }}"
+                                               id="charge_{{ charge.pk }}"
+                                               {% if charge.pk in selected_ids %}checked{% endif %}>
+                                    </td>
+                                    <td>
+                                        <label for="charge_{{ charge.pk }}" class="mb-0">
+                                            {{ charge.description }}
+                                        </label>
+                                        <span class="tc-sub">{{ charge.get_concept_display }}</span>
+                                    </td>
+                                    <td>{{ charge.period_label|default:"—" }}</td>
+                                    <td>
+                                        {{ charge.due_date|date:"d/m/Y" }}
+                                        {% if charge.is_overdue %}
+                                            <span class="tc-sub"><span class="tc-pill danger">Vencido</span></span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="num">S/ {{ charge.balance|floatformat:2 }}</td>
+                                    <td>
+                                        {% with commitment=charge.active_commitment %}
+                                            {% if commitment %}
+                                                <span class="tc-pill info">
+                                                    Al {{ commitment.committed_date|date:"d/m/Y" }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+            {% else %}
+
+                <div class="tc-empty">
+                    <i class="bi bi-check-circle text-success"></i>
+                    El abonado no tiene deudas pendientes: no hay nada que comprometer.
+                </div>
+
+            {% endif %}
+
+        </section>
+
+        {% if charges %}
+            <div class="tc-actions">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-check-lg"></i>Aceptar
+                </button>
+                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                    Cancelar
+                </a>
+            </div>
+        {% endif %}
+
+    </form>
+
+    {% if commitments %}
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-clock-history"></i>Compromisos registrados
+                </h2>
+            </div>
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha de pago</th>
+                            <th class="num">Monto</th>
+                            <th>Estado</th>
+                            <th>Motivo</th>
+                            <th>Autoriza</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for commitment in commitments %}
+                            <tr>
+                                <td>{{ commitment.committed_date|date:"d/m/Y" }}</td>
+                                <td class="num">S/ {{ commitment.amount|floatformat:2 }}</td>
+                                <td>
+                                    {% if commitment.status == "ACTIVE" %}
+                                        <span class="tc-pill info">Vigente</span>
+                                    {% elif commitment.status == "FULFILLED" %}
+                                        <span class="tc-pill success">Cumplido</span>
+                                    {% elif commitment.status == "BROKEN" %}
+                                        <span class="tc-pill danger">Incumplido</span>
+                                    {% else %}
+                                        <span class="tc-pill muted">Anulado</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ commitment.reason }}</td>
+                                <td>{{ commitment.authorized_by|default:commitment.granted_by }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </section>
+    {% endif %}
+
+</div>
+
+{% endblock %}

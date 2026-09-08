@@ -1,17 +1,18 @@
 from collections import defaultdict
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Max
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect
-from django.views.generic import CreateView, DetailView
+from django.urls import reverse_lazy
+from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from apps.customers.models import Customer
 
 from .commercial import build_commercial_quote
-from .forms import SubscriptionCreateForm
+from .forms import PlanForm, ServiceTypeForm, SubscriptionCreateForm
 from .models import Plan, ServiceType, Subscription
 
 
@@ -200,3 +201,137 @@ class SubscriptionSummaryView(LoginRequiredMixin, DetailView):
             subscription.contracts.filter(is_active=True).first()
         )
         return context
+
+
+# ---------------------------------------------------------------------
+# Configurar > Planes y Servicios
+#
+# Hasta aquí el catálogo comercial solo se cargaba con
+# `cargar_catalogo_comercial` o desde el admin de Django. Estas pantallas lo
+# ponen en manos del área comercial: el comando sigue sirviendo para sembrar
+# una instalación nueva, y el mantenimiento del día a día se hace acá.
+# ---------------------------------------------------------------------
+
+
+class ServiceTypeListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """Los servicios que se pueden contratar."""
+
+    model = ServiceType
+    template_name = "services/servicetype_list.html"
+    context_object_name = "service_types"
+    permission_required = "services.view_servicetype"
+
+    def get_queryset(self):
+        return ServiceType.objects.annotate(
+            plan_count=Count("plans", filter=Q(plans__is_active=True))
+        ).order_by("code")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_edit"] = self.request.user.has_perm(
+            "services.change_servicetype"
+        )
+        context["can_create"] = self.request.user.has_perm(
+            "services.add_servicetype"
+        )
+
+        return context
+
+
+class ServiceTypeCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+    model = ServiceType
+    form_class = ServiceTypeForm
+    template_name = "services/servicetype_form.html"
+    permission_required = "services.add_servicetype"
+    success_url = reverse_lazy("services:servicetype_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request, f"Servicio «{self.object.name}» registrado."
+        )
+
+        return response
+
+
+class ServiceTypeUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
+    model = ServiceType
+    form_class = ServiceTypeForm
+    template_name = "services/servicetype_form.html"
+    permission_required = "services.change_servicetype"
+    success_url = reverse_lazy("services:servicetype_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request, f"Servicio «{self.object.name}» actualizado."
+        )
+
+        return response
+
+
+class PlanListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """
+    Los planes del catálogo, con su precio normal y su precio de pronto pago.
+
+    Se muestran las dos cifras porque son las dos que el abonado escucha en la
+    venta. La de pronto pago no está guardada: se calcula con el descuento de
+    la política del plan.
+    """
+
+    model = Plan
+    template_name = "services/plan_list.html"
+    context_object_name = "plans"
+    permission_required = "services.view_plan"
+
+    def get_queryset(self):
+        queryset = Plan.objects.select_related(
+            "service_type", "billing_policy"
+        ).order_by("-generation", "service_type__code", "speed_mbps")
+
+        service_code = self.request.GET.get("servicio")
+        if service_code:
+            queryset = queryset.filter(service_type__code=service_code)
+
+        if self.request.GET.get("activos") == "1":
+            queryset = queryset.filter(is_active=True)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["service_types"] = ServiceType.objects.order_by("code")
+        context["current_service"] = self.request.GET.get("servicio", "")
+        context["only_active"] = self.request.GET.get("activos") == "1"
+        context["can_edit"] = self.request.user.has_perm("services.change_plan")
+        context["can_create"] = self.request.user.has_perm("services.add_plan")
+
+        return context
+
+
+class PlanCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView):
+    model = Plan
+    form_class = PlanForm
+    template_name = "services/plan_form.html"
+    permission_required = "services.add_plan"
+    success_url = reverse_lazy("services:plan_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, f"Plan «{self.object.name}» registrado.")
+
+        return response
+
+
+class PlanUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateView):
+    model = Plan
+    form_class = PlanForm
+    template_name = "services/plan_form.html"
+    permission_required = "services.change_plan"
+    success_url = reverse_lazy("services:plan_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, f"Plan «{self.object.name}» actualizado.")
+
+        return response

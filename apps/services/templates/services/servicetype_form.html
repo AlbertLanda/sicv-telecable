@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}
+SICV - {% if object %}Editar servicio{% else %}Nuevo servicio{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="py-3">
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="card card-custom mb-3">
+
+            <div class="card-header panel-head">
+                {% if object %}Editar servicio{% else %}Nuevo servicio{% endif %}
+            </div>
+
+            <div class="card-body">
+
+                <div class="row g-3">
+
+                    <div class="col-md-3">
+                        <label for="{{ form.code.id_for_label }}" class="form-label">
+                            Código
+                        </label>
+                        {{ form.code }}
+                        {% if form.code.help_text %}
+                            <div class="form-text">{{ form.code.help_text }}</div>
+                        {% endif %}
+                        {% for error in form.code.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-9">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                            Nombre del servicio
+                        </label>
+                        {{ form.name }}
+                        {% for error in form.name.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                            Descripción
+                        </label>
+                        {{ form.description }}
+                        {% for error in form.description.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.annex_installation_price.id_for_label }}" class="form-label">
+                            Anexo: costo de instalación (S/)
+                        </label>
+                        {{ form.annex_installation_price }}
+                        {% for error in form.annex_installation_price.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.annex_monthly_price.id_for_label }}" class="form-label">
+                            Anexo: cargo mensual (S/)
+                        </label>
+                        {{ form.annex_monthly_price }}
+                        {% for error in form.annex_monthly_price.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4 d-flex flex-column justify-content-center">
+                        <div class="form-check">
+                            {{ form.supports_tv_annexes }}
+                            <label class="form-check-label" for="{{ form.supports_tv_annexes.id_for_label }}">
+                                Permite anexos de TV
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.is_active }}
+                            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                Activo
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            Active los anexos solo para servicios con señal de
+                            cable, como CABLE o DUO.
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="card-body border-top d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    {% if object %}Guardar cambios{% else %}Registrar servicio{% endif %}
+                </button>
+                <a href="{% url 'services:servicetype_list' %}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
+            </div>
+
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

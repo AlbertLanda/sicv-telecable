@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Comprobantes de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "payments/_account_header.html" with active_tab="receipts" account_title="Comprobantes de pago" %}
+
+    <section class="tc-card tc-section tc-full">
+
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-receipt"></i>Comprobantes de pago
+            </h2>
+            {% if page_obj %}
+                <span class="tc-pill">{{ page_obj.paginator.count }} emitido{{ page_obj.paginator.count|pluralize }}</span>
+            {% endif %}
+        </div>
+
+        {% if receipts %}
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Comprobante</th>
+                            <th>Emitido</th>
+                            <th>Medio de pago</th>
+                            <th>Sede</th>
+                            <th class="num">Monto</th>
+                            <th>Estado</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for receipt in receipts %}
+                            <tr {% if receipt.is_voided %}style="opacity:.62;"{% endif %}>
+                                <td>
+                                    <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}">
+                                        {{ receipt.full_number }}
+                                    </a>
+                                </td>
+                                <td>
+                                    {{ receipt.issued_at|date:"d/m/Y H:i" }}
+                                    <span class="tc-sub">{{ receipt.payment.received_by }}</span>
+                                </td>
+                                <td>
+                                    {{ receipt.payment.get_method_display }}
+                                    {% if receipt.payment.reference %}
+                                        <span class="tc-sub">Op. {{ receipt.payment.reference }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ receipt.payment.branch.name }}</td>
+                                <td class="num">S/ {{ receipt.payment.amount|floatformat:2 }}</td>
+                                <td>
+                                    {% if receipt.is_voided %}
+                                        <span class="tc-pill danger">Anulado</span>
+                                    {% elif receipt.payment.status == "PENDING" %}
+                                        <span class="tc-pill warning">Pendiente</span>
+                                    {% else %}
+                                        <span class="tc-pill success">Vigente</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}"
+                                       class="tc-icon-btn" title="Ver comprobante">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}?print=1"
+                                       class="tc-icon-btn" title="Imprimir comprobante">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if is_paginated %}
+                <div class="tc-section-body" style="padding:12px 14px;">
+                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                        <span class="tc-form-hint" style="margin:0;">
+                            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                        </span>
+                        <div class="d-flex gap-2">
+                            {% if page_obj.has_previous %}
+                                <a class="tc-btn muted" href="?page={{ page_obj.previous_page_number }}">
+                                    <i class="bi bi-chevron-left"></i>Anterior
+                                </a>
+                            {% endif %}
+                            {% if page_obj.has_next %}
+                                <a class="tc-btn muted" href="?page={{ page_obj.next_page_number }}">
+                                    Siguiente<i class="bi bi-chevron-right"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+        {% else %}
+
+            <div class="tc-empty">
+                <i class="bi bi-info-circle"></i>
+                El abonado todavía no tiene comprobantes emitidos.
+            </div>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+{% endblock %}

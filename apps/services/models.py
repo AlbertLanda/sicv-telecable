@@ -171,7 +171,16 @@ class ServiceType(models.Model):
 
 class Plan(models.Model):
     class Category(models.TextChoices):
+        # Niveles de la linea 2026, del mas basico al mas alto. Son los
+        # nombres que el abonado escucha en la venta, asi que se guardan tal
+        # como se ofrecen: cambiarlos obligaria a reaprender la lista.
+        TELECABLE = "TELECABLE", "Telecable"
         STANDARD = "STANDARD", "Estándar"
+        PREMIUM = "PREMIUM", "Premium"
+        PREMIUM_PLUS = "PREMIUM_PLUS", "Premium Plus"
+
+        # Lineas anteriores. Se conservan porque hay suscripciones vivas
+        # contratadas con ellas.
         ECONOMIC = "ECONOMIC", "Económico"
         SUPER_ECONOMIC = "SUPER_ECONOMIC", "Súper económico"
 
@@ -262,6 +271,27 @@ class Plan(models.Model):
                     "Solo CABLE/DUO puede ofrecer cortesía inicial de TV."
                 )
             })
+
+    @property
+    def early_payment_price(self):
+        """Mensualidad si el abonado paga dentro del plazo de pronto pago.
+
+        Sale del precio normal menos el descuento de la politica: el descuento
+        ya vive ahi y duplicarlo en el plan crearia dos cifras que pueden
+        dejar de coincidir. Sin politica -o sin descuento- devuelve el precio
+        normal, porque entonces no hay pronto pago que ofrecer.
+        """
+        if not self.billing_policy_id or not self.billing_policy.discount_amount:
+            return self.monthly_price
+
+        return self.monthly_price - self.billing_policy.discount_amount
+
+    @property
+    def early_payment_discount(self):
+        if not self.billing_policy_id:
+            return Decimal("0.00")
+
+        return self.billing_policy.discount_amount
 
     def __str__(self):
         return self.name
