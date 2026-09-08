@@ -36,7 +36,7 @@ class CustomerDetailLocationRenderTests(TestCase):
     # Texto del enlace al mapa en la plantilla. Si el enlace aparece, ATC lo
     # va a pulsar; por eso la aserción es sobre lo que se pinta y no sobre una
     # variable de contexto.
-    MAP_BUTTON_TEXT = "Ver ubicación GPS"
+    MAP_BUTTON_TEXT = "Ver en Google Maps"
 
     def setUp(self):
         self.branch = Branch.objects.create(code="SED01", name="Sede Central")
