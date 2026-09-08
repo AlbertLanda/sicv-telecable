@@ -336,6 +336,8 @@ class AvailableWorkOrdersContentTests(AvailableWorkOrdersAPITestCase):
                 "priority",
                 "priority_display",
                 "scheduled_at",
+                "scheduled_date",
+                "agenda_date",
                 "created_at",
                 # Propios de la bandeja de disponibles: ubicar para decidir.
                 "branch",

@@ -107,7 +107,7 @@ class CustomerDashboardRedesignTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "customers/detail_dashboard.html")
-        self.assertContains(response, "Orden de trabajo abierta")
+        self.assertContains(response, "Orden de trabajo pendiente")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "Ver orden inicial")
         self.assertContains(response, "Imprimir orden inicial")

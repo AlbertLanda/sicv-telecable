@@ -212,7 +212,7 @@
             <article class="tc-card tc-section">
                 <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wrench-adjustable"></i>Últimas órdenes de trabajo</h2><a class="tc-btn" href="#ordenes">Ver todas las órdenes</a></div>
                 <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Orden</th><th>Tipo</th><th>Estado</th><th>Programada</th><th>Técnico</th><th>Resultado</th><th>Acciones</th></tr></thead><tbody>
-                    {% for order in recent_work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>{{ order.order_type.name }}</td><td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden"><i class="bi bi-file-earmark-text"></i></a></td></tr>{% empty %}<tr><td colspan="7">Sin órdenes registradas.</td></tr>{% endfor %}
+                    {% for order in recent_work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>{{ order.order_type.name }}{% if order.subtype %}<br><span class="text-muted">{{ order.subtype.name }}</span>{% endif %}</td><td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden"><i class="bi bi-file-earmark-text"></i></a></td></tr>{% empty %}<tr><td colspan="7">Sin órdenes registradas.</td></tr>{% endfor %}
                 </tbody></table></div>
             </article>
 
@@ -225,8 +225,56 @@
         </section>
 
         <section id="direcciones" class="tc-card tc-section tc-full">
-            <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-geo-alt-fill"></i>Direcciones</h2><a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}">Nueva dirección</a></div>
-            <div class="table-responsive"><table class="tc-table"><thead><tr><th>Dirección</th><th>Distrito</th><th>Referencia</th><th>Suministro</th><th>GPS</th></tr></thead><tbody>{% for addr in addresses %}<tr><td>{{ addr.address }}{% if addr.is_primary %} <span class="tc-pill">Principal</span>{% endif %}</td><td>{{ addr.district|default:"-" }}</td><td>{{ addr.reference|default:"-" }}</td><td>{{ addr.electrical_supply_number|default:"-" }}</td><td>{% if addr.map_link %}<a href="{{ addr.map_link }}" target="_blank">Google Maps</a>{% else %}-{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Sin direcciones registradas.</td></tr>{% endfor %}</tbody></table></div>
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-geo-alt-fill"></i>Direcciones
+                </h2>
+                <a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}">
+                    Nueva dirección
+                </a>
+            </div>
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Dirección</th>
+                            <th>Distrito</th>
+                            <th>Referencia</th>
+                            <th>Medidor</th>
+                            <th>Suministro</th>
+                            <th>GPS</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for addr in addresses %}
+                        <tr>
+                            <td>
+                                {{ addr.address }}
+                                {% if addr.is_primary %}
+                                    <span class="tc-pill">Principal</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ addr.district|default:"-" }}</td>
+                            <td>{{ addr.reference|default:"-" }}</td>
+                            <td>{{ addr.meter_number|default:"-" }}</td>
+                            <td>{{ addr.electrical_supply_number|default:"-" }}</td>
+                            <td>
+                                {% if addr.map_link %}
+                                    <a href="{{ addr.map_link }}" target="_blank">Google Maps</a>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">Sin direcciones registradas.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </section>
 
         <section id="suscripciones-completo" class="tc-card tc-section tc-full">
@@ -241,7 +289,7 @@
 
         <section id="ordenes" class="tc-card tc-section tc-full">
             <div class="tc-section-head"><h2 class="tc-section-title"><i class="bi bi-wrench-adjustable"></i>Órdenes de trabajo</h2>{% if perms.work_orders.add_workorder %}<a class="tc-btn primary" href="{% url 'work_orders:create' customer.pk %}">Nueva orden de trabajo</a>{% endif %}</div>
-            <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Orden</th><th>Servicio</th><th>Tipo</th><th>Motivo</th><th>Estado</th><th>Prioridad</th><th>Técnico</th><th>Resultado</th><th>Programada</th><th>Acciones</th></tr></thead><tbody>{% for order in work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>#{{ order.subscription.service_number }}</td><td>{{ order.order_type.name }}</td><td>{{ order.reason.name|default:"-" }}</td><td>{{ order.get_status_display }}</td><td>{{ order.get_priority_display }}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>{% if perms.work_orders.view_workorder %} <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>{% endif %}</td></tr>{% empty %}<tr><td colspan="10">Sin órdenes registradas.</td></tr>{% endfor %}</tbody></table></div>
+            <div class="table-responsive"><table class="tc-table"><thead><tr><th>N.º Orden</th><th>Servicio</th><th>Tipo</th><th>Motivo</th><th>Estado</th><th>Prioridad</th><th>Técnico</th><th>Resultado</th><th>Programada</th><th>Acciones</th></tr></thead><tbody>{% for order in work_orders %}<tr><td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td><td>#{{ order.subscription.service_number }}</td><td>{{ order.order_type.name }}{% if order.subtype %}<br><span class="text-muted">{{ order.subtype.name }}</span>{% endif %}</td><td>{{ order.reason.name|default:"-" }}</td><td>{{ order.get_status_display }}</td><td>{{ order.get_priority_display }}</td><td>{{ order.assigned_technician|default:"Sin asignar" }}</td><td>{{ order.result.name|default:"-" }}</td><td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td><td><a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>{% if perms.work_orders.view_workorder %} <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>{% endif %}</td></tr>{% empty %}<tr><td colspan="10">Sin órdenes registradas.</td></tr>{% endfor %}</tbody></table></div>
         </section>
 
         <section id="actividad" class="tc-card tc-section tc-full">

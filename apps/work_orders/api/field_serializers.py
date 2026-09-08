@@ -9,6 +9,8 @@ from pathlib import Path
 
 from rest_framework import serializers
 
+from decimal import Decimal
+
 from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.services.models import InstallationMaterialRule, InstallationMaterialUsage
 from apps.work_orders.models import OrderResult, WorkOrderEvidence, WorkOrderFieldSheet
@@ -116,7 +118,7 @@ class WorkOrderMaterialMovementInputSerializer(serializers.Serializer):
     quantity = serializers.DecimalField(
         max_digits=10,
         decimal_places=2,
-        min_value=0.01,
+        min_value=Decimal("0.01"),
     )
     remarks = serializers.CharField(
         required=False,

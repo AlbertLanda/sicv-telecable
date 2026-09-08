@@ -254,6 +254,20 @@ class CustomerAddressForm(forms.ModelForm):
     requerido es el código de suministro eléctrico.
     """
 
+    gps_link = forms.URLField(
+        required=False,
+        max_length=500,
+        label="Enlace GPS",
+        assume_scheme="https",
+        widget=forms.URLInput(
+            attrs={
+                "class": "form-control",
+                "maxlength": "500",
+                "placeholder": "https://maps.google.com/...",
+            }
+        ),
+    )
+
     class Meta:
         model = CustomerAddress
 
@@ -313,13 +327,6 @@ class CustomerAddressForm(forms.ModelForm):
                 attrs={
                     "class": "form-control",
                     "step": "0.0000001",
-                }
-            ),
-            "gps_link": forms.URLInput(
-                attrs={
-                    "class": "form-control",
-                    "maxlength": "500",
-                    "placeholder": "https://maps.google.com/...",
                 }
             ),
             "is_primary": forms.CheckboxInput(

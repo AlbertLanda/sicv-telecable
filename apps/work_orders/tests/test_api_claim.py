@@ -184,6 +184,8 @@ class ClaimSuccessTests(ClaimWorkOrderAPITestCase):
                 "priority",
                 "priority_display",
                 "scheduled_at",
+                "scheduled_date",
+                "agenda_date",
                 "created_at",
                 "address",
                 "plan_details",

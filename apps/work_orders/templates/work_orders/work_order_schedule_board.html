@@ -262,7 +262,7 @@
             Órdenes abiertas de
             {% if board_branch %}{{ board_branch.name }}{% else %}todas las sedes{% endif %},
             agrupadas por día de atención.
-            {% if perms.work_orders.assign_workorder %}
+            {% if perms.work_orders.schedule_workorder %}
                 Arrastre una tarjeta a otro día para programarla o reprogramarla.
             {% else %}
                 Solo lectura: programar o reprogramar requiere permiso operativo de programación.
@@ -309,7 +309,7 @@
         </div>
     </div>
 
-    {% if perms.work_orders.assign_workorder %}
+    {% if perms.work_orders.schedule_workorder %}
         <div class="alert alert-light border small mb-3">
             <strong>Cómo funciona:</strong>
             una OT <strong>Pendiente</strong> puede programarse o moverse varias veces y continúa
@@ -325,6 +325,7 @@
             id="board"
             data-reschedule-url="{% url 'work_orders:reschedule' 0 %}"
             data-week-start="{{ week_start|date:'Y-m-d' }}"
+            data-can-reschedule="{% if perms.work_orders.schedule_workorder %}1{% else %}0{% endif %}"
         >
             {% include "work_orders/_schedule_column.html" with column=unscheduled_column %}
             {% for column in day_columns %}
@@ -341,7 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const board = document.getElementById("board");
     if (!board) return;
 
-    const canReschedule = {% if perms.work_orders.assign_workorder %}true{% else %}false{% endif %};
+    const canReschedule = board.dataset.canReschedule === "1";
     if (!canReschedule) {
         board.querySelectorAll(".board-card").forEach(function (card) {
             card.removeAttribute("draggable");
@@ -467,6 +468,22 @@ document.addEventListener("DOMContentLoaded", function () {
         const targetBody = column.querySelector(".board-column-body");
         const placeholder = document.createComment("origen");
 
+        const reason = window.prompt(
+            "Indique el motivo de la programación o reprogramación:"
+        );
+
+        if (reason === null) {
+            return;
+        }
+
+        if (!reason.trim()) {
+            notify(
+                "Debe indicar un motivo para programar o reprogramar la orden.",
+                "warning"
+            );
+            return;
+        }
+
         saving = true;
         board.setAttribute("aria-busy", "true");
         originBody.insertBefore(placeholder, card);
@@ -487,7 +504,10 @@ document.addEventListener("DOMContentLoaded", function () {
                         "X-CSRFToken": csrfToken,
                         "X-Requested-With": "XMLHttpRequest",
                     },
-                    body: JSON.stringify({ date: column.dataset.column }),
+                    body: JSON.stringify({
+                        date: column.dataset.column,
+                        reason: reason.trim(),
+                    }),
                 }
             );
 

@@ -1557,6 +1557,18 @@ class CustomerRecentActivityTests(TestCase):
 
         self.client.login(username="atc_historial", password="123")
 
+    def login_user_without_workorder_permissions(self):
+        self.user.role = User.Role.SALES
+        self.user.save(update_fields=["role"])
+
+        self.user.user_permissions.clear()
+
+        self.client.logout()
+        self.client.login(
+            username="atc_historial",
+            password="123",
+        )
+
     # ------------------------------------------------------------------
     # ESTADOS VACÍOS (escenarios 3, 7, 16)
     # ------------------------------------------------------------------
@@ -1567,7 +1579,7 @@ class CustomerRecentActivityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "No se registran actividades recientes para este cliente.",
+            "Sin actividad reciente.",
         )
         self.assertEqual(
             response.context["operational_summary"]["total_subscriptions"], 0
@@ -1837,7 +1849,7 @@ class CustomerRecentActivityTests(TestCase):
         self.assertEqual(response.context["recent_activity"], [])
         self.assertContains(
             response,
-            "No se registran actividades recientes para este cliente.",
+            "Sin actividad reciente.",
         )
 
     # ------------------------------------------------------------------
@@ -1853,6 +1865,8 @@ class CustomerRecentActivityTests(TestCase):
         self.assertContains(response, "Nueva orden de trabajo")
 
     def test_usuario_sin_permiso_no_ve_accion_nueva_ot(self):
+        self.login_user_without_workorder_permissions()
+
         response = self.client.get(self.detail_url)
 
         self.assertNotContains(response, "Nueva orden de trabajo")

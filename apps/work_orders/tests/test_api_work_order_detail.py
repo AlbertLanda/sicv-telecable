@@ -110,6 +110,8 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "priority",
                 "priority_display",
                 "scheduled_at",
+                "scheduled_date",
+                "agenda_date",
                 "created_at",
                 # Propios del detalle.
                 "address",
