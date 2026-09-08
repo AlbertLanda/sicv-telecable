@@ -488,7 +488,7 @@ class WorkOrderStartAttentionRejectionTests(WorkOrderWebStartAttentionTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["can_start_attention"])
-        self.assertNotContains(response, "<form method=\"post\"")
+        self.assertNotContains(response, 'id="start-attention-form"')
 
 
 class WorkOrderStartAttentionSafetyTests(WorkOrderWebStartAttentionTestCase):
