@@ -1268,7 +1268,7 @@ class WorkOrderReprogramming(models.Model):
 
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(new_schedule__isnull=False, new_schedule_date__isnull=True)
                     | models.Q(new_schedule__isnull=True, new_schedule_date__isnull=False)
                 ),
@@ -1763,7 +1763,7 @@ class WorkOrderLiquidation(models.Model):
             # La regla "una sola corrección" se defiende también en base de
             # datos, no solo en los servicios.
             models.CheckConstraint(
-                check=models.Q(correction_count__lte=1),
+                condition=models.Q(correction_count__lte=1),
                 name="wo_liq_correction_count_max_1",
             ),
         ]
