@@ -19,6 +19,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
+from apps.accounts.models import User
 from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder, WorkOrderEvidence, WorkOrderFieldSheet
 from apps.work_orders.services import add_work_order_evidence, update_field_sheet
@@ -304,7 +305,11 @@ class WorkOrderDetailViewAccessTests(WorkOrderTestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_atc_without_permission_is_forbidden(self):
+    def test_user_without_permission_is_forbidden(self):
+        self.atc_user.role = User.Role.SALES
+        self.atc_user.save(update_fields=["role"])
+        self.atc_user.user_permissions.clear()
+
         self.client.login(username="atc1", password="test1234")
 
         response = self.client.get(self.url)
