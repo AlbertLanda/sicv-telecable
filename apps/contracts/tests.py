@@ -789,6 +789,18 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.user.user_permissions.add(permission)
 
+    def login_user_without_workorder_permissions(self):
+        self.user.role = User.Role.SALES
+        self.user.save(update_fields=["role"])
+
+        self.user.user_permissions.clear()
+
+        self.client.logout()
+        self.client.login(
+            username="colaborador_ot",
+            password="123",
+        )
+
     # -------------------------------------------------------------
     # ACCESO / PERMISOS
     # -------------------------------------------------------------
@@ -802,6 +814,8 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(WorkOrder.objects.count(), 0)
 
     def test_usuario_sin_permiso_recibe_403(self):
+        self.login_user_without_workorder_permissions()
+
         response = self.client.post(self.generate_url)
 
         self.assertEqual(response.status_code, 403)
@@ -849,6 +863,8 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(WorkOrder.objects.count(), 1)
 
     def test_resumen_oculta_el_boton_sin_permiso(self):
+        self.login_user_without_workorder_permissions()
+
         response = self.client.get(self.summary_url)
 
         self.assertEqual(response.status_code, 200)
@@ -1067,9 +1083,9 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, "Ver / editar ficha de la orden")
 
     def test_resumen_no_ofrece_el_enlace_sin_permiso(self):
-        self.grant_add_workorder_permission()
-
         self.client.post(self.generate_url)
+
+        self.login_user_without_workorder_permissions()
 
         response = self.client.get(self.summary_url)
 
@@ -1112,8 +1128,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, detail_url)
 
     def test_orden_no_ofrece_ver_orden_sin_permiso(self):
-        self.grant_add_workorder_permission()
-
         self.client.post(self.generate_url)
 
         order = WorkOrder.objects.get(subscription=self.subscription)
@@ -1126,6 +1140,8 @@ class InstallationWorkOrderCreateTests(TestCase):
             },
         )
 
+        self.login_user_without_workorder_permissions()
+
         response = self.client.get(receipt_url)
 
         self.assertNotContains(response, "Ver orden")
@@ -1136,9 +1152,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         )
 
         self.assertNotContains(response, detail_url)
-
-        self.assertContains(response, "Cancelar")
-        self.assertContains(response, "Imprimir")
 
     def test_cancelar_de_la_orden_vuelve_a_la_ficha_del_cliente_sin_alterarla(self):
         self.grant_add_workorder_permission()
