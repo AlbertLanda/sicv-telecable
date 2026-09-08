@@ -392,6 +392,13 @@
             .sicv-main { margin:0 !important; padding:0 !important; }
             body { background:#fff; }
         }
+        .sicv-messages {
+            margin: 1rem 0 0;
+        }
+
+        .sicv-messages .alert:last-child {
+            margin-bottom: 0;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -494,6 +501,27 @@
 {% endif %}
 
 <main class="{% if user.is_authenticated and not hide_sidebar %}sicv-main{% endif %}">
+
+    {% comment %}
+    Los avisos se pintan aqui y en un solo sitio.
+
+    Antes cada plantilla decidia si los mostraba, asi que un aviso emitido
+    antes de redirigir a una pantalla que no los pintaba no se consumia y
+    quedaba en la sesion: al abrir por fin una que si los pintaba salian
+    todos apilados de golpe. Al vivir en el shell se consumen en la
+    siguiente pantalla, sea cual sea, y siempre se ven igual.
+    {% endcomment %}
+    {% if messages %}
+        <div class="sicv-messages">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 </main>
 

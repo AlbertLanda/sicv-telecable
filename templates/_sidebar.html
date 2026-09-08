@@ -18,7 +18,7 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
         </div>
 
-        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente">
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente deuda historial de pagos comprobantes de pago cobranza">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
                 <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>
             </button>
@@ -27,6 +27,22 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     <a class="sidebar-link" href="{% url 'customers:search' %}"><i class="bi bi-search"></i>Buscar cliente</a>
                     {% if perms.customers.add_customer %}
                         <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
+                    {% endif %}
+
+                    {% comment %}
+                    Cuenta del abonado. Las tres pantallas cuelgan del cliente
+                    seleccionado en la sesion; si no hay ninguno, la vista de
+                    entrada lleva al buscador en lugar de abrir una cuenta vacia
+                    que pareceria decir que el abonado no debe nada.
+                    {% endcomment %}
+                    {% if perms.payments.view_charge %}
+                        <a class="sidebar-link" href="{% url 'payments:selected_debt' %}"><i class="bi bi-cash-stack"></i>Deuda</a>
+                    {% endif %}
+                    {% if perms.payments.view_payment %}
+                        <a class="sidebar-link" href="{% url 'payments:selected_history' %}"><i class="bi bi-clock-history"></i>Historial de pagos</a>
+                    {% endif %}
+                    {% if perms.payments.view_receipt %}
+                        <a class="sidebar-link" href="{% url 'payments:selected_receipts' %}"><i class="bi bi-receipt"></i>Comprobantes de pago</a>
                     {% endif %}
                 </div>
             </div>
@@ -55,6 +71,27 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     <span class="sidebar-link-pending"><span>Contratos</span><span class="pending-tag">pendiente</span></span>
                     <span class="sidebar-link-pending"><span>Suscripciones</span><span class="pending-tag">pendiente</span></span>
                     <span class="sidebar-link-pending"><span>Comprobantes</span><span class="pending-tag">pendiente</span></span>
+                </div>
+            </div>
+        </section>
+
+        {% comment %}
+        Configurar. El catalogo comercial se cargaba solo por comando o desde
+        el admin de Django; estas pantallas lo ponen en manos del area
+        comercial, que es quien decide precios y niveles.
+        {% endcomment %}
+        <section class="sidebar-section" data-sidebar-section="configurar planes servicios catalogo precios">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarConfigurar" aria-expanded="true">
+                <i class="bi bi-sliders"></i><span>Configurar</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarConfigurar">
+                <div class="sidebar-links">
+                    {% if perms.services.view_plan %}
+                        <a class="sidebar-link" href="{% url 'services:plan_list' %}"><i class="bi bi-list-stars"></i>Planes</a>
+                    {% endif %}
+                    {% if perms.services.view_servicetype %}
+                        <a class="sidebar-link" href="{% url 'services:servicetype_list' %}"><i class="bi bi-hdd-network"></i>Servicios</a>
+                    {% endif %}
                 </div>
             </div>
         </section>

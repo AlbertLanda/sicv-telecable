@@ -82,9 +82,9 @@ def get_active_office(request, branch=None):
 # sección aparte -es una sola sección, como en el sistema anterior.
 CLIENTES_PENDING_ITEMS = [
     "Datos",
-    "Deuda",
-    "Historial de pagos",
-    "Comprobantes de pago",
+    # "Deuda", "Historial de pagos" y "Comprobantes de pago" salieron de esta
+    # lista al construirse el modulo de cobranza: ya son enlaces reales en la
+    # seccion Clientes, igual que "Buscar cliente".
     "Contrato cable",
     "Contrato",
     "Orden",
@@ -106,8 +106,12 @@ CLIENTES_PENDING_ITEMS = [
 # sistema anterior:
 #   - "Soporte": ahí el proveedor atendía sus propias incidencias
 #     técnicas, y ese rol ya no existe -el soporte lo damos nosotros.
-#   - "Cliente2", "Programar" y "Configurar": no aportan nada que no
-#     esté ya en las tres secciones de arriba.
+#   - "Cliente2" y "Programar": no aportan nada que no esté ya en las
+#     tres secciones de arriba.
+#
+# "Configurar" sí se construyó, con contenido que no estaba en ninguna
+# otra sección: el mantenimiento de planes y servicios, que hasta ahora
+# solo se podía hacer por comando o desde el admin de Django.
 SIDEBAR_PENDING_SECTIONS = [
     {
         "name": "Caja",
@@ -153,6 +157,7 @@ def organization(request):
         "available_branches": Branch.objects.filter(is_active=True),
         "active_office": get_active_office(request, branch=active_branch),
         "available_offices": offices,
+        "selected_customer_id": request.session.get("selected_customer_id"),
         "sidebar_clientes_pending_items": CLIENTES_PENDING_ITEMS,
         "sidebar_pending_sections": SIDEBAR_PENDING_SECTIONS,
     }

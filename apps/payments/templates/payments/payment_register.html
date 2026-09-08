@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Cobrar a {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "payments/_account_header.html" with active_tab="debt" account_title="Cobrar" %}
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {# Las deudas elegidas en el tablero viajan con el formulario: son las
+           que se van a cobrar, y perderlas al enviar dejaría el cobro sin
+           saber a qué aplicarse. #}
+        {% for charge_id in selected_ids %}
+            <input type="hidden" name="charges" value="{{ charge_id }}">
+        {% endfor %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-receipt-cutoff"></i>Comprobante
+                </h2>
+                <span class="tc-pill">{{ active_branch.name }}</span>
+            </div>
+
+            <div class="tc-section-body">
+                <div class="tc-form">
+
+                    <div class="tc-form-label">Código</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Fecha y hora</div>
+                    <div class="tc-form-field">
+                        <div class="d-flex flex-wrap gap-2">
+                            <input type="text" class="tc-input tc-readonly tc-w-md"
+                                   value="{{ today|date:'d/m/Y' }}" disabled>
+                            <input type="text" class="tc-input tc-readonly tc-w-sm"
+                                   value="{{ now|date:'H:i' }}" disabled>
+                        </div>
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.series.id_for_label }}">
+                        Serie
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <div class="tc-w-md">{{ form.series }}</div>
+                            <span class="tc-form-hint" style="margin:0;">
+                                Número {{ next_number }} — lo asigna el correlativo al aceptar
+                            </span>
+                        </div>
+                        {% for error in form.series.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="tc-form-label">Usuario</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ request.user.username }}" disabled>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-list-check"></i>Deudas a cobrar
+                </h2>
+            </div>
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th class="num">Cantidad</th>
+                            <th>Código de abonado</th>
+                            <th>Descripción</th>
+                            <th>Moneda</th>
+                            <th class="num">Monto</th>
+                            <th class="num">Descuento</th>
+                            <th class="num">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for charge in selected_charges %}
+                            <tr>
+                                <td class="num">{{ charge.quantity|floatformat:5 }}</td>
+                                <td>{{ customer.code }}</td>
+                                <td>
+                                    {{ charge.description }}
+                                    {% if charge.period_label %}
+                                        <span class="tc-sub">{{ charge.period_label }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ charge.currency }}</td>
+                                <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
+                                <td class="num">S/ {{ charge.current_discount|floatformat:2 }}</td>
+                                <td class="num">S/ {{ charge.balance|floatformat:2 }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="tc-empty" style="padding:14px 9px;">
+                                    No se marcó ninguna deuda en el tablero.
+                                    El cobro quedará como saldo a favor del abonado.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if selected_charges %}
+                        <tfoot>
+                            <tr>
+                                <th colspan="4" class="num">Totales</th>
+                                <th class="num">S/ {{ selected_gross|floatformat:2 }}</th>
+                                <th class="num">S/ {{ selected_discount|floatformat:2 }}</th>
+                                <th class="num">S/ {{ selected_total|floatformat:2 }}</th>
+                            </tr>
+                        </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+
+        </section>
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-cash-coin"></i>Cobro
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+                <div class="tc-form">
+
+                    <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
+                        Total
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-sm">{{ form.amount }}</div>
+                        {% for error in form.amount.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="tc-form-label">Cancelado</div>
+                    <div class="tc-form-field">
+                        <div class="tc-choices">
+                            {% for radio in form.settled %}
+                                <label class="tc-choice" for="{{ radio.id_for_label }}">
+                                    {{ radio.tag }}<span>{{ radio.choice_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="tc-form-hint">
+                            «No (Pendiente)» emite el comprobante sin que el dinero
+                            haya entrado: la deuda no baja hasta confirmarlo.
+                        </div>
+                    </div>
+
+                    <div class="tc-form-label">Medio de pago</div>
+                    <div class="tc-form-field">
+                        <div class="tc-choices">
+                            {% for radio in form.method %}
+                                <label class="tc-choice" for="{{ radio.id_for_label }}">
+                                    {{ radio.tag }}<span>{{ radio.choice_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        {% for error in form.method.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.reference.id_for_label }}">
+                        Número de operación
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-lg">{{ form.reference }}</div>
+                        <div class="tc-form-hint">Obligatorio salvo en efectivo.</div>
+                        {% for error in form.reference.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.collector.id_for_label }}">
+                        Cobrador
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-lg">{{ form.collector }}</div>
+                        <div class="tc-form-hint">
+                            Quien trajo el dinero, si no fue la ventanilla.
+                        </div>
+                        {% for error in form.collector.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.due_date.id_for_label }}">
+                        Fecha de vencimiento
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-md">{{ form.due_date }}</div>
+                        <div class="tc-form-hint">
+                            Hasta cuándo vale un comprobante emitido como pendiente.
+                        </div>
+                        {% for error in form.due_date.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label top" for="{{ form.note.id_for_label }}">
+                        Observaciones
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-xl">{{ form.note }}</div>
+                        {% for error in form.note.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        <div class="tc-actions">
+            <button type="submit" class="tc-btn primary">
+                <i class="bi bi-check-lg"></i>Aceptar
+            </button>
+            <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                Cancelar
+            </a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

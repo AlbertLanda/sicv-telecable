@@ -760,6 +760,21 @@ class CustomerDetailView(LoginRequiredMixin, DetailView):
     template_name = "customers/detail.html"
     context_object_name = "customer"
 
+    def get(self, request, *args, **kwargs):
+        """Abrir la ficha deja al abonado elegido para el resto del sistema.
+
+        El buscador enlaza directamente a la ficha, asi que "el abonado
+        seleccionado" tiene que significar "el ultimo cuya ficha abri". Antes
+        solo lo fijaba el boton "Usar cliente", que la ficha nueva ya no
+        muestra: por eso las pantallas de cuenta -Deuda, Historial,
+        Comprobantes- respondian que no habia ningun abonado elegido aunque
+        el operador estuviera viendo uno.
+        """
+        response = super().get(request, *args, **kwargs)
+        request.session["selected_customer_id"] = self.object.pk
+
+        return response
+
     def get_queryset(self):
         address_queryset = (
             CustomerAddress.objects

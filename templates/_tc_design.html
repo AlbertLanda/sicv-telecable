@@ -1,0 +1,173 @@
+{% comment %}
+Sistema visual compartido de las pantallas operativas del SICV.
+
+Vivia dentro de la ficha del cliente, que fue la primera en usarlo. Se movio
+aqui cuando cobranza necesito el mismo lenguaje: mantenerlo en una plantilla
+habria obligado a copiarlo, y dos copias del mismo CSS se separan al primer
+ajuste. Las pantallas lo cargan desde su bloque extra_css.
+{% endcomment %}
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+    :root {
+        --tc-blue: #0f4c7f;
+        --tc-blue-dark: #0a3b66;
+        --tc-blue-soft: #eef6fd;
+        --tc-text: #17355f;
+        --tc-muted: #64748b;
+        --tc-border: #d9e4ef;
+        --tc-bg: #f3f7fb;
+        --tc-warning: #f6b700;
+        --tc-warning-bg: #fff9e8;
+        --tc-success: #0b9a52;
+    }
+
+    body { color: var(--tc-text); }
+
+    .tc-content { min-width:0; }
+    .tc-breadcrumb { font-size:.77rem; color:#6f8197; margin-bottom:18px; }
+    .tc-breadcrumb strong { color:#24486f; }
+    .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .tc-toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
+
+    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; }
+    .tc-btn:hover { color:#0c4f9e; background:#f7fbff; }
+    .tc-btn.primary { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
+    .tc-btn.muted { border-color:#afc0d1; color:#31516f; }
+    .tc-btn.square { width:38px; padding:0; }
+
+    .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
+
+    /* El resumen del abonado (.tc-hero) se define en base.html: lo
+       comparte con el alta de órdenes. Aquí solo su separación. */
+    .tc-hero { margin-top:14px; }
+
+    .tc-order { margin-top:12px; padding:14px 16px; background:linear-gradient(90deg,#fff9e7 0%,#fffefa 100%); border:1px solid #f2ce63; border-left:6px solid var(--tc-warning); display:grid; grid-template-columns:70px minmax(0,1fr) 360px; gap:16px; align-items:center; }
+    .tc-order-icon { width:56px; height:56px; border-radius:50%; background:#ffbd22; color:#111; display:flex; align-items:center; justify-content:center; font-size:1.65rem; }
+    .tc-order-title { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.9rem; font-weight:800; color:#173d68; }
+    .tc-order-number { font-size:1.17rem; font-weight:800; color:#123c6d; margin-top:2px; }
+    .tc-pill { display:inline-flex; align-items:center; padding:3px 11px; border-radius:5px; background:#e7edf3; color:#284c70; font-size:.7rem; font-weight:700; border:1px solid #d2dde8; }
+    .tc-pill.warning { background:#ffc928; color:#2e2600; border-color:#eeb90a; }
+    .tc-order-meta { font-size:.77rem; color:#2e4763; margin-top:7px; }
+    .tc-order-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    .tc-tabs { display:grid; grid-template-columns:repeat(6,1fr); margin-top:12px; background:#fff; border:1px solid var(--tc-border); border-radius:7px; overflow:hidden; }
+    .tc-tabs a { text-decoration:none; color:#345a80; padding:13px 10px; text-align:center; font-size:.77rem; border-right:1px solid #e5edf4; display:flex; gap:8px; justify-content:center; align-items:center; }
+    .tc-tabs a:last-child { border-right:0; }
+    .tc-tabs a.active { color:#1766c2; font-weight:700; background:#f4f9ff; box-shadow:inset 0 -3px 0 #2f7df6; }
+
+    .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+    .tc-section { overflow:hidden; }
+    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+    .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
+    .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
+    .tc-section-body { padding:0 14px 14px; }
+    .tc-data-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px 28px; }
+    .tc-data-label { font-size:.69rem; color:#74859a; margin-bottom:2px; }
+    .tc-data-value { font-size:.78rem; color:#1b385d; font-weight:500; }
+    .tc-map-layout { display:grid; grid-template-columns:minmax(0,1fr) 185px; gap:12px; align-items:stretch; }
+    .tc-map { height:150px; border-radius:6px; border:1px solid #d9e4ef; overflow:hidden; background:#edf2f7; position:relative; }
+    .tc-map iframe { width:100%; height:100%; border:0; }
+    .tc-map-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#718096; font-size:.72rem; padding:12px; }
+    .tc-map-btn { margin-top:8px; width:100%; }
+
+    .tc-table { width:100%; margin:0; border-collapse:collapse; }
+    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:8px 9px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
+    .tc-table td { color:#334f6b; font-size:.69rem; padding:9px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
+    .tc-table tr:last-child td { border-bottom:0; }
+    .tc-table a { color:#1473d4; text-decoration:none; font-weight:700; }
+    .tc-table .status-warning { display:inline-block; padding:2px 7px; border-radius:5px; background:#ffc928; color:#332900; font-weight:700; }
+    .tc-table .status-success { display:inline-block; padding:2px 7px; border-radius:4px; background:#0aa25c; color:#fff; font-weight:700; }
+    .tc-icon-btn { width:31px; height:31px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #aebfd0; border-radius:5px; color:#516a84; background:#fff; text-decoration:none; }
+
+    .tc-full { margin-top:14px; }
+    .tc-footer { display:flex; justify-content:space-between; font-size:.66rem; color:#8897a8; margin-top:18px; padding:0 2px 8px; }
+
+    @media (max-width: 1200px) {
+        .tc-order { grid-template-columns:60px minmax(0,1fr); }
+        .tc-order-actions { grid-column:1/-1; }
+    }
+    @media (max-width: 900px) {
+        .tc-grid { grid-template-columns:1fr; }
+        .tc-tabs { grid-template-columns:repeat(3,1fr); }
+    }
+    @media (max-width: 600px) {
+        .tc-order { grid-template-columns:1fr; }
+        .tc-order-icon { display:none; }
+        .tc-order-actions, .tc-tabs { grid-template-columns:1fr 1fr; }
+        .tc-data-grid, .tc-map-layout { grid-template-columns:1fr; }
+        .tc-map { height:190px; }
+    }
+</style>
+
+<style>
+    /* --------------------------------------------------------------
+       Complementos que las pantallas de cobranza necesitan y la ficha
+       del cliente no tenia: pestanas de 3 y 4 columnas, formularios en
+       dos columnas y totales de tabla.
+       -------------------------------------------------------------- */
+
+    .tc-tabs.cols-3 { grid-template-columns:repeat(3,1fr); }
+    .tc-tabs.cols-4 { grid-template-columns:repeat(4,1fr); }
+
+    /* Formulario en filas etiqueta / campo, como el sistema anterior. */
+    .tc-form { display:grid; grid-template-columns:190px minmax(0,1fr); gap:12px 18px; align-items:center; }
+    .tc-form-label { font-size:.75rem; font-weight:700; color:#42607f; text-align:right; }
+    .tc-form-label.top { align-self:start; padding-top:9px; }
+    .tc-form-field { min-width:0; }
+    .tc-form-wide { grid-column:1/-1; }
+    .tc-form-hint { font-size:.68rem; color:#74859a; margin-top:4px; }
+    .tc-form-error { font-size:.7rem; color:#c0392b; margin-top:4px; font-weight:600; }
+
+    /* Campos: mismo trazo que las tarjetas, sin el look por defecto de
+       Bootstrap, para que el formulario no parezca de otra aplicacion. */
+    .tc-input,
+    .tc-form-field .form-control,
+    .tc-form-field .form-select {
+        font-size:.78rem;
+        border:1px solid var(--tc-border);
+        border-radius:5px;
+        padding:7px 10px;
+        color:var(--tc-text);
+        background:#fff;
+        width:100%;
+    }
+    .tc-form-field .form-control:focus,
+    .tc-form-field .form-select:focus {
+        border-color:#7fb2f0;
+        box-shadow:0 0 0 3px rgba(47,125,246,.14);
+        outline:0;
+    }
+    .tc-form-field textarea.form-control { min-height:96px; }
+    .tc-readonly { background:#f2f5f9; color:#5b7391; }
+
+    .tc-w-sm { max-width:9rem; }
+    .tc-w-md { max-width:14rem; }
+    .tc-w-lg { max-width:22rem; }
+    .tc-w-xl { max-width:32rem; }
+
+    /* Opciones en linea: medio de pago, cancelado. */
+    .tc-choices { display:flex; flex-wrap:wrap; gap:8px 18px; }
+    .tc-choice { display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:#2e4763; }
+
+    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:9px; border-top:1px solid var(--tc-border); }
+    .tc-table td.num, .tc-table th.num { text-align:right; white-space:nowrap; }
+    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:2px; }
+
+    .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+
+    .tc-empty { padding:18px 14px; font-size:.78rem; color:#5c7590; }
+
+    .tc-metric-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+
+    .tc-pill.success { background:#d9f5e5; color:#197a46; border-color:#9fddb9; }
+    .tc-pill.danger { background:#fde8e6; color:#a52f22; border-color:#f2b8b1; }
+    .tc-pill.info { background:#e4efff; color:#17518f; border-color:#bcd6f7; }
+    .tc-pill.muted { background:#eef1f5; color:#5a6c80; border-color:#dbe2ea; }
+
+    @media (max-width: 700px) {
+        .tc-form { grid-template-columns:1fr; }
+        .tc-form-label { text-align:left; }
+        .tc-form-label.top { padding-top:0; }
+    }
+</style>

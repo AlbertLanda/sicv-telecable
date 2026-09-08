@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Comprobante {{ receipt.full_number }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    <div class="tc-breadcrumb d-print-none">
+        <a href="{% url 'customers:search' %}">Clientes</a>
+        &nbsp;›&nbsp;
+        <a href="{% url 'payments:receipts' pk=customer.pk %}">Comprobantes de pago</a>
+        &nbsp;›&nbsp;
+        <strong>{{ receipt.full_number }}</strong>
+    </div>
+
+    <div class="tc-toolbar">
+        <h1 class="tc-section-title" style="font-size:1rem;">
+            <i class="bi bi-receipt"></i>Comprobante {{ receipt.full_number }}
+        </h1>
+
+        <div class="tc-toolbar-actions d-print-none">
+            <a href="?print=1" class="tc-btn primary">
+                <i class="bi bi-printer"></i>Imprimir
+            </a>
+            <a href="{% url 'payments:receipts' pk=customer.pk %}" class="tc-btn muted">
+                Volver
+            </a>
+        </div>
+    </div>
+
+    {% if receipt.is_voided %}
+        <div class="alert alert-danger tc-full">
+            <strong>Comprobante anulado.</strong>
+            {{ receipt.payment.void_reason }}
+            <div class="tc-form-hint">
+                Anulado el {{ receipt.payment.voided_at|date:"d/m/Y H:i" }}
+                por {{ receipt.payment.voided_by }}.
+            </div>
+        </div>
+    {% elif receipt.payment.status == "PENDING" %}
+        <div class="alert alert-warning tc-full">
+            <strong>Pendiente de cobro.</strong>
+            El comprobante está emitido pero el dinero todavía no ha entrado,
+            así que la deuda del abonado sigue en pie.
+        </div>
+    {% endif %}
+
+    <section class="tc-card tc-section tc-full">
+
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-person-vcard"></i>Datos del comprobante
+            </h2>
+            {% if not receipt.is_voided and receipt.payment.status != "PENDING" %}
+                <span class="tc-pill success">Cancelado</span>
+            {% endif %}
+        </div>
+
+        <div class="tc-section-body">
+            <div class="tc-data-grid">
+
+                <div>
+                    <div class="tc-data-label">Abonado</div>
+                    <div class="tc-data-value">{{ customer }}</div>
+                    <div class="tc-data-label">
+                        {{ customer.get_document_type_display }} {{ customer.document_number }}
+                        · Código {{ customer.code }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="tc-data-label">Emitido</div>
+                    <div class="tc-data-value">{{ receipt.issued_at|date:"d/m/Y H:i" }}</div>
+                    <div class="tc-data-label">{{ receipt.payment.branch.name }}</div>
+                </div>
+
+                <div>
+                    <div class="tc-data-label">Medio de pago</div>
+                    <div class="tc-data-value">{{ receipt.payment.get_method_display }}</div>
+                    {% if receipt.payment.reference %}
+                        <div class="tc-data-label">Op. {{ receipt.payment.reference }}</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="tc-data-label">Recibido por</div>
+                    <div class="tc-data-value">{{ receipt.payment.received_by }}</div>
+                    {% if receipt.payment.collector %}
+                        <div class="tc-data-label">Cobró {{ receipt.payment.collector }}</div>
+                    {% endif %}
+                </div>
+
+            </div>
+        </div>
+
+    </section>
+
+    <section class="tc-card tc-section tc-full">
+
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-list-check"></i>Deudas cubiertas
+            </h2>
+        </div>
+
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th>Periodo</th>
+                        <th>Vencimiento</th>
+                        <th class="num">Monto</th>
+                        <th class="num">Descuento</th>
+                        <th class="num">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for allocation in receipt.payment.allocations.all %}
+                        <tr>
+                            <td>{{ allocation.charge.description }}</td>
+                            <td>{{ allocation.charge.period_label|default:"—" }}</td>
+                            <td>{{ allocation.charge.due_date|date:"d/m/Y" }}</td>
+                            <td class="num">S/ {{ allocation.gross_amount|floatformat:2 }}</td>
+                            <td class="num">S/ {{ allocation.discount|floatformat:2 }}</td>
+                            <td class="num">S/ {{ allocation.amount|floatformat:2 }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="tc-empty" style="padding:14px 9px;">
+                                El pago no se aplicó a ninguna deuda: quedó como
+                                saldo a favor del abonado.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    {% if receipt.payment.unallocated_amount > 0 %}
+                        <tr>
+                            <th colspan="5" class="num">Saldo a favor</th>
+                            <th class="num">
+                                S/ {{ receipt.payment.unallocated_amount|floatformat:2 }}
+                            </th>
+                        </tr>
+                    {% endif %}
+                    <tr>
+                        <th colspan="5" class="num">Total recibido</th>
+                        <th class="num">S/ {{ receipt.payment.amount|floatformat:2 }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        {% if receipt.payment.note %}
+            <div class="tc-section-body">
+                <div class="tc-data-label">Observaciones</div>
+                <div class="tc-data-value">{{ receipt.payment.note }}</div>
+            </div>
+        {% endif %}
+
+    </section>
+
+    <div class="tc-footer">
+        <span>
+            Documento interno. No constituye comprobante electrónico SUNAT.
+        </span>
+        <span>{{ receipt.full_number }}</span>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% if autoprint %}
+<script>
+    window.addEventListener("load", function () {
+        window.print();
+    });
+</script>
+{% endif %}
+{% endblock %}
