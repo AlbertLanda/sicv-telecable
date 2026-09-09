@@ -19,10 +19,12 @@ def get_active_branch(request):
     """
     Sede desde la que se está consultando ahora.
 
-    Orden de resolución: lo elegido en esta sesión, y si no hay nada,
-    la sede del propio usuario. Devuelve None si ninguna aplica -por
-    ejemplo, un usuario sin sede asignada que aún no eligió una-, y en
-    ese caso las consultas no se acotan por sede.
+    Orden de resolución:
+    1. sede elegida en la sesión;
+    2. sede asignada al usuario;
+    3. Huancayo como sede por defecto.
+
+    La selección activa no modifica la sede asignada al usuario.
     """
     if not request.user.is_authenticated:
         return None
@@ -30,21 +32,41 @@ def get_active_branch(request):
     branch_id = request.session.get(ACTIVE_BRANCH_SESSION_KEY)
 
     if branch_id:
-        branch = Branch.objects.filter(pk=branch_id, is_active=True).first()
+        branch = Branch.objects.filter(
+            pk=branch_id,
+            is_active=True,
+        ).first()
 
         if branch:
             return branch
 
-    return request.user.branch
+    if request.user.branch_id:
+        branch = Branch.objects.filter(
+            pk=request.user.branch_id,
+            is_active=True,
+        ).first()
+
+        if branch:
+            return branch
+
+    return (
+        Branch.objects
+        .filter(
+            code="HUANCAYO",
+            is_active=True,
+        )
+        .first()
+    )
 
 
 def get_active_office(request, branch=None):
     """
     Oficina desde la que se está atendiendo ahora.
 
-    Siempre se valida contra la sede activa: si el operador cambia de
-    sede, la oficina elegida antes deja de pertenecer a esa sede y se
-    descarta, en lugar de quedar mostrando una oficina de otra ciudad.
+    Orden de resolución:
+    1. oficina elegida en la sesión;
+    2. oficina asignada al usuario si pertenece a la sede activa;
+    3. primera oficina activa de la sede activa.
     """
     if not request.user.is_authenticated:
         return None
@@ -67,12 +89,22 @@ def get_active_office(request, branch=None):
         if office:
             return office
 
-    # Sin elección válida se cae a la oficina asignada al usuario, y solo
-    # si pertenece a la sede activa.
-    if request.user.office_id and request.user.office.branch_id == branch.pk:
+    if (
+        request.user.office_id
+        and request.user.office.branch_id == branch.pk
+        and request.user.office.is_active
+    ):
         return request.user.office
 
-    return None
+    return (
+        Office.objects
+        .filter(
+            branch=branch,
+            is_active=True,
+        )
+        .order_by("name", "pk")
+        .first()
+    )
 
 
 # Ítems de "Clientes" que existían en el sistema anterior y todavía no

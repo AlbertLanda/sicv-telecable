@@ -3,7 +3,7 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 from apps.organization.context_processors import ACTIVE_BRANCH_SESSION_KEY
-from apps.organization.models import Branch
+from apps.organization.models import Branch, Office
 
 
 class ActiveBranchTests(TestCase):
@@ -17,8 +17,19 @@ class ActiveBranchTests(TestCase):
     """
 
     def setUp(self):
-        self.huancayo = Branch.objects.create(code="HYO", name="Huancayo")
-        self.oroya = Branch.objects.create(code="ORO", name="Oroya")
+        self.huancayo = Branch.objects.get(
+            code="HUANCAYO",
+        )
+
+        self.huancayo_office = Office.objects.create(
+            branch=self.huancayo,
+            code="HYO-01",
+            name="Oficina Principal",
+        )
+
+        self.oroya = Branch.objects.get(
+            code="OROYA",
+        )
         self.inactiva = Branch.objects.create(
             code="OLD",
             name="Sede cerrada",
@@ -96,3 +107,27 @@ class ActiveBranchTests(TestCase):
         })
 
         self.assertRedirects(response, destination)
+
+    def test_user_without_branch_defaults_to_huancayo(self):
+        self.user.branch = None
+        self.user.office = None
+        self.user.save(update_fields=["branch", "office"])
+
+        response = self.client.get(reverse("customers:search"))
+
+        self.assertEqual(
+            response.context["active_branch"],
+            self.huancayo,
+        )
+
+
+    def test_user_without_office_defaults_to_first_active_office(self):
+        self.user.office = None
+        self.user.save(update_fields=["office"])
+
+        response = self.client.get(reverse("customers:search"))
+
+        self.assertEqual(
+            response.context["active_office"],
+            self.huancayo_office,
+        )
