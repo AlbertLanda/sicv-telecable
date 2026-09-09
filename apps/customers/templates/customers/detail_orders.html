@@ -29,7 +29,14 @@ pinta el hueco.
                 <span class="tc-pill warning">{{ featured_open_order.get_status_display }}</span>
             </div>
             <div class="tc-order-number">{{ featured_open_order.order_number }}</div>
-            <div class="tc-order-meta"><strong>Motivo:</strong> {{ featured_open_order.reason.name|default:"Sin motivo registrado" }} &nbsp;|&nbsp; <strong>Programada:</strong> {% if featured_open_order.scheduled_at %}{{ featured_open_order.scheduled_at|date:"d/m/Y H:i" }}{% else %}Sin programar{% endif %}</div>
+            <strong>Motivo:</strong>
+            {% if featured_open_order.reason_text %}
+                {{ featured_open_order.reason_text }}
+            {% elif featured_open_order.reason %}
+                {{ featured_open_order.reason.name }}
+            {% else %}
+                Sin motivo registrado
+            {% endif %}
             <div class="tc-order-meta"><strong>Técnico:</strong> {{ featured_open_order.assigned_technician|default:"Sin asignar" }}</div>
         </div>
         <div class="tc-order-actions">
@@ -58,7 +65,43 @@ pinta el hueco.
                 {% if open_order_count %}<span class="tc-pill warning">{{ open_order_count }} abierta{{ open_order_count|pluralize }}</span>{% endif %}
             </h2>
             {% if perms.work_orders.add_workorder %}
-                <a class="tc-btn primary" href="{% url 'work_orders:create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva orden de trabajo</a>
+                <div class="dropdown">
+                    <button
+                        class="tc-btn primary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <i class="bi bi-plus-lg"></i>
+                        Nueva orden de trabajo
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="{% url 'work_orders:incident_create' customer.pk %}"
+                            >
+                                <i class="bi bi-headset me-2"></i>
+                                Incidencia
+                            </a>
+                        </li>
+
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="{% url 'work_orders:create' customer.pk %}"
+                            >
+                                <i class="bi bi-tools me-2"></i>
+                                Otra orden de trabajo
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             {% endif %}
         </div>
 
@@ -84,7 +127,15 @@ pinta el hueco.
                         <td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td>
                         <td>#{{ order.subscription.service_number }}</td>
                         <td>{{ order.order_type.name }}{% if order.subtype %}<br><span class="text-muted">{{ order.subtype.name }}</span>{% endif %}</td>
-                        <td>{{ order.reason.name|default:"-" }}</td>
+                        <td>
+                            {% if order.reason_text %}
+                                {{ order.reason_text }}
+                            {% elif order.reason %}
+                                {{ order.reason.name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td>
                         <td>{{ order.get_priority_display }}</td>
                         <td>{{ order.assigned_technician|default:"Sin asignar" }}</td>

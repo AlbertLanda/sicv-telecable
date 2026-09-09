@@ -29,6 +29,7 @@ from apps.customers.models import Customer
 from apps.organization.context_processors import get_active_branch
 from apps.services.models import Subscription
 from apps.work_orders.forms import (
+    IncidentCreateForm,
     WorkOrderAssignForm,
     WorkOrderCreateForm,
     WorkOrderEvidenceUploadForm,
@@ -42,6 +43,7 @@ from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import (
     add_work_order_evidence,
+    create_incident_work_order,
     create_work_order,
     start_order_attention,
     update_field_sheet,
@@ -149,6 +151,81 @@ class WorkOrderCreateView(
             kwargs={"pk": self.customer.pk},
         )
 
+class IncidentCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    permission_required = "work_orders.add_workorder"
+
+    form_class = IncidentCreateForm
+    template_name = "work_orders/incident_create.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.customer = get_object_or_404(
+            Customer.objects.select_related("branch"),
+            pk=self.kwargs["customer_pk"],
+            is_active=True,
+        )
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["customer"] = self.customer
+
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["customer"] = self.customer
+
+        context["has_subscriptions"] = (
+            Subscription.objects
+            .filter(
+                customer=self.customer,
+                is_active=True,
+            )
+            .exists()
+        )
+
+        return context
+
+    def form_valid(self, form):
+        try:
+            order = create_incident_work_order(
+                created_by=self.request.user,
+                **form.service_arguments(),
+            )
+
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            format_html(
+                "Incidencia <strong>{}</strong> registrada correctamente. "
+                '<a href="{}" class="alert-link">'
+                "Ver ficha de la incidencia"
+                "</a>.",
+                order.order_number,
+                reverse(
+                    "work_orders:detail",
+                    kwargs={"pk": order.pk},
+                ),
+            ),
+        )
+
+        return redirect(self.get_success_url())
+
+    def get_success_url(self):
+        return reverse(
+            "customers:detail",
+            kwargs={"pk": self.customer.pk},
+        )
 
 class WorkOrderAssignView(
     LoginRequiredMixin,

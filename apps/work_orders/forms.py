@@ -311,6 +311,111 @@ class WorkOrderCreateForm(forms.ModelForm):
             "scheduled_at": data.get("scheduled_at"),
         }
 
+class IncidentCreateForm(forms.Form):
+    """
+    Alta de una incidencia para atención remota por NOC.
+
+    El operador solo declara la suscripción, el motivo reportado
+    y un detalle opcional. El tipo INCIDENT, la atención SYSTEM,
+    el estado, las fechas y la ausencia de técnico los decide
+    el dominio.
+    """
+
+    subscription = SubscriptionChoiceField(
+        queryset=Subscription.objects.none(),
+        label="Suscripción",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    reason_text = forms.CharField(
+        label="Motivo",
+        required=True,
+        min_length=3,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Ej.: Cliente reporta que no tiene internet."
+                ),
+            }
+        ),
+    )
+
+    detail = forms.CharField(
+        label="Detalle de la solicitud",
+        required=False,
+        max_length=3000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Información adicional proporcionada por el cliente..."
+                ),
+            }
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        customer = kwargs.pop("customer", None)
+
+        super().__init__(*args, **kwargs)
+
+        self.customer = customer
+
+        if customer is None:
+            self.fields["subscription"].queryset = (
+                Subscription.objects.none()
+            )
+        else:
+            self.fields["subscription"].queryset = (
+                Subscription.objects
+                .filter(
+                    customer=customer,
+                    is_active=True,
+                )
+                .select_related(
+                    "service_type",
+                    "plan",
+                    "address",
+                )
+                .order_by("-created_at")
+            )
+
+        self.fields["subscription"].empty_label = (
+            "Seleccione una suscripción del cliente..."
+        )
+
+    def clean_subscription(self):
+        subscription = self.cleaned_data["subscription"]
+
+        if (
+            self.customer is not None
+            and subscription.customer_id != self.customer.pk
+        ):
+            raise forms.ValidationError(
+                "La suscripción no corresponde al cliente mostrado."
+            )
+
+        return subscription
+
+    def service_arguments(self):
+        data = self.cleaned_data
+
+        return {
+            "subscription": data["subscription"],
+            "customer": self.customer,
+            "reason_text": data["reason_text"],
+            "detail": data.get("detail", ""),
+        }
 
 class WorkOrderAssignForm(forms.Form):
 

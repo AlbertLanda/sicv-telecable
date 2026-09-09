@@ -556,6 +556,15 @@ class WorkOrder(models.Model):
         verbose_name="Motivo"
     )
 
+    reason_text = models.TextField(
+        blank=True,
+        verbose_name="Motivo registrado",
+        help_text=(
+            "Motivo escrito por el operador cuando el tipo de orden "
+            "no utiliza un motivo de catálogo."
+        ),
+    )
+
     cause = models.ForeignKey(
         OrderCause,
         on_delete=models.PROTECT,
@@ -723,6 +732,37 @@ class WorkOrder(models.Model):
 
     def clean(self):
         super().clean()
+
+        if self.order_type_id and self.order_type.code == "INCIDENT":
+            if self.attention_type != self.AttentionType.SYSTEM:
+                raise ValidationError({
+                    "attention_type": (
+                        "Las incidencias son atendidas exclusivamente por NOC "
+                        "y deben registrarse como atención de sistema."
+                    )
+                })
+
+            if not (self.reason_text or "").strip():
+                raise ValidationError({
+                    "reason_text": (
+                        "Debe registrar el motivo de la incidencia."
+                    )
+                })
+
+            if self.scheduled_at or self.scheduled_date:
+                raise ValidationError({
+                    "scheduled_at": (
+                        "Una incidencia NOC no debe registrarse "
+                        "con fecha programada."
+                    )
+                })
+
+            if self.assigned_technician_id is not None:
+                raise ValidationError({
+                    "assigned_technician": (
+                        "Una incidencia NOC no se asigna a un técnico de campo."
+                    )
+                })
 
         if self.scheduled_at and self.scheduled_date:
             raise ValidationError({
@@ -1150,6 +1190,81 @@ class WorkOrder(models.Model):
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
 
+class IncidentDetail(models.Model):
+    """
+    Información específica de la atención de una incidencia por NOC.
+
+    WorkOrder conserva la información común de toda orden:
+    suscripción, estado, creador y marcas de tiempo operativas.
+
+    Este modelo guarda únicamente el diagnóstico y los datos que NOC
+    puede necesitar durante la atención remota.
+    """
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="incident_detail",
+        verbose_name="Incidencia",
+    )
+
+    attention_detail = models.TextField(
+        blank=True,
+        verbose_name="Detalle de atención",
+    )
+
+    mac = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="MAC / Equipo",
+    )
+
+    nap = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="NAP / Caja",
+    )
+
+    terminal = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Borne",
+    )
+
+    seal_number = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Precinto",
+    )
+
+    observations = models.TextField(
+        blank=True,
+        verbose_name="Observaciones",
+    )
+
+    attended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="attended_incidents",
+        null=True,
+        blank=True,
+        verbose_name="Atendido por",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        verbose_name = "Detalle de incidencia"
+        verbose_name_plural = "Detalles de incidencias"
+
+    def __str__(self):
+        return f"Incidencia - {self.work_order.order_number}"
 
 class WorkOrderStatusHistory(models.Model):
     """Trazabilidad de cada cambio de estado de una orden."""

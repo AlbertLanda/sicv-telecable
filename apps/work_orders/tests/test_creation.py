@@ -21,8 +21,13 @@ from django.utils import timezone
 from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
-from apps.work_orders.models import WorkOrder, WorkOrderSequence
+from apps.work_orders.models import (
+    IncidentDetail,
+    WorkOrder,
+    WorkOrderSequence,
+)
 from apps.work_orders.services import (
+    create_incident_work_order,
     create_work_order,
     format_order_number,
     generate_order_number,
@@ -125,6 +130,97 @@ class CreateWorkOrderTests(WorkOrderTestCase):
 
         self.assertEqual(order_with_seller.seller, self.seller)
 
+class CreateIncidentWorkOrderTests(WorkOrderTestCase):
+    """Reglas específicas de creación de incidencias NOC."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.subscription.status = Subscription.Status.ACTIVE
+        self.subscription.save(
+            update_fields=["status", "updated_at"]
+        )
+
+    def test_creates_incident_with_system_attention(self):
+        order = create_incident_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            reason_text="Cliente reporta que no tiene internet.",
+            detail="Se solicita validación por NOC.",
+        )
+
+        self.assertIsNotNone(order.pk)
+        self.assertEqual(order.order_type.code, "INCIDENT")
+        self.assertEqual(
+            order.attention_type,
+            WorkOrder.AttentionType.SYSTEM,
+        )
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
+
+    def test_creates_incident_detail_automatically(self):
+        order = create_incident_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            reason_text="Cliente reporta pérdida total del servicio.",
+        )
+
+        self.assertTrue(
+            IncidentDetail.objects.filter(
+                work_order=order
+            ).exists()
+        )
+
+        self.assertEqual(
+            IncidentDetail.objects.get(work_order=order).work_order,
+            order,
+        )
+
+    def test_persists_free_text_reason(self):
+        order = create_incident_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            reason_text="  Cliente indica navegación intermitente.  ",
+        )
+
+        self.assertEqual(
+            order.reason_text,
+            "Cliente indica navegación intermitente.",
+        )
+
+        self.assertIsNone(order.reason)
+
+    def test_incident_has_no_field_technician_or_schedule(self):
+        order = create_incident_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            reason_text="Cliente reporta lentitud.",
+        )
+
+        self.assertIsNone(order.assigned_technician)
+        self.assertIsNone(order.scheduled_at)
+        self.assertIsNone(order.scheduled_date)
+
+    def test_rejects_empty_reason(self):
+        with self.assertRaises(ValidationError):
+            create_incident_work_order(
+                subscription=self.subscription,
+                created_by=self.atc_user,
+                reason_text="   ",
+            )
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(IncidentDetail.objects.count(), 0)
+
+    def test_rejects_too_short_reason(self):
+        with self.assertRaises(ValidationError):
+            create_incident_work_order(
+                subscription=self.subscription,
+                created_by=self.atc_user,
+                reason_text="No",
+            )
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(IncidentDetail.objects.count(), 0)
 
 class CreateWorkOrderValidationTests(WorkOrderTestCase):
     """Reglas que deben rechazarse ANTES de persistir nada."""

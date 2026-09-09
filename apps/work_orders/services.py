@@ -7,6 +7,7 @@ from apps.services.models import Subscription
 from apps.work_orders.models import (
     DEFINITIVE_CUT_REASONS,
     TEMPORARY_CUT_REASONS,
+    IncidentDetail,
     OrderType,
     WorkOrder,
     WorkOrderEvidence,
@@ -39,6 +40,7 @@ ORDER_NUMBER_PADDING = 6
 # desalineen, y en particular evita confundirlo con el DEMO-INSTALLATION de
 # datos de prueba.
 INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
+INCIDENT_ORDER_TYPE_CODE = "INCIDENT"
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -238,6 +240,7 @@ def create_work_order(
     zone=None,
     subtype=None,
     reason=None,
+    reason_text="",
     cause=None,
     attention_type=None,
     priority=None,
@@ -290,6 +293,7 @@ def create_work_order(
         order_type=order_type,
         subtype=subtype,
         reason=reason,
+        reason_text=(reason_text or "").strip(),
         cause=cause,
         branch=branch,
         zone=zone,
@@ -311,6 +315,70 @@ def create_work_order(
 
     return order
 
+@transaction.atomic
+def create_incident_work_order(
+    *,
+    subscription,
+    created_by,
+    reason_text,
+    customer=None,
+    branch=None,
+    zone=None,
+    detail="",
+):
+    """
+    Registra una incidencia para atención remota por NOC.
+
+    Una incidencia:
+    - siempre pertenece al tipo INCIDENT;
+    - siempre es de atención SYSTEM;
+    - no se programa;
+    - no se asigna a un técnico de campo;
+    - exige un motivo escrito por el operador;
+    - crea automáticamente su IncidentDetail.
+
+    La operación completa es atómica: si falla la creación del detalle,
+    tampoco queda registrada la WorkOrder.
+    """
+    reason_text = (reason_text or "").strip()
+
+    if len(reason_text) < 3:
+        raise ValidationError({
+            "reason_text": (
+                "Debe indicar el motivo de la incidencia "
+                "con al menos 3 caracteres."
+            )
+        })
+
+    try:
+        order_type = OrderType.objects.get(
+            code=INCIDENT_ORDER_TYPE_CODE,
+            is_active=True,
+        )
+    except OrderType.DoesNotExist:
+        raise ValidationError(
+            "No existe el tipo de orden de incidencia activo "
+            f"(código «{INCIDENT_ORDER_TYPE_CODE}»)."
+        )
+
+    order = create_work_order(
+        subscription=subscription,
+        order_type=order_type,
+        created_by=created_by,
+        customer=customer,
+        branch=branch,
+        zone=zone,
+        reason_text=reason_text,
+        attention_type=WorkOrder.AttentionType.SYSTEM,
+        detail=(detail or "").strip(),
+        scheduled_at=None,
+    )
+
+    IncidentDetail.objects.create(
+        work_order=order,
+    )
+
+    return order
 
 @transaction.atomic
 def create_installation_work_order(

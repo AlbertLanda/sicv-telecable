@@ -35,6 +35,14 @@ urlpatterns = [
         name="create",
     ),
 
+    # Registrar un incidente para un cliente. La vista valida que el cliente
+    # tenga un servicio activo y que la sede del operador coincida con la del cliente.
+    path(
+        "customers/<int:customer_pk>/incidents/create/",
+        views.IncidentCreateView.as_view(),
+        name="incident_create",
+    ),
+
     # Presentación administrativa de la OT emitida. Deliberadamente excluye
     # ficha técnica, evidencias y liquidación para separar solicitud inicial
     # de la ejecución registrada después por el técnico.
