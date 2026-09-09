@@ -34,9 +34,19 @@ pinta el hueco.
         </div>
         <div class="tc-order-actions">
             <a aria-label="Ver orden inicial" href="{% url 'work_orders:initial_print' featured_open_order.pk %}" class="tc-btn primary"><i class="bi bi-file-earmark-text"></i>Ver orden</a>
-            <a href="{% url 'work_orders:initial_print' featured_open_order.pk %}?print=1" class="tc-btn"><i class="bi bi-printer"></i>Imprimir orden inicial</a>
             <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="tc-btn muted"><i class="bi bi-file-earmark-text"></i>Ver liquidación técnica<span class="visually-hidden">Ver ficha técnica</span></a>
             <a href="{% url 'work_orders:schedule_board' %}" class="tc-btn"><i class="bi bi-calendar3"></i>Reprogramar</a>
+            {% if perms.work_orders.cancel_workorder %}
+                {% if featured_open_order.status == "PENDING" or featured_open_order.status == "ASSIGNED" or featured_open_order.status == "DERIVED" or featured_open_order.status == "REPROGRAMMED" %}
+                    <a
+                        href="{% url 'work_orders:cancel' featured_open_order.pk %}"
+                        class="tc-btn"
+                    >
+                        <i class="bi bi-x-circle"></i>
+                        Anular orden
+                    </a>
+                {% endif %}
+            {% endif %}
         </div>
     </section>
     {% endif %}

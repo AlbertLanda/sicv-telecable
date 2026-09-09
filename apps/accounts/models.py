@@ -31,6 +31,7 @@ class User(AbstractUser):
                 "work_orders.add_workorder",
                 "work_orders.view_workorder",
                 "work_orders.schedule_workorder",
+                "work_orders.cancel_workorder",
             }
         ),
     }

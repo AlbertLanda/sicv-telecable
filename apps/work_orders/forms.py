@@ -541,3 +541,25 @@ class WorkOrderRescheduleForm(forms.Form):
         error_messages={"invalid": "Debe indicar una hora válida."},
     )
     reason = forms.CharField(required=False)
+
+class WorkOrderCancelForm(forms.Form):
+    reason = forms.CharField(
+        label="Motivo de anulación",
+        required=True,
+        min_length=5,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": (
+                    "Explique por qué se está anulando esta orden..."
+                ),
+            }
+        ),
+        help_text=(
+            "El motivo es obligatorio y quedará registrado "
+            "en el historial de la orden."
+        ),
+    )

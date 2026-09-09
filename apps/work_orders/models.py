@@ -715,6 +715,10 @@ class WorkOrder(models.Model):
                 "start_workorder",
                 "Puede iniciar la atención de órdenes de trabajo",
             ),
+            (
+                "cancel_workorder",
+                "Puede anular órdenes de trabajo",
+            ),
         ]
 
     def clean(self):
@@ -1087,6 +1091,61 @@ class WorkOrder(models.Model):
         )
 
         return reprogramming
+
+    @transaction.atomic
+    def cancel(self, user=None, reason=""):
+        """
+        Anula administrativamente una orden de trabajo.
+
+        La orden no se elimina: pasa a CANCELLED y conserva trazabilidad
+        completa mediante WorkOrderStatusHistory.
+
+        El motivo es obligatorio y debe ser escrito por el usuario.
+        Si existía una asignación vigente, se cierra y se limpia el técnico
+        actual para que la orden anulada no siga apareciendo como asignada.
+        """
+        reason = (reason or "").strip()
+
+        if len(reason) < 5:
+            raise ValidationError({
+                "reason": (
+                    "Debe indicar el motivo de la anulación "
+                    "con al menos 5 caracteres."
+                )
+            })
+
+        if not self.can_transition_to(self.Status.CANCELLED):
+            raise ValidationError({
+                "status": (
+                    "No se puede anular una orden en estado "
+                    f"{self.get_status_display()}."
+                )
+            })
+
+        now = timezone.now()
+
+        self.assignments.filter(
+            unassigned_at__isnull=True
+        ).update(
+            unassigned_at=now
+        )
+
+        if self.assigned_technician_id is not None:
+            self.assigned_technician = None
+            self.save(
+                update_fields=[
+                    "assigned_technician",
+                    "updated_at",
+                ]
+            )
+
+        self.change_status(
+            self.Status.CANCELLED,
+            user=user,
+            remarks=reason,
+        )
+
+        return True
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"

@@ -490,6 +490,40 @@
                         </div>
                     </div>
 
+                    {% if cancellation %}
+
+                        <div class="ot-field">
+                            <div class="ot-field-label">
+                                Motivo de anulación
+                            </div>
+
+                            <div class="ot-field-value">
+                                {{ cancellation.remarks|linebreaksbr }}
+                            </div>
+                        </div>
+
+                        <div class="ot-field">
+                            <div class="ot-field-label">
+                                Anulada por
+                            </div>
+
+                            <div class="ot-field-value">
+                                {{ cancellation.changed_by|default:"Sistema" }}
+                            </div>
+                        </div>
+
+                        <div class="ot-field">
+                            <div class="ot-field-label">
+                                Fecha de anulación
+                            </div>
+
+                            <div class="ot-field-value">
+                                {{ cancellation.changed_at|date:"d/m/Y H:i" }}
+                            </div>
+                        </div>
+
+                    {% endif %}
+
                     <div class="ot-field">
                         <div class="ot-field-label">Técnico asignado</div>
                         <div class="ot-field-value {% if not order.assigned_technician %}text-muted-value{% endif %}">

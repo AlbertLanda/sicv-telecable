@@ -36,6 +36,7 @@ from apps.work_orders.forms import (
     WorkOrderRescheduleForm,
     WorkOrderScheduleWeekForm,
     WorkOrderStartAttentionForm,
+    WorkOrderCancelForm,
 )
 from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
@@ -408,6 +409,70 @@ class WorkOrderStartAttentionView(
             kwargs={"pk": self.get_work_order().subscription.customer_id},
         )
 
+class WorkOrderCancelView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    permission_required = "work_orders.cancel_workorder"
+    form_class = WorkOrderCancelForm
+    template_name = "work_orders/work_order_cancel.html"
+
+    def get_work_order(self):
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "order_type",
+                    "assigned_technician",
+                ),
+                pk=self.kwargs["pk"],
+            )
+
+        return self._work_order
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        order = self.get_work_order()
+
+        context["order"] = order
+        context["customer"] = order.subscription.customer
+        context["can_cancel"] = order.can_transition_to(
+            WorkOrder.Status.CANCELLED
+        )
+
+        return context
+
+    def form_valid(self, form):
+        order = self.get_work_order()
+
+        try:
+            order.cancel(
+                user=self.request.user,
+                reason=form.cleaned_data["reason"],
+            )
+
+        except ValidationError as exc:
+            order.refresh_from_db()
+
+            form.add_error(None, exc.messages)
+
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            (
+                f"Orden {order.order_number} anulada correctamente. "
+                "El motivo quedó registrado en el historial."
+            ),
+        )
+
+        return redirect(
+            "customers:orders",
+            pk=order.subscription.customer_id,
+        )
 
 class WorkOrderDetailView(LoginRequiredMixin, View):
     """
@@ -506,6 +571,14 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
     def get_context(self, order, field_sheet_form, evidence_form):
         liquidation = self._get_liquidation(order)
 
+        cancellation = (
+            order.status_history
+            .filter(new_status=WorkOrder.Status.CANCELLED)
+            .select_related("changed_by")
+            .order_by("-changed_at")
+            .first()
+        )
+
         return {
             "order": order,
             "customer": order.subscription.customer,
@@ -521,6 +594,7 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
             "can_edit": self.can_edit,
             "field_sheet_form": field_sheet_form,
             "evidence_form": evidence_form,
+            "cancellation": cancellation,
         }
 
     def get(self, request, *args, **kwargs):

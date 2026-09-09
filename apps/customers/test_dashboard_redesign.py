@@ -136,7 +136,6 @@ class CustomerDashboardRedesignTests(TestCase):
         self.assertContains(response, "Orden de trabajo pendiente")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "Ver orden inicial")
-        self.assertContains(response, "Imprimir orden inicial")
         self.assertContains(response, "Ver ficha técnica")
 
     def test_global_shell_is_present_on_regular_authenticated_pages(self):

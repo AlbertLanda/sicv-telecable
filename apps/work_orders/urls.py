@@ -61,6 +61,14 @@ urlpatterns = [
         name="start",
     ),
 
+
+    # Anulación de una orden de trabajo. Solo ATC puede anular; el técnico no. La anulación no borra la OT, solo la marca como CANCELLED y registra la fecha y el motivo. La OT cancelada no puede reprogramarse ni atenderse.
+    path(
+        "<int:pk>/cancel/",
+        views.WorkOrderCancelView.as_view(),
+        name="cancel",
+    ),
+
     # Ficha única de la orden: la misma pantalla sirve a ATC (solo lectura)
     # y al técnico asignado (además completa ficha técnica y evidencias).
     path(
