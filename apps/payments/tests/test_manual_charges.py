@@ -9,6 +9,7 @@ restricción única de (suscripción, periodo), no que la pantalla esconda el
 concepto.
 """
 
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -17,7 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.payments.models import Charge, Payment
-from apps.payments.services import create_manual_charge
+from apps.payments.services import create_manual_charge, register_payment
 from apps.payments.tests.base import PaymentsTestCase
 
 
@@ -264,9 +265,10 @@ class ChargeSelectionTests(PaymentsTestCase):
     def test_every_row_carries_its_own_checkbox(self):
         """Cada deuda trae su casilla, que es como se elige qué cobrar.
 
-        Se comprueban los atributos por separado y no la etiqueta completa:
-        el HTML los reparte en varias líneas, y fijar la cadena exacta haría
-        fallar la prueba por la indentación en vez de por la casilla.
+        Se cuentan etiquetas `input` y no apariciones del texto `name="charges"`:
+        el guion que avisa de que no hay nada marcado busca esas casillas por
+        selector, así que la cadena suelta también sale en el script y contarla
+        daba dos de más.
         """
         self.login(self.cashier_user)
 
@@ -274,8 +276,9 @@ class ChargeSelectionTests(PaymentsTestCase):
             reverse("payments:debt", args=[self.customer.pk])
         )
         html = response.content.decode()
+        checkboxes = re.findall(r'<input[^>]*name="charges"[^>]*>', html)
 
-        self.assertEqual(html.count('name="charges"'), 2)
+        self.assertEqual(len(checkboxes), 2)
         self.assertIn('value="%s"' % self.old.pk, html)
         self.assertIn('value="%s"' % self.recent.pk, html)
 
@@ -400,6 +403,405 @@ class ChargeSelectionTests(PaymentsTestCase):
         self.assertEqual(response.context["selected_charges"], [])
 
 
+class EarlyDiscountOnAManualChargeTests(PaymentsTestCase):
+    """El pronto pago de una deuda emitida a mano.
+
+    El servicio y la vista ya lo aceptaban y el formulario declaraba los dos
+    campos, pero la pantalla no los pintaba: viajaban siempre vacíos, así que
+    la ventanilla no tenía forma de conceder un descuento al emitir.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
+        )
+        self.login(self.issuer)
+
+    def url(self):
+        return reverse("payments:charge_create", args=[self.customer.pk])
+
+    def payload(self, **overrides):
+        data = {
+            "concept": Charge.Concept.REACTIVATION,
+            "description": "Reconexión por corte",
+            "amount": "20.00",
+            "due_date": (self.today + timedelta(days=10)).isoformat(),
+            "early_discount": "",
+            "discount_deadline": "",
+            "subscription": "",
+        }
+        data.update(overrides)
+
+        return data
+
+    def test_the_screen_offers_both_fields(self):
+        response = self.client.get(self.url())
+
+        self.assertContains(response, 'name="early_discount"')
+        self.assertContains(response, 'name="discount_deadline"')
+
+    def test_a_discount_with_its_deadline_reaches_the_charge(self):
+        deadline = self.today + timedelta(days=5)
+
+        self.client.post(
+            self.url(),
+            self.payload(
+                early_discount="3.00",
+                discount_deadline=deadline.isoformat(),
+            ),
+        )
+
+        charge = Charge.objects.get()
+
+        self.assertEqual(charge.early_discount, Decimal("3.00"))
+        self.assertEqual(charge.discount_deadline, deadline)
+
+    def test_a_discount_without_its_deadline_is_rejected_on_screen(self):
+        """Sin plazo sería un descuento permanente, que es otra cosa.
+
+        Llega como error del formulario y no como un 500: el operador lee qué
+        le falta en la misma pantalla en vez de perder lo que ya escribió.
+        """
+        response = self.client.post(
+            self.url(), self.payload(early_discount="3.00")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Charge.objects.exists())
+        self.assertTrue(response.context["form"].errors)
+
+    def test_without_a_discount_the_charge_is_issued_as_before(self):
+        self.client.post(self.url(), self.payload())
+
+        charge = Charge.objects.get()
+
+        self.assertEqual(charge.early_discount, Decimal("0"))
+        self.assertIsNone(charge.discount_deadline)
+
+
+class TheSubscriptionIsNamedByItsServiceTests(PaymentsTestCase):
+    """Cómo se lee una suscripción en el desplegable de la nueva deuda.
+
+    `Subscription.__str__` antepone el nombre del cliente. Aquí sobra -la
+    pantalla ya es la de ese abonado- y ocupaba el ancho del campo hasta
+    empujar el plan, que es lo único que distingue una suscripción de otra,
+    fuera de la vista.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
+        )
+        self.login(self.issuer)
+
+    def body(self):
+        response = self.client.get(
+            reverse("payments:charge_create", args=[self.customer.pk])
+        )
+
+        return response.content.decode()
+
+    def test_the_option_leads_with_the_service_and_its_plan(self):
+        self.assertInHTML(
+            '<option value="%s">#1 · Internet · Fibra 100 Mbps</option>'
+            % self.subscription.pk,
+            self.body(),
+            count=1,
+        )
+
+    def test_the_option_does_not_repeat_the_customer_name(self):
+        self.assertNotIn("Juan Pérez Ramos - Fibra 100 Mbps", self.body())
+
+    def test_a_subscription_that_is_not_active_says_so(self):
+        """Una activa no necesita anunciarlo; una suspendida cambia la charla."""
+        from apps.services.models import Subscription
+
+        suspended = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            billing_policy=self.policy,
+            status=Subscription.Status.SUSPENDED,
+            service_number=2,
+            base_monthly_fee=80,
+        )
+
+        self.assertInHTML(
+            '<option value="%s">#2 · Internet · Fibra 100 Mbps (Suspendido)</option>'
+            % suspended.pk,
+            self.body(),
+            count=1,
+        )
+
+    def test_the_empty_option_says_what_leaving_it_blank_means(self):
+        """«---------» no dice nada; el campo es opcional y hay que verlo."""
+        self.assertIn("Sin servicio asociado", self.body())
+
+
+class ADebtCannotBeNegativeTests(PaymentsTestCase):
+    """Un cargo en negativo no existe.
+
+    Lo que se le devuelve al abonado es un pago o una anulación, no una deuda
+    al revés: un monto negativo restaría del total adeudado y dejaría la
+    cuenta diciendo que debe menos de lo que debe. Se frena en las tres capas
+    porque el cargo entra por tres puertas -la pantalla, el servicio manual y
+    el ciclo mensual- y solo la primera tiene formulario.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
+        )
+
+    def payload(self, **overrides):
+        data = {
+            "concept": Charge.Concept.REACTIVATION,
+            "description": "Nota de ajuste",
+            "amount": "20.00",
+            "due_date": (self.today + timedelta(days=10)).isoformat(),
+            "early_discount": "",
+            "discount_deadline": "",
+            "subscription": "",
+        }
+        data.update(overrides)
+
+        return data
+
+    # -- La pantalla -------------------------------------------------
+
+    def test_the_screen_rejects_a_negative_amount(self):
+        self.login(self.issuer)
+
+        response = self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            self.payload(amount="-0.08"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Charge.objects.exists())
+        self.assertIn("amount", response.context["form"].errors)
+
+    def test_the_screen_rejects_a_zero_amount(self):
+        """Cero tampoco: una deuda de cero no reclama nada."""
+        self.login(self.issuer)
+
+        response = self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            self.payload(amount="0"),
+        )
+
+        self.assertFalse(Charge.objects.exists())
+        self.assertIn("amount", response.context["form"].errors)
+
+    def test_the_screen_rejects_a_negative_quantity(self):
+        self.login(self.issuer)
+
+        response = self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            self.payload(quantity="-2"),
+        )
+
+        self.assertFalse(Charge.objects.exists())
+        self.assertIn("quantity", response.context["form"].errors)
+
+    def test_the_screen_rejects_a_negative_discount(self):
+        """Un descuento en negativo subiría lo que el abonado debe."""
+        self.login(self.issuer)
+
+        response = self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            self.payload(
+                early_discount="-5.00",
+                discount_deadline=(self.today + timedelta(days=3)).isoformat(),
+            ),
+        )
+
+        self.assertFalse(Charge.objects.exists())
+        self.assertIn("early_discount", response.context["form"].errors)
+
+    def test_the_field_tells_the_browser_where_the_floor_is(self):
+        """La flecha del spinner es por donde se llega al negativo sin querer."""
+        self.login(self.issuer)
+
+        response = self.client.get(
+            reverse("payments:charge_create", args=[self.customer.pk])
+        )
+        body = response.content.decode()
+
+        self.assertIn('min="0.01"', body)
+
+    # -- El servicio -------------------------------------------------
+
+    def test_the_service_rejects_it_too(self):
+        """La pantalla no es la unica puerta: el servicio se llama directo."""
+        with self.assertRaises(ValidationError):
+            create_manual_charge(
+                customer=self.customer,
+                concept=Charge.Concept.OTHER,
+                description="Ajuste al reves",
+                amount=Decimal("-30.00"),
+                due_date=self.today + timedelta(days=5),
+            )
+
+        self.assertFalse(Charge.objects.exists())
+
+    def test_a_valid_amount_still_goes_through(self):
+        charge = create_manual_charge(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="Ajuste normal",
+            amount=Decimal("30.00"),
+            due_date=self.today + timedelta(days=5),
+        )
+
+        self.assertEqual(charge.amount, Decimal("30.00"))
+
+    # -- El modelo ---------------------------------------------------
+
+    def test_the_model_is_the_last_defence(self):
+        charge = Charge(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="Cargo al reves",
+            amount=Decimal("-1.00"),
+            due_date=self.today,
+        )
+
+        with self.assertRaises(ValidationError) as caught:
+            charge.full_clean()
+
+        self.assertIn("amount", caught.exception.error_dict)
+
+
+class ActingWithoutSelectingAnythingTests(PaymentsTestCase):
+    """«Cobrar» y «Compromiso» actúan sobre lo marcado.
+
+    Sin nada marcado, la pantalla de destino se abría en blanco y el operador
+    tenía que deducir que el problema estaba en el tablero que acababa de
+    dejar atrás. Ahora vuelve al tablero con el aviso, sin perder de vista las
+    deudas que tenía que marcar.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="Cargo pendiente",
+            amount=Decimal("50.00"),
+            due_date=self.today + timedelta(days=10),
+        )
+
+        self.user = self.make_user(
+            "ventanilla1",
+            permissions=["view_charge", "add_payment", "grant_paymentcommitment"],
+        )
+        self.login(self.user)
+
+    def board_url(self):
+        return reverse("payments:debt", args=[self.customer.pk])
+
+    # -- Cobro -------------------------------------------------------
+
+    def test_collecting_with_nothing_marked_returns_to_the_board(self):
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk]),
+            {"origen": "tablero"},
+        )
+
+        self.assertRedirects(response, self.board_url())
+
+    def test_it_says_what_was_missing(self):
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk]),
+            {"origen": "tablero"},
+            follow=True,
+        )
+
+        self.assertContains(response, "Marque la deuda que va a cobrar.")
+
+    def test_with_a_row_marked_it_opens_the_charging_screen(self):
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk]),
+            {"origen": "tablero", "charges": self.charge.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_charges"], [self.charge])
+
+    def test_a_charge_that_is_no_longer_open_counts_as_nothing_marked(self):
+        """Marcar algo que otro cajero acaba de cobrar no es marcar."""
+        register_payment(
+            customer=self.customer,
+            amount=Decimal("50.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.user,
+            allocations=[(self.charge, Decimal("50.00"))],
+        )
+
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk]),
+            {"origen": "tablero", "charges": self.charge.pk},
+        )
+
+        self.assertRedirects(response, self.board_url())
+
+    # -- Compromiso --------------------------------------------------
+
+    def test_a_commitment_with_nothing_marked_returns_too(self):
+        response = self.client.get(
+            reverse("payments:commitment_create", args=[self.customer.pk]),
+            {"origen": "tablero"},
+            follow=True,
+        )
+
+        self.assertContains(
+            response, "Marque las deudas que entran en el compromiso."
+        )
+
+    def test_a_commitment_with_a_row_marked_opens(self):
+        response = self.client.get(
+            reverse("payments:commitment_create", args=[self.customer.pk]),
+            {"origen": "tablero", "charges": self.charge.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_charges"], [self.charge])
+
+    # -- El adelanto sigue siendo posible ----------------------------
+
+    def test_collecting_from_the_record_menu_needs_no_selection(self):
+        """Un adelanto no tiene deuda que marcar: es lo que lo hace adelanto.
+
+        El menú de la ficha no manda `origen`, así que no pasa por la guarda.
+        """
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["selected_charges"], [])
+
+    def test_the_board_tells_the_browser_which_buttons_need_a_row(self):
+        response = self.client.get(self.board_url())
+
+        self.assertContains(response, 'data-exige-seleccion="cobrar"')
+        self.assertContains(response, 'data-exige-seleccion="aplazar"')
+        self.assertContains(response, 'name="origen"')
+
+
 class DebtBoardPageSizeTests(PaymentsTestCase):
     """El selector de filas del tablero."""
 
@@ -420,20 +822,27 @@ class DebtBoardPageSizeTests(PaymentsTestCase):
     def url(self):
         return reverse("payments:debt", args=[self.customer.pk])
 
-    def test_it_defaults_to_500_rows(self):
+    def test_it_defaults_to_fifteen_rows(self):
         self.login(self.user)
 
         response = self.client.get(self.url())
 
-        self.assertEqual(response.context["page_size"], 500)
-        self.assertEqual(len(response.context["debt"]["charges"]), 3)
+        self.assertEqual(response.context["page_size"], 15)
+        self.assertEqual(len(response.context["page_obj"].object_list), 3)
 
-    def test_a_smaller_size_limits_the_rows(self):
+    def test_a_bigger_size_shows_more_rows_per_page(self):
+        """Los tamaños grandes siguen ahí, y no por comodidad.
+
+        «Cobrar» y «Compromiso» actúan sobre las filas marcadas, y la marca no
+        cruza de página: saldar una mora larga de una vez exige poder verla
+        entera.
+        """
         self.login(self.user)
 
-        response = self.client.get(self.url(), {"filas": "20"})
+        response = self.client.get(self.url(), {"filas": "500"})
 
-        self.assertEqual(response.context["page_size"], 20)
+        self.assertEqual(response.context["page_size"], 500)
+        self.assertFalse(response.context["is_paginated"])
 
     def test_the_summary_counts_the_whole_debt_not_the_page(self):
         """El resumen del encabezado no depende del tamaño de página.
@@ -457,4 +866,4 @@ class DebtBoardPageSizeTests(PaymentsTestCase):
                 response = self.client.get(self.url(), {"filas": value})
 
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.context["page_size"], 500)
+                self.assertEqual(response.context["page_size"], 15)

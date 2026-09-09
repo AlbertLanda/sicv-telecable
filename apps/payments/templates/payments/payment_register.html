@@ -8,15 +8,17 @@
 
 <div class="tc-content">
 
-    {% include "payments/_account_header.html" with active_tab="debt" account_title="Cobrar" %}
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Cobrar" %}
 
     <form method="post" novalidate>
 
         {% csrf_token %}
 
-        {# Las deudas elegidas en el tablero viajan con el formulario: son las
-           que se van a cobrar, y perderlas al enviar dejaría el cobro sin
-           saber a qué aplicarse. #}
+        {% comment %}
+        Las deudas elegidas en el tablero viajan con el formulario: son las
+        que se van a cobrar, y perderlas al enviar dejaría el cobro sin saber
+        a qué aplicarse.
+        {% endcomment %}
         {% for charge_id in selected_ids %}
             <input type="hidden" name="charges" value="{{ charge_id }}">
         {% endfor %}

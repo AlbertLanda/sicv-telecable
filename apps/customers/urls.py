@@ -73,11 +73,22 @@ urlpatterns = [
         name="work_order_ui_preview",
     ),
 
-    # Ficha ejecutiva del cliente. Reutiliza la lógica y consultas de la vista
-    # histórica, pero prioriza resumen, OT abiertas y accesos operativos.
+    # Ficha del cliente. Cada pestaña es su propia pantalla: el abonado visto
+    # desde un ángulo distinto, no una sección de una página gigante. Las de
+    # cobranza -deuda, pagos, comprobantes- viven en apps.payments.
     path(
         "<int:pk>/",
         dashboard_views.CustomerDashboardDetailView.as_view(),
         name="detail",
+    ),
+    path(
+        "<int:pk>/ordenes/",
+        dashboard_views.CustomerOrdersTabView.as_view(),
+        name="orders",
+    ),
+    path(
+        "<int:pk>/actividad/",
+        dashboard_views.CustomerActivityTabView.as_view(),
+        name="activity",
     ),
 ]

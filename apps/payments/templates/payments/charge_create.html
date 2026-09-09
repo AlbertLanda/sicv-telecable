@@ -4,11 +4,31 @@
 
 {% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
 
+{% comment %}
+Emisión manual de una deuda.
+
+Mantiene los campos y el orden del sistema anterior -código, fecha, cantidad,
+concepto, paga hasta, moneda, monto, descripción- porque es la pantalla que el
+operador tiene aprendida. Lo que cambia es la disposición: dos columnas de
+pares etiqueta/campo en vez de una sola columna de diez filas, que dejaba
+media pantalla vacía y el botón de aceptar fuera de la vista.
+
+Moneda y monto van juntos: son una sola cifra leída por una persona, y
+separarlos en dos filas obligaba a mirar arriba para saber en qué moneda está
+lo que se escribe abajo.
+
+Sin textos de ayuda bajo los campos. En dos columnas, una ayuda estira su fila
+y el campo de al lado queda a media altura, así que la rejilla se lee torcida.
+Lo que decían vive ahora donde no ocupa alto: «sin servicio asociado» es la
+propia opción vacía del desplegable, la cantidad ya viene con un 1 escrito, y
+la descripción lo lleva de marcador de posición.
+{% endcomment %}
+
 {% block content %}
 
 <div class="tc-content">
 
-    {% include "payments/_account_header.html" with active_tab="debt" account_title="Nueva deuda" %}
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Nueva deuda" %}
 
     <form method="post" novalidate>
 
@@ -32,16 +52,21 @@
 
             <div class="tc-section-body">
 
-                <div class="alert alert-info" style="font-size:.76rem;">
-                    La mensualidad la emite sola el ciclo desde el plan contratado.
-                    Aquí se emite lo que ese ciclo no alcanzó: una reconexión,
-                    materiales o un ajuste acordado en ventanilla.
+                <div class="tc-note">
+                    <i class="bi bi-info-circle-fill"></i>
+                    <div>
+                        La mensualidad la emite sola el ciclo desde el plan contratado.
+                        Aquí se emite lo que ese ciclo no alcanzó: una reconexión,
+                        materiales o un ajuste acordado en ventanilla.
+                    </div>
                 </div>
 
-                <div class="tc-form">
+                <div class="tc-form cols-2">
 
-                    {# Código y fecha los pone el sistema: se muestran para que
-                       el operador reconozca la pantalla, no para editarlos. #}
+                    {% comment %}
+                    Código y fecha los pone el sistema. Se muestran para que el
+                    operador reconozca la pantalla, no para editarlos.
+                    {% endcomment %}
                     <div class="tc-form-label">Código</div>
                     <div class="tc-form-field">
                         <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
@@ -53,21 +78,11 @@
                                value="{{ today|date:'d/m/Y' }}" disabled>
                     </div>
 
-                    <label class="tc-form-label" for="{{ form.quantity.id_for_label }}">
-                        Cantidad
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-sm">{{ form.quantity }}</div>
-                        {% for error in form.quantity.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
                     <label class="tc-form-label" for="{{ form.concept.id_for_label }}">
                         Concepto
                     </label>
                     <div class="tc-form-field">
-                        <div class="tc-w-lg">{{ form.concept }}</div>
+                        {{ form.concept }}
                         {% for error in form.concept.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -77,11 +92,18 @@
                         Suscripción
                     </label>
                     <div class="tc-form-field">
-                        <div class="tc-w-lg">{{ form.subscription }}</div>
-                        <div class="tc-form-hint">
-                            En blanco si la deuda no viene de un servicio contratado.
-                        </div>
+                        {{ form.subscription }}
                         {% for error in form.subscription.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.quantity.id_for_label }}">
+                        Cantidad
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-sm">{{ form.quantity }}</div>
+                        {% for error in form.quantity.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
                     </div>
@@ -96,16 +118,14 @@
                         {% endfor %}
                     </div>
 
-                    <div class="tc-form-label">Moneda</div>
-                    <div class="tc-form-field">
-                        <input type="text" class="tc-input tc-readonly tc-w-sm" value="PEN" disabled>
-                    </div>
-
                     <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
                         Monto
                     </label>
-                    <div class="tc-form-field">
-                        <div class="d-flex flex-wrap align-items-start gap-2">
+                    <div class="tc-form-field span">
+                        <div class="tc-field-row">
+                            <select class="tc-input tc-readonly" style="width:auto;" aria-label="Moneda" disabled>
+                                <option>PEN</option>
+                            </select>
                             <div class="tc-w-sm">{{ form.amount }}</div>
                             <button type="button"
                                     class="tc-btn muted"
@@ -123,39 +143,78 @@
                     <label class="tc-form-label top" for="{{ form.description.id_for_label }}">
                         Descripción
                     </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-xl">{{ form.description }}</div>
+                    <div class="tc-form-field span">
+                        {{ form.description }}
                         {% for error in form.description.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
                     </div>
 
-                    <div class="tc-form-label">Actualizar automáticamente</div>
-                    <div class="tc-form-field">
+                    <div class="tc-form-label">Actualizar</div>
+                    <div class="tc-form-field span">
                         <label class="tc-choice">
                             {{ form.auto_update }}
                             <span>Recalcular si cambia el plan o la tarifa</span>
                         </label>
-                        <div class="tc-form-hint">
-                            Las deudas emitidas a mano suelen ser fijas, así que
-                            sale desmarcado.
-                        </div>
                     </div>
 
                 </div>
 
             </div>
 
+            <div class="tc-card-footer">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-check-lg"></i>Aceptar
+                </button>
+                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                    Cancelar
+                </a>
+            </div>
+
         </section>
 
-        <div class="tc-actions">
-            <button type="submit" class="tc-btn primary">
-                <i class="bi bi-check-lg"></i>Aceptar
-            </button>
-            <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
-                Cancelar
-            </a>
-        </div>
+        {% comment %}
+        Pronto pago. El servicio y la vista ya lo aceptaban -y el modelo
+        rechaza un descuento sin plazo, porque sin fecha sería un descuento
+        permanente, que es otra cosa-, pero la pantalla no tenía dónde
+        escribirlo: los dos campos viajaban siempre vacíos.
+        {% endcomment %}
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-percent"></i>Pronto pago
+                </h2>
+                <span class="tc-pill muted">Opcional</span>
+            </div>
+
+            <div class="tc-section-body">
+                <div class="tc-form cols-2">
+
+                    <label class="tc-form-label" for="{{ form.early_discount.id_for_label }}">
+                        Descuento
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-sm">{{ form.early_discount }}</div>
+                        {% for error in form.early_discount.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.discount_deadline.id_for_label }}">
+                        Válido hasta
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-md">{{ form.discount_deadline }}</div>
+                        {% for error in form.discount_deadline.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
 
     </form>
 

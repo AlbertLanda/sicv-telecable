@@ -87,7 +87,7 @@ class RetiredWebAssignmentTests(WorkOrderTestCase):
         self.client.login(username="atc1", password="test1234")
 
         response = self.client.get(
-            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+            reverse("customers:orders", kwargs={"pk": self.customer.pk})
         )
 
         self.assertEqual(response.status_code, 200)

@@ -20,6 +20,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q, Sum
 from django.utils import timezone
@@ -109,10 +110,15 @@ class Charge(models.Model):
     # Cantidad del concepto. Casi siempre 1: una mensualidad, una reconexion.
     # Se guarda con cinco decimales porque el sistema anterior prorratea dias
     # de servicio y la fraccion tiene que caber sin redondear.
+    # Cantidades y montos en negativo no existen en una deuda: lo que se le
+    # devuelve al abonado es un pago o una anulación, no un cargo al revés. Se
+    # frena en el campo y no solo en la pantalla, porque el cargo tambien se
+    # emite desde el ciclo mensual y desde el servicio manual.
     quantity = models.DecimalField(
         max_digits=12,
         decimal_places=5,
         default=Decimal("1.00000"),
+        validators=[MinValueValidator(Decimal("0.00001"))],
         verbose_name="Cantidad",
     )
 
@@ -151,6 +157,7 @@ class Charge(models.Model):
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name="Monto emitido",
     )
 
@@ -158,10 +165,13 @@ class Charge(models.Model):
         verbose_name="Vence el",
     )
 
+    # Cero es válido -no hay descuento-, negativo no: un descuento en
+    # negativo subiría lo que el abonado debe sin que nada lo llame cargo.
     early_discount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
+        validators=[MinValueValidator(ZERO)],
         verbose_name="Descuento por pronto pago",
     )
 

@@ -8,7 +8,7 @@
 
 <div class="tc-content">
 
-    {% include "payments/_account_header.html" with active_tab="debt" account_title="Compromiso de pago" %}
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Compromiso de pago" %}
 
     <form method="post" novalidate>
 
@@ -132,8 +132,10 @@
 
             {% if charges %}
 
-                {# Se eligen deudas concretas: el compromiso protege las que
-                   cubre, no la deuda que aparezca después. #}
+                {% comment %}
+                Se eligen deudas concretas: el compromiso protege las que
+                cubre, no la deuda que aparezca después.
+                {% endcomment %}
                 <div class="table-responsive">
                     <table class="tc-table">
                         <thead>

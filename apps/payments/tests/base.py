@@ -104,9 +104,3 @@ class PaymentsTestCase(TestCase):
         session = self.client.session
         session[ACTIVE_BRANCH_SESSION_KEY] = self.branch.pk
         session.save()
-
-    def select_customer(self, customer=None):
-        """Deja un abonado elegido en la sesión, como hace 'Usar cliente'."""
-        session = self.client.session
-        session["selected_customer_id"] = (customer or self.customer).pk
-        session.save()

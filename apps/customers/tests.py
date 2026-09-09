@@ -216,6 +216,14 @@ class CustomerUIConsultaTests(TestCase):
             "customers:detail",
             kwargs={"pk": self.customer.pk},
         )
+        self.orders_url = reverse(
+            "customers:orders",
+            kwargs={"pk": self.customer.pk},
+        )
+        self.activity_url = reverse(
+            "customers:activity",
+            kwargs={"pk": self.customer.pk},
+        )
 
         self.client.login(
             username="colaborador",
@@ -421,7 +429,7 @@ class CustomerUIConsultaTests(TestCase):
     # ------------------------------------------------------------------
 
     def test_ficha_muestra_orden_asociada(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         work_orders = list(response.context["work_orders"])
 
@@ -429,27 +437,27 @@ class CustomerUIConsultaTests(TestCase):
         self.assertContains(response, "OT-0001")
 
     def test_ficha_muestra_tipo_de_orden(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, "Instalación")
 
     def test_ficha_muestra_subtipo_de_orden(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, "Instalación estándar")
 
     def test_ficha_muestra_motivo_de_orden(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, "Nuevo servicio")
 
     def test_ficha_muestra_resultado_de_orden(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, "Instalación exitosa")
 
     def test_orden_de_otro_cliente_no_aparece(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         work_orders = list(response.context["work_orders"])
 
@@ -462,7 +470,7 @@ class CustomerUIConsultaTests(TestCase):
 
         self.assertEqual(self.work_order.status, WorkOrder.Status.ATTENDED)
 
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         work_orders = list(response.context["work_orders"])
         self.assertIn(self.work_order, work_orders)
@@ -1554,6 +1562,14 @@ class CustomerRecentActivityTests(TestCase):
             "customers:detail",
             kwargs={"pk": self.customer.pk},
         )
+        self.orders_url = reverse(
+            "customers:orders",
+            kwargs={"pk": self.customer.pk},
+        )
+        self.activity_url = reverse(
+            "customers:activity",
+            kwargs={"pk": self.customer.pk},
+        )
 
         self.client.login(username="atc_historial", password="123")
 
@@ -1574,7 +1590,7 @@ class CustomerRecentActivityTests(TestCase):
     # ------------------------------------------------------------------
 
     def test_ficha_sin_ninguna_fuente_muestra_estado_vacio_de_actividad(self):
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.activity_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(
@@ -1841,7 +1857,7 @@ class CustomerRecentActivityTests(TestCase):
             maternal_surname="Diaz",
         )
 
-        url = reverse("customers:detail", kwargs={"pk": otro_cliente.pk})
+        url = reverse("customers:activity", kwargs={"pk": otro_cliente.pk})
 
         response = self.client.get(url)
 
@@ -1860,35 +1876,57 @@ class CustomerRecentActivityTests(TestCase):
         permission = Permission.objects.get(codename="add_workorder")
         self.user.user_permissions.add(permission)
 
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, "Nueva orden de trabajo")
 
     def test_usuario_sin_permiso_no_ve_accion_nueva_ot(self):
         self.login_user_without_workorder_permissions()
 
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertNotContains(response, "Nueva orden de trabajo")
 
     def test_usuario_sin_permiso_de_asignacion_no_ve_accion_restringida(self):
         order = self._crear_orden(status=WorkOrder.Status.PENDING)
 
-        response = self.client.get(self.detail_url)
+        response = self.client.get(self.orders_url)
 
         self.assertContains(response, order.order_number)
         self.assertNotContains(response, "Asignar</a>")
         self.assertNotContains(response, "Reasignar</a>")
 
-    def test_usuario_con_permiso_de_asignacion_ve_accion(self):
+    def test_usuario_con_permiso_de_asignacion_recibe_solo_la_aclaracion(self):
+        """El permiso histórico no devuelve la acción, solo la explicación.
+
+        La asignación manual desde la web fue retirada; `assign_workorder`
+        sobrevive porque se reutiliza para programar. A quien lo conserva se
+        le deja una aclaración accesible en la pestaña donde vendría a buscar
+        el botón que ya no está.
+
+        Antes esta prueba miraba la ficha y se conformaba con encontrar la
+        palabra «Asignar», que solo salía dentro de esa misma aclaración: daba
+        verde sin comprobar nada.
+        """
         permission = Permission.objects.get(codename="assign_workorder")
         self.user.user_permissions.add(permission)
 
         self._crear_orden(status=WorkOrder.Status.PENDING)
 
+        response = self.client.get(self.orders_url)
+
+        self.assertContains(response, "ya no está disponible en el portal web")
+        self.assertNotContains(response, "Asignar</a>")
+        self.assertNotContains(response, "Reasignar</a>")
+
+    def test_la_aclaracion_no_se_queda_en_informacion(self):
+        """Información no tiene órdenes; una nota sobre asignarlas ahí sobra."""
+        permission = Permission.objects.get(codename="assign_workorder")
+        self.user.user_permissions.add(permission)
+
         response = self.client.get(self.detail_url)
 
-        self.assertContains(response, "Asignar")
+        self.assertNotContains(response, "ya no está disponible en el portal web")
 
     # ------------------------------------------------------------------
     # CONSULTAS SIN N+1 EVIDENTE (escenario 20)

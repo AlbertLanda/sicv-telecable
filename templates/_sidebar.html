@@ -18,7 +18,7 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
         </div>
 
-        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente deuda historial de pagos comprobantes de pago cobranza">
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
                 <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>
             </button>
@@ -28,22 +28,28 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     {% if perms.customers.add_customer %}
                         <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
                     {% endif %}
+                </div>
+            </div>
+        </section>
 
-                    {% comment %}
-                    Cuenta del abonado. Las tres pantallas cuelgan del cliente
-                    seleccionado en la sesion; si no hay ninguno, la vista de
-                    entrada lleva al buscador en lugar de abrir una cuenta vacia
-                    que pareceria decir que el abonado no debe nada.
-                    {% endcomment %}
-                    {% if perms.payments.view_charge %}
-                        <a class="sidebar-link" href="{% url 'payments:selected_debt' %}"><i class="bi bi-cash-stack"></i>Deuda</a>
-                    {% endif %}
-                    {% if perms.payments.view_payment %}
-                        <a class="sidebar-link" href="{% url 'payments:selected_history' %}"><i class="bi bi-clock-history"></i>Historial de pagos</a>
-                    {% endif %}
-                    {% if perms.payments.view_receipt %}
-                        <a class="sidebar-link" href="{% url 'payments:selected_receipts' %}"><i class="bi bi-receipt"></i>Comprobantes de pago</a>
-                    {% endif %}
+        {% comment %}
+        Cobranza. Deuda, historial y comprobantes de *un* abonado no estan
+        aqui: cuelgan de su ficha, porque son el mismo cliente visto desde
+        otro angulo y una entrada de menu global que necesita saber "de
+        quien" acaba dependiendo de un estado que el operador no ve.
+
+        Lo que si pertenece al menu son las listas transversales, las que
+        cruzan a todos los abonados. Todavia no existen.
+        {% endcomment %}
+        <section class="sidebar-section" data-sidebar-section="cobranza caja deuda cartera vencida compromisos de pago recaudacion">
+            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarCobranza" aria-expanded="true">
+                <i class="bi bi-cash-coin"></i><span>Cobranza</span><i class="bi bi-chevron-down chev"></i>
+            </button>
+            <div class="collapse show" id="sidebarCobranza">
+                <div class="sidebar-links">
+                    <span class="sidebar-link-pending"><span>Cartera vencida</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Caja del día</span><span class="pending-tag">pendiente</span></span>
+                    <span class="sidebar-link-pending"><span>Compromisos de pago</span><span class="pending-tag">pendiente</span></span>
                 </div>
             </div>
         </section>

@@ -1,0 +1,63 @@
+{% comment %}
+Pestañas del abonado: los ángulos desde los que se mira a un mismo cliente.
+
+Un solo nivel. Información, órdenes, deuda, pagos y comprobantes no son
+módulos distintos ni secciones de una misma página: son el mismo abonado
+visto de seis maneras, y cada una es su propia pantalla con su propia URL.
+
+Tampoco viven en el menú lateral: una entrada de navegación global que
+necesita saber «¿de quién?» para tener sentido acaba dependiendo de un estado
+que el operador no ve.
+
+Cada pestaña se esconde si el usuario no puede abrirla, así que el número de
+columnas depende de los permisos y no se puede fijar; de ahí la clase `auto`.
+
+Espera en el contexto `customer` y `active_tab`, uno de:
+info | orders | debt | history | receipts | activity
+{% endcomment %}
+
+<nav class="tc-tabs auto" aria-label="Secciones del abonado">
+
+    <a href="{% url 'customers:detail' pk=customer.pk %}"
+       class="{% if active_tab == 'info' %}active{% endif %}"
+       {% if active_tab == 'info' %}aria-current="page"{% endif %}>
+        <i class="bi bi-person-vcard"></i>Información
+    </a>
+
+    <a href="{% url 'customers:orders' pk=customer.pk %}"
+       class="{% if active_tab == 'orders' %}active{% endif %}"
+       {% if active_tab == 'orders' %}aria-current="page"{% endif %}>
+        <i class="bi bi-wrench-adjustable"></i>Órdenes
+    </a>
+
+    {% if perms.payments.view_charge %}
+        <a href="{% url 'payments:debt' pk=customer.pk %}"
+           class="{% if active_tab == 'debt' %}active{% endif %}"
+           {% if active_tab == 'debt' %}aria-current="page"{% endif %}>
+            <i class="bi bi-cash-stack"></i>Deuda
+        </a>
+    {% endif %}
+
+    {% if perms.payments.view_payment %}
+        <a href="{% url 'payments:history' pk=customer.pk %}"
+           class="{% if active_tab == 'history' %}active{% endif %}"
+           {% if active_tab == 'history' %}aria-current="page"{% endif %}>
+            <i class="bi bi-clock-history"></i>Historial de pagos
+        </a>
+    {% endif %}
+
+    {% if perms.payments.view_receipt %}
+        <a href="{% url 'payments:receipts' pk=customer.pk %}"
+           class="{% if active_tab == 'receipts' %}active{% endif %}"
+           {% if active_tab == 'receipts' %}aria-current="page"{% endif %}>
+            <i class="bi bi-receipt"></i>Comprobantes
+        </a>
+    {% endif %}
+
+    <a href="{% url 'customers:activity' pk=customer.pk %}"
+       class="{% if active_tab == 'activity' %}active{% endif %}"
+       {% if active_tab == 'activity' %}aria-current="page"{% endif %}>
+        <i class="bi bi-clock"></i>Actividad
+    </a>
+
+</nav>

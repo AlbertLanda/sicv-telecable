@@ -3,8 +3,35 @@
 from decimal import Decimal
 
 from django import forms
+from django.core.validators import MinValueValidator
+
+from apps.services.models import Subscription
 
 from .models import Charge, Payment, ZERO
+
+
+def subscription_label(subscription):
+    """Cómo se lee una suscripción en un desplegable del propio abonado.
+
+    `Subscription.__str__` antepone el nombre del cliente, que aquí sobra: la
+    pantalla ya es la de ese abonado y no hay ninguna otra a la que pudiera
+    referirse. Lo que hacía era ocupar el ancho del campo y empujar el plan
+    -lo único que distingue una suscripción de otra- fuera de la vista.
+
+    Se identifica por número de servicio, tipo y plan, que es como el operador
+    las nombra. El estado solo aparece cuando no es el esperado: una activa no
+    necesita anunciarlo, una suspendida sí, porque cambia la conversación.
+    """
+    label = "#%s · %s · %s" % (
+        subscription.service_number,
+        subscription.service_type.name,
+        subscription.plan.name,
+    )
+
+    if subscription.status != Subscription.Status.ACTIVE:
+        label += " (%s)" % subscription.get_status_display()
+
+    return label
 
 
 def _style_widgets(form):
@@ -175,7 +202,22 @@ class ChargeCreateForm(forms.ModelForm):
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "discount_deadline": forms.DateInput(attrs={"type": "date"}),
-            "description": forms.Textarea(attrs={"rows": 6}),
+            "description": forms.Textarea(
+                attrs={
+                    "rows": 6,
+                    "placeholder": "En blanco se usa el nombre del concepto.",
+                }
+            ),
+            # `min` frena tambien la flecha del spinner, que es por donde se
+            # llega al negativo sin darse cuenta: se baja de 1 a 0 y de 0 a
+            # -1 sin escribir nada.
+            "amount": forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+            "quantity": forms.NumberInput(
+                attrs={"min": "0.00001", "step": "0.00001"}
+            ),
+            "early_discount": forms.NumberInput(
+                attrs={"min": "0", "step": "0.01"}
+            ),
         }
         labels = {
             "due_date": "Paga hasta",
@@ -186,6 +228,21 @@ class ChargeCreateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.customer = customer
+
+        # Una deuda en negativo no existe: lo que se le devuelve al abonado es
+        # un pago o una anulacion, no un cargo al reves. El modelo ya lo
+        # rechaza; declararlo aqui ademas da el error en el campo y no al
+        # final, y evita que un monto invalido llegue a `cleaned_data`.
+        self.fields["amount"].validators.append(
+            MinValueValidator(Decimal("0.01"))
+        )
+        self.fields["quantity"].validators.append(
+            MinValueValidator(Decimal("0.00001"))
+        )
+        self.fields["early_discount"].validators.append(
+            MinValueValidator(ZERO)
+        )
+
         self.fields["subscription"].required = False
         self.fields["early_discount"].required = False
         self.fields["discount_deadline"].required = False
@@ -206,7 +263,14 @@ class ChargeCreateForm(forms.ModelForm):
         # Solo las suscripciones del abonado: ofrecer las de todos permitiría
         # colgarle un cargo del servicio de otra persona.
         if customer is not None:
-            self.fields["subscription"].queryset = customer.subscriptions.all()
+            self.fields["subscription"].queryset = (
+                customer.subscriptions.select_related("service_type", "plan")
+            )
+
+        # select_related arriba: sin el, pintar el desplegable consulta el tipo
+        # y el plan una vez por opcion.
+        self.fields["subscription"].label_from_instance = subscription_label
+        self.fields["subscription"].empty_label = "Sin servicio asociado"
 
     def clean_description(self):
         """Sin descripción se usa el nombre del concepto.

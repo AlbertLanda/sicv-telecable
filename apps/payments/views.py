@@ -2,17 +2,20 @@
 Pantallas de cobranza del abonado: deuda, historial de pagos y comprobantes.
 
 Las tres cuelgan de un abonado concreto porque así se consultan en ventanilla:
-primero se ubica al cliente y después se mira su cuenta. El menú lateral lleva
-al abonado seleccionado en la sesión y, si no hay ninguno, a la búsqueda.
+primero se ubica al cliente y después se mira su cuenta. Son pestañas de la
+ficha del cliente -el mismo abonado visto desde otro ángulo-, no entradas de
+un menú global: una entrada global tendría que adivinar de qué abonado se
+habla y acabaría dependiendo de un estado que el operador no ve.
 """
 
 from decimal import Decimal, InvalidOperation
+
+from django.core.paginator import Paginator
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, View
 
@@ -39,6 +42,40 @@ from .services import (
     receipt_series_options,
     register_payment,
 )
+
+
+#: Marca que el tablero de deuda pone en su formulario. Distingue «vengo de
+#: marcar filas» de «vengo del menú de la ficha», que es un caso legítimo sin
+#: nada marcado: el abonado que adelanta dinero sin deber todavía nada.
+BOARD_ORIGIN = "tablero"
+
+
+class BoardSelectionRequiredMixin:
+    """Devuelve al tablero si se pidió actuar sobre filas y no había ninguna.
+
+    «Cobrar» y «Compromiso» actúan sobre lo marcado. Sin marcas, la pantalla
+    de destino se abría en blanco y el operador tenía que deducir que el
+    problema estaba en el tablero que acababa de dejar atrás.
+
+    Solo se aplica al que viene del tablero. Entrar a cobrar sin selección
+    sigue siendo válido desde el menú de la ficha, que es como se registra un
+    adelanto.
+    """
+
+    selection_message = "Marque las deudas sobre las que quiere actuar."
+
+    def board_selection(self):
+        raise NotImplementedError
+
+    def get(self, request, *args, **kwargs):
+        came_from_board = request.GET.get("origen") == BOARD_ORIGIN
+
+        if came_from_board and not self.board_selection():
+            messages.warning(request, self.selection_message)
+
+            return redirect("payments:debt", pk=self.customer.pk)
+
+        return super().get(request, *args, **kwargs)
 
 
 class CustomerScopedMixin:
@@ -73,10 +110,12 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
     template_name = "payments/customer_debt.html"
     permission_required = "payments.view_charge"
 
-    # Tamanos de pagina del sistema anterior. 500 por defecto: la deuda de un
-    # abonado cabe entera, y el operador ve el total sin paginar.
-    PAGE_SIZES = (20, 50, 100, 500)
-    DEFAULT_PAGE_SIZE = 500
+    # 15 filas, como el resto de tablas del abonado. El selector conserva los
+    # tamanos grandes porque "Cobrar" y "Compromiso" actuan sobre las filas
+    # marcadas y la marca no cruza de pagina: para saldar una mora larga de
+    # una vez, el operador necesita poder verla entera.
+    PAGE_SIZES = (15, 30, 50, 100, 500)
+    DEFAULT_PAGE_SIZE = 15
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -85,13 +124,15 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         page_size = self._resolve_page_size()
         context["page_sizes"] = self.PAGE_SIZES
         context["page_size"] = page_size
-        # Solo la tabla se recorta al tamano elegido. El resumen del
-        # encabezado sigue contando la deuda completa: si leyera de aqui,
-        # diria "20 deudas abiertas" cuando el abonado tiene 30.
-        context["debt"] = dict(
-            context["debt"],
-            charges=context["debt"]["charges"][:page_size],
-        )
+
+        # Solo la tabla se pagina. Los totales siguen saliendo de `debt`, que
+        # cuenta la deuda entera: si leyeran de la pagina, dirian "15 deudas
+        # abiertas" cuando el abonado tiene 30.
+        paginator = Paginator(context["debt"]["charges"], page_size)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
+        context["paginator"] = paginator
+        context["page_obj"] = page_obj
+        context["is_paginated"] = page_obj.has_other_pages()
 
         # Cada boton del tablero responde a su propio permiso: emitir deuda,
         # cobrarla y aplazar su corte son tres decisiones distintas.
@@ -129,7 +170,7 @@ class CustomerPaymentHistoryView(
 
     template_name = "payments/customer_payment_history.html"
     context_object_name = "payments"
-    paginate_by = 25
+    paginate_by = 15
     permission_required = "payments.view_payment"
 
     def get_queryset(self):
@@ -153,7 +194,7 @@ class CustomerReceiptsView(PermissionRequiredMixin, CustomerScopedMixin, ListVie
 
     template_name = "payments/customer_receipts.html"
     context_object_name = "receipts"
-    paginate_by = 25
+    paginate_by = 15
     permission_required = "payments.view_receipt"
 
     def get_queryset(self):
@@ -163,7 +204,12 @@ class CustomerReceiptsView(PermissionRequiredMixin, CustomerScopedMixin, ListVie
         )
 
 
-class PaymentRegisterView(PermissionRequiredMixin, CustomerScopedMixin, TemplateView):
+class PaymentRegisterView(
+    PermissionRequiredMixin,
+    CustomerScopedMixin,
+    BoardSelectionRequiredMixin,
+    TemplateView,
+):
     """
     Cobro en ventanilla.
 
@@ -174,6 +220,10 @@ class PaymentRegisterView(PermissionRequiredMixin, CustomerScopedMixin, Template
 
     template_name = "payments/payment_register.html"
     permission_required = "payments.add_payment"
+    selection_message = "Marque la deuda que va a cobrar."
+
+    def board_selection(self):
+        return self._selected_charges(list(outstanding_charges(self.customer)))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -388,31 +438,6 @@ class PaymentVoidView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return redirect("payments:history", pk=payment.customer_id)
 
 
-class SelectedCustomerRedirectView(LoginRequiredMixin, View):
-    """
-    Entrada del menú lateral: lleva al abonado seleccionado en la sesión.
-
-    El abonado seleccionado es el último cuya ficha se abrió. Si todavía no se
-    abrió ninguna -o la que estaba ya no existe- cae en el padrón de la sede,
-    que es la lista donde se elige uno. No abre una cuenta vacía: parecería
-    afirmar que el abonado no debe nada.
-    """
-
-    screen = "payments:debt"
-
-    def get(self, request, *args, **kwargs):
-        customer_id = request.session.get("selected_customer_id")
-
-        if not customer_id or not Customer.objects.filter(pk=customer_id).exists():
-            messages.info(
-                request,
-                "Abra la ficha de un abonado para consultar su cuenta.",
-            )
-            return redirect("customers:search")
-
-        return redirect(reverse(self.screen, kwargs={"pk": customer_id}))
-
-
 class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateView):
     """
     Botón «Nuevo» del tablero de deuda: emite un cargo a mano.
@@ -474,7 +499,10 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
 
 
 class PaymentCommitmentCreateView(
-    PermissionRequiredMixin, CustomerScopedMixin, TemplateView
+    PermissionRequiredMixin,
+    CustomerScopedMixin,
+    BoardSelectionRequiredMixin,
+    TemplateView,
 ):
     """
     Botón «Compromiso» del tablero de deuda.
@@ -486,6 +514,10 @@ class PaymentCommitmentCreateView(
 
     template_name = "payments/commitment_create.html"
     permission_required = "payments.grant_paymentcommitment"
+    selection_message = "Marque las deudas que entran en el compromiso."
+
+    def board_selection(self):
+        return self._read_selected_charges(self.request.GET)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

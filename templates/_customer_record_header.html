@@ -1,0 +1,92 @@
+{% load customer_ui %}
+
+{% comment %}
+Encabezado común de las seis pestañas del abonado.
+
+Identidad, cifras vivas y pestañas se resuelven aquí una sola vez: si cada
+pantalla describiera al abonado por su cuenta, dos podrían acabar diciendo
+cosas distintas sobre quién es y qué tiene activo.
+
+El nombre del abonado es el `h1` de todas: la pantalla trata de él, y la
+pestaña activa ya dice desde qué ángulo se le está mirando. Poner además un
+título por pantalla dejaba la página con dos encabezados compitiendo.
+
+Las acciones de aquí son las del cliente entero. Lo que actúa sobre una tabla
+concreta -nueva orden, nueva deuda, compromiso- vive en la cabecera de esa
+tabla, junto a lo que modifica.
+
+Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
+{% endcomment %}
+
+<div class="tc-toolbar">
+    <div class="tc-breadcrumb" style="margin-bottom:0;">
+        <a href="{% url 'customers:search' %}">Clientes</a>
+        &nbsp;›&nbsp;
+        <a href="{% url 'customers:detail' pk=customer.pk %}">{{ customer.code }}</a>
+        &nbsp;›&nbsp;
+        <strong>{{ record_title|default:"Información" }}</strong>
+    </div>
+
+    <div class="tc-toolbar-actions">
+        <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="tc-btn">
+            <i class="bi bi-pencil"></i>Editar datos
+        </a>
+        <button class="tc-btn muted" type="button" onclick="window.print()">
+            <i class="bi bi-printer"></i>Imprimir
+        </button>
+
+        {% comment %}
+        Desbordamiento: lo que se hace desde la ficha pero no cada vez. Antes
+        era un boton de tres puntos sin menu detras -no abria nada-, asi que
+        aqui lleva las altas que de otro modo obligan a cambiar de pestaña
+        para encontrar su boton.
+        {% endcomment %}
+        <div class="dropdown">
+            <button class="tc-btn muted square"
+                    type="button"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    aria-label="Más opciones">
+                <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end tc-menu">
+                {% comment %}
+                Cobrar se hace desde la pestaña Deuda, marcando los cargos que
+                se saldan. Aqui queda la puerta para el caso que esa pantalla
+                no cubre: el abonado que adelanta dinero sin deber nada, al
+                que el boton «Cobrar» ni siquiera se le muestra.
+                {% endcomment %}
+                {% if perms.payments.add_payment %}
+                    <li>
+                        <a class="dropdown-item" href="{% url 'payments:register' pk=customer.pk %}">
+                            <i class="bi bi-cash-coin"></i>Registrar cobro
+                        </a>
+                    </li>
+                {% endif %}
+                {% if perms.work_orders.add_workorder %}
+                    <li>
+                        <a class="dropdown-item" href="{% url 'work_orders:create' customer.pk %}">
+                            <i class="bi bi-wrench-adjustable"></i>Nueva orden de trabajo
+                        </a>
+                    </li>
+                {% endif %}
+                {% if perms.payments.add_charge %}
+                    <li>
+                        <a class="dropdown-item" href="{% url 'payments:charge_create' pk=customer.pk %}">
+                            <i class="bi bi-cash-stack"></i>Nueva deuda
+                        </a>
+                    </li>
+                {% endif %}
+                <li>
+                    <a class="dropdown-item" href="{% url 'customers:address_create' customer.pk %}">
+                        <i class="bi bi-geo-alt"></i>Nueva dirección
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+{% customer_hero customer heading_level=1 %}
+
+{% include "_account_tabs.html" %}

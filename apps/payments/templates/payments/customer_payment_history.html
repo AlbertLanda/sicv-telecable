@@ -8,7 +8,7 @@
 
 <div class="tc-content">
 
-    {% include "payments/_account_header.html" with active_tab="history" account_title="Historial de pagos" %}
+    {% include "_customer_record_header.html" with active_tab="history" record_title="Historial de pagos" %}
 
     <section class="tc-card tc-section tc-full">
 
@@ -113,27 +113,7 @@
                 </table>
             </div>
 
-            {% if is_paginated %}
-                <div class="tc-section-body" style="padding:12px 14px;">
-                    <div class="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-                        <span class="tc-form-hint" style="margin:0;">
-                            Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                        </span>
-                        <div class="d-flex gap-2">
-                            {% if page_obj.has_previous %}
-                                <a class="tc-btn muted" href="?page={{ page_obj.previous_page_number }}">
-                                    <i class="bi bi-chevron-left"></i>Anterior
-                                </a>
-                            {% endif %}
-                            {% if page_obj.has_next %}
-                                <a class="tc-btn muted" href="?page={{ page_obj.next_page_number }}">
-                                    Siguiente<i class="bi bi-chevron-right"></i>
-                                </a>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            {% endif %}
+            {% include "_pager.html" %}
 
         {% else %}
 

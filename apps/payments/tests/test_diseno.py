@@ -130,11 +130,84 @@ class SharedDesignTests(PaymentsTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, DESIGN_PARTIAL)
 
-    def test_the_account_header_reports_the_debt_of_the_day(self):
-        """La cifra que decide la conversación va junto al abonado."""
+    def test_the_debt_tab_reports_the_debt_of_the_day(self):
+        """La cifra que decide la conversación encabeza la pestaña que trata de ella.
+
+        No va en el encabezado común: repetida en historial y comprobantes
+        empujaba el contenido de cada pantalla por debajo del pliegue sin
+        añadir nada que esas pantallas necesiten.
+        """
         response = self.client.get(
-            reverse("payments:history", args=[self.customer.pk])
+            reverse("payments:debt", args=[self.customer.pk])
         )
 
         self.assertEqual(response.context["debt"]["total"], Decimal("50.00"))
         self.assertContains(response, "Deuda al")
+
+    def test_the_other_account_tabs_do_not_repeat_it(self):
+        for screen in ("payments:history", "payments:receipts"):
+            with self.subTest(screen=screen):
+                response = self.client.get(
+                    reverse(screen, args=[self.customer.pk])
+                )
+
+                self.assertNotContains(response, "Deuda al")
+
+
+class NoTemplateSyntaxLeaksTests(PaymentsTestCase):
+    """Ninguna pantalla imprime sintaxis de plantilla como si fuera texto.
+
+    `{# ... #}` es un comentario de una sola línea. Escrito en varias, Django
+    no lo reconoce y lo pinta tal cual; en un formulario de rejilla ese texto
+    ocupa además la primera celda y corre todas las etiquetas un sitio, así
+    que cada campo acaba junto a la etiqueta del anterior. Se vio en pantalla
+    antes que en las pruebas, que es justo lo que esta clase evita.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="Cargo de prueba",
+            amount=Decimal("50.00"),
+            due_date=timezone.localdate() + timedelta(days=10),
+        )
+
+        self.login(
+            self.make_user(
+                "operador2",
+                permissions=[
+                    "view_charge",
+                    "add_charge",
+                    "view_payment",
+                    "view_receipt",
+                    "add_payment",
+                    "grant_paymentcommitment",
+                ],
+            )
+        )
+
+    def screens(self):
+        return [
+            reverse("customers:detail", args=[self.customer.pk]),
+            reverse("customers:orders", args=[self.customer.pk]),
+            reverse("customers:activity", args=[self.customer.pk]),
+            reverse("payments:debt", args=[self.customer.pk]),
+            reverse("payments:history", args=[self.customer.pk]),
+            reverse("payments:receipts", args=[self.customer.pk]),
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            reverse("payments:register", args=[self.customer.pk]),
+            reverse("payments:commitment_create", args=[self.customer.pk]),
+        ]
+
+    def test_no_screen_prints_template_syntax(self):
+        for url in self.screens():
+            with self.subTest(url=url):
+                body = self.client.get(url).content.decode()
+
+                self.assertNotIn("{#", body)
+                self.assertNotIn("#}", body)
+                self.assertNotIn("{%", body)
+                self.assertNotIn("{{", body)

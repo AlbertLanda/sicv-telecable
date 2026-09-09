@@ -9,30 +9,11 @@ app_name = "payments"
 urlpatterns = [
 
     # --------------------------------------------------------------
-    # Entradas del menú lateral.
-    #
-    # No llevan pk: resuelven el abonado seleccionado en la sesión, que
-    # es como se navega en ventanilla -primero se ubica al cliente y
-    # después se mira su cuenta.
-    # --------------------------------------------------------------
-    path(
-        "deuda/",
-        views.SelectedCustomerRedirectView.as_view(screen="payments:debt"),
-        name="selected_debt",
-    ),
-    path(
-        "historial/",
-        views.SelectedCustomerRedirectView.as_view(screen="payments:history"),
-        name="selected_history",
-    ),
-    path(
-        "comprobantes/",
-        views.SelectedCustomerRedirectView.as_view(screen="payments:receipts"),
-        name="selected_receipts",
-    ),
-
-    # --------------------------------------------------------------
     # Cuenta de un abonado concreto.
+    #
+    # Todas llevan pk. Son pestañas de la ficha del cliente, no entradas
+    # del menú lateral: se navega primero al abonado y después a su
+    # cuenta, así que no hay pantalla de cobranza sin abonado a la vista.
     # --------------------------------------------------------------
     path(
         "clientes/<int:pk>/deuda/",

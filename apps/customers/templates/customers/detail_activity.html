@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Actividad de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+{% endblock %}
+
+{% comment %}
+Actividad del abonado, de lo último a lo primero.
+
+Los eventos no salen de un modelo de historial: se derivan de las fuentes
+reales -suscripciones, contratos, órdenes-, así que aquí no hay nada que
+crear ni editar. Es una pantalla de solo lectura.
+{% endcomment %}
+
+{% block content %}
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="activity" record_title="Actividad" %}
+
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title"><i class="bi bi-clock-history"></i>Actividad reciente</h2>
+        </div>
+
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Evento</th>
+                        <th>Referencia</th>
+                        <th>Detalle</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in page_obj %}
+                    <tr>
+                        <td>{{ event.timestamp|date:"d/m/Y H:i" }}</td>
+                        <td>{{ event.title }}</td>
+                        <td>{{ event.reference|default:"-" }}</td>
+                        <td>{{ event.detail|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4">Sin actividad reciente.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "_pager.html" %}
+    </section>
+
+</div>
+{% endblock %}

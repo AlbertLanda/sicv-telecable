@@ -110,6 +110,28 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-tabs.cols-3 { grid-template-columns:repeat(3,1fr); }
     .tc-tabs.cols-4 { grid-template-columns:repeat(4,1fr); }
 
+    /* Ancho automatico. La tira del abonado esconde las pestanas que el
+       usuario no puede abrir, asi que su numero de columnas depende de los
+       permisos y no se puede fijar de antemano. */
+    .tc-tabs.auto { grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:1fr; }
+
+    /* Pie de tabla. Vive dentro de la tarjeta, separado por su linea: el
+       operador tiene que ver de un vistazo que lo que mira es una pagina y
+       no todo lo que hay. */
+    .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:11px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-pager-count { font-size:.72rem; color:#6a809a; }
+    .tc-pager-actions { display:flex; gap:8px; }
+    .tc-pager .tc-btn { min-height:32px; padding:5px 12px; font-size:.73rem; }
+    .tc-pager-page { min-width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; padding:0 7px; border:1px solid var(--tc-border); border-radius:5px; background:#fff; color:#42607f; font-size:.73rem; font-weight:700; text-decoration:none; }
+    .tc-pager-page:hover { background:#f4f9ff; border-color:#9fc4ea; color:#1766c2; }
+    .tc-pager-page.active { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
+    .tc-pager-size { min-height:32px; padding:4px 8px; font-size:.73rem; width:auto; }
+    .tc-btn.disabled { opacity:.45; pointer-events:none; }
+
+    @media (max-width: 700px) {
+        .tc-tabs.auto { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:repeat(2,1fr); }
+    }
+
     /* Formulario en filas etiqueta / campo, como el sistema anterior. */
     .tc-form { display:grid; grid-template-columns:190px minmax(0,1fr); gap:12px 18px; align-items:center; }
     .tc-form-label { font-size:.75rem; font-weight:700; color:#42607f; text-align:right; }
@@ -165,8 +187,40 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-pill.info { background:#e4efff; color:#17518f; border-color:#bcd6f7; }
     .tc-pill.muted { background:#eef1f5; color:#5a6c80; border-color:#dbe2ea; }
 
+    /* Formulario en dos columnas de pares etiqueta/campo. Un formulario de
+       diez campos cortos en una sola columna deja media pantalla vacia y
+       obliga a bajar para ver el boton de aceptar. Lo que necesita ancho
+       -descripcion, un campo con su boton al lado- se marca `tc-form-wide` y
+       ocupa la fila entera. */
+    .tc-form.cols-2 { grid-template-columns:150px minmax(0,1fr) 150px minmax(0,1fr); }
+    .tc-form.cols-2 .tc-form-field.span { grid-column:2/-1; }
+
+    /* Campos compuestos: moneda + monto + boton, en una sola fila. */
+    .tc-field-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+
+    /* Nota de contexto de una pantalla. Mas discreta que un alert de
+       Bootstrap, que ocupaba el ancho entero y competia con los campos. */
+    .tc-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; margin-bottom:16px; border:1px solid #bfe0f5; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f2f9ff; color:#2a4d70; font-size:.73rem; line-height:1.5; }
+    .tc-note i { color:var(--tc-blue); font-size:.95rem; line-height:1.3; }
+    .tc-note.danger { border-color:#f2b8b1; border-left-color:#c0392b; background:#fdf3f2; color:#8f2b1f; }
+    .tc-note.danger i { color:#c0392b; }
+
+    /* Pie de tarjeta: donde se confirma o se abandona. Mismo trazo que el pie
+       de las tablas, para que la pantalla tenga un solo lenguaje. */
+    .tc-card-footer { display:flex; flex-wrap:wrap; gap:10px; padding:12px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+
+    /* Menu de desbordamiento de la ficha. Hereda de Bootstrap la
+       mecanica y de aqui el trazo, para que no parezca de otra app. */
+    .tc-menu { font-size:.78rem; border:1px solid var(--tc-border); border-radius:7px; padding:6px; box-shadow:0 8px 24px rgba(20,52,88,.12); }
+    .tc-menu .dropdown-item { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:5px; color:#2e4763; font-weight:600; }
+    .tc-menu .dropdown-item i { color:#1564c0; font-size:.95rem; }
+    .tc-menu .dropdown-item:hover { background:#f4f9ff; color:#1766c2; }
+
+    @media (max-width: 1100px) {
+        .tc-form.cols-2 { grid-template-columns:150px minmax(0,1fr); }
+    }
     @media (max-width: 700px) {
-        .tc-form { grid-template-columns:1fr; }
+        .tc-form, .tc-form.cols-2 { grid-template-columns:1fr; }
         .tc-form-label { text-align:left; }
         .tc-form-label.top { padding-top:0; }
     }

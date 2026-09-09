@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Órdenes de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+{% endblock %}
+
+{% comment %}
+Órdenes de trabajo del abonado.
+
+La OT abierta encabeza la pantalla porque es la que reclama algo: mientras
+siga abierta, el resto del historial es contexto. Si no hay ninguna, no se
+pinta el hueco.
+{% endcomment %}
+
+{% block content %}
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="orders" record_title="Órdenes de trabajo" %}
+
+    {% if featured_open_order %}
+    <section class="tc-card tc-order">
+        <div class="tc-order-icon"><i class="bi bi-wrench-adjustable"></i></div>
+        <div>
+            <div class="tc-order-title">
+                <span>{% if featured_open_order.status == 'PENDING' %}Orden de trabajo pendiente{% else %}Orden de trabajo abierta{% endif %}</span>
+                <span class="tc-pill">{{ featured_open_order.order_type.name }}</span>
+                <span class="tc-pill warning">{{ featured_open_order.get_status_display }}</span>
+            </div>
+            <div class="tc-order-number">{{ featured_open_order.order_number }}</div>
+            <div class="tc-order-meta"><strong>Motivo:</strong> {{ featured_open_order.reason.name|default:"Sin motivo registrado" }} &nbsp;|&nbsp; <strong>Programada:</strong> {% if featured_open_order.scheduled_at %}{{ featured_open_order.scheduled_at|date:"d/m/Y H:i" }}{% else %}Sin programar{% endif %}</div>
+            <div class="tc-order-meta"><strong>Técnico:</strong> {{ featured_open_order.assigned_technician|default:"Sin asignar" }}</div>
+        </div>
+        <div class="tc-order-actions">
+            <a aria-label="Ver orden inicial" href="{% url 'work_orders:initial_print' featured_open_order.pk %}" class="tc-btn primary"><i class="bi bi-file-earmark-text"></i>Ver orden</a>
+            <a href="{% url 'work_orders:initial_print' featured_open_order.pk %}?print=1" class="tc-btn"><i class="bi bi-printer"></i>Imprimir orden inicial</a>
+            <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="tc-btn muted"><i class="bi bi-file-earmark-text"></i>Ver liquidación técnica<span class="visually-hidden">Ver ficha técnica</span></a>
+            <a href="{% url 'work_orders:schedule_board' %}" class="tc-btn"><i class="bi bi-calendar3"></i>Reprogramar</a>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-wrench-adjustable"></i>Órdenes de trabajo
+                {% if open_order_count %}<span class="tc-pill warning">{{ open_order_count }} abierta{{ open_order_count|pluralize }}</span>{% endif %}
+            </h2>
+            {% if perms.work_orders.add_workorder %}
+                <a class="tc-btn primary" href="{% url 'work_orders:create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva orden de trabajo</a>
+            {% endif %}
+        </div>
+
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead>
+                    <tr>
+                        <th>N.º Orden</th>
+                        <th>Servicio</th>
+                        <th>Tipo</th>
+                        <th>Motivo</th>
+                        <th>Estado</th>
+                        <th>Prioridad</th>
+                        <th>Técnico</th>
+                        <th>Resultado</th>
+                        <th>Programada</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in page_obj %}
+                    <tr>
+                        <td><a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a></td>
+                        <td>#{{ order.subscription.service_number }}</td>
+                        <td>{{ order.order_type.name }}{% if order.subtype %}<br><span class="text-muted">{{ order.subtype.name }}</span>{% endif %}</td>
+                        <td>{{ order.reason.name|default:"-" }}</td>
+                        <td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td>
+                        <td>{{ order.get_priority_display }}</td>
+                        <td>{{ order.assigned_technician|default:"Sin asignar" }}</td>
+                        <td>{{ order.result.name|default:"-" }}</td>
+                        <td>{% if order.scheduled_at %}{{ order.scheduled_at|date:"d/m/Y H:i" }}{% else %}-{% endif %}</td>
+                        <td>
+                            <a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>
+                            {% if perms.work_orders.view_workorder %}
+                                <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="10">Sin órdenes registradas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "_pager.html" %}
+    </section>
+
+</div>
+{% endblock %}

@@ -100,20 +100,44 @@ class CustomerDashboardRedesignTests(TestCase):
 
         self.client.login(username="atc_dashboard", password="test1234")
 
-    def test_dashboard_prioritizes_open_work_order_and_professional_summary(self):
+    def test_the_information_tab_shows_what_the_customer_has_contracted(self):
+        """La primera pestaña: quién es, dónde vive y qué tiene contratado."""
         response = self.client.get(
             reverse("customers:detail", kwargs={"pk": self.customer.pk})
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "customers/detail_dashboard.html")
+        self.assertContains(response, "CONT-000001")
+        self.assertContains(response, "Duo 600 Mbps - Estandar 2026")
+
+    def test_the_information_tab_does_not_carry_the_work_orders(self):
+        """Cada pestaña muestra una cosa.
+
+        Cuando todo vivía en la ficha, cada bloque salía dos veces -vista
+        previa arriba y tabla entera abajo- y la pantalla arrancaba con seis
+        secciones antes del primer dato.
+        """
+        response = self.client.get(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertNotContains(response, "Orden de trabajo pendiente")
+        self.assertNotContains(response, self.order.order_number)
+
+    def test_the_orders_tab_prioritizes_the_open_work_order(self):
+        """La OT abierta encabeza su pestaña: es la que reclama algo."""
+        response = self.client.get(
+            reverse("customers:orders", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "customers/detail_orders.html")
         self.assertContains(response, "Orden de trabajo pendiente")
         self.assertContains(response, self.order.order_number)
         self.assertContains(response, "Ver orden inicial")
         self.assertContains(response, "Imprimir orden inicial")
         self.assertContains(response, "Ver ficha técnica")
-        self.assertContains(response, "CONT-000001")
-        self.assertContains(response, "Duo 600 Mbps - Estandar 2026")
 
     def test_global_shell_is_present_on_regular_authenticated_pages(self):
         response = self.client.get(reverse("customers:search"))
