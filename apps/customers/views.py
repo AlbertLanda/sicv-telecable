@@ -723,6 +723,7 @@ class CustomerGeneralDataEditView(LoginRequiredMixin, UpdateView):
         customer = self.object
 
         context["customer"] = customer
+        context["is_edit"] = True
 
         context["registration_data"] = {
             "document_type": customer.document_type,
