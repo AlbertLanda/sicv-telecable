@@ -11,7 +11,7 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.work_orders.models import WorkOrder, WorkOrderReprogramming
+from apps.work_orders.models import OrderType, WorkOrder, WorkOrderReprogramming
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -153,6 +153,29 @@ class WorkOrderReprogrammingTests(WorkOrderTestCase):
         )
         self.assertEqual(order.reprogrammings.count(), 0)
 
+    def test_incident_cannot_be_reprogrammed(self):
+        incident_type = OrderType.objects.get(code="INCIDENT")
+
+        order = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta intermitencia del servicio.",
+        )
+
+        with self.assertRaises(ValidationError):
+            order.reprogram(
+                new_schedule=timezone.now() + timedelta(days=2),
+                user=self.supervisor,
+                reason="Intento inválido de programación",
+            )
+
+        order.refresh_from_db()
+
+        self.assertIsNone(order.scheduled_at)
+        self.assertIsNone(order.scheduled_date)
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
+        self.assertEqual(order.reprogrammings.count(), 0)
+
 
 class WorkOrderStartAttentionTests(WorkOrderTestCase):
 
@@ -235,3 +258,24 @@ class WorkOrderStartAttentionTests(WorkOrderTestCase):
             WorkOrder.Status.IN_PROGRESS,
         )
         self.assertIsNotNone(order.started_at)
+
+    def test_incident_cannot_start_with_generic_field_workflow(self):
+        incident_type = OrderType.objects.get(code="INCIDENT")
+
+        order = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta pérdida de conectividad.",
+            status=WorkOrder.Status.ASSIGNED,
+            assigned_technician=self.technician,
+        )
+
+        self.assertFalse(order.can_start_attention)
+
+        with self.assertRaises(ValidationError):
+            order.start_attention(user=self.technician)
+
+        order.refresh_from_db()
+
+        self.assertIsNone(order.started_at)
+        self.assertEqual(order.status, WorkOrder.Status.ASSIGNED)

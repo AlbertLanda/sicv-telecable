@@ -21,7 +21,7 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 from apps.work_orders.location import resolve_location_display
-from apps.work_orders.models import WorkOrder, WorkOrderEvidence, WorkOrderFieldSheet
+from apps.work_orders.models import WorkOrder, WorkOrderEvidence, WorkOrderFieldSheet, OrderType
 from apps.work_orders.services import add_work_order_evidence, update_field_sheet
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -337,6 +337,93 @@ class WorkOrderDetailViewAccessTests(WorkOrderTestCase):
         self.assertTrue(response.context["is_owner_technician"])
         self.assertFalse(response.context["can_edit"])
 
+    def test_atc_can_view_incident(self):
+        incident_type = OrderType.objects.get(
+            code="INCIDENT",
+        )
+
+        incident = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta caída total del servicio.",
+        )
+
+        url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": incident.pk},
+        )
+
+        self.client.login(
+            username="atc1",
+            password="test1234",
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["can_edit"])
+        self.assertFalse(response.context["is_owner_technician"])
+
+
+    def test_noc_can_view_incident(self):
+        incident_type = OrderType.objects.get(
+            code="INCIDENT",
+        )
+
+        incident = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta caída total del servicio.",
+        )
+
+        noc_user = User.objects.create_user(
+            username="noc1",
+            password="test1234",
+            role=User.Role.NOC,
+            branch=self.branch,
+        )
+
+        url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": incident.pk},
+        )
+
+        self.client.login(
+            username="noc1",
+            password="test1234",
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["can_edit"])
+        self.assertFalse(response.context["is_owner_technician"])
+
+
+    def test_field_technician_cannot_view_incident(self):
+        incident_type = OrderType.objects.get(
+            code="INCIDENT",
+        )
+
+        incident = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta caída total del servicio.",
+        )
+
+        url = reverse(
+            "work_orders:detail",
+            kwargs={"pk": incident.pk},
+        )
+
+        self.client.login(
+            username="tecnico1",
+            password="test1234",
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 403)
 
 class WorkOrderDetailViewContentTests(WorkOrderTestCase):
     """Lo que la ficha muestra: cliente, plan, dirección, GPS, suministro."""

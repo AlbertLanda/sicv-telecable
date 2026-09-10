@@ -30,8 +30,18 @@ class User(AbstractUser):
                 "customers.add_customer",
                 "work_orders.add_workorder",
                 "work_orders.view_workorder",
+                "work_orders.view_incident",
                 "work_orders.schedule_workorder",
                 "work_orders.cancel_workorder",
+            }
+        ),
+
+        Role.NOC: frozenset(
+            {
+                "work_orders.view_workorder",
+                "work_orders.view_incident",
+                "work_orders.start_incident",
+                "work_orders.close_incident",
             }
         ),
     }

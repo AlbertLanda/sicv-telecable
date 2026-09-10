@@ -417,6 +417,42 @@ class IncidentCreateForm(forms.Form):
             "detail": data.get("detail", ""),
         }
 
+class IncidentCloseForm(forms.Form):
+    """
+    Cierre simplificado de una incidencia por NOC.
+    """
+
+    attention_detail = forms.CharField(
+        label="Detalle de atención",
+        required=True,
+        min_length=3,
+        max_length=500,
+        strip=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Ej.: Problemas con WAN",
+            }
+        ),
+    )
+
+    observations = forms.CharField(
+        label="Observaciones",
+        required=False,
+        max_length=3000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 5,
+                "placeholder": (
+                    "Ej.: Se corrigió el problema y se validó "
+                    "el servicio con el cliente."
+                ),
+            }
+        ),
+    )
+
 class WorkOrderAssignForm(forms.Form):
 
     assigned_technician = forms.ModelChoiceField(

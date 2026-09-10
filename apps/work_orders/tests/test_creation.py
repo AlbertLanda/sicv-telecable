@@ -18,19 +18,25 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.models import User
 from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     IncidentDetail,
+    OrderType,
     WorkOrder,
     WorkOrderSequence,
+    WorkOrderFieldSheet,
 )
 from apps.work_orders.services import (
+    close_incident_attention,
     create_incident_work_order,
     create_work_order,
     format_order_number,
     generate_order_number,
+    start_incident_attention,
+    get_subscription_technical_context,
 )
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -221,6 +227,420 @@ class CreateIncidentWorkOrderTests(WorkOrderTestCase):
 
         self.assertEqual(WorkOrder.objects.count(), 0)
         self.assertEqual(IncidentDetail.objects.count(), 0)
+
+class IncidentAttentionWorkflowTests(WorkOrderTestCase):
+    """Flujo remoto de atención de incidencias por NOC."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.subscription.status = Subscription.Status.ACTIVE
+        self.subscription.save(
+            update_fields=["status", "updated_at"]
+        )
+
+        self.noc_user = User.objects.create_user(
+            username="noc1",
+            password="test1234",
+            role=User.Role.NOC,
+            branch=self.branch,
+        )
+
+        self.incident = create_incident_work_order(
+            subscription=self.subscription,
+            created_by=self.atc_user,
+            reason_text="Cliente reporta pérdida total de conectividad.",
+            detail="Validar remotamente parámetros del servicio.",
+        )
+
+    def test_noc_can_start_incident(self):
+        before = timezone.now()
+
+        order = start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+            remarks="NOC inicia diagnóstico remoto.",
+        )
+
+        after = timezone.now()
+
+        order.refresh_from_db()
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+        self.assertIsNotNone(order.started_at)
+        self.assertGreaterEqual(order.started_at, before)
+        self.assertLessEqual(order.started_at, after)
+
+    def test_start_incident_creates_status_history(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+            remarks="Inicio de revisión desde NOC.",
+        )
+
+        entry = self.incident.status_history.get(
+            new_status=WorkOrder.Status.IN_PROGRESS
+        )
+
+        self.assertEqual(
+            entry.previous_status,
+            WorkOrder.Status.PENDING,
+        )
+        self.assertEqual(entry.changed_by, self.noc_user)
+        self.assertEqual(
+            entry.remarks,
+            "Inicio de revisión desde NOC.",
+        )
+
+    def test_atc_cannot_start_incident_without_permission(self):
+        with self.assertRaises(ValidationError):
+            start_incident_attention(
+                self.incident,
+                user=self.atc_user,
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.PENDING,
+        )
+        self.assertIsNone(self.incident.started_at)
+
+    def test_field_technician_cannot_start_incident(self):
+        with self.assertRaises(ValidationError):
+            start_incident_attention(
+                self.incident,
+                user=self.technician,
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.PENDING,
+        )
+
+    def test_incident_cannot_be_started_twice(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        with self.assertRaises(ValidationError):
+            start_incident_attention(
+                self.incident,
+                user=self.noc_user,
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+
+    def test_noc_can_close_incident(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        order = close_incident_attention(
+            self.incident,
+            user=self.noc_user,
+            attention_detail=(
+                "Se reinició remotamente la ONU y se validó "
+                "navegación estable con el cliente."
+            ),
+            observations="Cliente confirma servicio restablecido.",
+            remarks="Incidencia resuelta remotamente.",
+        )
+
+        order.refresh_from_db()
+
+        detail = IncidentDetail.objects.get(
+            work_order=order
+        )
+
+        self.assertEqual(
+            order.status,
+            WorkOrder.Status.ATTENDED,
+        )
+        self.assertIsNotNone(order.attended_at)
+
+        self.assertEqual(
+            detail.attention_detail,
+            (
+                "Se reinició remotamente la ONU y se validó "
+                "navegación estable con el cliente."
+            ),
+        )
+        self.assertEqual(
+            detail.observations,
+            "Cliente confirma servicio restablecido.",
+        )
+        self.assertEqual(
+            detail.attended_by,
+            self.noc_user,
+        )
+
+    def test_close_incident_requires_attention_detail(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        with self.assertRaises(ValidationError):
+            close_incident_attention(
+                self.incident,
+                user=self.noc_user,
+                attention_detail="   ",
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+        self.assertIsNone(self.incident.attended_at)
+
+    def test_atc_cannot_close_incident_without_permission(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        with self.assertRaises(ValidationError):
+            close_incident_attention(
+                self.incident,
+                user=self.atc_user,
+                attention_detail="Intento de cierre por ATC.",
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+
+    def test_incident_cannot_close_before_starting(self):
+        with self.assertRaises(ValidationError):
+            close_incident_attention(
+                self.incident,
+                user=self.noc_user,
+                attention_detail="Diagnóstico final.",
+            )
+
+        self.incident.refresh_from_db()
+
+        self.assertEqual(
+            self.incident.status,
+            WorkOrder.Status.PENDING,
+        )
+
+    def test_close_incident_creates_status_history(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        close_incident_attention(
+            self.incident,
+            user=self.noc_user,
+            attention_detail="Servicio restablecido remotamente.",
+            remarks="Cierre NOC.",
+        )
+
+        entry = self.incident.status_history.get(
+            new_status=WorkOrder.Status.ATTENDED
+        )
+
+        self.assertEqual(
+            entry.previous_status,
+            WorkOrder.Status.IN_PROGRESS,
+        )
+        self.assertEqual(entry.changed_by, self.noc_user)
+        self.assertEqual(entry.remarks, "Cierre NOC.")
+
+    def test_incident_observations_can_remain_empty(self):
+        start_incident_attention(
+            self.incident,
+            user=self.noc_user,
+        )
+
+        close_incident_attention(
+            self.incident,
+            user=self.noc_user,
+            attention_detail="Se resolvió mediante ajuste remoto.",
+        )
+
+        detail = IncidentDetail.objects.get(
+            work_order=self.incident
+        )
+
+        self.assertEqual(detail.observations, "")
+        self.assertEqual(
+            detail.attended_by,
+            self.noc_user,
+        )
+
+class SubscriptionTechnicalContextTests(WorkOrderTestCase):
+    """Contexto técnico histórico mostrado a NOC."""
+
+    def test_returns_none_when_subscription_has_no_technical_history(self):
+        context = get_subscription_technical_context(
+            self.subscription
+        )
+
+        self.assertIsNone(context)
+
+    def test_returns_latest_field_sheet_data(self):
+        order = self.create_assigned_order()
+
+        WorkOrderFieldSheet.objects.create(
+            work_order=order,
+            nap="NAP-001",
+            terminal="12",
+            equipment_code="AA:BB:CC:DD:EE:FF",
+            seal_number="PREC-100",
+            notes="Instalación inicial operativa.",
+            updated_by=self.technician,
+        )
+
+        context = get_subscription_technical_context(
+            self.subscription
+        )
+
+        self.assertIsNotNone(context)
+        self.assertEqual(context["source_order"], order)
+        self.assertEqual(context["nap"], "NAP-001")
+        self.assertEqual(context["terminal"], "12")
+        self.assertEqual(
+            context["equipment_code"],
+            "AA:BB:CC:DD:EE:FF",
+        )
+        self.assertEqual(
+            context["seal_number"],
+            "PREC-100",
+        )
+        self.assertEqual(
+            context["technician_notes"],
+            "Instalación inicial operativa.",
+        )
+        self.assertEqual(
+            context["field_updated_by"],
+            self.technician,
+        )
+
+    def test_returns_liquidation_data_when_available(self):
+        order = self.create_attended_order()
+
+        liquidation = self.create_liquidation(
+            order=order,
+            network_element="NAP-020",
+            network_port="7",
+            equipment_serial="ONU-ABC123",
+            signal_level_dbm="-21.50",
+            technical_notes="Se dejó servicio estable.",
+        )
+
+        context = get_subscription_technical_context(
+            self.subscription
+        )
+
+        self.assertIsNotNone(context)
+        self.assertEqual(
+            context["source_order"],
+            order,
+        )
+        self.assertEqual(
+            context["network_element"],
+            "NAP-020",
+        )
+        self.assertEqual(
+            context["network_port"],
+            "7",
+        )
+        self.assertEqual(
+            context["equipment_serial"],
+            "ONU-ABC123",
+        )
+        self.assertEqual(
+            context["signal_level_dbm"],
+            liquidation.signal_level_dbm,
+        )
+        self.assertEqual(
+            context["technical_notes"],
+            "Se dejó servicio estable.",
+        )
+
+    def test_uses_most_recent_physical_order(self):
+        older_order = self.create_assigned_order()
+
+        WorkOrderFieldSheet.objects.create(
+            work_order=older_order,
+            nap="NAP-OLD",
+            terminal="1",
+            equipment_code="OLD-MAC",
+            seal_number="OLD-SEAL",
+            updated_by=self.technician,
+        )
+
+        newer_order = self.create_assigned_order(
+            order_type=self.reconnection_type,
+        )
+
+        WorkOrderFieldSheet.objects.create(
+            work_order=newer_order,
+            nap="NAP-NEW",
+            terminal="9",
+            equipment_code="NEW-MAC",
+            seal_number="NEW-SEAL",
+            updated_by=self.technician,
+        )
+
+        context = get_subscription_technical_context(
+            self.subscription
+        )
+
+        self.assertIsNotNone(context)
+        self.assertEqual(
+            context["source_order"],
+            newer_order,
+        )
+        self.assertEqual(context["nap"], "NAP-NEW")
+        self.assertEqual(
+            context["equipment_code"],
+            "NEW-MAC",
+        )
+        self.assertEqual(
+            context["seal_number"],
+            "NEW-SEAL",
+        )
+
+    def test_ignores_system_incident_as_technical_source(self):
+        incident_type = OrderType.objects.get(
+            code="INCIDENT"
+        )
+
+        incident = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Incidencia lógica.",
+        )
+
+        context = get_subscription_technical_context(
+            self.subscription,
+            exclude_order=incident,
+        )
+
+        self.assertIsNone(context)
 
 class CreateWorkOrderValidationTests(WorkOrderTestCase):
     """Reglas que deben rechazarse ANTES de persistir nada."""

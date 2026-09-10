@@ -43,8 +43,21 @@ urlpatterns = [
         name="incident_create",
     ),
 
+    # Asignación de un técnico a una orden. Solo ATC puede asignar; el técnico no. La asignación no borra la OT, solo la marca como ASSIGNED y registra la fecha y el técnico asignado. La OT asignada no puede reprogramarse ni atenderse por otro técnico.
+    path(
+        "<int:pk>/incident/start/",
+        views.IncidentStartAttentionView.as_view(),
+        name="incident_start",
+    ),
+
+    path(
+        "<int:pk>/incident/close/",
+        views.IncidentCloseView.as_view(),
+        name="incident_close",
+    ),
+
     # Presentación administrativa de la OT emitida. Deliberadamente excluye
-    # ficha técnica, evidencias y liquidación para separar solicitud inicial
+    # ficha técnica, evidencias y liquidación para separar solicitud initial
     # de la ejecución registrada después por el técnico.
     path(
         "<int:pk>/initial/",

@@ -7,7 +7,7 @@ conservación de la trazabilidad del técnico anterior en una reasignación.
 
 from django.core.exceptions import ValidationError
 
-from apps.work_orders.models import WorkOrder, WorkOrderAssignment
+from apps.work_orders.models import OrderType, WorkOrder, WorkOrderAssignment
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -135,3 +135,26 @@ class WorkOrderAssignmentTests(WorkOrderTestCase):
         self.assertEqual(order.assignments.count(), 3)
         self.assertEqual(active.count(), 1)
         self.assertEqual(active.first().technician, self.technician)
+
+    def test_incident_cannot_be_assigned_to_field_technician(self):
+        incident_type = OrderType.objects.get(code="INCIDENT")
+
+        order = self.create_order(
+            order_type=incident_type,
+            attention_type=WorkOrder.AttentionType.SYSTEM,
+            reason_text="Cliente reporta caída total del servicio.",
+        )
+
+        self.assertFalse(order.can_be_assigned)
+
+        with self.assertRaises(ValidationError):
+            order.assign_technician(
+                technician=self.technician,
+                assigned_by=self.supervisor,
+            )
+
+        order.refresh_from_db()
+
+        self.assertIsNone(order.assigned_technician)
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
+        self.assertEqual(order.assignments.count(), 0)

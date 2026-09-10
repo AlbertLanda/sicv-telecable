@@ -30,6 +30,7 @@ from apps.organization.context_processors import get_active_branch
 from apps.services.models import Subscription
 from apps.work_orders.forms import (
     IncidentCreateForm,
+    IncidentCloseForm,
     WorkOrderAssignForm,
     WorkOrderCreateForm,
     WorkOrderEvidenceUploadForm,
@@ -43,8 +44,11 @@ from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import (
     add_work_order_evidence,
+    close_incident_attention,
     create_incident_work_order,
     create_work_order,
+    get_subscription_technical_context,
+    start_incident_attention,
     start_order_attention,
     update_field_sheet,
 )
@@ -225,6 +229,156 @@ class IncidentCreateView(
         return reverse(
             "customers:detail",
             kwargs={"pk": self.customer.pk},
+        )
+
+class IncidentStartAttentionView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    View,
+):
+    """
+    Inicio de la atención remota de una incidencia por NOC.
+
+    La operación es POST-only: consultar una URL nunca puede iniciar
+    accidentalmente una incidencia.
+    """
+
+    permission_required = "work_orders.start_incident"
+    raise_exception = True
+
+    def get_work_order(self):
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "order_type",
+                ),
+                pk=self.kwargs["pk"],
+                order_type__code="INCIDENT",
+            )
+
+        return self._work_order
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_work_order()
+
+        try:
+            order = start_incident_attention(
+                order,
+                user=request.user,
+            )
+
+        except ValidationError as exc:
+            messages.error(
+                request,
+                " ".join(exc.messages),
+            )
+
+        else:
+            messages.success(
+                request,
+                (
+                    f"Atención de la incidencia {order.order_number} "
+                    "iniciada correctamente."
+                ),
+            )
+
+        return redirect(
+            "work_orders:detail",
+            pk=order.pk,
+        )
+
+    def get(self, request, *args, **kwargs):
+        return redirect(
+            "work_orders:detail",
+            pk=self.get_work_order().pk,
+        )
+
+class IncidentCloseView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    """
+    Cierre de una incidencia atendida remotamente por NOC.
+
+    Los datos técnicos anteriores se presentan como contexto de solo
+    lectura. El formulario únicamente registra el resultado de NOC.
+    """
+
+    permission_required = "work_orders.close_incident"
+    raise_exception = True
+
+    form_class = IncidentCloseForm
+    template_name = "work_orders/incident_close.html"
+
+    def get_work_order(self):
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "subscription__address",
+                    "subscription__service_type",
+                    "subscription__plan",
+                    "order_type",
+                ),
+                pk=self.kwargs["pk"],
+                order_type__code="INCIDENT",
+            )
+
+        return self._work_order
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        order = self.get_work_order()
+
+        context["order"] = order
+        context["customer"] = order.subscription.customer
+        context["technical_context"] = (
+            get_subscription_technical_context(
+                order.subscription,
+                exclude_order=order,
+            )
+        )
+
+        return context
+
+    def form_valid(self, form):
+        order = self.get_work_order()
+
+        try:
+            order = close_incident_attention(
+                order,
+                user=self.request.user,
+                attention_detail=form.cleaned_data[
+                    "attention_detail"
+                ],
+                observations=form.cleaned_data.get(
+                    "observations",
+                    "",
+                ),
+                remarks="Incidencia finalizada por NOC.",
+            )
+
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            (
+                f"Incidencia {order.order_number} atendida "
+                "correctamente por NOC."
+            ),
+        )
+
+        return redirect(
+            "work_orders:detail",
+            pk=order.pk,
         )
 
 class WorkOrderAssignView(
@@ -609,14 +763,31 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
 
     def _resolve_access(self, request, order):
         """
-        Decide si el usuario puede ver esta orden y si además puede editar
-        su ficha técnica. Deja el resultado en la instancia y corta con
-        PermissionDenied si ninguna de las dos vías de acceso aplica.
+        Decide si el usuario puede consultar la orden y si puede editar
+        la ficha técnica de campo.
+
+        Las incidencias usan un flujo independiente:
+        - ATC puede consultarlas.
+        - NOC puede consultarlas y atenderlas mediante su flujo específico.
+        - El técnico de campo no obtiene acceso a incidencias.
         """
         user = request.user
 
-        is_owner_technician = order.assigned_technician_id == user.pk
         can_view_as_staff = user.has_perm("work_orders.view_workorder")
+
+        if order.order_type.code == "INCIDENT":
+            can_view_incident = user.has_perm("work_orders.view_incident")
+
+            if not (can_view_as_staff and can_view_incident):
+                raise PermissionDenied(
+                    "No tiene autorización para consultar esta incidencia."
+                )
+
+            self.is_owner_technician = False
+            self.can_edit = False
+            return
+
+        is_owner_technician = order.assigned_technician_id == user.pk
 
         if not (is_owner_technician or can_view_as_staff):
             raise PermissionDenied(
@@ -624,11 +795,6 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
             )
 
         self.is_owner_technician = is_owner_technician
-
-        # Ver como técnico propietario habilita edición solo mientras la
-        # orden sigue operativamente abierta. La comprobación real -y la
-        # única que importa de verdad- la repite el servicio en cada POST;
-        # esto únicamente decide si se ofrecen los controles en pantalla.
         self.can_edit = is_owner_technician and not order.is_closed
 
     @staticmethod
@@ -656,22 +822,68 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
             .first()
         )
 
+        is_incident = order.is_incident
+
+        incident_detail = None
+        technical_context = None
+        can_start_incident = False
+        can_close_incident = False
+
+        if is_incident:
+            try:
+                incident_detail = order.incident_detail
+            except WorkOrder.incident_detail.RelatedObjectDoesNotExist:
+                incident_detail = None
+
+            technical_context = get_subscription_technical_context(
+                order.subscription,
+                exclude_order=order,
+            )
+
+            can_start_incident = (
+                order.status == WorkOrder.Status.PENDING
+                and self.request.user.has_perm(
+                    "work_orders.start_incident"
+                )
+            )
+
+            can_close_incident = (
+                order.status == WorkOrder.Status.IN_PROGRESS
+                and self.request.user.has_perm(
+                    "work_orders.close_incident"
+                )
+            )
+
         return {
             "order": order,
             "customer": order.subscription.customer,
             "subscription": order.subscription,
-            "location": resolve_location_display(order.subscription.address),
+            "location": resolve_location_display(
+                order.subscription.address
+            ),
             "liquidation": liquidation,
             "liquidation_items": (
-                liquidation.items.all() if liquidation is not None else []
+                liquidation.items.all()
+                if liquidation is not None
+                else []
             ),
             "field_sheet": self._get_field_sheet(order),
-            "evidences": order.evidences.select_related("uploaded_by").all(),
+            "evidences": (
+                order.evidences
+                .select_related("uploaded_by")
+                .all()
+            ),
             "is_owner_technician": self.is_owner_technician,
             "can_edit": self.can_edit,
             "field_sheet_form": field_sheet_form,
             "evidence_form": evidence_form,
             "cancellation": cancellation,
+
+            "is_incident": is_incident,
+            "incident_detail": incident_detail,
+            "technical_context": technical_context,
+            "can_start_incident": can_start_incident,
+            "can_close_incident": can_close_incident,
         }
 
     def get(self, request, *args, **kwargs):

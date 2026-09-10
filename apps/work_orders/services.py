@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -380,6 +380,304 @@ def create_incident_work_order(
 
     return order
 
+INCIDENT_START_PERMISSION = "work_orders.start_incident"
+INCIDENT_CLOSE_PERMISSION = "work_orders.close_incident"
+
+
+def _require_incident_permission(user, permission, action):
+    """Valida al operador de NOC mediante permiso funcional, no por rol."""
+    if user is None or user.pk is None:
+        raise ValidationError(
+            f"Debe indicar el usuario que {action}."
+        )
+
+    if not user.is_active:
+        raise ValidationError(
+            f"El usuario que {action} debe estar activo."
+        )
+
+    if not user.has_perm(permission):
+        raise ValidationError(
+            f"El usuario no está autorizado para {action}. "
+            f"Requiere el permiso {permission}."
+        )
+
+
+@transaction.atomic
+def start_incident_attention(order: WorkOrder, user, remarks=""):
+    """
+    Inicia formalmente una incidencia NOC.
+
+    El flujo es propio de incidencias:
+    PENDING -> IN_PROGRESS.
+
+    No asigna técnico de campo ni utiliza start_attention().
+    """
+    if order is None or order.pk is None:
+        raise ValidationError(
+            "Debe indicar una incidencia registrada."
+        )
+
+    _require_incident_permission(
+        user,
+        INCIDENT_START_PERMISSION,
+        "inicia la atención de la incidencia",
+    )
+
+    try:
+        order = (
+            WorkOrder.objects
+            .select_for_update()
+            .select_related("order_type")
+            .get(pk=order.pk)
+        )
+    except WorkOrder.DoesNotExist:
+        raise ValidationError(
+            "La incidencia indicada ya no existe."
+        )
+
+    if not order.is_incident:
+        raise ValidationError(
+            "La orden indicada no es una incidencia NOC."
+        )
+
+    if order.status != WorkOrder.Status.PENDING:
+        raise ValidationError(
+            "Solo una incidencia pendiente puede iniciar atención. "
+            f"Estado actual: {order.get_status_display()}."
+        )
+
+    if order.attention_type != WorkOrder.AttentionType.SYSTEM:
+        raise ValidationError(
+            "La incidencia debe estar registrada como atención de sistema."
+        )
+
+    if order.assigned_technician_id is not None:
+        raise ValidationError(
+            "Una incidencia NOC no puede tener técnico de campo asignado."
+        )
+
+    if order.scheduled_at or order.scheduled_date:
+        raise ValidationError(
+            "Una incidencia NOC no puede tener programación de campo."
+        )
+
+    order.started_at = timezone.now()
+    order.save(
+        update_fields=[
+            "started_at",
+            "updated_at",
+        ]
+    )
+
+    order.change_status(
+        WorkOrder.Status.IN_PROGRESS,
+        user=user,
+        remarks=(remarks or "").strip(),
+    )
+
+    return order
+
+
+@transaction.atomic
+def close_incident_attention(
+    order: WorkOrder,
+    user,
+    attention_detail,
+    observations="",
+    remarks="",
+):
+    """
+    Finaliza una incidencia atendida remotamente por NOC.
+
+    IN_PROGRESS -> ATTENDED.
+
+    El detalle de atención es obligatorio. Los datos técnicos restantes
+    son opcionales y el usuario responsable se obtiene del ejecutor.
+    """
+    if order is None or order.pk is None:
+        raise ValidationError(
+            "Debe indicar una incidencia registrada."
+        )
+
+    _require_incident_permission(
+        user,
+        INCIDENT_CLOSE_PERMISSION,
+        "finaliza la incidencia",
+    )
+
+    attention_detail = (attention_detail or "").strip()
+
+    if not attention_detail:
+        raise ValidationError({
+            "attention_detail": (
+                "Debe registrar el detalle de atención de la incidencia."
+            )
+        })
+
+    try:
+        order = (
+            WorkOrder.objects
+            .select_for_update()
+            .select_related("order_type")
+            .get(pk=order.pk)
+        )
+    except WorkOrder.DoesNotExist:
+        raise ValidationError(
+            "La incidencia indicada ya no existe."
+        )
+
+    if not order.is_incident:
+        raise ValidationError(
+            "La orden indicada no es una incidencia NOC."
+        )
+
+    if order.status != WorkOrder.Status.IN_PROGRESS:
+        raise ValidationError(
+            "Solo una incidencia en atención puede finalizarse. "
+            f"Estado actual: {order.get_status_display()}."
+        )
+
+    try:
+        incident_detail = (
+            IncidentDetail.objects
+            .select_for_update()
+            .get(work_order=order)
+        )
+    except IncidentDetail.DoesNotExist:
+        raise ValidationError(
+            "La incidencia no cuenta con su detalle NOC asociado."
+        )
+
+    incident_detail.attention_detail = attention_detail
+    incident_detail.observations = (observations or "").strip()
+    incident_detail.attended_by = user
+
+    incident_detail.save(
+        update_fields=[
+            "attention_detail",
+            "observations",
+            "attended_by",
+            "updated_at",
+        ]
+    )
+
+    order.change_status(
+        WorkOrder.Status.ATTENDED,
+        user=user,
+        remarks=(remarks or "").strip(),
+    )
+
+    return order
+
+def get_subscription_technical_context(subscription, exclude_order=None):
+    """
+    Devuelve el contexto técnico más reciente conocido de una suscripción.
+
+    La información se consulta desde órdenes físicas previas que tengan
+    ficha técnica de campo y/o liquidación. No se copia ni se modifica
+    información dentro de la incidencia.
+
+    `exclude_order` permite excluir la incidencia que se está consultando.
+    """
+
+    if subscription is None or subscription.pk is None:
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
+    orders = (
+        WorkOrder.objects
+        .filter(
+            subscription=subscription,
+            attention_type=WorkOrder.AttentionType.FIELD,
+        )
+        .filter(
+            models.Q(field_sheet__isnull=False)
+            | models.Q(liquidation__isnull=False)
+        )
+        .select_related(
+            "order_type",
+            "assigned_technician",
+            "field_sheet",
+            "field_sheet__updated_by",
+            "liquidation",
+            "liquidation__liquidated_by",
+        )
+        .distinct()
+    )
+
+    if exclude_order is not None and exclude_order.pk is not None:
+        orders = orders.exclude(pk=exclude_order.pk)
+
+    # La OT física más reciente es la mejor representación disponible
+    # del estado técnico actual de la suscripción.
+    source_order = orders.order_by("-created_at", "-pk").first()
+
+    if source_order is None:
+        return None
+
+    try:
+        field_sheet = source_order.field_sheet
+    except WorkOrder.field_sheet.RelatedObjectDoesNotExist:
+        field_sheet = None
+
+    try:
+        liquidation = source_order.liquidation
+    except WorkOrder.liquidation.RelatedObjectDoesNotExist:
+        liquidation = None
+
+    return {
+        "source_order": source_order,
+        "field_sheet": field_sheet,
+        "liquidation": liquidation,
+
+        # Datos de ficha técnica
+        "nap": field_sheet.nap if field_sheet else "",
+        "terminal": field_sheet.terminal if field_sheet else "",
+        "equipment_code": (
+            field_sheet.equipment_code if field_sheet else ""
+        ),
+        "seal_number": (
+            field_sheet.seal_number if field_sheet else ""
+        ),
+        "technician_notes": (
+            field_sheet.notes if field_sheet else ""
+        ),
+        "field_updated_by": (
+            field_sheet.updated_by if field_sheet else None
+        ),
+        "field_updated_at": (
+            field_sheet.updated_at if field_sheet else None
+        ),
+
+        # Datos de liquidación
+        "network_element": (
+            liquidation.network_element if liquidation else ""
+        ),
+        "network_port": (
+            liquidation.network_port if liquidation else ""
+        ),
+        "equipment_serial": (
+            liquidation.equipment_serial if liquidation else ""
+        ),
+        "signal_level_dbm": (
+            liquidation.signal_level_dbm if liquidation else None
+        ),
+        "resolution_detail": (
+            liquidation.resolution_detail if liquidation else ""
+        ),
+        "technical_notes": (
+            liquidation.technical_notes if liquidation else ""
+        ),
+        "liquidated_by": (
+            liquidation.liquidated_by if liquidation else None
+        ),
+        "liquidated_at": (
+            liquidation.liquidated_at if liquidation else None
+        ),
+    }
+
 @transaction.atomic
 def create_installation_work_order(
     *,
@@ -561,6 +859,12 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
     delegando en apply_order_result(). Las reglas de negocio no se
     duplican aquí: viven en las funciones _apply_* de este módulo.
     """
+    if order.is_incident:
+        raise ValidationError(
+            "Las incidencias deben finalizarse mediante el flujo "
+            "específico de atención NOC."
+        )
+
     if result is None:
         raise ValidationError(
             "Debe indicar el resultado de la atención."
