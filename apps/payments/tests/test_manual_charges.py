@@ -17,9 +17,24 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.payments.models import Charge, Payment
-from apps.payments.services import create_manual_charge, register_payment
+from apps.payments.models import Charge, ChargeConcept, Payment, ZERO
+from apps.payments.services import (
+    create_manual_charge,
+    daily_rate,
+    prorated_amount,
+    register_payment,
+)
 from apps.payments.tests.base import PaymentsTestCase
+
+
+def concept(code):
+    """El concepto del catálogo con ese código.
+
+    Los siembra la migración, así que están en toda base de pruebas. Se
+    busca por código y no por nombre porque el nombre lleva tildes y se
+    puede corregir desde el admin.
+    """
+    return ChargeConcept.objects.get(code=code)
 
 
 class ManualChargeServiceTests(PaymentsTestCase):
@@ -138,22 +153,88 @@ class ManualChargeWebTests(PaymentsTestCase):
         self.assertTrue(response.context["can_create_charge"])
         self.assertContains(response, self.url())
 
-    def test_the_form_offers_every_concept_including_the_monthly_one(self):
-        """La ventanilla puede emitir cualquier concepto, mensualidad incluida.
+    def test_the_screen_offers_the_whole_catalogue(self):
+        """El desplegable es el catálogo de la empresa, no cuatro familias.
 
-        El ciclo automático sigue emitiéndola sola; poder emitirla a mano
-        cubre los casos que ese ciclo no alcanzó, y la restricción única de
-        (suscripción, periodo) evita que se cobre dos veces.
+        Doscientos y pico conceptos -planes, publicidad, alquileres, ajustes-
+        que la empresa mantiene desde el admin. Lo que el código conserva es
+        la familia de cada uno, que es lo que decide cómo se comporta la deuda.
         """
         self.login(self.issuer)
+        response = self.client.get(self.url())
+        ofrecidos = response.context["form"].fields["concept"].queryset
+
+        self.assertIn(concept("mensualidad"), ofrecidos)
+        self.assertIn(concept("reconexion"), ofrecidos)
+        self.assertIn(concept("internet-100mg"), ofrecidos)
+        self.assertIn(concept("materiales"), ofrecidos)
+        self.assertGreater(ofrecidos.count(), 200)
+
+    def test_a_concept_that_is_no_longer_sold_leaves_the_list(self):
+        """Se retira del desplegable, pero no se borra.
+
+        Las deudas que ya lo llevan tienen que poder seguir diciendo qué se
+        cobró, así que el catálogo se da de baja, no se elimina.
+        """
+        self.login(self.issuer)
+        retirado = concept("iptv-oro")
+        retirado.is_active = False
+        retirado.save()
 
         response = self.client.get(self.url())
-        offered = [
-            value for value, _ in response.context["form"].fields["concept"].choices
-        ]
 
-        self.assertIn(Charge.Concept.MONTHLY, offered)
-        self.assertIn(Charge.Concept.REACTIVATION, offered)
+        self.assertNotIn(
+            retirado, response.context["form"].fields["concept"].queryset
+        )
+
+    def test_the_family_travels_with_each_option(self):
+        """El navegador tiene que saber cuáles se reparten en días.
+
+        Con el catálogo en la base ya no basta con mirar el valor de la
+        opción: cuál se comporta como mensualidad lo dice su familia.
+        """
+        self.login(self.issuer)
+        html = self.client.get(self.url()).content.decode()
+
+        # `assertInHTML` y no una comparacion de texto: el orden de los
+        # atributos que pinta Django no es parte del contrato.
+        self.assertInHTML(
+            '<option value="%s" data-family="MONTHLY" selected>MENSUALIDAD</option>'
+            % concept("mensualidad").pk,
+            html,
+            count=1,
+        )
+        self.assertInHTML(
+            '<option value="%s" data-family="OTHER">MATERIALES</option>'
+            % concept("materiales").pk,
+            html,
+            count=1,
+        )
+
+    def test_the_charge_keeps_the_concept_that_was_charged(self):
+        """La familia dice cómo se comporta; el concepto, qué se cobró.
+
+        Sin el segundo, una deuda de «INTERNET 300MG» y una de «ALQUILER
+        TERRENO» serían la misma cosa en la base: dos mensualidades.
+        """
+        self.login(self.issuer)
+        elegido = concept("internet-300mg")
+
+        self.client.post(
+            self.url(),
+            {
+                "concept": elegido.pk,
+                "description": "",
+                "amount": "120.00",
+                "due_date": (self.today + timedelta(days=10)).isoformat(),
+            },
+        )
+
+        charge = Charge.objects.get()
+
+        self.assertEqual(charge.concept_item, elegido)
+        self.assertEqual(charge.concept, Charge.Concept.MONTHLY)
+        self.assertEqual(charge.description, "INTERNET 300MG")
 
     def test_a_manual_charge_is_issued_and_appears_in_the_debt(self):
         self.login(self.issuer)
@@ -161,7 +242,7 @@ class ManualChargeWebTests(PaymentsTestCase):
         response = self.client.post(
             self.url(),
             {
-                "concept": Charge.Concept.REACTIVATION,
+                "concept": concept("reconexion").pk,
                 "description": "Reconexión por corte",
                 "amount": "20.00",
                 "due_date": (self.today + timedelta(days=10)).isoformat(),
@@ -179,41 +260,33 @@ class ManualChargeWebTests(PaymentsTestCase):
         self.assertEqual(charge.description, "Reconexión por corte")
         self.assertEqual(charge.amount, Decimal("20.00"))
 
-    def test_only_the_subscriptions_of_this_customer_are_offered(self):
-        """Nadie debe poder colgarle un cargo del servicio de otra persona."""
-        from apps.customers.models import Customer, CustomerAddress
-        from apps.services.models import Subscription
+    def test_the_charge_is_issued_against_the_customer_alone(self):
+        """La suscripción salió de la pantalla.
 
-        other = Customer.objects.create(
-            code="CLI002",
-            branch=self.branch,
-            document_type=Customer.DocumentType.DNI,
-            document_number="10101010",
-            first_name="Ana",
-            paternal_surname="Lopez",
-        )
-        other_address = CustomerAddress.objects.create(
-            customer=other,
-            zone=self.zone,
-            address="Jr. Union 100",
-            district="Chachapoyas",
-            is_primary=True,
-        )
-        foreign_subscription = Subscription.objects.create(
-            customer=other,
-            address=other_address,
-            service_type=self.service_type,
-            plan=self.plan,
-            billing_policy=self.policy,
-            status=Subscription.Status.ACTIVE,
-        )
-
+        Se emitía contra el abonado incluso cuando el desplegable existía -su
+        opción vacía era la de siempre-, y ofrecerlo abría la puerta a colgarle
+        un cargo del servicio de otra persona si alguien enviaba un id ajeno.
+        """
         self.login(self.issuer)
-        response = self.client.get(self.url())
-        offered = response.context["form"].fields["subscription"].queryset
 
-        self.assertIn(self.subscription, offered)
-        self.assertNotIn(foreign_subscription, offered)
+        response = self.client.get(self.url())
+
+        self.assertNotIn("subscription", response.context["form"].fields)
+
+        self.client.post(
+            self.url(),
+            {
+                "concept": concept("reconexion").pk,
+                "description": "Reconexión por corte",
+                "amount": "20.00",
+                "due_date": (self.today + timedelta(days=10)).isoformat(),
+                "early_discount": "",
+                "discount_deadline": "",
+                "subscription": "99",
+            },
+        )
+
+        self.assertIsNone(Charge.objects.get().subscription)
 
     def test_an_invalid_amount_does_not_create_anything(self):
         self.login(self.issuer)
@@ -221,7 +294,7 @@ class ManualChargeWebTests(PaymentsTestCase):
         response = self.client.post(
             self.url(),
             {
-                "concept": Charge.Concept.OTHER,
+                "concept": concept("otros").pk,
                 "description": "Cargo sin monto",
                 "amount": "0",
                 "due_date": (self.today + timedelta(days=5)).isoformat(),
@@ -403,12 +476,16 @@ class ChargeSelectionTests(PaymentsTestCase):
         self.assertEqual(response.context["selected_charges"], [])
 
 
-class EarlyDiscountOnAManualChargeTests(PaymentsTestCase):
-    """El pronto pago de una deuda emitida a mano.
+class TheEarlyPaymentDiscountIsNotIssuedByHandTests(PaymentsTestCase):
+    """El pronto pago salió de la pantalla de nueva deuda.
 
-    El servicio y la vista ya lo aceptaban y el formulario declaraba los dos
-    campos, pero la pantalla no los pintaba: viajaban siempre vacíos, así que
-    la ventanilla no tenía forma de conceder un descuento al emitir.
+    Lo concede el ciclo mensual desde la política de cobro del plan, que es
+    donde vive la regla: cuánto se descuenta y hasta cuándo. Concederlo a mano
+    en cada emisión abría la puerta a que dos ventanillas dieran plazos
+    distintos por el mismo concepto.
+
+    El servicio y el modelo lo siguen aceptando -es por donde entra el del
+    ciclo-, así que lo que se fija aquí es que la ventanilla no lo emita.
     """
 
     def setUp(self):
@@ -425,79 +502,91 @@ class EarlyDiscountOnAManualChargeTests(PaymentsTestCase):
 
     def payload(self, **overrides):
         data = {
-            "concept": Charge.Concept.REACTIVATION,
+            "concept": concept("reconexion").pk,
             "description": "Reconexión por corte",
             "amount": "20.00",
             "due_date": (self.today + timedelta(days=10)).isoformat(),
-            "early_discount": "",
-            "discount_deadline": "",
-            "subscription": "",
         }
         data.update(overrides)
 
         return data
 
-    def test_the_screen_offers_both_fields(self):
+    def test_the_screen_no_longer_asks_for_it(self):
         response = self.client.get(self.url())
+        form = response.context["form"]
+        body = response.content.decode()
 
-        self.assertContains(response, 'name="early_discount"')
-        self.assertContains(response, 'name="discount_deadline"')
+        self.assertNotIn("early_discount", form.fields)
+        self.assertNotIn("discount_deadline", form.fields)
+        self.assertNotIn('name="early_discount"', body)
+        self.assertNotIn("Pronto pago", body)
 
-    def test_a_discount_with_its_deadline_reaches_the_charge(self):
-        deadline = self.today + timedelta(days=5)
-
+    def test_a_discount_sent_anyway_does_not_reach_the_charge(self):
+        """El campo no está, pero el POST se escribe a mano igual de fácil."""
         self.client.post(
             self.url(),
             self.payload(
-                early_discount="3.00",
-                discount_deadline=deadline.isoformat(),
+                early_discount="5.00",
+                discount_deadline=(self.today + timedelta(days=3)).isoformat(),
             ),
         )
 
         charge = Charge.objects.get()
 
-        self.assertEqual(charge.early_discount, Decimal("3.00"))
-        self.assertEqual(charge.discount_deadline, deadline)
+        self.assertEqual(charge.early_discount, ZERO)
+        self.assertIsNone(charge.discount_deadline)
 
-    def test_a_discount_without_its_deadline_is_rejected_on_screen(self):
-        """Sin plazo sería un descuento permanente, que es otra cosa.
-
-        Llega como error del formulario y no como un 500: el operador lee qué
-        le falta en la misma pantalla en vez de perder lo que ya escribió.
-        """
-        response = self.client.post(
-            self.url(), self.payload(early_discount="3.00")
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Charge.objects.exists())
-        self.assertTrue(response.context["form"].errors)
-
-    def test_without_a_discount_the_charge_is_issued_as_before(self):
+    def test_the_charge_is_issued_as_always(self):
         self.client.post(self.url(), self.payload())
 
         charge = Charge.objects.get()
 
-        self.assertEqual(charge.early_discount, Decimal("0"))
-        self.assertIsNone(charge.discount_deadline)
+        self.assertEqual(charge.amount, Decimal("20.00"))
+        self.assertEqual(charge.early_discount, ZERO)
+
+    def test_the_monthly_cycle_still_grants_it(self):
+        """Lo que sale es la emisión a mano, no el descuento.
+
+        El ciclo lo sigue concediendo desde la política del plan, que es de
+        donde tiene que salir.
+        """
+        charge = create_manual_charge(
+            customer=self.customer,
+            concept=Charge.Concept.MONTHLY,
+            description="Mensualidad",
+            amount=Decimal("80.00"),
+            due_date=self.today + timedelta(days=10),
+            early_discount=Decimal("5.00"),
+            discount_deadline=self.today + timedelta(days=3),
+        )
+
+        self.assertEqual(charge.early_discount, Decimal("5.00"))
 
 
-class TheSubscriptionIsNamedByItsServiceTests(PaymentsTestCase):
-    """Cómo se lee una suscripción en el desplegable de la nueva deuda.
+class TheScreenOpensReadyForTheUsualCaseTests(PaymentsTestCase):
+    """Con qué llega escrita la pantalla al abrirse.
 
-    `Subscription.__str__` antepone el nombre del cliente. Aquí sobra -la
-    pantalla ya es la de ese abonado- y ocupaba el ancho del campo hasta
-    empujar el plan, que es lo único que distingue una suscripción de otra,
-    fuera de la vista.
+    La deuda que se emite a diario es la mensualidad del abonado por el monto
+    de su plan. Abrir en el primer concepto de la lista y con el monto en
+    blanco obligaba a corregir dos campos en cada emisión, y el monto había
+    que ir a buscarlo a la ficha del servicio.
     """
 
     def setUp(self):
         super().setUp()
 
+        self.today = timezone.localdate()
         self.issuer = self.make_user(
             "emisor1", permissions=["view_charge", "add_charge"]
         )
         self.login(self.issuer)
+
+    def form(self):
+        response = self.client.get(
+            reverse("payments:charge_create", args=[self.customer.pk])
+        )
+
+        return response.context["form"]
 
     def body(self):
         response = self.client.get(
@@ -506,42 +595,194 @@ class TheSubscriptionIsNamedByItsServiceTests(PaymentsTestCase):
 
         return response.content.decode()
 
-    def test_the_option_leads_with_the_service_and_its_plan(self):
-        self.assertInHTML(
-            '<option value="%s">#1 · Internet · Fibra 100 Mbps</option>'
-            % self.subscription.pk,
-            self.body(),
-            count=1,
+    def test_the_concept_opens_on_the_monthly_fee(self):
+        self.assertEqual(
+            self.form()["concept"].value(), concept("mensualidad").pk
         )
 
-    def test_the_option_does_not_repeat_the_customer_name(self):
-        self.assertNotIn("Juan Pérez Ramos - Fibra 100 Mbps", self.body())
+    def test_the_amount_arrives_written_with_the_plan_price(self):
+        self.assertEqual(
+            Decimal(self.form()["amount"].value()),
+            self.subscription.total_monthly_price,
+        )
 
-    def test_a_subscription_that_is_not_active_says_so(self):
-        """Una activa no necesita anunciarlo; una suspendida cambia la charla."""
+    def test_the_amount_can_still_be_edited(self):
+        """Llega escrito, no bloqueado: un acuerdo se escribe encima."""
+        self.assertNotIn("readonly", str(self.form()["amount"]))
+        self.assertFalse(self.form().fields["amount"].disabled)
+
+    def test_pay_until_opens_on_today(self):
+        self.assertEqual(self.form()["due_date"].value(), self.today)
+
+    def test_the_subscription_is_no_longer_asked_for(self):
+        """Salió de la pantalla: la deuda se emite contra el abonado."""
+        self.assertNotIn("subscription", self.form().fields)
+        self.assertNotIn('name="subscription"', self.body())
+
+    def test_the_concept_does_not_offer_an_empty_option(self):
+        """«---------» no era una respuesta posible: el concepto es obligatorio.
+
+        Lo unico que hacia era dar una pantalla que parece sin llenar, y dejar
+        que el navegador se quedara en esa opcion al restaurar el formulario
+        tras una recarga, por encima del valor inicial.
+        """
+        ofrecidos = [value for value, _ in self.form().fields["concept"].choices]
+
+        self.assertNotIn("", ofrecidos)
+        self.assertNotIn("---------", str(self.form()["concept"]))
+
+    def test_the_quantity_is_shown_as_a_whole_one(self):
+        """Un 1 pelado: los cinco decimales no dicen nada en un campo fijo."""
+        self.assertIn('value="1"', str(self.form()["quantity"]))
+
+    def test_the_description_carries_no_placeholder(self):
+        self.assertNotIn("placeholder", str(self.form()["description"]))
+
+    def test_the_date_reaches_the_browser_in_the_format_it_understands(self):
+        """Un <input type="date"> solo entiende aaaa-mm-dd.
+
+        Con el idioma en español Django pinta 09/09/2026, que el navegador
+        descarta dejando el campo vacío: la fecha inicial no llegaba, y una
+        que volviera con errores de validación se perdía por el camino.
+        """
+        self.assertIn(
+            'value="%s"' % self.today.isoformat(),
+            str(self.form()["due_date"]),
+        )
+
+    def test_a_customer_without_an_active_subscription_opens_blank(self):
+        """Sin plan del que copiar, el monto queda vacío y no en cero.
+
+        Un cero escrito parece un monto puesto a propósito y el formulario lo
+        rechaza igual; en blanco se lee como lo que es, un campo por llenar.
+        """
         from apps.services.models import Subscription
 
-        suspended = Subscription.objects.create(
-            customer=self.customer,
-            address=self.address,
-            service_type=self.service_type,
-            plan=self.plan,
-            billing_policy=self.policy,
-            status=Subscription.Status.SUSPENDED,
-            service_number=2,
-            base_monthly_fee=80,
+        Subscription.objects.filter(customer=self.customer).update(
+            status=Subscription.Status.SUSPENDED
         )
 
-        self.assertInHTML(
-            '<option value="%s">#2 · Internet · Fibra 100 Mbps (Suspendido)</option>'
-            % suspended.pk,
-            self.body(),
-            count=1,
+        self.assertIsNone(self.form()["amount"].value())
+
+
+class TheDailyProrationTests(PaymentsTestCase):
+    """El prorrateo del mes en días.
+
+    Sirve para el periodo partido: un alta a mitad de mes o una reconexión
+    que no cubre el mes entero. El operador sabe cuántos días cobra, no cuánto
+    suman, y hasta ahora los calculaba aparte.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
+        )
+        self.login(self.issuer)
+
+    def screen(self):
+        return self.client.get(
+            reverse("payments:charge_create", args=[self.customer.pk])
         )
 
-    def test_the_empty_option_says_what_leaving_it_blank_means(self):
-        """«---------» no dice nada; el campo es opcional y hay que verlo."""
-        self.assertIn("Sin servicio asociado", self.body())
+    def test_the_day_is_the_monthly_fee_over_a_thirty_day_month(self):
+        """Mes comercial: el mismo corte de cinco días vale igual en febrero.
+
+        Con los días reales del calendario, el prorrateo de febrero saldría
+        más caro que el de marzo por el mismo servicio.
+        """
+        self.assertEqual(daily_rate(Decimal("60.00")), Decimal("2.00"))
+        self.assertEqual(daily_rate(Decimal("45.00")), Decimal("1.50"))
+
+    def test_a_customer_without_a_monthly_fee_has_no_day_to_split(self):
+        self.assertEqual(daily_rate(Decimal("0.00")), Decimal("0.00"))
+        self.assertEqual(daily_rate(None), Decimal("0.00"))
+
+    def test_the_amount_multiplies_the_day_the_operator_is_shown(self):
+        """Diez días de S/ 1.50 son quince exactos.
+
+        Se multiplica el día ya redondeado y no la mensualidad en crudo:
+        45/30 da 1.50 justo, pero 50/30 da 1.6666..., y el operador que lee
+        «S/ 1.67 por día» espera que diez días sean S/ 16.70.
+        """
+        self.assertEqual(
+            prorated_amount(Decimal("45.00"), 10), Decimal("15.00")
+        )
+        self.assertEqual(
+            prorated_amount(Decimal("50.00"), 10), Decimal("16.70")
+        )
+
+    def test_a_full_month_of_days_is_the_monthly_fee(self):
+        """El mes entero vale el plan, no la suma de sus treinta días.
+
+        Con S/ 79.00 el día redondeado es 2.63, y treinta de esos dan 78.90:
+        diez céntimos por debajo de lo contratado. El redondeo puede repartir
+        un periodo partido, no rebajar el plan.
+        """
+        self.assertEqual(
+            prorated_amount(Decimal("45.00"), 30), Decimal("45.00")
+        )
+        self.assertEqual(
+            prorated_amount(Decimal("79.00"), 30), Decimal("79.00")
+        )
+
+    def test_a_period_that_is_not_the_whole_month_follows_the_day(self):
+        """Diez días de S/ 2.63 son 26.30, lo que suma la pantalla."""
+        self.assertEqual(daily_rate(Decimal("79.00")), Decimal("2.63"))
+        self.assertEqual(
+            prorated_amount(Decimal("79.00"), 10), Decimal("26.30")
+        )
+
+    def test_no_days_are_not_a_debt(self):
+        self.assertEqual(prorated_amount(Decimal("45.00"), 0), Decimal("0.00"))
+        self.assertEqual(prorated_amount(Decimal("45.00"), -3), Decimal("0.00"))
+
+    def test_the_screen_carries_the_day_already_calculated(self):
+        """El valor del día lo divide el servidor, no el navegador.
+
+        Si lo dividiera cada lado por su cuenta, la cifra que el operador lee
+        y la que guarda el servidor podrían no coincidir en el céntimo.
+        """
+        context = self.screen().context
+
+        self.assertEqual(
+            context["daily_rate"],
+            daily_rate(self.subscription.total_monthly_price),
+        )
+
+    def test_the_numbers_reach_the_script_with_a_decimal_point(self):
+        """Con el idioma en español, «2.63» se pinta «2,63».
+
+        `parseFloat("2,63")` corta en la coma y devuelve 2: el valor del día
+        llegaba al script hecho un entero y el prorrateo cobraba de menos.
+        """
+        html = self.screen().content.decode()
+        esperado = daily_rate(self.subscription.total_monthly_price)
+
+        self.assertIn('data-daily="%s"' % esperado, html)
+        self.assertNotIn(str(esperado).replace(".", ","), html)
+
+    def test_the_button_is_offered_on_the_monthly_fee(self):
+        """Y llega ya visible: no aparece un instante después de abrir."""
+        self.assertTrue(self.screen().context["es_mensualidad"])
+
+    def test_the_button_is_not_offered_on_another_concept(self):
+        """Una reconexión cuesta lo que cuesta, no medio mes."""
+        response = self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            {
+                "concept": concept("reconexion").pk,
+                "description": "Reconexión",
+                "amount": "0",
+                "due_date": self.today.isoformat(),
+                "early_discount": "",
+                "discount_deadline": "",
+            },
+        )
+
+        self.assertFalse(response.context["es_mensualidad"])
 
 
 class ADebtCannotBeNegativeTests(PaymentsTestCase):
@@ -564,7 +805,7 @@ class ADebtCannotBeNegativeTests(PaymentsTestCase):
 
     def payload(self, **overrides):
         data = {
-            "concept": Charge.Concept.REACTIVATION,
+            "concept": concept("reconexion").pk,
             "description": "Nota de ajuste",
             "amount": "20.00",
             "due_date": (self.today + timedelta(days=10)).isoformat(),
@@ -602,31 +843,37 @@ class ADebtCannotBeNegativeTests(PaymentsTestCase):
         self.assertFalse(Charge.objects.exists())
         self.assertIn("amount", response.context["form"].errors)
 
-    def test_the_screen_rejects_a_negative_quantity(self):
+    def test_the_quantity_stays_at_one_however_it_is_sent(self):
+        """La cantidad está bloqueada: se emite de a una.
+
+        No basta con deshabilitar el campo en el HTML -eso se reescribe desde
+        el navegador-: el formulario lo declara `disabled`, así que Django
+        descarta lo que venga en el POST y toma el valor inicial. Antes un
+        negativo llegaba a validarse; ahora ni se lee.
+        """
         self.login(self.issuer)
 
-        response = self.client.post(
+        self.client.post(
             reverse("payments:charge_create", args=[self.customer.pk]),
             self.payload(quantity="-2"),
         )
 
-        self.assertFalse(Charge.objects.exists())
-        self.assertIn("quantity", response.context["form"].errors)
+        self.assertEqual(Charge.objects.get().quantity, Decimal("1.00000"))
 
-    def test_the_screen_rejects_a_negative_discount(self):
-        """Un descuento en negativo subiría lo que el abonado debe."""
+    def test_a_negative_discount_cannot_be_slipped_in(self):
+        """Un descuento en negativo subiría lo que el abonado debe.
+
+        La pantalla ya no pide el pronto pago, así que no hay dónde escribirlo
+        mal; lo que se fija es que enviarlo por el POST tampoco lo cuele.
+        """
         self.login(self.issuer)
 
-        response = self.client.post(
+        self.client.post(
             reverse("payments:charge_create", args=[self.customer.pk]),
-            self.payload(
-                early_discount="-5.00",
-                discount_deadline=(self.today + timedelta(days=3)).isoformat(),
-            ),
+            self.payload(early_discount="-5.00"),
         )
 
-        self.assertFalse(Charge.objects.exists())
-        self.assertIn("early_discount", response.context["form"].errors)
+        self.assertEqual(Charge.objects.get().early_discount, ZERO)
 
     def test_the_field_tells_the_browser_where_the_floor_is(self):
         """La flecha del spinner es por donde se llega al negativo sin querer."""

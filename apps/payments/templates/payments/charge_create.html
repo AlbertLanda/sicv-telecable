@@ -1,8 +1,44 @@
 {% extends "base.html" %}
+{% load l10n %}
 
 {% block title %}Nueva deuda de {{ customer }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* Cabecera en franja, como la del sistema anterior: la pantalla es una
+       ficha que se llena, y la franja marca donde empieza. Se queda en esta
+       pantalla y no en el sistema compartido hasta que se decida que todas
+       las cabeceras van asi. */
+    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:13px 26px; }
+    .tc-section-head.banner .tc-section-title { color:#fff; }
+    .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
+
+    /* El aire de la ficha. Los valores compartidos estan pensados para
+       tarjetas de consulta -filas cortas que se leen de un vistazo-, y en un
+       formulario que se llena dejaban la primera fila pegada a la cabecera y
+       las etiquetas contra el borde de la tarjeta.
+
+       Se separan tres cosas distintas: la rejilla de la franja y del filo
+       (padding del cuerpo), una fila de la siguiente (gap de fila), y el par
+       etiqueta/campo de la izquierda del par de la derecha (gap de columna,
+       el mas ancho: sin el, la etiqueta «Fecha» se leia como parte del campo
+       «Codigo» que termina justo antes). */
+    .tc-sheet .tc-section-body { padding:24px 26px 26px; }
+    .tc-sheet .tc-form.cols-2 { gap:18px 28px; }
+    .tc-sheet .tc-card-footer { padding:14px 26px; }
+
+    /* Los campos compuestos -moneda y monto, monto y su boton- van juntos,
+       no pegados. */
+    .tc-sheet .tc-field-row { gap:12px; }
+
+    /* El prorrateo cuelga del monto: no es un campo mas de la rejilla, sino
+       una calculadora que se abre sobre el campo que va a escribir, y se
+       distingue con su propio fondo para que se lea asi. */
+    .tc-prorrateo { margin-top:8px; padding:9px 11px; border:1px solid #bcd6f7; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f6faff; }
+    .tc-prorrateo-label { font-size:.72rem; color:#2e4763; font-weight:600; }
+</style>
+{% endblock %}
 
 {% comment %}
 Emisión manual de una deuda.
@@ -13,15 +49,19 @@ operador tiene aprendida. Lo que cambia es la disposición: dos columnas de
 pares etiqueta/campo en vez de una sola columna de diez filas, que dejaba
 media pantalla vacía y el botón de aceptar fuera de la vista.
 
-Moneda y monto van juntos: son una sola cifra leída por una persona, y
-separarlos en dos filas obligaba a mirar arriba para saber en qué moneda está
-lo que se escribe abajo.
+Moneda queda en la fila anterior al monto, como en el sistema anterior. Va
+bloqueada en PEN, así que no es una decisión que el operador tome mirando
+arriba y abajo: es una etiqueta de lo que viene debajo.
+
+Código, fecha, cantidad y moneda se muestran bloqueados: los pone el sistema
+y el operador los reconoce, pero no los escribe. Lo que sí se escribe -concepto,
+paga hasta, monto, descripción- queda entre ellos, en el mismo orden del sistema
+anterior.
 
 Sin textos de ayuda bajo los campos. En dos columnas, una ayuda estira su fila
 y el campo de al lado queda a media altura, así que la rejilla se lee torcida.
-Lo que decían vive ahora donde no ocupa alto: «sin servicio asociado» es la
-propia opción vacía del desplegable, la cantidad ya viene con un 1 escrito, y
-la descripción lo lleva de marcador de posición.
+Lo que decían vive ahora donde no ocupa alto: el prorrateo se explica solo
+cuando se abre.
 {% endcomment %}
 
 {% block content %}
@@ -42,30 +82,23 @@ la descripción lo lleva de marcador de posición.
             </div>
         {% endif %}
 
-        <section class="tc-card tc-section tc-full">
+        <section class="tc-card tc-section tc-full tc-sheet">
 
-            <div class="tc-section-head">
+            <div class="tc-section-head banner">
                 <h2 class="tc-section-title">
-                    <i class="bi bi-file-earmark-plus"></i>Datos
+                    <i class="bi bi-file-earmark-plus"></i>Nueva deuda
                 </h2>
             </div>
 
             <div class="tc-section-body">
 
-                <div class="tc-note">
-                    <i class="bi bi-info-circle-fill"></i>
-                    <div>
-                        La mensualidad la emite sola el ciclo desde el plan contratado.
-                        Aquí se emite lo que ese ciclo no alcanzó: una reconexión,
-                        materiales o un ajuste acordado en ventanilla.
-                    </div>
-                </div>
-
                 <div class="tc-form cols-2">
 
                     {% comment %}
-                    Código y fecha los pone el sistema. Se muestran para que el
-                    operador reconozca la pantalla, no para editarlos.
+                    Código, fecha y cantidad los pone el sistema. Se muestran
+                    para que el operador reconozca la pantalla, no para
+                    editarlos. La cantidad la bloquea el propio formulario, así
+                    que reescribir el HTML desde el navegador tampoco la mueve.
                     {% endcomment %}
                     <div class="tc-form-label">Código</div>
                     <div class="tc-form-field">
@@ -78,32 +111,17 @@ la descripción lo lleva de marcador de posición.
                                value="{{ today|date:'d/m/Y' }}" disabled>
                     </div>
 
+                    <div class="tc-form-label">Cantidad</div>
+                    <div class="tc-form-field">
+                        <div class="tc-w-sm">{{ form.quantity }}</div>
+                    </div>
+
                     <label class="tc-form-label" for="{{ form.concept.id_for_label }}">
                         Concepto
                     </label>
                     <div class="tc-form-field">
-                        {{ form.concept }}
+                        <div class="tc-w-lg">{{ form.concept }}</div>
                         {% for error in form.concept.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label" for="{{ form.subscription.id_for_label }}">
-                        Suscripción
-                    </label>
-                    <div class="tc-form-field">
-                        {{ form.subscription }}
-                        {% for error in form.subscription.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label" for="{{ form.quantity.id_for_label }}">
-                        Cantidad
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-sm">{{ form.quantity }}</div>
-                        {% for error in form.quantity.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
                     </div>
@@ -118,23 +136,64 @@ la descripción lo lleva de marcador de posición.
                         {% endfor %}
                     </div>
 
+                    <div class="tc-form-label">Moneda</div>
+                    <div class="tc-form-field">
+                        <select class="tc-input tc-readonly tc-w-sm" aria-label="Moneda" disabled>
+                            <option>PEN</option>
+                        </select>
+                    </div>
+
                     <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
                         Monto
                     </label>
+                    {% comment %}
+                    El botón de prorrateo pertenece a los conceptos que
+                    cubren un mes -la mensualidad, un plan, un alquiler-, que
+                    son los únicos que se reparten en días. Una reconexión o
+                    unos materiales cuestan lo que cuestan, no medio mes. Se
+                    pinta ya visible o ya escondido según el concepto con el
+                    que abre la pantalla, para que el caso normal lo tenga
+                    desde el primer momento sin esperar a un evento del
+                    navegador.
+                    {% endcomment %}
                     <div class="tc-form-field span">
                         <div class="tc-field-row">
-                            <select class="tc-input tc-readonly" style="width:auto;" aria-label="Moneda" disabled>
-                                <option>PEN</option>
-                            </select>
                             <div class="tc-w-sm">{{ form.amount }}</div>
                             <button type="button"
                                     class="tc-btn muted"
                                     id="calcularDias"
-                                    data-monthly="{{ monthly_reference|default:0 }}">
+                                    {% if not es_mensualidad %}hidden{% endif %}>
                                 <i class="bi bi-calculator"></i>Calcular días según monto
                             </button>
                         </div>
-                        <div class="tc-form-hint" id="calculoDias"></div>
+
+                        {% comment %}
+                        El prorrateo. El valor del día lo calcula el servidor y
+                        viaja ya redondeado: si lo dividiera el navegador, la
+                        cifra que el operador lee y la que guarda el servidor
+                        podrían no coincidir en el céntimo.
+                        {% endcomment %}
+                        <div id="panelDias"
+                             class="tc-prorrateo"
+                             hidden
+                             data-monthly="{{ monthly_reference|default:0|unlocalize }}"
+                             data-daily="{{ daily_rate|default:0|unlocalize }}"
+                             data-month-days="{{ billing_month_days }}"
+                             data-monthly-concept="{{ monthly_concept }}">
+                            <div class="tc-field-row">
+                                <label class="tc-prorrateo-label" for="diasProrrateo">Días</label>
+                                <input type="number"
+                                       id="diasProrrateo"
+                                       class="tc-input tc-w-sm"
+                                       min="1"
+                                       max="{{ billing_month_days }}"
+                                       step="1"
+                                       inputmode="numeric">
+                                <span class="tc-form-hint" id="valorDia"></span>
+                            </div>
+                            <div class="tc-form-hint" id="calculoDias"></div>
+                        </div>
+
                         {% for error in form.amount.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -144,7 +203,7 @@ la descripción lo lleva de marcador de posición.
                         Descripción
                     </label>
                     <div class="tc-form-field span">
-                        {{ form.description }}
+                        <div class="tc-w-xl">{{ form.description }}</div>
                         {% for error in form.description.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -173,49 +232,6 @@ la descripción lo lleva de marcador de posición.
 
         </section>
 
-        {% comment %}
-        Pronto pago. El servicio y la vista ya lo aceptaban -y el modelo
-        rechaza un descuento sin plazo, porque sin fecha sería un descuento
-        permanente, que es otra cosa-, pero la pantalla no tenía dónde
-        escribirlo: los dos campos viajaban siempre vacíos.
-        {% endcomment %}
-        <section class="tc-card tc-section tc-full">
-
-            <div class="tc-section-head">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-percent"></i>Pronto pago
-                </h2>
-                <span class="tc-pill muted">Opcional</span>
-            </div>
-
-            <div class="tc-section-body">
-                <div class="tc-form cols-2">
-
-                    <label class="tc-form-label" for="{{ form.early_discount.id_for_label }}">
-                        Descuento
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-sm">{{ form.early_discount }}</div>
-                        {% for error in form.early_discount.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label" for="{{ form.discount_deadline.id_for_label }}">
-                        Válido hasta
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-md">{{ form.discount_deadline }}</div>
-                        {% for error in form.discount_deadline.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                </div>
-            </div>
-
-        </section>
-
     </form>
 
 </div>
@@ -224,38 +240,110 @@ la descripción lo lleva de marcador de posición.
 
 {% block extra_js %}
 <script>
-    // "Calcular días según monto": traduce el monto a días de servicio usando
-    // la mensualidad de referencia del abonado, para prorratear un periodo que
-    // no cubre el mes completo. Solo informa: no toca el monto que se guarda.
+    // "Calcular dias segun monto": reparte la mensualidad del abonado en dias
+    // y escribe en el monto lo que suman los que se indiquen. Es el caso del
+    // periodo partido -un alta a mitad de mes, una reconexion que no cubre el
+    // mes entero-: el operador sabe cuantos dias cobra, no cuanto suman.
+    //
+    // Solo aplica a la mensualidad, que es lo unico que se reparte en dias.
     (function () {
+        var concepto = document.getElementById("{{ form.concept.id_for_label }}");
         var boton = document.getElementById("calcularDias");
+        var panel = document.getElementById("panelDias");
+        var dias = document.getElementById("diasProrrateo");
         var salida = document.getElementById("calculoDias");
+        var valorDia = document.getElementById("valorDia");
+        var monto = document.getElementById("{{ form.amount.id_for_label }}");
 
-        if (!boton || !salida) {
+        if (!concepto || !boton || !panel || !dias || !monto) {
             return;
         }
 
-        boton.addEventListener("click", function () {
-            var mensual = parseFloat(boton.dataset.monthly || "0");
-            var montoCampo = document.getElementById("{{ form.amount.id_for_label }}");
-            var monto = parseFloat((montoCampo && montoCampo.value) || "0");
+        var mensual = parseFloat(panel.dataset.monthly || "0");
+        var diario = parseFloat(panel.dataset.daily || "0");
+        var diasDelMes = parseInt(panel.dataset.monthDays || "30", 10);
+        var conceptoMensual = panel.dataset.monthlyConcept;
 
-            if (!mensual || mensual <= 0) {
+        // Que un concepto se reparta en dias no lo dice su valor sino su
+        // familia: el catalogo tiene doscientos y pico, y son los recurrentes
+        // -un plan, un alquiler, un enlace- los que cubren un mes. Cada
+        // opcion la trae escrita.
+        function familiaElegida() {
+            var opcion = concepto.options[concepto.selectedIndex];
+
+            return opcion ? opcion.dataset.family : "";
+        }
+
+        // El boton aparece y desaparece con el concepto. Al salir de
+        // mensualidad se cierra ademas el panel: dejarlo abierto sobre una
+        // reconexion invitaria a prorratear lo que no se prorratea.
+        function sincronizar() {
+            var aplica = familiaElegida() === conceptoMensual;
+
+            boton.hidden = !aplica;
+
+            if (!aplica) {
+                panel.hidden = true;
+            }
+        }
+
+        function describirDia() {
+            if (!valorDia) {
+                return;
+            }
+
+            valorDia.textContent = diario > 0
+                ? "S/ " + diario.toFixed(2) + " por dia \u00b7 mes de " + diasDelMes + " dias"
+                : "";
+        }
+
+        function calcular() {
+            var cantidad = parseInt(dias.value || "0", 10);
+
+            if (!cantidad || cantidad <= 0) {
+                salida.textContent = "Indique cuantos dias se cobran.";
+                return;
+            }
+
+            // El monto sale del valor del dia ya redondeado, que es el que el
+            // operador tiene delante: si dice "S/ 2.63 por dia", diez dias
+            // tienen que dar 26.30.
+            //
+            // El mes entero es la excepcion y vale la mensualidad: con 79.00
+            // el dia es 2.63 y treinta de esos darian 78.90, diez centimos
+            // por debajo del plan contratado. Misma regla que el servidor, o
+            // la cifra que se lee y la que se guarda no coincidirian.
+            var total = cantidad >= diasDelMes
+                ? mensual
+                : Math.round(diario * cantidad * 100) / 100;
+
+            monto.value = total.toFixed(2);
+            salida.textContent =
+                cantidad + " dia(s) \u00d7 S/ " + diario.toFixed(2) +
+                " = S/ " + total.toFixed(2) + ".";
+        }
+
+        boton.addEventListener("click", function () {
+            if (!(mensual > 0)) {
+                panel.hidden = false;
+                dias.disabled = true;
                 salida.textContent =
                     "El abonado no tiene una mensualidad de referencia con la que prorratear.";
                 return;
             }
 
-            if (!monto || monto <= 0) {
-                salida.textContent = "Indique primero el monto.";
-                return;
-            }
+            panel.hidden = !panel.hidden;
 
-            var dias = Math.round((monto / mensual) * 30);
-            salida.textContent =
-                "S/ " + monto.toFixed(2) + " equivale a " + dias +
-                " día(s) sobre una mensualidad de S/ " + mensual.toFixed(2) + ".";
+            if (!panel.hidden) {
+                describirDia();
+                dias.focus();
+            }
         });
+
+        dias.addEventListener("input", calcular);
+        concepto.addEventListener("change", sincronizar);
+
+        sincronizar();
     })();
 </script>
 {% endblock %}

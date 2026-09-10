@@ -323,7 +323,26 @@ class CommitmentWebTests(CommitmentTestCase):
         )
 
         self.assertEqual(len(response.context["active_commitments"]), 1)
-        self.assertContains(response, "Compromisos de pago vigentes")
+        self.assertContains(response, "Compromiso de pago vigente")
+
+    def test_the_commitment_is_read_before_deciding_what_to_collect(self):
+        """El aviso encabeza la pantalla, como la OT abierta en la de ordenes.
+
+        Mientras el compromiso siga en pie cambia lo que el operador puede
+        decirle al abonado -esa deuda no empuja al corte hasta la fecha
+        acordada-, y al pie se leia despues de haber marcado que cobrar.
+        """
+        self.grant()
+        self.login(self.granter)
+
+        body = self.client.get(
+            reverse("payments:debt", args=[self.customer.pk])
+        ).content.decode()
+
+        self.assertLess(
+            body.index("Compromiso de pago vigente"),
+            body.index("Total adeudado"),
+        )
 
     def test_cancelling_from_the_board_requires_the_permission(self):
         commitment = self.grant()

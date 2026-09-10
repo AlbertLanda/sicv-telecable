@@ -4,34 +4,35 @@ from decimal import Decimal
 
 from django import forms
 from django.core.validators import MinValueValidator
+from django.utils import timezone
 
-from apps.services.models import Subscription
+from .models import Charge, ChargeConcept, Payment, ZERO
+from .services import default_concept, monthly_reference
 
-from .models import Charge, Payment, ZERO
 
+class ConceptSelect(forms.Select):
+    """Desplegable de conceptos que lleva la familia de cada uno.
 
-def subscription_label(subscription):
-    """Cómo se lee una suscripción en un desplegable del propio abonado.
-
-    `Subscription.__str__` antepone el nombre del cliente, que aquí sobra: la
-    pantalla ya es la de ese abonado y no hay ninguna otra a la que pudiera
-    referirse. Lo que hacía era ocupar el ancho del campo y empujar el plan
-    -lo único que distingue una suscripción de otra- fuera de la vista.
-
-    Se identifica por número de servicio, tipo y plan, que es como el operador
-    las nombra. El estado solo aparece cuando no es el esperado: una activa no
-    necesita anunciarlo, una suspendida sí, porque cambia la conversación.
+    El prorrateo en días solo pertenece a la mensualidad, y con el catálogo
+    en la base ya no basta con mirar el valor de la opción: cuál de los
+    doscientos y pico conceptos se comporta como mensualidad lo dice su
+    familia. Viaja en cada `<option>` para que la pantalla lo resuelva sin
+    preguntarle al servidor en cada cambio del desplegable.
     """
-    label = "#%s · %s · %s" % (
-        subscription.service_number,
-        subscription.service_type.name,
-        subscription.plan.name,
-    )
 
-    if subscription.status != Subscription.Status.ACTIVE:
-        label += " (%s)" % subscription.get_status_display()
+    def create_option(self, name, value, label, selected, index, **kwargs):
+        option = super().create_option(
+            name, value, label, selected, index, **kwargs
+        )
 
-    return label
+        # La opción vacía no tiene concepto detrás; el resto llega como
+        # `ModelChoiceIteratorValue`, que sí trae la instancia.
+        concept = getattr(value, "instance", None)
+
+        if concept is not None:
+            option["attrs"]["data-family"] = concept.family
+
+        return option
 
 
 def _style_widgets(form):
@@ -189,40 +190,47 @@ class ChargeCreateForm(forms.ModelForm):
     class Meta:
         model = Charge
         fields = [
-            "subscription",
-            "concept",
             "quantity",
             "description",
             "amount",
             "due_date",
             "auto_update",
-            "early_discount",
-            "discount_deadline",
         ]
         widgets = {
-            "due_date": forms.DateInput(attrs={"type": "date"}),
-            "discount_deadline": forms.DateInput(attrs={"type": "date"}),
-            "description": forms.Textarea(
-                attrs={
-                    "rows": 6,
-                    "placeholder": "En blanco se usa el nombre del concepto.",
-                }
+            # `format` explicito: un <input type="date"> solo entiende
+            # aaaa-mm-dd, y con el idioma en español Django pinta 09/09/2026,
+            # que el navegador descarta dejando el campo en blanco.
+            "due_date": forms.DateInput(
+                attrs={"type": "date"}, format="%Y-%m-%d"
             ),
+            "description": forms.Textarea(attrs={"rows": 6}),
             # `min` frena tambien la flecha del spinner, que es por donde se
             # llega al negativo sin darse cuenta: se baja de 1 a 0 y de 0 a
             # -1 sin escribir nada.
             "amount": forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+            # Cantidad bloqueada en 1. La deuda se emite de a una: lo que
+            # varia entre un caso y otro es el monto, no cuantas veces se
+            # cobra el mismo concepto. Se muestra porque es la pantalla que el
+            # operador tiene aprendida, no para que la escriba.
             "quantity": forms.NumberInput(
-                attrs={"min": "0.00001", "step": "0.00001"}
-            ),
-            "early_discount": forms.NumberInput(
-                attrs={"min": "0", "step": "0.01"}
+                attrs={"class": "tc-input tc-readonly tc-w-sm"}
             ),
         }
         labels = {
             "due_date": "Paga hasta",
             "description": "Descripción",
         }
+
+    # Declarado aparte y no como el campo del modelo: en el cargo, `concept`
+    # es la familia -las cuatro que el sistema sabe tratar- y en la pantalla
+    # es el concepto exacto del catálogo. La vista traduce lo segundo en lo
+    # primero al emitir.
+    concept = forms.ModelChoiceField(
+        label="Concepto",
+        queryset=ChargeConcept.objects.none(),
+        empty_label=None,
+        widget=ConceptSelect,
+    )
 
     def __init__(self, *args, customer=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -239,62 +247,79 @@ class ChargeCreateForm(forms.ModelForm):
         self.fields["quantity"].validators.append(
             MinValueValidator(Decimal("0.00001"))
         )
-        self.fields["early_discount"].validators.append(
-            MinValueValidator(ZERO)
-        )
 
-        self.fields["subscription"].required = False
-        self.fields["early_discount"].required = False
-        self.fields["discount_deadline"].required = False
         self.fields["description"].required = False
 
-        # Cantidad no obligatoria: casi siempre es 1 -una mensualidad, una
-        # reconexion- y en blanco se asume esa, en vez de rechazar la deuda
-        # por un campo que el operador no tenia que pensar.
+        # `disabled` y no solo el atributo del widget: un campo deshabilitado
+        # no viaja en el POST, y sin esto Django lo leeria como vacio. Asi toma
+        # siempre el valor inicial, aunque alguien reescriba el formulario
+        # desde el navegador.
         self.fields["quantity"].required = False
-        self.fields["quantity"].initial = Decimal("1.00000")
+        self.fields["quantity"].disabled = True
 
-        # Emitida a mano, la deuda es fija: no la recalcula un cambio de plan.
-        # Es lo contrario que en la mensualidad del ciclo, que si se actualiza.
-        self.fields["auto_update"].initial = False
+        # Un 1 pelado y no 1.00000: los cinco decimales existen para repartir
+        # consumos, no para leerse en un campo que siempre dice lo mismo. En
+        # la base sigue guardandose con la escala de la columna.
+        self.fields["quantity"].initial = Decimal("1")
+
+        # El catálogo se resuelve al construir el formulario y no en el
+        # módulo: una lista fijada al importar no vería un concepto dado de
+        # alta desde el admin hasta reiniciar el servidor.
+        #
+        # Sin opción vacía -«---------» no era una respuesta posible, el
+        # concepto es obligatorio- y abriendo en mensualidad, que es lo que se
+        # emite a diario.
+        self.fields["concept"].queryset = ChargeConcept.objects.filter(
+            is_active=True
+        )
+        self.fields["concept"].initial = default_concept()
+
+        # Paga hasta arranca hoy, como en el sistema anterior. Es una fecha
+        # que el operador mueve, no una que tenga que escribir desde cero.
+        self.fields["due_date"].initial = timezone.localdate()
+
+        # Marcado por defecto ahora que la pantalla abre en mensualidad: esa
+        # si sigue al plan, y si la tarifa cambia antes de que la paguen, el
+        # cargo tiene que acompañarla. Para un cargo fijo -una reconexion- el
+        # operador lo desmarca.
+        self.fields["auto_update"].initial = True
+
+        # El monto llega escrito con la mensualidad del abonado, que es el
+        # caso normal, y queda editable: un prorrateo o un acuerdo de
+        # ventanilla se escriben encima.
+        if customer is not None:
+            reference = monthly_reference(customer)
+
+            if reference > ZERO:
+                self.fields["amount"].initial = reference
 
         _style_widgets(self)
-
-        # Solo las suscripciones del abonado: ofrecer las de todos permitiría
-        # colgarle un cargo del servicio de otra persona.
-        if customer is not None:
-            self.fields["subscription"].queryset = (
-                customer.subscriptions.select_related("service_type", "plan")
-            )
-
-        # select_related arriba: sin el, pintar el desplegable consulta el tipo
-        # y el plan una vez por opcion.
-        self.fields["subscription"].label_from_instance = subscription_label
-        self.fields["subscription"].empty_label = "Sin servicio asociado"
-
-    def clean_description(self):
-        """Sin descripción se usa el nombre del concepto.
-
-        La pantalla de deudas muestra el detalle en su propia columna: dejarla
-        vacía daría una fila que no dice qué se le está cobrando.
-        """
-        description = (self.cleaned_data.get("description") or "").strip()
-
-        if description:
-            return description
-
-        concept = self.data.get("concept")
-
-        return dict(Charge.Concept.choices).get(concept, "Cargo")
 
     def clean_quantity(self):
         return self.cleaned_data.get("quantity") or Decimal("1.00000")
 
     def clean(self):
+        """El pronto pago no se emite a mano.
+
+        Lo concede el ciclo mensual desde la politica de cobro del plan, que
+        es donde vive la regla. La pantalla no lo pide, y dejarlo en cero aqui
+        cierra la puerta a que llegue por el POST de todos modos.
+        """
         cleaned = super().clean()
 
-        if not cleaned.get("early_discount"):
-            cleaned["early_discount"] = ZERO
+        cleaned["early_discount"] = ZERO
+        cleaned["discount_deadline"] = None
+
+        # Sin descripción se usa el nombre del concepto. La pantalla de deudas
+        # muestra el detalle en su propia columna: dejarla vacía daría una fila
+        # que no dice qué se le está cobrando.
+        #
+        # Va aquí y no en un `clean_description` porque el concepto se declara
+        # despues de los campos del modelo, y cuando le toca el turno a la
+        # descripcion todavia no esta limpio.
+        if not (cleaned.get("description") or "").strip():
+            concept = cleaned.get("concept")
+            cleaned["description"] = concept.name if concept else "Cargo"
 
         return cleaned
 

@@ -1,6 +1,35 @@
 from django.contrib import admin
 
-from .models import Charge, Payment, PaymentAllocation, Receipt, ReceiptSequence
+from .models import (
+    Charge,
+    ChargeConcept,
+    Payment,
+    PaymentAllocation,
+    Receipt,
+    ReceiptSequence,
+)
+
+
+@admin.register(ChargeConcept)
+class ChargeConceptAdmin(admin.ModelAdmin):
+    """El catálogo que se ofrece en la nueva deuda.
+
+    Es la pantalla por la que se da de alta un plan nuevo sin tocar código.
+    La familia es el único campo que hay que pensar: dice a cuál de los cuatro
+    comportamientos del sistema responde el concepto, y de ella dependen la
+    exigencia de periodo y el prorrateo en días.
+    """
+
+    list_display = ["name", "family", "code", "is_active"]
+    list_filter = ["family", "is_active"]
+    list_editable = ["family", "is_active"]
+    search_fields = ["name", "code"]
+    ordering = ["name"]
+
+    # El código identifica al concepto en el tiempo; el nombre se corrige. Se
+    # propone desde el nombre al dar de alta y queda editable, pero cambiarlo
+    # en uno que ya se usa rompe lo que lo referencie por código.
+    prepopulated_fields = {"code": ("name",)}
 
 
 class PaymentAllocationInline(admin.TabularInline):
@@ -26,7 +55,7 @@ class ChargeAdmin(admin.ModelAdmin):
         "customer__code",
     ]
     date_hierarchy = "due_date"
-    raw_id_fields = ["customer", "subscription"]
+    raw_id_fields = ["customer", "subscription", "concept_item"]
 
 
 @admin.register(Payment)

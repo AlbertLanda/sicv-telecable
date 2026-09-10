@@ -94,6 +94,20 @@ class Charge(models.Model):
         verbose_name="Concepto",
     )
 
+    # El concepto exacto del catálogo, junto a la familia que el sistema usa
+    # para decidir. `concept` dice cómo se comporta la deuda; `concept_item`,
+    # qué se le cobró al abonado. Opcional porque el ciclo mensual emite desde
+    # el plan contratado, sin pasar por el catálogo de ventanilla, y porque
+    # las deudas anteriores al catálogo no tienen a quién apuntar.
+    concept_item = models.ForeignKey(
+        "payments.ChargeConcept",
+        on_delete=models.PROTECT,
+        related_name="charges",
+        null=True,
+        blank=True,
+        verbose_name="Concepto del catálogo",
+    )
+
     description = models.CharField(
         max_length=160,
         verbose_name="Detalle",
@@ -376,6 +390,63 @@ class Charge(models.Model):
             self.save(update_fields=["status", "updated_at"])
 
         return self.status
+
+
+class ChargeConcept(models.Model):
+    """El catálogo de conceptos cobrables de la empresa.
+
+    Vive en la base y no en el código: son los servicios y cargos que la
+    empresa factura -doscientos y pico entre planes, publicidad, alquileres y
+    ajustes-, y esa lista cambia sin que cambie el sistema. Escribirla en un
+    `TextChoices` obligaría a un despliegue por cada plan nuevo.
+
+    Lo que el código sí gobierna es la `familia`: a cuál de los cuatro
+    comportamientos que el sistema conoce -mensualidad, instalación, anexo,
+    reconexión- responde cada concepto. Es lo que decide si una deuda exige
+    periodo, si se puede prorratear en días y cómo se agrupa en los reportes.
+    Un concepto nuevo se da de alta eligiendo su familia; no hace falta tocar
+    la lógica.
+    """
+
+    code = models.SlugField(
+        max_length=80,
+        unique=True,
+        verbose_name="Código",
+        help_text="Identificador estable. No cambia aunque se corrija el nombre.",
+    )
+
+    name = models.CharField(
+        max_length=160,
+        unique=True,
+        verbose_name="Concepto",
+    )
+
+    family = models.CharField(
+        max_length=20,
+        choices=Charge.Concept.choices,
+        default=Charge.Concept.OTHER,
+        verbose_name="Familia",
+        help_text="El comportamiento del sistema al que responde el concepto.",
+    )
+
+    # Un concepto que se deja de vender sale del desplegable, pero no se borra:
+    # las deudas que ya lo llevan tienen que poder seguir diciendo qué se cobró.
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo",
+    )
+
+    class Meta:
+        verbose_name = "Concepto cobrable"
+        verbose_name_plural = "Conceptos cobrables"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_monthly(self):
+        return self.family == Charge.Concept.MONTHLY
 
 
 class Payment(models.Model):

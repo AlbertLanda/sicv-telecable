@@ -2,7 +2,40 @@
 
 {% block title %}Cobrar a {{ customer }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* Mismo trazo que «Nueva deuda»: son la pareja de pantallas de la
+       ventanilla y se llenan igual, así que se leen igual. */
+    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:13px 26px; }
+    .tc-section-head.banner .tc-section-title { color:#fff; }
+    .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
+    .tc-section-head.banner .tc-pill { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.4); color:#fff; }
+
+    .tc-sheet .tc-section-body { padding:24px 26px 26px; }
+    .tc-sheet .tc-form { gap:18px 22px; }
+    .tc-sheet .tc-field-row { gap:12px; }
+
+    /* La deuda es una fila más de la ficha, no una tarjeta aparte. Se le
+       quita el margen que la tabla trae para vivir suelta, y se le deja el
+       borde para que siga leyéndose como una tabla. */
+    .tc-debt-block { border:1px solid var(--tc-border); border-radius:6px; overflow:hidden; }
+    .tc-debt-block .tc-table { margin:0; }
+</style>
+{% endblock %}
+
+{% comment %}
+Cobro en ventanilla.
+
+Todo en una sola ficha -comprobante, deuda que se cobra y forma de pago-
+porque es una sola decisión: el cajero mira lo que el abonado debe y escribe
+encima cuánto entrega y cómo. Repartido en tres tarjetas obligaba a bajar y
+subir para contrastar el total que se escribe con el total que se debe, que
+están a dos pantallas de distancia.
+
+La deuda va como una fila más de la ficha, con su etiqueta a la izquierda
+igual que los demás campos, que es como la muestra el sistema anterior.
+{% endcomment %}
 
 {% block content %}
 
@@ -31,11 +64,11 @@
             </div>
         {% endif %}
 
-        <section class="tc-card tc-section tc-full">
+        <section class="tc-card tc-section tc-full tc-sheet">
 
-            <div class="tc-section-head">
+            <div class="tc-section-head banner">
                 <h2 class="tc-section-title">
-                    <i class="bi bi-receipt-cutoff"></i>Comprobante
+                    <i class="bi bi-cash-coin"></i>Cobrar
                 </h2>
                 <span class="tc-pill">{{ active_branch.name }}</span>
             </div>
@@ -43,6 +76,11 @@
             <div class="tc-section-body">
                 <div class="tc-form">
 
+                    {% comment %}
+                    Código, fecha, hora, número y usuario los pone el sistema.
+                    Se muestran para que el operador reconozca la pantalla, no
+                    para editarlos.
+                    {% endcomment %}
                     <div class="tc-form-label">Código</div>
                     <div class="tc-form-field">
                         <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
@@ -50,7 +88,7 @@
 
                     <div class="tc-form-label">Fecha y hora</div>
                     <div class="tc-form-field">
-                        <div class="d-flex flex-wrap gap-2">
+                        <div class="tc-field-row">
                             <input type="text" class="tc-input tc-readonly tc-w-md"
                                    value="{{ today|date:'d/m/Y' }}" disabled>
                             <input type="text" class="tc-input tc-readonly tc-w-sm"
@@ -62,15 +100,22 @@
                         Serie
                     </label>
                     <div class="tc-form-field">
-                        <div class="d-flex flex-wrap align-items-center gap-2">
-                            <div class="tc-w-md">{{ form.series }}</div>
-                            <span class="tc-form-hint" style="margin:0;">
-                                Número {{ next_number }} — lo asigna el correlativo al aceptar
-                            </span>
-                        </div>
+                        <div class="tc-w-md">{{ form.series }}</div>
                         {% for error in form.series.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
+                    </div>
+
+                    {% comment %}
+                    El número es su propio campo y no una ayuda colgada de la
+                    serie: es un dato del comprobante, como en el sistema
+                    anterior. Lo asigna el correlativo al aceptar, así que se
+                    muestra bloqueado.
+                    {% endcomment %}
+                    <div class="tc-form-label">Número</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{{ next_number }}" disabled>
                     </div>
 
                     <div class="tc-form-label">Usuario</div>
@@ -79,82 +124,59 @@
                                value="{{ request.user.username }}" disabled>
                     </div>
 
-                </div>
-            </div>
-
-        </section>
-
-        <section class="tc-card tc-section tc-full">
-
-            <div class="tc-section-head">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-list-check"></i>Deudas a cobrar
-                </h2>
-            </div>
-
-            <div class="table-responsive">
-                <table class="tc-table">
-                    <thead>
-                        <tr>
-                            <th class="num">Cantidad</th>
-                            <th>Código de abonado</th>
-                            <th>Descripción</th>
-                            <th>Moneda</th>
-                            <th class="num">Monto</th>
-                            <th class="num">Descuento</th>
-                            <th class="num">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for charge in selected_charges %}
-                            <tr>
-                                <td class="num">{{ charge.quantity|floatformat:5 }}</td>
-                                <td>{{ customer.code }}</td>
-                                <td>
-                                    {{ charge.description }}
-                                    {% if charge.period_label %}
-                                        <span class="tc-sub">{{ charge.period_label }}</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ charge.currency }}</td>
-                                <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
-                                <td class="num">S/ {{ charge.current_discount|floatformat:2 }}</td>
-                                <td class="num">S/ {{ charge.balance|floatformat:2 }}</td>
-                            </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="7" class="tc-empty" style="padding:14px 9px;">
-                                    No se marcó ninguna deuda en el tablero.
-                                    El cobro quedará como saldo a favor del abonado.
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                    {% if selected_charges %}
-                        <tfoot>
-                            <tr>
-                                <th colspan="4" class="num">Totales</th>
-                                <th class="num">S/ {{ selected_gross|floatformat:2 }}</th>
-                                <th class="num">S/ {{ selected_discount|floatformat:2 }}</th>
-                                <th class="num">S/ {{ selected_total|floatformat:2 }}</th>
-                            </tr>
-                        </tfoot>
-                    {% endif %}
-                </table>
-            </div>
-
-        </section>
-
-        <section class="tc-card tc-section tc-full">
-
-            <div class="tc-section-head">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-cash-coin"></i>Cobro
-                </h2>
-            </div>
-
-            <div class="tc-section-body">
-                <div class="tc-form">
+                    <div class="tc-form-label top">Deuda</div>
+                    <div class="tc-form-field">
+                        <div class="tc-debt-block table-responsive">
+                            <table class="tc-table">
+                                <thead>
+                                    <tr>
+                                        <th class="num">Cantidad</th>
+                                        <th>Código de abonado</th>
+                                        <th>Descripción</th>
+                                        <th>Moneda</th>
+                                        <th class="num">Monto</th>
+                                        <th class="num">Descuento</th>
+                                        <th class="num">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for charge in selected_charges %}
+                                        <tr>
+                                            <td class="num">{{ charge.quantity|floatformat:5 }}</td>
+                                            <td>{{ customer.code }}</td>
+                                            <td>
+                                                {{ charge.description }}
+                                                {% if charge.period_label %}
+                                                    <span class="tc-sub">{{ charge.period_label }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ charge.currency }}</td>
+                                            <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
+                                            <td class="num">S/ {{ charge.current_discount|floatformat:2 }}</td>
+                                            <td class="num">S/ {{ charge.balance|floatformat:2 }}</td>
+                                        </tr>
+                                    {% empty %}
+                                        <tr>
+                                            <td colspan="7" class="tc-empty" style="padding:14px 9px;">
+                                                No se marcó ninguna deuda en el tablero.
+                                                El cobro quedará como saldo a favor del abonado.
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                                {% if selected_charges %}
+                                    <tfoot>
+                                        <tr>
+                                            <th colspan="4" class="num">Totales</th>
+                                            <th class="num">S/ {{ selected_gross|floatformat:2 }}</th>
+                                            <th class="num">S/ {{ selected_discount|floatformat:2 }}</th>
+                                            <th class="num">S/ {{ selected_total|floatformat:2 }}</th>
+                                        </tr>
+                                    </tfoot>
+                                {% endif %}
+                            </table>
+                        </div>
+                    </div>
 
                     <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
                         Total
@@ -175,6 +197,12 @@
                                 </label>
                             {% endfor %}
                         </div>
+                        {% comment %}
+                        Esta ayuda se queda: «No (Pendiente)» emite un
+                        comprobante sin que el dinero haya entrado, y de las
+                        dos opciones no se deduce cuál de las dos baja la
+                        deuda.
+                        {% endcomment %}
                         <div class="tc-form-hint">
                             «No (Pendiente)» emite el comprobante sin que el dinero
                             haya entrado: la deuda no baja hasta confirmarlo.
@@ -200,7 +228,6 @@
                     </label>
                     <div class="tc-form-field">
                         <div class="tc-w-lg">{{ form.reference }}</div>
-                        <div class="tc-form-hint">Obligatorio salvo en efectivo.</div>
                         {% for error in form.reference.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -211,9 +238,6 @@
                     </label>
                     <div class="tc-form-field">
                         <div class="tc-w-lg">{{ form.collector }}</div>
-                        <div class="tc-form-hint">
-                            Quien trajo el dinero, si no fue la ventanilla.
-                        </div>
                         {% for error in form.collector.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -224,9 +248,6 @@
                     </label>
                     <div class="tc-form-field">
                         <div class="tc-w-md">{{ form.due_date }}</div>
-                        <div class="tc-form-hint">
-                            Hasta cuándo vale un comprobante emitido como pendiente.
-                        </div>
                         {% for error in form.due_date.errors %}
                             <div class="tc-form-error">{{ error }}</div>
                         {% endfor %}
@@ -245,16 +266,16 @@
                 </div>
             </div>
 
-        </section>
+            <div class="tc-card-footer">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-check-lg"></i>Aceptar
+                </button>
+                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                    Cancelar
+                </a>
+            </div>
 
-        <div class="tc-actions">
-            <button type="submit" class="tc-btn primary">
-                <i class="bi bi-check-lg"></i>Aceptar
-            </button>
-            <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
-                Cancelar
-            </a>
-        </div>
+        </section>
 
     </form>
 

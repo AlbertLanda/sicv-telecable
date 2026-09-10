@@ -21,7 +21,6 @@ from django.views.generic import DetailView, ListView, TemplateView, View
 
 from apps.customers.models import Customer
 from apps.organization.context_processors import get_active_branch
-from apps.services.models import Subscription
 
 from .forms import (
     ChargeCreateForm,
@@ -29,15 +28,25 @@ from .forms import (
     PaymentRegisterForm,
     PaymentVoidForm,
 )
-from .models import Charge, Payment, PaymentCommitment, Receipt, ZERO
+from .models import (
+    Charge,
+    ChargeConcept,
+    Payment,
+    PaymentCommitment,
+    Receipt,
+    ZERO,
+)
 from .services import (
+    BILLING_MONTH_DAYS,
     DEFAULT_RECEIPT_SERIES,
     authorizer_options,
     collector_options,
     create_manual_charge,
     customer_commitments,
     customer_debt,
+    daily_rate,
     grant_commitment,
+    monthly_reference,
     outstanding_charges,
     receipt_series_options,
     register_payment,
@@ -455,15 +464,35 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         context.setdefault("form", ChargeCreateForm(customer=self.customer))
         context["today"] = timezone.localdate()
 
-        # Mensualidad con la que "Calcular dias segun monto" prorratea. Sale
-        # de la suscripcion activa del abonado; sin ninguna, el boton lo dice
-        # en vez de calcular sobre un cero.
-        active = self.customer.subscriptions.filter(
-            status=Subscription.Status.ACTIVE
-        ).first()
-        context["monthly_reference"] = (
-            active.total_monthly_price if active else ZERO
-        )
+        # Mensualidad con la que "Calcular dias segun monto" prorratea, y lo
+        # que sale de dividirla. Se calculan aqui y no en el navegador para
+        # que la cifra que el operador ve sea la misma que la del servidor:
+        # dos redondeos distintos sobre el mismo plan darian dos deudas.
+        reference = monthly_reference(self.customer)
+
+        context["monthly_reference"] = reference
+        context["daily_rate"] = daily_rate(reference)
+        context["billing_month_days"] = BILLING_MONTH_DAYS
+        context["monthly_concept"] = Charge.Concept.MONTHLY
+
+        # Si el boton de prorrateo nace visible o escondido. Lo decide el
+        # servidor y no el navegador para que la pantalla llegue ya pintada:
+        # en el caso normal -mensualidad- el boton no debe aparecer un
+        # instante despues, ni asomar y esconderse en un formulario que
+        # vuelve con errores sobre otro concepto.
+        #
+        # Con el catalogo en la base, quien manda es la familia del concepto
+        # elegido: mensualidad es una de doscientas y pico opciones, y son
+        # todas las recurrentes -un plan, un alquiler, un enlace- las que se
+        # reparten en dias.
+        form = context["form"]
+        selected = form["concept"].value()
+        concept = None
+
+        if selected:
+            concept = ChargeConcept.objects.filter(pk=selected).first()
+
+        context["es_mensualidad"] = bool(concept and concept.is_monthly)
 
         return context
 
@@ -474,9 +503,14 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
             return self.render_to_response(self.get_context_data(form=form))
 
         try:
+            concept = form.cleaned_data["concept"]
+
             charge = create_manual_charge(
                 customer=self.customer,
-                concept=form.cleaned_data["concept"],
+                # La familia gobierna el comportamiento de la deuda; el
+                # concepto del catalogo dice que se le cobro al abonado.
+                concept=concept.family,
+                concept_item=concept,
                 description=form.cleaned_data["description"],
                 amount=form.cleaned_data["amount"],
                 due_date=form.cleaned_data["due_date"],

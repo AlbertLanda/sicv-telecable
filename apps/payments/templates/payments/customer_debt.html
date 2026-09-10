@@ -3,7 +3,15 @@
 
 {% block title %}Deudas de {{ customer }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    .tc-commitment { background:linear-gradient(90deg,#eef6ff 0%,#fbfdff 100%); border-color:#a9cdf3; border-left-color:var(--tc-blue); grid-template-columns:70px minmax(0,1fr) 220px; }
+    .tc-commitment .tc-order-icon { background:var(--tc-blue); color:#fff; }
+    .tc-commitment .tc-order-actions { grid-template-columns:1fr; }
+    .tc-commitment .tc-order-actions .tc-btn { width:100%; justify-content:center; }
+</style>
+{% endblock %}
 
 {% block content %}
 
@@ -12,6 +20,63 @@
     {% include "_customer_record_header.html" with active_tab="debt" record_title="Deuda" %}
 
     {% account_debt_summary customer debt=debt %}
+
+    {% comment %}
+    Los compromisos vigentes encabezan la pantalla, como la OT abierta
+    encabeza la de órdenes: mientras el compromiso siga en pie, cambia lo que
+    el operador puede decirle al abonado -esa deuda no empuja al corte hasta
+    la fecha acordada-, y al pie de la pantalla se leía después de haber
+    decidido qué cobrar.
+
+    Uno por compromiso y no una tabla: son pocos -lo normal es ninguno o uno-
+    y cada uno se lee entero de un vistazo, sin cruzar columnas.
+    {% endcomment %}
+    {% for commitment in active_commitments %}
+        <section class="tc-card tc-order tc-commitment">
+
+            <div class="tc-order-icon"><i class="bi bi-hand-thumbs-up"></i></div>
+
+            <div>
+                <div class="tc-order-title">
+                    <span>Compromiso de pago vigente</span>
+                    <span class="tc-pill info">Paga el {{ commitment.committed_date|date:"d/m/Y" }}</span>
+                </div>
+
+                <div class="tc-order-number">S/ {{ commitment.amount|floatformat:2 }}</div>
+
+                <div class="tc-order-meta">
+                    <strong>Deuda comprometida:</strong>
+                    {% for charge in commitment.charges.all %}
+                        {{ charge.description }}{% if charge.period_label %} ({{ charge.period_label }}){% endif %}{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        Sin deudas asociadas
+                    {% endfor %}
+                </div>
+
+                {% if commitment.reason %}
+                    <div class="tc-order-meta">{{ commitment.reason }}</div>
+                {% endif %}
+
+                <div class="tc-order-meta">
+                    <strong>Autoriza:</strong>
+                    {{ commitment.authorized_by|default:commitment.granted_by }}
+                </div>
+            </div>
+
+            <div class="tc-order-actions">
+                {% if can_grant_commitment %}
+                    <form method="post"
+                          action="{% url 'payments:commitment_cancel' pk=commitment.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="tc-btn">
+                            <i class="bi bi-x-circle"></i>Anular compromiso
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+
+        </section>
+    {% endfor %}
 
     {% comment %}
     Un solo formulario envuelve la tabla y los botones: «Cobrar» y
@@ -163,61 +228,6 @@
         </div>
 
     </form>
-
-    {% if active_commitments %}
-        <section class="tc-card tc-section tc-full">
-
-            <div class="tc-section-head">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-hand-thumbs-up"></i>Compromisos de pago vigentes
-                </h2>
-            </div>
-
-            <div class="table-responsive">
-                <table class="tc-table">
-                    <thead>
-                        <tr>
-                            <th>Fecha de pago</th>
-                            <th class="num">Monto</th>
-                            <th>Deuda comprometida</th>
-                            <th>Autoriza</th>
-                            {% if can_grant_commitment %}<th></th>{% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for commitment in active_commitments %}
-                            <tr>
-                                <td>{{ commitment.committed_date|date:"d/m/Y" }}</td>
-                                <td class="num">S/ {{ commitment.amount|floatformat:2 }}</td>
-                                <td>
-                                    {% for charge in commitment.charges.all %}
-                                        {{ charge.description }}
-                                        {% if charge.period_label %}
-                                            <span class="tc-sub">{{ charge.period_label }}</span>
-                                        {% endif %}
-                                    {% endfor %}
-                                    <span class="tc-sub">{{ commitment.reason }}</span>
-                                </td>
-                                <td>{{ commitment.authorized_by|default:commitment.granted_by }}</td>
-                                {% if can_grant_commitment %}
-                                    <td class="text-end">
-                                        <form method="post"
-                                              action="{% url 'payments:commitment_cancel' pk=commitment.pk %}">
-                                            {% csrf_token %}
-                                            <button type="submit" class="tc-icon-btn" title="Anular compromiso">
-                                                <i class="bi bi-x-lg"></i>
-                                            </button>
-                                        </form>
-                                    </td>
-                                {% endif %}
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-        </section>
-    {% endif %}
 
 </div>
 

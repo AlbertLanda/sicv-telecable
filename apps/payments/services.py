@@ -11,7 +11,7 @@ cuadrar.
 
 import calendar
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -22,6 +22,7 @@ from apps.services.models import Subscription
 
 from .models import (
     Charge,
+    ChargeConcept,
     Payment,
     PaymentAllocation,
     PaymentCommitment,
@@ -378,6 +379,89 @@ def register_payment(
     return payment, receipt
 
 
+# El mes comercial de la cobranza. Con los dias reales del calendario, el
+# mismo corte de cinco dias costaria distinto en febrero que en marzo, y el
+# abonado que reclama por que su prorrateo cambio tendria razon.
+BILLING_MONTH_DAYS = 30
+
+
+# El concepto con el que abre la pantalla de nueva deuda. Se busca por codigo
+# y no por nombre: el nombre se puede corregir desde el admin -una tilde, una
+# mayuscula- y la pantalla dejaria de encontrarlo.
+DEFAULT_CONCEPT_CODE = "mensualidad"
+
+
+def default_concept():
+    """El concepto con el que abre la ventanilla, o el primero que haya.
+
+    Sin catalogo sembrado devuelve None y el desplegable sale vacio, que es
+    mejor que reventar la pantalla: lo que falta es un dato, no el codigo.
+    """
+    catalog = ChargeConcept.objects.filter(is_active=True)
+
+    return (
+        catalog.filter(code=DEFAULT_CONCEPT_CODE).first()
+        or catalog.first()
+    )
+
+
+def monthly_reference(customer):
+    """Mensualidad del abonado, la base de todo prorrateo.
+
+    Sale de su suscripcion activa: es la cifra que el operador tiene delante
+    al emitir una mensualidad a mano y la que reparte el mes en dias. Sin
+    suscripcion activa devuelve cero, y la pantalla lo dice en vez de
+    calcular sobre esa nada.
+    """
+    active = (
+        customer.subscriptions.filter(status=Subscription.Status.ACTIVE)
+        .order_by("pk")
+        .first()
+    )
+
+    return active.total_monthly_price if active else ZERO
+
+
+def daily_rate(monthly):
+    """Lo que vale un dia de servicio sobre una mensualidad dada."""
+    monthly = Decimal(monthly or ZERO)
+
+    if monthly <= ZERO:
+        return ZERO
+
+    return (monthly / BILLING_MONTH_DAYS).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
+def prorated_amount(monthly, days):
+    """Cuanto se cobra por `days` dias de una mensualidad.
+
+    Se multiplica el valor del dia ya redondeado, y no la mensualidad partida
+    en crudo, porque es la cifra que el operador ve en pantalla: si dice
+    «S/ 2.63 por dia», diez dias tienen que dar 26.30 y no 26.3333 recortado
+    aparte.
+
+    El mes entero es la excepcion: vale la mensualidad y no la suma de sus
+    treinta dias. Con 79.00, el dia redondeado es 2.63 y treinta de esos dan
+    78.90, diez centimos menos que el mes que el abonado tiene contratado. El
+    redondeo puede repartir un periodo partido; no puede rebajar el plan.
+    """
+    rate = daily_rate(monthly)
+
+    if rate <= ZERO or not days or days <= 0:
+        return ZERO
+
+    if days >= BILLING_MONTH_DAYS:
+        return Decimal(monthly).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    return (rate * Decimal(days)).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+
 @transaction.atomic
 def create_manual_charge(
     *,
@@ -386,6 +470,7 @@ def create_manual_charge(
     description,
     amount,
     due_date,
+    concept_item=None,
     subscription=None,
     period=None,
     period_end=None,
@@ -407,6 +492,11 @@ def create_manual_charge(
     Si el concepto es una mensualidad y no se indica periodo, se toma el mes
     de la fecha de emision: el formulario no pide el periodo aparte porque la
     fecha ya lo dice.
+
+    `concept` es la familia -como se comporta la deuda- y `concept_item` el
+    concepto exacto del catalogo que eligio el operador. El ciclo mensual solo
+    pasa la primera: emite desde el plan contratado, sin pasar por el catalogo
+    de ventanilla.
     """
     issued_on = issued_on or timezone.localdate()
 
@@ -421,6 +511,7 @@ def create_manual_charge(
         customer=customer,
         subscription=subscription,
         concept=concept,
+        concept_item=concept_item,
         description=description,
         issued_on=issued_on,
         quantity=Decimal(quantity) if quantity is not None else Decimal("1.00000"),
