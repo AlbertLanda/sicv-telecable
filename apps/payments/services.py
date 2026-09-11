@@ -238,20 +238,85 @@ def allocate_oldest_first(charges, amount, day=None):
     return plan
 
 
+def receipt_sequence(code=DEFAULT_RECEIPT_SERIES):
+    """El talonario que responde a ese código, creándolo si no existe.
+
+    Se busca por `code` y no por la serie impresa porque la serie se repite:
+    «S010» nombra tres blocks distintos, y elegir por ella devolvería
+    cualquiera de los tres.
+
+    El que se crea aquí nace retirado. Llegar a este punto significa que
+    nadie eligió ese talonario en la ventanilla -es el de respaldo, o un
+    código que no está en el padrón-, y ofrecerlo después en el desplegable
+    pondría a elegir un block que no existe en papel.
+    """
+    sequence, _ = ReceiptSequence.objects.get_or_create(
+        code=code,
+        defaults={"series": code, "label": code, "is_active": False},
+    )
+
+    return sequence
+
+
 @transaction.atomic
-def next_receipt_number(series=DEFAULT_RECEIPT_SERIES):
-    """Siguiente correlativo de la serie, bloqueando la fila.
+def next_receipt_number(sequence=DEFAULT_RECEIPT_SERIES):
+    """Siguiente correlativo del talonario, bloqueando su fila.
 
     Se bloquea con select_for_update() para que dos cajas que cobran a la vez
     no se lleven el mismo número. Nunca se deduce del último recibo emitido:
     ese cálculo da el mismo resultado a dos transacciones simultáneas.
+
+    Acepta el talonario o su código: casi todas las llamadas traen el objeto,
+    pero la firma antigua pasaba una cadena y sigue valiendo.
     """
-    sequence, _ = ReceiptSequence.objects.get_or_create(series=series)
+    if not isinstance(sequence, ReceiptSequence):
+        sequence = receipt_sequence(sequence)
+
     sequence = ReceiptSequence.objects.select_for_update().get(pk=sequence.pk)
     sequence.last_number += 1
     sequence.save(update_fields=["last_number", "updated_at"])
 
     return sequence.last_number
+
+
+@transaction.atomic
+def issue_receipt_number(sequence, number=None):
+    """El número que se imprime, venga del correlativo o del operador.
+
+    El campo es editable en pantalla -hay blocks de papel que ya vienen
+    numerados y hay que escribir el número que toca-, así que el escrito
+    manda sobre el propuesto.
+
+    Cuando el operador escribe uno en un talonario que sí numera solo, el
+    correlativo se adelanta hasta ahí: si se salta del 300 al 350, el
+    siguiente cobro sale 351 y no vuelve a repetir los que quedaron en medio.
+    """
+    if number is None:
+        if not sequence.autonumber:
+            raise ValidationError(
+                f"El talonario «{sequence.label}» no numera solo: escriba el "
+                f"número del comprobante."
+            )
+
+        return next_receipt_number(sequence)
+
+    number = int(number)
+
+    if number <= 0:
+        raise ValidationError("El número del comprobante debe ser mayor a cero.")
+
+    bloqueado = ReceiptSequence.objects.select_for_update().get(pk=sequence.pk)
+
+    if Receipt.objects.filter(sequence=bloqueado, number=number).exists():
+        raise ValidationError(
+            f"El comprobante {sequence.series}-{number:06d} ya fue emitido."
+        )
+
+    if bloqueado.autonumber and number > bloqueado.last_number:
+        bloqueado.last_number = number
+        bloqueado.save(update_fields=["last_number", "updated_at"])
+
+    return number
 
 
 def discount_for(charge, applied, day=None):
@@ -287,6 +352,8 @@ def register_payment(
     received_at=None,
     day=None,
     series=DEFAULT_RECEIPT_SERIES,
+    number=None,
+    office=None,
     collector=None,
     settled=True,
     paid_at=None,
@@ -339,12 +406,25 @@ def register_payment(
 
     received_at = received_at or timezone.now()
 
+    # El talonario se resuelve antes de tocar nada: si la serie elegida no
+    # numera sola y no vino número, el cobro no debe llegar a escribirse.
+    sequence = series
+    if not isinstance(sequence, ReceiptSequence):
+        sequence = receipt_sequence(sequence)
+
+    if number is None and not sequence.autonumber:
+        raise ValidationError(
+            f"El talonario «{sequence.label}» no numera solo: escriba el "
+            f"número del comprobante."
+        )
+
     payment = Payment(
         customer=customer,
         amount=amount,
         method=method,
         reference=(reference or "").strip(),
         branch=branch,
+        office=office,
         received_by=user,
         collector=collector,
         note=(note or "").strip(),
@@ -356,7 +436,7 @@ def register_payment(
         due_date=due_date,
     )
     payment.full_clean(
-        exclude=["received_by", "collector", "branch", "customer"]
+        exclude=["received_by", "collector", "branch", "office", "customer"]
     )
     payment.save()
 
@@ -371,8 +451,9 @@ def register_payment(
 
     receipt = Receipt.objects.create(
         payment=payment,
-        series=series,
-        number=next_receipt_number(series),
+        sequence=sequence,
+        series=sequence.series,
+        number=issue_receipt_number(sequence, number),
         issued_at=payment.received_at,
     )
 
@@ -629,17 +710,21 @@ def customer_commitments(customer):
 
 
 def receipt_series_options():
-    """Las series de comprobante disponibles para cobrar.
+    """Los talonarios en uso, en el orden de la ventanilla.
 
     Salen de las filas de ReceiptSequence, que es donde vive el correlativo:
     ofrecer una serie que no tiene fila obligaria a crearla al vuelo dentro
     del cobro, y el numero se emitiria sin el bloqueo que evita repetirlo.
-    La serie por defecto se asegura para que la ventanilla nunca quede sin
-    ninguna opcion.
-    """
-    ReceiptSequence.objects.get_or_create(series=DEFAULT_RECEIPT_SERIES)
 
-    return list(ReceiptSequence.objects.order_by("series"))
+    R001 no esta entre ellas. Era el talonario propio del sistema, el que se
+    uso mientras no habia padron, y sigue existiendo porque sus comprobantes
+    ya se entregaron; lo que no hace es ofrecerse para cobrar de nuevo.
+
+    Aqui no se asegura ninguno: el padron entra por migracion, y crear uno al
+    vuelo para que la lista no quede vacia volveria a meter R001 por la puerta
+    de atras en cada base recien creada.
+    """
+    return list(ReceiptSequence.objects.filter(is_active=True))
 
 
 def collector_options():

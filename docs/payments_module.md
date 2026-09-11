@@ -26,9 +26,10 @@ fiscal sobre el mismo pago no obliga a rehacer lo cobrado.
 ## Entidades
 
     Charge              lo que se le cobra al abonado, con su vencimiento.
-    Payment             el dinero recibido, con su método.
+    Payment             el dinero recibido, con su método y dónde entró.
     PaymentAllocation   qué parte de un pago cubre qué cargo.
     Receipt             la constancia numerada que se entrega.
+    ReceiptSequence     el talonario del que sale, con su correlativo.
 
 El pago y el cargo no se tocan directamente. Un abonado que entrega S/ 120
 sobre dos mensualidades de S/ 60 genera **un** pago y **dos** aplicaciones, y
@@ -123,10 +124,18 @@ informa: no altera el monto que se guarda.
 
 ## Cobrar
 
-Formato de comprobante: Serie y Número (el número lo asigna el correlativo al
-aceptar, bajo bloqueo), la tabla de deudas elegidas con
-`Cantidad | Código de abonado | Descripción | Moneda | Monto | Descuento | Total`,
+Formato de comprobante: **Serie y lugar de cobro** en una misma fila —son los
+dos datos que dicen de qué block sale el papel y en qué caja entró el dinero;
+el lugar se lee, no se elige—,
+**Número** debajo, la tabla de deudas elegidas con
+`Cantidad | Abonado | Plan | Mes | Moneda | Monto | Desc | Total`,
 el medio de pago, el cobrador y las observaciones.
+
+`Plan` y `Mes` iban antes en una sola celda, el plan con el periodo debajo. El
+papel del sistema anterior tiene dos columnas, y el operador que compara una
+cosa con la otra tenía que leer una celda partida donde el papel le ofrece dos.
+`Cantidad` se muestra entera: son unidades de un cargo, y los cinco decimales
+del sistema anterior no describían ninguna cantidad que alguien cobre.
 
 **Descuento** por fila es el pronto pago vigente ese día
 (`Charge.current_discount`). Se guarda en la aplicación del pago
@@ -228,13 +237,85 @@ El historial muestra el pago anulado en lugar de esconderlo, porque un cobro
 que desaparece deja un hueco sin explicación justo donde el abonado va a
 preguntar qué pasó con su dinero.
 
-## Correlativo de recibos
+## Talonarios y correlativo
 
-Serie única `R001`, formato `R001-000001`. La fila de `ReceiptSequence` se
-bloquea con `select_for_update()` antes de incrementarla —mismo criterio que
-el correlativo de órdenes—, de modo que dos cajas que cobran a la vez no
-emiten el mismo número. Nunca se deduce leyendo el último recibo emitido: ese
-cálculo da el mismo resultado a dos transacciones simultáneas.
+Una fila de `ReceiptSequence` es un **talonario**, no una serie. La serie es
+solo lo que se imprime, y se repite: en el sistema que se reemplaza «S010»
+nombra tres blocks distintos —VELOCIDAD, RED OPTICA y SPEEDY— que van cada uno
+por su cuenta (3031, 267 y 569). Por eso manda `code`, que es único, y `series`
+puede coincidir entre filas.
+
+De ahí que la restricción de base de datos sea `(sequence, number)` y no
+`(series, number)`: exigir que la serie impresa no repita número haría fallar
+el segundo block de S010 en cuanto alcanzara al primero, por un choque que en
+el papel no existe. La contrapartida está aceptada: dos recibos de blocks
+distintos pueden acabar imprimiendo `S010-000300`.
+
+La fila se bloquea con `select_for_update()` antes de incrementarla —mismo
+criterio que el correlativo de órdenes—, de modo que dos cajas que cobran a la
+vez no emiten el mismo número. Nunca se deduce leyendo el último recibo
+emitido: ese cálculo da el mismo resultado a dos transacciones simultáneas.
+
+### El número se propone, no se impone
+
+Elegir la serie completa el número, y el campo queda editable. No es una
+comodidad: los blocks de un cobrador (`JU1`, `MR3`, `ST1`…) son papel que él ya
+trae numerado, así que el sistema no tiene de dónde sacar el que toca. Esos
+talonarios llevan `autonumber=False` y proponen vacío; proponerles uno sería
+inventarlo.
+
+Cuando el operador escribe un número por delante en un talonario que sí numera
+solo, el correlativo se adelanta hasta ahí. Si se quedara donde estaba, el
+siguiente cobro volvería a recorrer números que ya se entregaron.
+
+Los números sembrados son el **próximo a imprimir**, no el último entregado.
+`last_number` se guarda uno por debajo: el primer recibo de `B001` sale
+`0041314`, que es el que el talonario de papel tiene arriba.
+
+### R001 quedó retirado
+
+Era el talonario propio del sistema, el que se usó mientras no había padrón.
+No se borra —tiene comprobantes entregados colgando, y un recibo sin el block
+del que salió no puede explicarse—: lleva `is_active=False` y deja de
+ofrecerse, nada más. Un talonario que el sistema crea al vuelo nace igual de
+retirado, porque llegar a crearlo significa que nadie lo eligió y ofrecerlo
+después pondría a elegir un block que no existe en papel.
+
+La pantalla abre en el **primer talonario que numera solo** (`B001`), no en el
+primero de la lista. Encabezan los blocks de un cobrador, que proponen vacío:
+abrir ahí dejaría el número en blanco y un «Aceptar» sin tocar nada devolvería
+un error por algo que el operador no eligió.
+
+## Dónde entró el dinero
+
+El pago guarda **sede y oficina**. La sede dice de qué ciudad es la caja; la
+oficina dice cuál de sus ventanillas, que es lo que un arqueo de sede con cinco
+ventanillas necesita para saber de cuál salió el dinero.
+
+La oficina se elige **en la barra superior y solo ahí**. La pantalla de cobro
+la muestra al lado de la serie, en un campo que no se puede escribir.
+Preguntarla también ahí eran dos sitios para decidir lo mismo, y el que se
+quedaba sin mirar —el de la barra— seguía gobernando el resto de la sesión.
+
+Es opcional a propósito: un despliegue sin padrón de oficinas cargado seguiría
+cobrando, porque la sede basta para saber qué caja lo recibió, y exigirla
+dejaría la ventanilla parada por una tabla que nadie llenó.
+
+### El depósito es una ubicación más
+
+Lo que llega por transferencia, depósito o billetera no lo recibe nadie en
+mostrador, pero sí cae en una sede concreta. Cada sede tiene por eso su
+`Deposito`, y se elige en la barra como cualquier ventanilla: quien va a
+registrar una transferencia lo elige arriba y después cobra.
+
+Lleva su propia marca (`Office.is_deposit`) en vez de reconocerse por el
+nombre, porque de ese hecho depende una regla: **no puede ser la ubicación que
+el sistema elige solo** para un operador sin oficina asignada. Si lo fuera, sus
+cobros dirían que el dinero entró por banco sin que nadie lo hubiera dicho.
+
+Hoy cualquiera puede elegir el depósito de su sede. Quién debería poder
+hacerlo es una decisión de rol que todavía no está tomada, y la marca ya deja
+el sitio donde se aplicará cuando lo esté.
 
 ## Navegación
 
@@ -270,22 +351,56 @@ Bootstrap crudo y las dos se veían de aplicaciones distintas. Se extrajo a
 copiarlo habría bastado para hoy, pero dos copias del mismo CSS se separan al
 primer ajuste y una quedaría con el trazo viejo sin que nadie lo note.
 
+La cabecera en franja azul (`tc-section-head banner`) siguió ese mismo
+camino. Nació dentro de «Nueva deuda», con la nota de que se quedaba ahí
+hasta decidir si todas las cabeceras irían así; la copió «Cobrar» y la pidió
+después la tabla de deudas, y esa tercera pantalla resolvió la duda: vive en
+el parcial compartido.
+
+La pantalla de deuda quedó en una sola cosa: la tabla. Salieron el total al
+pie, la píldora de pendientes de la cabecera y la tira de cifras que la
+encabezaba —deuda, vencido, deudas abiertas y vencimiento más antiguo—, que
+repetía lo que las filas de abajo dicen una por una y empujaba la primera
+deuda por debajo del pliegue. Cuántas hay lo sigue diciendo el pie del
+paginador, que las cuenta de todos modos.
+
+El total al pie además decía otra cosa sin avisarlo: sumaba la deuda
+**completa** mientras la tabla mostraba una página, así que con el selector de
+filas en 15 y treinta cargos abiertos las dos cifras no coincidían.
+
+Con eso se retiraron el parcial `_debt_summary.html` y el tag
+`account_debt_summary` que lo pintaba: la pantalla de deuda era su único
+consumidor. La vista **sigue** calculando la deuda —la tabla y los botones de
+cobro viven de ella—, solo que ya no se pinta como resumen.
+
 La identidad del abonado la pinta `customer_hero`, el mismo bloque de la
 ficha. Si cada pantalla lo describiera por su cuenta, podrían acabar diciendo
 cosas distintas sobre quién es y qué tiene activo.
 
-El encabezado de cuenta añade el estado al día de hoy —deuda, vencido, deudas
-abiertas y vencimiento más antiguo— porque es la cifra que decide la
-conversación en ventanilla antes de mirar el detalle. Cuenta la deuda
-**completa**, no la página: el selector de filas recorta la tabla, y leer de
-ahí diría «20 deudas abiertas» cuando el abonado tiene 30.
+«Cobrar» y «Compromiso» actúan sobre lo marcado, y sin marcas lo avisan con
+un aviso flotante arriba a la derecha que se va solo a los tres segundos.
+Antes era una franja bajo la tabla: con la tabla larga quedaba fuera de la
+pantalla, así que el clic parecía no haber hecho nada. No es un modal porque
+el operador no tiene nada que decidir, solo que enterarse, y un modal le
+cobraría un clic de más por un descuido.
+
+Lo pinta `tcAviso`, del sistema visual compartido (`.tc-toast`), no una
+librería de terceros: se probó con SweetAlert2 y su caja venía a la escala
+de un diálogo, no a la de esta interfaz, y achicarla por CSS habría dejado
+60 KB de CDN para pintar una fila de texto.
+
+Si por lo que sea el aviso no está disponible, el clic **no** se bloquea y
+sigue al servidor, que devuelve al tablero con el mismo mensaje —el guardia
+de verdad está ahí (`BoardSelectionRequiredMixin`), y el aviso del navegador
+solo ahorra el viaje.
 
 Los formularios usan el layout etiqueta/campo del sistema anterior
 (`tc-form`), para que el operador reconozca la pantalla, con el trazo de la
 ficha en vez del aspecto por defecto de Bootstrap.
 
 `apps/payments/tests/test_diseno.py` fija que ninguna pantalla traiga su
-propio CSS ni su propia versión del abonado.
+propio CSS ni su propia versión del abonado, y que ninguna vuelva a encabezar
+la cuenta con la tira de cifras.
 
 ## Permisos
 

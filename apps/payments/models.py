@@ -26,7 +26,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.customers.models import Customer
-from apps.organization.models import Branch
+from apps.organization.models import Branch, Office
 from apps.services.models import Subscription
 
 
@@ -522,6 +522,22 @@ class Payment(models.Model):
         verbose_name="Sede que cobró",
     )
 
+    # Dónde entró el dinero. La sede dice de qué ciudad es la caja; la oficina
+    # dice cuál de sus ventanillas, y el depósito de la sede es la «oficina»
+    # de lo que no entró por ninguna -una transferencia no la recibe nadie en
+    # mostrador, pero sí cae en una sede-.
+    #
+    # Opcional porque el padrón de oficinas se cargó después que los primeros
+    # cobros: exigirla habría obligado a inventar una para pagos ya emitidos.
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.PROTECT,
+        related_name="payments",
+        null=True,
+        blank=True,
+        verbose_name="Lugar de cobro",
+    )
+
     received_at = models.DateTimeField(
         default=timezone.now,
         verbose_name="Recibido el",
@@ -759,18 +775,63 @@ class PaymentAllocation(models.Model):
 
 class ReceiptSequence(models.Model):
     """
-    Correlativo persistente de los recibos, una fila por serie.
+    Un talonario de comprobantes, con su correlativo.
 
     Mismo criterio que el correlativo de órdenes: la fila se bloquea con
     select_for_update() antes de incrementarla, de modo que dos cajas que
     cobran a la vez no emiten el mismo número. Nunca se calcula leyendo el
     último recibo emitido.
+
+    El talonario no se identifica por la serie impresa. En el sistema que se
+    reemplaza, «S010» nombra tres talonarios distintos -VELOCIDAD, RED OPTICA
+    y SPEEDY- que van cada uno por su cuenta (3031, 267 y 569). Por eso manda
+    `code`, que es único, y `series` es solo lo que se imprime y puede
+    repetirse.
+
+    Hay talonarios que no numeran solos: los de un cobrador concreto son
+    blocks de papel que él ya trae numerados, así que el operador escribe el
+    número que toca. `autonumber` distingue unos de otros.
     """
+
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Código del talonario",
+    )
 
     series = models.CharField(
         max_length=8,
-        unique=True,
-        verbose_name="Serie",
+        verbose_name="Serie impresa",
+    )
+
+    label = models.CharField(
+        max_length=80,
+        verbose_name="Etiqueta",
+        help_text="Como se lee en el desplegable de cobro.",
+    )
+
+    autonumber = models.BooleanField(
+        default=True,
+        verbose_name="Numera sola",
+        help_text=(
+            "Si no numera sola, el operador escribe el número del block."
+        ),
+    )
+
+    # El orden del desplegable es el del sistema anterior, que no es
+    # alfabético: los tres S010 van VELOCIDAD, RED OPTICA y SPEEDY. Se guarda
+    # en vez de deducirse para que siga siendo el mismo al añadir uno nuevo.
+    position = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Orden en la lista",
+    )
+
+    # Un talonario retirado no se borra: sus comprobantes ya se entregaron y
+    # tienen que poder seguir explicándose. Deja de ofrecerse en la ventanilla
+    # y nada más.
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Se ofrece al cobrar",
     )
 
     last_number = models.PositiveIntegerField(
@@ -782,12 +843,20 @@ class ReceiptSequence(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Correlativo de recibos"
-        verbose_name_plural = "Correlativos de recibos"
-        ordering = ["series"]
+        verbose_name = "Talonario de comprobantes"
+        verbose_name_plural = "Talonarios de comprobantes"
+        ordering = ["position", "label"]
 
     def __str__(self):
-        return f"{self.series}: {self.last_number}"
+        return self.label or self.series
+
+    @property
+    def next_number(self):
+        """El que se imprimiría ahora. Vacío si el block lo numera a mano."""
+        if not self.autonumber:
+            return None
+
+        return self.last_number + 1
 
 
 class Receipt(models.Model):
@@ -807,6 +876,16 @@ class Receipt(models.Model):
         verbose_name="Pago",
     )
 
+    # El talonario del que salió. La serie se guarda además suelta porque es
+    # lo que quedó impreso en el papel: si mañana se corrige la etiqueta de un
+    # talonario, el recibo entregado sigue diciendo lo que decía.
+    sequence = models.ForeignKey(
+        ReceiptSequence,
+        on_delete=models.PROTECT,
+        related_name="receipts",
+        verbose_name="Talonario",
+    )
+
     series = models.CharField(max_length=8, verbose_name="Serie")
     number = models.PositiveIntegerField(verbose_name="Correlativo")
 
@@ -822,9 +901,13 @@ class Receipt(models.Model):
         verbose_name_plural = "Comprobantes de pago"
         ordering = ["-issued_at", "-pk"]
         constraints = [
+            # Por talonario y no por serie impresa: los tres «S010» son
+            # blocks distintos y cada uno recorre sus propios números, así
+            # que exigir que la serie impresa no repita número haría fallar
+            # el segundo en cuanto alcanzara al primero.
             models.UniqueConstraint(
-                fields=["series", "number"],
-                name="payments_receipt_unique_series_number",
+                fields=["sequence", "number"],
+                name="payments_receipt_unique_sequence_number",
             ),
         ]
 

@@ -83,16 +83,6 @@ class TheFichaOffersTheAccountTests(PaymentsTestCase):
         self.assertNotContains(response, "Deudas abiertas")
         self.assertNotContains(response, "Vencimiento más antiguo")
 
-    def test_the_debt_tab_is_the_one_that_carries_the_figures(self):
-        self.login(self.user)
-
-        response = self.client.get(
-            reverse("payments:debt", args=[self.customer.pk])
-        )
-
-        self.assertContains(response, "Deudas abiertas")
-        self.assertContains(response, "Vencimiento más antiguo")
-
     def test_the_ficha_links_to_the_orders_and_activity_tabs(self):
         """Órdenes y actividad también salieron de la ficha a su pestaña."""
         self.login(self.user)

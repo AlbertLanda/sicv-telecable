@@ -20,7 +20,10 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from apps.customers.models import Customer
-from apps.organization.context_processors import get_active_branch
+from apps.organization.context_processors import (
+    get_active_branch,
+    get_active_office,
+)
 
 from .forms import (
     ChargeCreateForm,
@@ -243,17 +246,33 @@ class PaymentRegisterView(
         # monto llega ya sumado -y con el pronto pago aplicado cuando
         # corresponde- para que no tenga que recalcular a mano lo que las
         # filas ya decian.
+        series = receipt_series_options()
+
+        # La pantalla se abre con el comprobante que se emitiria si el
+        # operador no cambiara nada, asi que el talonario propuesto es el
+        # primero que sabe decir que numero le toca. Encabezan la lista los
+        # blocks de un cobrador, que vienen numerados de papel: abrir en uno
+        # de esos dejaria el numero en blanco y un «Aceptar» sin tocar nada
+        # devolveria un error por algo que el operador no eligio.
+        propuesto = next(
+            (sequence for sequence in series if sequence.autonumber),
+            series[0] if series else None,
+        )
+        inicial = {
+            "settled": "1",
+            "series": propuesto.code if propuesto else None,
+            "number": propuesto.next_number if propuesto else None,
+        }
+
         if selected and "form" not in kwargs:
             context["form"] = PaymentRegisterForm(
-                initial={
-                    "amount": sum(
-                        (charge.balance for charge in selected), ZERO
-                    ),
-                    "settled": "1",
-                }
+                initial=dict(
+                    inicial,
+                    amount=sum((charge.balance for charge in selected), ZERO),
+                )
             )
 
-        context.setdefault("form", PaymentRegisterForm(initial={"settled": "1"}))
+        context.setdefault("form", PaymentRegisterForm(initial=inicial))
         context["charges"] = charges
         context["selected_charges"] = selected
         context["selected_ids"] = [charge.pk for charge in selected]
@@ -268,12 +287,7 @@ class PaymentRegisterView(
         )
         context["today"] = timezone.localdate()
         context["now"] = timezone.localtime()
-        series = receipt_series_options()
         context["receipt_series"] = series
-
-        # Solo informativo: el numero definitivo lo asigna el correlativo al
-        # aceptar, bajo bloqueo. Mostrar el proximo aqui no lo reserva.
-        context["next_number"] = (series[0].last_number + 1) if series else 1
 
         return context
 
@@ -317,6 +331,15 @@ class PaymentRegisterView(
 
         branch = get_active_branch(request)
 
+        # Donde se esta cobrando lo dice la barra superior y solo ella. La
+        # ficha lo muestra pero no lo pregunta: eran dos sitios para decidir
+        # lo mismo, y el que se quedaba sin mirar -el de la barra- seguia
+        # gobernando el resto de la sesion.
+        #
+        # Sin oficinas cargadas queda en blanco y el cobro sigue: la sede
+        # basta para saber que caja lo recibio.
+        office = get_active_office(request, branch=branch)
+
         if branch is None:
             form.add_error(
                 None,
@@ -331,11 +354,13 @@ class PaymentRegisterView(
                 amount=form.cleaned_data["amount"],
                 method=form.cleaned_data["method"],
                 branch=branch,
+                office=office,
                 user=request.user,
                 reference=form.cleaned_data["reference"],
                 note=form.cleaned_data["note"],
                 allocations=allocations,
                 series=form.cleaned_data.get("series") or DEFAULT_RECEIPT_SERIES,
+                number=form.cleaned_data.get("number"),
                 collector=form.cleaned_data.get("collector"),
                 settled=form.cleaned_data.get("settled", True),
                 due_date=form.cleaned_data.get("due_date"),

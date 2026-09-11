@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load payments_ui %}
 
 {% block title %}Deudas de {{ customer }} - SICV{% endblock %}
 
@@ -18,8 +17,6 @@
 <div class="tc-content">
 
     {% include "_customer_record_header.html" with active_tab="debt" record_title="Deuda" %}
-
-    {% account_debt_summary customer debt=debt %}
 
     {% comment %}
     Los compromisos vigentes encabezan la pantalla, como la OT abierta
@@ -95,13 +92,10 @@
 
         <section class="tc-card tc-section tc-full">
 
-            <div class="tc-section-head">
+            <div class="tc-section-head banner">
                 <h2 class="tc-section-title">
                     <i class="bi bi-cash-stack"></i>Deudas
                 </h2>
-                {% if debt.charges %}
-                    <span class="tc-pill">{{ debt.charges|length }} pendiente{{ debt.charges|length|pluralize }}</span>
-                {% endif %}
             </div>
 
             {% if debt.charges %}
@@ -132,10 +126,7 @@
                                     </td>
                                     <td>{{ charge.issued_on|date:"d/m/Y" }}</td>
                                     <td class="num">{{ charge.quantity|floatformat:5 }}</td>
-                                    <td>
-                                        {{ charge.description }}
-                                        <span class="tc-sub">{{ charge.get_concept_display }}</span>
-                                    </td>
+                                    <td>{{ charge.description }}</td>
                                     <td>{{ charge.period_label|default:"—" }}</td>
                                     <td>{{ charge.currency }}</td>
                                     <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
@@ -173,13 +164,6 @@
                                 </tr>
                             {% endfor %}
                         </tbody>
-                        <tfoot>
-                            <tr>
-                                <th colspan="6" class="num">Total adeudado</th>
-                                <th class="num">S/ {{ debt.total|floatformat:2 }}</th>
-                                <th colspan="3"></th>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
 
@@ -195,11 +179,6 @@
             {% endif %}
 
         </section>
-
-        <div class="tc-note danger" id="avisoSeleccion" hidden>
-            <i class="bi bi-exclamation-triangle-fill"></i>
-            <div>Marque las deudas sobre las que quiere actuar.</div>
-        </div>
 
         <div class="tc-actions">
             {% if can_create_charge %}
@@ -219,7 +198,7 @@
             {% endif %}
             {% if can_grant_commitment and debt.charges %}
                 <button type="submit"
-                        class="tc-btn"
+                        class="tc-btn primary"
                         data-exige-seleccion="aplazar"
                         formaction="{% url 'payments:commitment_create' pk=customer.pk %}">
                     <i class="bi bi-hand-thumbs-up"></i>Compromiso
@@ -238,11 +217,21 @@
     // «Cobrar» y «Compromiso» actúan sobre las filas marcadas. Sin ninguna, el
     // servidor devuelve al tablero con el aviso; esto lo dice antes de ir y
     // volver, y deja al operador donde ya estaba mirando.
+    //
+    // Se dice en un aviso flotante arriba y no en una franja bajo la tabla:
+    // ahí quedaba lejos del botón que se acababa de pulsar -y, con la tabla
+    // larga, fuera de la pantalla-, así que el clic parecía no haber hecho
+    // nada.
+    //
+    // Flotante y no modal: el operador no tiene que decidir nada, solo
+    // enterarse, y un modal le cobraría un clic de más por un descuido. Lo
+    // pinta `tcAviso`, del sistema visual compartido; se va solo a los tres
+    // segundos, y el foco baja a la primera casilla sin esperar a que se
+    // vaya, que es lo que hay que hacer a continuación.
     (function () {
         var formulario = document.getElementById("deudasForm");
-        var aviso = document.getElementById("avisoSeleccion");
 
-        if (!formulario || !aviso) {
+        if (!formulario) {
             return;
         }
 
@@ -264,24 +253,21 @@
                 return;
             }
 
+            // Sin el aviso no se bloquea el envio: el servidor ya devuelve
+            // al tablero con el mismo mensaje. Cortar aqui dejaria un boton
+            // que no hace nada ni explica por que.
+            if (typeof window.tcAviso !== "function") {
+                return;
+            }
+
             evento.preventDefault();
 
-            aviso.querySelector("div").textContent =
-                mensajes[boton.dataset.exigeSeleccion];
-            aviso.hidden = false;
+            window.tcAviso(mensajes[boton.dataset.exigeSeleccion]);
 
             var primera = formulario.querySelector('input[name="charges"]');
 
             if (primera) {
                 primera.focus();
-            }
-        });
-
-        // Marcar una fila responde el aviso: dejarlo puesto lo convertiria en
-        // un reproche que ya no viene a cuento.
-        formulario.addEventListener("change", function (evento) {
-            if (evento.target.name === "charges" && hayMarcadas()) {
-                aviso.hidden = true;
             }
         });
     })();

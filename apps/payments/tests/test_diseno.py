@@ -130,28 +130,27 @@ class SharedDesignTests(PaymentsTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, DESIGN_PARTIAL)
 
-    def test_the_debt_tab_reports_the_debt_of_the_day(self):
-        """La cifra que decide la conversación encabeza la pestaña que trata de ella.
+    def test_no_account_screen_repeats_the_debt_as_a_metric_strip(self):
+        """Ninguna pantalla encabeza la cuenta con la tira de cifras.
 
-        No va en el encabezado común: repetida en historial y comprobantes
-        empujaba el contenido de cada pantalla por debajo del pliegue sin
-        añadir nada que esas pantallas necesiten.
+        Estuvo sobre la tabla de deudas y se retiró: decía lo mismo que la
+        tabla que va debajo, y empujaba las deudas por debajo del pliegue.
+        La deuda se sigue calculando para la vista -la tabla y sus botones
+        viven de ella-, pero no se pinta como resumen.
         """
+        for url in self.account_screens():
+            for figure in ("Deuda al", "Deudas abiertas", "Vencimiento más antiguo"):
+                with self.subTest(url=url, figure=figure):
+                    response = self.client.get(url)
+
+                    self.assertNotContains(response, figure)
+
+    def test_the_debt_screen_still_computes_the_debt(self):
         response = self.client.get(
             reverse("payments:debt", args=[self.customer.pk])
         )
 
         self.assertEqual(response.context["debt"]["total"], Decimal("50.00"))
-        self.assertContains(response, "Deuda al")
-
-    def test_the_other_account_tabs_do_not_repeat_it(self):
-        for screen in ("payments:history", "payments:receipts"):
-            with self.subTest(screen=screen):
-                response = self.client.get(
-                    reverse(screen, args=[self.customer.pk])
-                )
-
-                self.assertNotContains(response, "Deuda al")
 
 
 class NoTemplateSyntaxLeaksTests(PaymentsTestCase):

@@ -59,6 +59,19 @@ class Office(models.Model):
         verbose_name="Activo"
     )
 
+    # El deposito de la sede no es una ventanilla: nadie esta parado ahi. Es
+    # donde cae lo que llega por banco -transferencia, deposito, billetera-,
+    # que si entra en una sede concreta pero no lo recibe nadie en mostrador.
+    #
+    # Se marca en vez de reconocerse por el nombre porque de ese hecho
+    # dependen dos cosas: no se ofrece como oficina desde la que se atiende,
+    # y no puede ser la que el sistema elige sola para un operador que no
+    # tiene ninguna asignada.
+    is_deposit = models.BooleanField(
+        default=False,
+        verbose_name="Es el deposito de la sede"
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
@@ -70,7 +83,9 @@ class Office(models.Model):
     class Meta:
         verbose_name = "Oficina"
         verbose_name_plural = "Oficinas"
-        ordering = ["branch", "name"]
+        # El deposito cierra la lista de su sede: se elige a proposito, no
+        # por ser el primero que aparece.
+        ordering = ["branch", "is_deposit", "name"]
 
     def __str__(self):
         return f"{self.branch.name} - {self.name}"

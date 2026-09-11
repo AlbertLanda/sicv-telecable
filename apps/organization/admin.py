@@ -12,8 +12,8 @@ class BranchAdmin(admin.ModelAdmin):
 
 @admin.register(Office)
 class OfficeAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "branch", "is_active")
-    list_filter = ("branch", "is_active")
+    list_display = ("code", "name", "branch", "is_deposit", "is_active")
+    list_filter = ("branch", "is_deposit", "is_active")
     search_fields = ("code", "name")
 
 

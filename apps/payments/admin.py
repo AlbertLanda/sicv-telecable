@@ -66,9 +66,10 @@ class PaymentAdmin(admin.ModelAdmin):
         "amount",
         "method",
         "received_at",
+        "office",
         "status",
     ]
-    list_filter = ["method", "status", "branch"]
+    list_filter = ["method", "status", "branch", "office"]
     search_fields = [
         "reference",
         "customer__document_number",
@@ -86,11 +87,25 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
-    list_display = ["full_number", "payment", "issued_at"]
+    list_display = ["full_number", "sequence", "payment", "issued_at"]
+    list_filter = ["sequence"]
     search_fields = ["series", "number"]
     date_hierarchy = "issued_at"
 
 
 @admin.register(ReceiptSequence)
 class ReceiptSequenceAdmin(admin.ModelAdmin):
-    list_display = ["series", "last_number", "updated_at"]
+    # El código manda y la serie impresa se repite, así que la lista muestra
+    # los dos: buscando solo por «S010» aparecen tres filas distintas y hay
+    # que poder decir cuál es cuál.
+    list_display = [
+        "label",
+        "code",
+        "series",
+        "autonumber",
+        "last_number",
+        "is_active",
+        "updated_at",
+    ]
+    list_filter = ["autonumber", "is_active"]
+    search_fields = ["code", "series", "label"]

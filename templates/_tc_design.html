@@ -12,6 +12,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     :root {
         --tc-blue: #0f4c7f;
         --tc-blue-dark: #0a3b66;
+        --tc-blue-hover: #1a68ad;
         --tc-blue-soft: #eef6fd;
         --tc-text: #17355f;
         --tc-muted: #64748b;
@@ -30,11 +31,29 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
     .tc-toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
 
-    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; }
-    .tc-btn:hover { color:#0c4f9e; background:#f7fbff; }
+    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
     .tc-btn.primary { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
     .tc-btn.muted { border-color:#afc0d1; color:#31516f; }
     .tc-btn.square { width:38px; padding:0; }
+
+    /* El hover va DESPUES de las variantes, no antes. Declarado arriba tenia
+       la misma especificidad que `.tc-btn.primary` y perdia por orden: el
+       boton azul se quedaba quieto bajo el cursor y solo reaccionaba el de
+       contorno.
+
+       El azul de reposo (--tc-blue) es un azul de tinta, casi marino. Bajo el
+       cursor sube a --tc-blue-hover, que no es el mismo azul aclarado -eso lo
+       dejaria lavado, como deshabilitado- sino uno mas vivo y saturado: el
+       boton se enciende. Hundirlo se reserva para el clic. */
+    .tc-btn:hover { color:#0c4f9e; background:var(--tc-blue-soft); border-color:#1565c8; box-shadow:0 2px 6px rgba(15, 76, 127, .16); }
+    .tc-btn.primary:hover { background:var(--tc-blue-hover); border-color:var(--tc-blue-hover); color:#fff; box-shadow:0 3px 9px rgba(26, 104, 173, .32); }
+    .tc-btn.muted:hover { background:#eef2f7; border-color:#8fa3b8; color:#1f3b57; box-shadow:0 2px 6px rgba(35, 74, 112, .14); }
+
+    /* Al pulsar se hunde y vuelve al azul de tinta, para que el clic se note
+       aun cuando la pantalla tarde en responder. */
+    .tc-btn:active { box-shadow:inset 0 1px 3px rgba(10, 59, 102, .25); }
+    .tc-btn.primary:active { background:var(--tc-blue-dark); border-color:var(--tc-blue-dark); }
+    .tc-btn:focus-visible { outline:2px solid #2f7df6; outline-offset:2px; }
 
     .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
 
@@ -59,6 +78,15 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     .tc-section { overflow:hidden; }
     .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+
+    /* Cabecera en franja, como la del sistema anterior: marca donde empieza
+       lo que se lee o se llena. Nacio dentro de «Nueva deuda» y se quedaba
+       alli hasta decidir si todas las cabeceras irian asi; la tercera
+       pantalla que la pidio -la tabla de deudas- resolvio la duda, y tres
+       copias del mismo trazo se separan al primer ajuste. */
+    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:13px 26px; }
+    .tc-section-head.banner .tc-section-title { color:#fff; }
+    .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
     .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
     .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
     .tc-section-body { padding:0 14px 14px; }
@@ -200,6 +228,35 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     /* Nota de contexto de una pantalla. Mas discreta que un alert de
        Bootstrap, que ocupaba el ancho entero y competia con los campos. */
+    /* Avisos flotantes. Arriba a la derecha, del tamano de una fila de tabla
+       y no de una tarjeta: el operador no tiene que decidir nada, solo
+       enterarse. Se apilan hacia abajo si caen varios seguidos.
+
+       Van en color pleno y no en blanco con un filo de color. La pantalla ya
+       es blanca con azules serios; un aviso del mismo temple se confunde con
+       una tarjeta mas y hay que buscarlo. En pleno se ve de reojo, que es lo
+       unico que se le pide: aparece, se lee sin mirar y se va.
+
+       El ambar lleva texto oscuro en vez de blanco -blanco sobre amarillo no
+       se lee-, y por eso el reloj y el disco del icono se tinen con
+       `currentColor` en lugar de un blanco fijo.
+
+       La barra del pie es ese reloj: se encoge durante los segundos que dura
+       el aviso, asi que se ve cuanto queda en vez de desaparecer de golpe. */
+    .tc-toast-zone { position:fixed; top:16px; right:16px; z-index:1080; display:flex; flex-direction:column; gap:9px; pointer-events:none; }
+    .tc-toast { pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:center; gap:10px; min-width:240px; max-width:360px; padding:11px 14px 13px; border-radius:8px; color:#fff; font-size:.76rem; font-weight:600; line-height:1.45; cursor:pointer; animation:tc-toast-in .18s ease-out; }
+    .tc-toast i { flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:rgba(255, 255, 255, .22); font-size:.88rem; color:inherit; }
+    .tc-toast.danger { background:linear-gradient(135deg, #f0564a 0%, #d32f2f 100%); box-shadow:0 8px 22px rgba(211, 47, 47, .34); }
+    .tc-toast.warning { background:linear-gradient(135deg, #ffb524 0%, #f08c00 100%); box-shadow:0 8px 22px rgba(240, 140, 0, .34); color:#3b2700; }
+    .tc-toast.warning i { background:rgba(0, 0, 0, .13); }
+    .tc-toast.success { background:linear-gradient(135deg, #25c46e 0%, #0f9d58 100%); box-shadow:0 8px 22px rgba(15, 157, 88, .34); }
+    .tc-toast.info { background:linear-gradient(135deg, #3089d8 0%, #1565a8 100%); box-shadow:0 8px 22px rgba(21, 101, 168, .34); }
+    .tc-toast-bar { position:absolute; left:0; bottom:0; height:3px; width:100%; background:currentColor; opacity:.45; transform-origin:left; animation:tc-toast-bar linear forwards; }
+    .tc-toast.leaving { animation:tc-toast-out .18s ease-in forwards; }
+    @keyframes tc-toast-in { from { opacity:0; transform:translateX(14px); } }
+    @keyframes tc-toast-out { to { opacity:0; transform:translateX(14px); } }
+    @keyframes tc-toast-bar { from { transform:scaleX(1); } to { transform:scaleX(0); } }
+
     .tc-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; margin-bottom:16px; border:1px solid #bfe0f5; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f2f9ff; color:#2a4d70; font-size:.73rem; line-height:1.5; }
     .tc-note i { color:var(--tc-blue); font-size:.95rem; line-height:1.3; }
     .tc-note.danger { border-color:#f2b8b1; border-left-color:#c0392b; background:#fdf3f2; color:#8f2b1f; }
@@ -224,4 +281,109 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
         .tc-form-label { text-align:left; }
         .tc-form-label.top { padding-top:0; }
     }
+
+    /* Quien pidio menos movimiento no ve el deslizamiento ni el reloj. El
+       aviso sigue yendose solo: el temporizador esta en el guion, no en la
+       animacion. */
+    @media (prefers-reduced-motion: reduce) {
+        .tc-toast, .tc-toast.leaving { animation:none; }
+        .tc-toast-bar { animation:none; display:none; }
+    }
 </style>
+
+{% comment %}
+El guion de los avisos viaja con su CSS, en el mismo parcial, a proposito.
+Separados, una pantalla podria cargar el uno sin el otro y el aviso saldria
+sin maqueta -o no saldria- sin que nada lo advierta.
+
+Se declara en el head y no toca el documento hasta que alguien llama a
+`tcAviso`, que es cuando crea la zona.
+
+    tcAviso("Marque la deuda que va a cobrar.");
+    tcAviso("Cobro registrado.", {tono: "success", icono: "bi-check-circle-fill"});
+{% endcomment %}
+<script>
+(function () {
+    var ZONA_ID = "tcAvisos";
+
+    function zona() {
+        var z = document.getElementById(ZONA_ID);
+
+        if (!z) {
+            z = document.createElement("div");
+            z.id = ZONA_ID;
+            z.className = "tc-toast-zone";
+            z.setAttribute("aria-live", "polite");
+            document.body.appendChild(z);
+        }
+
+        return z;
+    }
+
+    window.tcAviso = function (mensaje, opciones) {
+        var conf = opciones || {};
+        var duracion = conf.duracion || 3000;
+        var reloj = null;
+
+        var aviso = document.createElement("div");
+        aviso.className = "tc-toast " + (conf.tono || "danger");
+        aviso.setAttribute("role", "status");
+
+        var icono = document.createElement("i");
+        icono.className = "bi " + (conf.icono || "bi-exclamation-triangle-fill");
+
+        var texto = document.createElement("span");
+        texto.textContent = mensaje;
+
+        var barra = document.createElement("span");
+        barra.className = "tc-toast-bar";
+        barra.style.animationDuration = duracion + "ms";
+
+        aviso.appendChild(icono);
+        aviso.appendChild(texto);
+        aviso.appendChild(barra);
+        zona().appendChild(aviso);
+
+        function cerrar() {
+            window.clearTimeout(reloj);
+
+            if (!aviso.parentNode) {
+                return;
+            }
+
+            aviso.classList.add("leaving");
+            window.setTimeout(function () {
+                if (aviso.parentNode) {
+                    aviso.parentNode.removeChild(aviso);
+                }
+            }, 200);
+        }
+
+        function contar() {
+            reloj = window.setTimeout(cerrar, duracion);
+        }
+
+        contar();
+
+        // Con el cursor encima el reloj se detiene: si el operador fue a
+        // leerlo, no se le escapa a media frase. Al salir vuelve a empezar
+        // entero, que es mas predecible que reanudar un resto invisible.
+        aviso.addEventListener("mouseenter", function () {
+            window.clearTimeout(reloj);
+            barra.style.animationPlayState = "paused";
+        });
+
+        aviso.addEventListener("mouseleave", function () {
+            barra.style.animation = "none";
+            void barra.offsetWidth;
+            barra.style.animation = "";
+            barra.style.animationDuration = duracion + "ms";
+            contar();
+        });
+
+        aviso.addEventListener("click", cerrar);
+
+        return aviso;
+    };
+})();
+</script>

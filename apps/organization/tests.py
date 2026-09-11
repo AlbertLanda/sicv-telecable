@@ -122,12 +122,68 @@ class ActiveBranchTests(TestCase):
 
 
     def test_user_without_office_defaults_to_first_active_office(self):
+        """Sin oficina asignada se resuelve la primera de la sede, por nombre.
+
+        No se compara contra la oficina que crea esta prueba: el padron real
+        se siembra por migracion, asi que la sede llega con las suyas y la
+        primera puede ser cualquiera de ellas. Lo que se fija es la regla.
+        """
+        self.user.office = None
+        self.user.save(update_fields=["office"])
+
+        esperada = (
+            Office.objects
+            .filter(branch=self.huancayo, is_active=True, is_deposit=False)
+            .order_by("name", "pk")
+            .first()
+        )
+
+        response = self.client.get(reverse("customers:search"))
+
+        self.assertEqual(response.context["active_office"], esperada)
+
+    def test_the_deposit_is_never_the_office_chosen_by_default(self):
+        """Del deposito no se atiende a nadie.
+
+        Es donde cae lo que llega por banco. Si el sistema lo eligiera solo,
+        los cobros de un operador recien creado dirian que el dinero entro
+        por transferencia sin que nadie lo haya dicho.
+        """
+        Office.objects.filter(branch=self.huancayo).update(is_active=False)
+
+        deposito = Office.objects.create(
+            branch=self.huancayo,
+            code="HYO-DEP",
+            name="A Deposito",
+            is_deposit=True,
+        )
+
         self.user.office = None
         self.user.save(update_fields=["office"])
 
         response = self.client.get(reverse("customers:search"))
 
-        self.assertEqual(
-            response.context["active_office"],
-            self.huancayo_office,
+        self.assertIsNone(response.context["active_office"])
+        self.assertNotEqual(response.context["active_office"], deposito)
+
+    def test_the_deposit_is_offered_in_the_top_bar(self):
+        """El deposito se elige donde se elige todo lo demas.
+
+        Quien cobra una transferencia lo elige aqui antes de registrarla: la
+        pantalla de cobro no vuelve a preguntarlo, solo muestra lo elegido.
+        Quien puede hacerlo es una decision de rol todavia sin tomar.
+        """
+        deposito = Office.objects.create(
+            branch=self.huancayo,
+            code="HYO-DEP2",
+            name="Deposito",
+            is_deposit=True,
         )
+
+        response = self.client.get(reverse("customers:search"))
+
+        self.assertIn(
+            self.huancayo_office,
+            response.context["available_offices"],
+        )
+        self.assertIn(deposito, response.context["available_offices"])

@@ -14,11 +14,18 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.payments.models import Charge, Payment, PaymentAllocation, Receipt
+from apps.payments.models import (
+    Charge,
+    Payment,
+    PaymentAllocation,
+    Receipt,
+    ReceiptSequence,
+)
 from apps.payments.services import (
     authorizer_options,
     collector_options,
     discount_for,
+    receipt_sequence,
     receipt_series_options,
     register_payment,
 )
@@ -279,12 +286,37 @@ class CollectorAndSeriesTests(ComprobanteTestCase):
 
         self.assertNotIn(seller, list(collector_options()))
 
-    def test_the_default_series_always_exists(self):
-        """La ventanilla nunca debe quedarse sin serie con la que cobrar."""
+    def test_the_window_is_never_left_without_a_book(self):
+        """La ventanilla nunca debe quedarse sin talonario con el que cobrar."""
         series = receipt_series_options()
 
         self.assertTrue(series)
-        self.assertIn("R001", [item.series for item in series])
+
+    def test_the_systems_own_book_is_no_longer_offered(self):
+        """R001 se usó mientras no había padrón y no vuelve a la ventanilla.
+
+        Donde ya existe no se borra -sus comprobantes se entregaron y tienen
+        que poder seguir explicándose-, y donde no, no se crea para rellenar
+        la lista. En ninguno de los dos casos se ofrece para cobrar.
+        """
+        codes = [item.code for item in receipt_series_options()]
+
+        self.assertNotIn("R001", codes)
+
+    def test_a_book_created_on_the_fly_is_born_retired(self):
+        """Llegar a crearlo significa que nadie lo eligió en la ventanilla.
+
+        Ofrecerlo después pondría a elegir un block que no existe en papel.
+        """
+        receipt_sequence("NOEXISTE")
+
+        sequence = ReceiptSequence.objects.get(code="NOEXISTE")
+
+        self.assertFalse(sequence.is_active)
+        self.assertNotIn(
+            "NOEXISTE",
+            [item.code for item in receipt_series_options()],
+        )
 
     def test_only_deciding_roles_are_offered_as_authorizers(self):
         supervisor = self.make_user("super1", role=User.Role.SUPERVISOR)

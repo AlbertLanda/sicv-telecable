@@ -35,6 +35,37 @@ class ConceptSelect(forms.Select):
         return option
 
 
+class SeriesSelect(forms.Select):
+    """Desplegable de talonarios que lleva el número que le toca a cada uno.
+
+    Elegir la serie completa el número, y esa correspondencia es un dato del
+    talonario, no del formulario. Viaja en cada `<option>` para que la
+    pantalla lo resuelva sin volver a preguntar al servidor cada vez que el
+    operador cambia de serie.
+
+    Los blocks que no numeran solos viajan con el atributo vacío: ahí el
+    número lo escribe el operador, y proponerle uno sería inventarlo.
+    """
+
+    def __init__(self, *args, sequences=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sequences = sequences or {}
+
+    def create_option(self, name, value, label, selected, index, **kwargs):
+        option = super().create_option(
+            name, value, label, selected, index, **kwargs
+        )
+
+        sequence = self.sequences.get(str(value))
+
+        if sequence is not None:
+            option["attrs"]["data-numero"] = (
+                "" if sequence.next_number is None else sequence.next_number
+            )
+
+        return option
+
+
 def _style_widgets(form):
     """Aplica al formulario el trazo del sistema visual compartido.
 
@@ -71,6 +102,15 @@ class PaymentRegisterForm(forms.Form):
 
     series = forms.ChoiceField(
         label="Serie",
+        required=False,
+    )
+
+    # El correlativo lo propone la serie, pero se escribe: hay blocks de papel
+    # que ya vienen numerados y el operador tiene que poder poner el que toca.
+    # Opcional porque las series que numeran solas no necesitan que lo envie.
+    number = forms.IntegerField(
+        label="Número",
+        min_value=1,
         required=False,
     )
 
@@ -126,10 +166,15 @@ class PaymentRegisterForm(forms.Form):
         # nueva ni un vendedor recien creado hasta reiniciar el servidor.
         from .services import collector_options, receipt_series_options
 
+        sequences = receipt_series_options()
+
         self.fields["series"].choices = [
-            (sequence.series, sequence.series)
-            for sequence in receipt_series_options()
+            (sequence.code, sequence.label) for sequence in sequences
         ]
+        self.fields["series"].widget = SeriesSelect(
+            sequences={sequence.code: sequence for sequence in sequences},
+            choices=self.fields["series"].choices,
+        )
         self.fields["collector"].queryset = collector_options()
 
         _style_widgets(self)

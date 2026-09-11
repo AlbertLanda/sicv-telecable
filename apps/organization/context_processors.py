@@ -66,7 +66,9 @@ def get_active_office(request, branch=None):
     Orden de resolución:
     1. oficina elegida en la sesión;
     2. oficina asignada al usuario si pertenece a la sede activa;
-    3. primera oficina activa de la sede activa.
+    3. primera oficina activa de la sede activa, sin contar su deposito:
+       nadie atiende desde ahi, y elegirlo solo haria que los cobros de un
+       operador recien creado dijeran que el dinero entro por banco.
     """
     if not request.user.is_authenticated:
         return None
@@ -101,6 +103,7 @@ def get_active_office(request, branch=None):
         .filter(
             branch=branch,
             is_active=True,
+            is_deposit=False,
         )
         .order_by("name", "pk")
         .first()
@@ -178,6 +181,13 @@ def organization(request):
 
     active_branch = get_active_branch(request)
 
+    # La barra ofrece todas las ubicaciones de la sede, su deposito incluido.
+    # El deposito es donde cae lo que llega por banco, y quien cobra una
+    # transferencia lo elige aqui antes de registrarla: la pantalla de cobro
+    # no vuelve a preguntarlo, solo muestra lo que esta elegido.
+    #
+    # Esta abierto a cualquiera a proposito y por ahora: quien puede cobrar
+    # contra el deposito es una decision de rol que todavia no esta tomada.
     offices = (
         Office.objects.filter(branch=active_branch, is_active=True)
         if active_branch

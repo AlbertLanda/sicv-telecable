@@ -432,7 +432,7 @@
         <div class="dropdown topbar-office">
             <a href="#" class="topbar-control dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-geo-alt-fill"></i>
-                <span>{{ active_office.name|default:"Oficina" }}</span>
+                <span>{{ active_office|default:"Oficina" }}</span>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
                 {% for office in available_offices %}
@@ -441,7 +441,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="office" value="{{ office.pk }}">
                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office.name }}</button>
+                        <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office }}</button>
                     </form>
                 </li>
                 {% endfor %}

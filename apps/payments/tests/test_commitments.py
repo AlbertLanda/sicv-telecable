@@ -341,7 +341,7 @@ class CommitmentWebTests(CommitmentTestCase):
 
         self.assertLess(
             body.index("Compromiso de pago vigente"),
-            body.index("Total adeudado"),
+            body.index('id="deudasForm"'),
         )
 
     def test_cancelling_from_the_board_requires_the_permission(self):
