@@ -2,7 +2,37 @@
 
 {% block title %}Comprobante {{ receipt.full_number }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    .tc-sheet .tc-section-body { padding:24px 26px 26px; }
+    .tc-sheet .tc-form { gap:18px 22px; }
+    .tc-sheet .tc-field-row { gap:12px; }
+
+    .tc-debt-block { border:1px solid var(--tc-border); border-radius:6px; overflow:hidden; }
+    .tc-debt-block .tc-table { margin:0; }
+
+    /* Un campo bloqueado no se pinta como uno vacio esperando texto: el
+       cursor de «prohibido» dice que no hay nada que escribir aqui antes de
+       que el operador lo intente. */
+    .tc-sheet [disabled] { cursor:not-allowed; }
+
+</style>
+{% endblock %}
+
+{% comment %}
+El comprobante emitido, con la misma ficha con la que se cobro.
+
+No es una pantalla nueva: es la de cobro con todo bloqueado. El operador que
+abre un comprobante desde el historial esta comprobando que lo que se cobro es
+lo que dice el papel, y compararlo contra una ficha distinta -otras etiquetas,
+otro orden, otras columnas- le obliga a traducir entre las dos. Con la misma
+ficha, la comprobacion es mirar el mismo sitio.
+
+Bloqueado con `disabled` y no con `readonly`: un comprobante emitido no se
+corrige, se anula y se emite otro. `readonly` deja el campo enfocable y con
+aspecto de editable, que invita a intentarlo.
+{% endcomment %}
 
 {% block content %}
 
@@ -11,24 +41,9 @@
     <div class="tc-breadcrumb d-print-none">
         <a href="{% url 'customers:search' %}">Clientes</a>
         &nbsp;›&nbsp;
-        <a href="{% url 'payments:receipts' pk=customer.pk %}">Comprobantes de pago</a>
+        <a href="{% url 'payments:history' pk=customer.pk %}">Historial de pagos</a>
         &nbsp;›&nbsp;
         <strong>{{ receipt.full_number }}</strong>
-    </div>
-
-    <div class="tc-toolbar">
-        <h1 class="tc-section-title" style="font-size:1rem;">
-            <i class="bi bi-receipt"></i>Comprobante {{ receipt.full_number }}
-        </h1>
-
-        <div class="tc-toolbar-actions d-print-none">
-            <a href="?print=1" class="tc-btn primary">
-                <i class="bi bi-printer"></i>Imprimir
-            </a>
-            <a href="{% url 'payments:receipts' pk=customer.pk %}" class="tc-btn muted">
-                Volver
-            </a>
-        </div>
     </div>
 
     {% if receipt.is_voided %}
@@ -48,138 +63,227 @@
         </div>
     {% endif %}
 
-    <section class="tc-card tc-section tc-full">
+    <section class="tc-card tc-section tc-full tc-sheet">
 
-        <div class="tc-section-head">
+        <div class="tc-section-head banner">
             <h2 class="tc-section-title">
-                <i class="bi bi-person-vcard"></i>Datos del comprobante
+                <i class="bi bi-receipt"></i>Comprobante {{ receipt.full_number }}
             </h2>
-            {% if not receipt.is_voided and receipt.payment.status != "PENDING" %}
-                <span class="tc-pill success">Cancelado</span>
-            {% endif %}
         </div>
 
         <div class="tc-section-body">
-            <div class="tc-data-grid">
+            <div class="tc-form">
 
-                <div>
-                    <div class="tc-data-label">Abonado</div>
-                    <div class="tc-data-value">{{ customer }}</div>
-                    <div class="tc-data-label">
-                        {{ customer.get_document_type_display }} {{ customer.document_number }}
-                        · Código {{ customer.code }}
+                <div class="tc-form-label">Código</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-sm"
+                           value="{{ receipt.pk }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Fecha y hora</div>
+                <div class="tc-form-field">
+                    <div class="tc-field-row">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ receipt.issued_at|date:'d/m/Y' }}" disabled>
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{{ receipt.issued_at|date:'H:i' }}" disabled>
                     </div>
                 </div>
 
-                <div>
-                    <div class="tc-data-label">Emitido</div>
-                    <div class="tc-data-value">{{ receipt.issued_at|date:"d/m/Y H:i" }}</div>
-                    <div class="tc-data-label">{{ receipt.payment.branch.name }}</div>
+                <div class="tc-form-label">Serie</div>
+                <div class="tc-form-field">
+                    <div class="tc-field-row">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ receipt.sequence.label }}"
+                               aria-label="Serie" disabled>
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ receipt.payment.office|default:receipt.payment.branch }}"
+                               aria-label="Lugar de cobro" disabled>
+                    </div>
                 </div>
 
-                <div>
-                    <div class="tc-data-label">Medio de pago</div>
-                    <div class="tc-data-value">{{ receipt.payment.get_method_display }}</div>
-                    {% if receipt.payment.reference %}
-                        <div class="tc-data-label">Op. {{ receipt.payment.reference }}</div>
-                    {% endif %}
+                <div class="tc-form-label">Número</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-sm"
+                           value="{{ printed_number }}" disabled>
                 </div>
 
-                <div>
-                    <div class="tc-data-label">Recibido por</div>
-                    <div class="tc-data-value">{{ receipt.payment.received_by }}</div>
-                    {% if receipt.payment.collector %}
-                        <div class="tc-data-label">Cobró {{ receipt.payment.collector }}</div>
-                    {% endif %}
+                <div class="tc-form-label">Usuario</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-md"
+                           value="{{ receipt.payment.received_by }}" disabled>
+                </div>
+
+                {% comment %}
+                Las deudas que cubrió, con las columnas del cobro: es la misma
+                tabla que el operador tuvo delante al marcar y aceptar.
+                {% endcomment %}
+                <div class="tc-form-label top">Deuda</div>
+                <div class="tc-form-field">
+                    <div class="tc-debt-block table-responsive">
+                        <table class="tc-table">
+                            <thead>
+                                <tr>
+                                    <th class="num">Cantidad</th>
+                                    <th>Código de abonado</th>
+                                    <th>Descripción</th>
+                                    <th>Moneda</th>
+                                    <th class="num">Monto</th>
+                                    <th class="num">Descuento</th>
+                                    <th class="num">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for allocation in allocations %}
+                                    <tr>
+                                        <td class="num">{{ allocation.charge.quantity|floatformat:0 }}</td>
+                                        <td>{{ customer.code }}</td>
+                                        <td>{{ allocation.charge.description }}</td>
+                                        <td>{{ allocation.charge.currency }}</td>
+                                        <td class="num">S/ {{ allocation.gross_amount|floatformat:2 }}</td>
+                                        <td class="num">S/ {{ allocation.discount|floatformat:2 }}</td>
+                                        <td class="num">S/ {{ allocation.amount|floatformat:2 }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="7" class="tc-empty">
+                                            El pago no se aplicó a ninguna deuda:
+                                            quedó como saldo a favor del abonado.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                            {% if allocations %}
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="4" class="num">Totales</th>
+                                        <th class="num">S/ {{ totals.gross|floatformat:2 }}</th>
+                                        <th class="num">S/ {{ totals.discount|floatformat:2 }}</th>
+                                        <th class="num">S/ {{ totals.net|floatformat:2 }}</th>
+                                    </tr>
+                                </tfoot>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tc-form-label">Total</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-sm"
+                           value="{{ receipt.payment.amount|floatformat:2 }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Cancelado</div>
+                <div class="tc-form-field">
+                    <div class="tc-choices">
+                        <label class="tc-choice">
+                            <input type="radio" class="form-check-input" disabled
+                                   {% if receipt.payment.status != "PENDING" %}checked{% endif %}>
+                            <span>Sí</span>
+                        </label>
+                        <label class="tc-choice">
+                            <input type="radio" class="form-check-input" disabled
+                                   {% if receipt.payment.status == "PENDING" %}checked{% endif %}>
+                            <span>No (Pendiente)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="tc-form-label">Fecha de pago</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-md"
+                           value="{{ paid_at|date:'d/m/Y' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Hora de pago</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-sm"
+                           value="{{ paid_at|date:'H:i' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Medio de pago</div>
+                <div class="tc-form-field">
+                    <div class="tc-choices">
+                        {% for value, label in methods %}
+                            <label class="tc-choice">
+                                <input type="radio" class="form-check-input" disabled
+                                       {% if value == receipt.payment.method %}checked{% endif %}>
+                                <span>{{ label }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="tc-form-label">Número de operación</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-lg"
+                           value="{{ receipt.payment.reference }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Cobrador</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-lg"
+                           value="{{ receipt.payment.collector|default:'—' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Fecha de vencimiento</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly tc-w-md"
+                           value="{{ receipt.payment.due_date|date:'d/m/Y' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Anulado</div>
+                <div class="tc-form-field">
+                    <input type="checkbox" class="form-check-input" disabled
+                           {% if receipt.is_voided %}checked{% endif %}
+                           aria-label="Anulado">
+                </div>
+
+                <div class="tc-form-label top">Observaciones</div>
+                <div class="tc-form-field">
+                    <textarea class="form-control tc-readonly tc-w-xl" rows="3"
+                              disabled>{{ receipt.payment.note }}</textarea>
+                </div>
+
+                <div class="tc-form-label top d-print-none">Enviar al abonado</div>
+                <div class="tc-form-field d-print-none">
+                    <div class="tc-actions" style="margin-top:0;">
+                        <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}"
+                           class="tc-btn primary">
+                            <i class="bi bi-file-earmark-pdf"></i>Descargar PDF
+                        </a>
+                    </div>
                 </div>
 
             </div>
         </div>
 
-    </section>
+        <div class="tc-card-footer d-print-none">
+            {% comment %}
+            Imprimir abre el PDF en la pestaña de al lado, en el visor del
+            navegador. No vuelve a pintar esta misma pantalla ni lanza el
+            diálogo por su cuenta: eso duplicaba la ficha y tapaba la consulta
+            con un cuadro que el operador no había pedido todavía.
 
-    <section class="tc-card tc-section tc-full">
-
-        <div class="tc-section-head">
-            <h2 class="tc-section-title">
-                <i class="bi bi-list-check"></i>Deudas cubiertas
-            </h2>
+            Lo que se ve en esa pestaña es el papel -el mismo archivo que baja
+            «Descargar PDF»-, no la pantalla de consulta, así que lo que sale
+            por la impresora es lo que el abonado se lleva. El visor ya trae
+            sus botones de imprimir y guardar.
+            {% endcomment %}
+            <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1"
+               target="_blank" rel="noopener"
+               class="tc-btn primary">
+                <i class="bi bi-printer"></i>Imprimir
+            </a>
+            <a href="{% url 'payments:history' pk=customer.pk %}" class="tc-btn muted">
+                Volver
+            </a>
         </div>
 
-        <div class="table-responsive">
-            <table class="tc-table">
-                <thead>
-                    <tr>
-                        <th>Concepto</th>
-                        <th>Periodo</th>
-                        <th>Vencimiento</th>
-                        <th class="num">Monto</th>
-                        <th class="num">Descuento</th>
-                        <th class="num">Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for allocation in receipt.payment.allocations.all %}
-                        <tr>
-                            <td>{{ allocation.charge.description }}</td>
-                            <td>{{ allocation.charge.period_label|default:"—" }}</td>
-                            <td>{{ allocation.charge.due_date|date:"d/m/Y" }}</td>
-                            <td class="num">S/ {{ allocation.gross_amount|floatformat:2 }}</td>
-                            <td class="num">S/ {{ allocation.discount|floatformat:2 }}</td>
-                            <td class="num">S/ {{ allocation.amount|floatformat:2 }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="6" class="tc-empty" style="padding:14px 9px;">
-                                El pago no se aplicó a ninguna deuda: quedó como
-                                saldo a favor del abonado.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    {% if receipt.payment.unallocated_amount > 0 %}
-                        <tr>
-                            <th colspan="5" class="num">Saldo a favor</th>
-                            <th class="num">
-                                S/ {{ receipt.payment.unallocated_amount|floatformat:2 }}
-                            </th>
-                        </tr>
-                    {% endif %}
-                    <tr>
-                        <th colspan="5" class="num">Total recibido</th>
-                        <th class="num">S/ {{ receipt.payment.amount|floatformat:2 }}</th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-
-        {% if receipt.payment.note %}
-            <div class="tc-section-body">
-                <div class="tc-data-label">Observaciones</div>
-                <div class="tc-data-value">{{ receipt.payment.note }}</div>
-            </div>
-        {% endif %}
-
     </section>
-
-    <div class="tc-footer">
-        <span>
-            Documento interno. No constituye comprobante electrónico SUNAT.
-        </span>
-        <span>{{ receipt.full_number }}</span>
-    </div>
 
 </div>
 
 {% endblock %}
 
-{% block extra_js %}
-{% if autoprint %}
-<script>
-    window.addEventListener("load", function () {
-        window.print();
-    });
-</script>
-{% endif %}
-{% endblock %}
+

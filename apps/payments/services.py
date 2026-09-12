@@ -29,6 +29,7 @@ from .models import (
     Receipt,
     ReceiptSequence,
     ZERO,
+    format_receipt_number,
 )
 
 
@@ -309,7 +310,8 @@ def issue_receipt_number(sequence, number=None):
 
     if Receipt.objects.filter(sequence=bloqueado, number=number).exists():
         raise ValidationError(
-            f"El comprobante {sequence.series}-{number:06d} ya fue emitido."
+            f"El comprobante {sequence.series}-"
+            f"{format_receipt_number(number)} ya fue emitido."
         )
 
     if bloqueado.autonumber and number > bloqueado.last_number:

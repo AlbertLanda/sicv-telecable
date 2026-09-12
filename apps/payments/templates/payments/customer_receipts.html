@@ -70,7 +70,16 @@
                                        class="tc-icon-btn" title="Ver comprobante">
                                         <i class="bi bi-eye"></i>
                                     </a>
-                                    <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}?print=1"
+                                    {% comment %}
+                                    Al PDF, como el boton de la ficha: lo que
+                                    se imprime es el papel, no la pantalla de
+                                    consulta. Apuntaba a la ficha con
+                                    ?print=1, que dejo de lanzar nada cuando
+                                    la impresion paso al PDF, y el icono se
+                                    quedaba abriendo la consulta sin imprimir.
+                                    {% endcomment %}
+                                    <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1"
+                                       target="_blank" rel="noopener"
                                        class="tc-icon-btn" title="Imprimir comprobante">
                                         <i class="bi bi-printer"></i>
                                     </a>

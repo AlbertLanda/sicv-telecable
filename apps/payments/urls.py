@@ -63,6 +63,14 @@ urlpatterns = [
         views.ReceiptDetailView.as_view(),
         name="receipt_detail",
     ),
+
+    # El mismo comprobante como archivo. Cuelga del comprobante y no del
+    # abonado porque es el mismo documento por otra salida, no otra pantalla.
+    path(
+        "comprobantes/<int:pk>/pdf/",
+        views.ReceiptPdfView.as_view(),
+        name="receipt_pdf",
+    ),
     path(
         "pagos/<int:pk>/anular/",
         views.PaymentVoidView.as_view(),

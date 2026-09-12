@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from apps.organization.context_processors import ACTIVE_OFFICE_SESSION_KEY
 from apps.organization.models import Office
+from apps.payments.forms import PaymentRegisterForm
 from apps.payments.models import Charge, Payment, Receipt, ReceiptSequence
 from apps.payments.services import register_payment
 from apps.payments.tests.base import PaymentsTestCase
@@ -82,7 +83,7 @@ class TalonarioTests(PaymentsTestCase):
 
         self.assertEqual(receipt.number, 41314)
         self.assertEqual(receipt.series, "B001")
-        self.assertEqual(receipt.full_number, "B001-041314")
+        self.assertEqual(receipt.full_number, "B001-0041314")
 
     def test_the_next_one_continues(self):
         self.cobrar(series="B001")
@@ -329,8 +330,10 @@ class FormularioDeCobroTests(PaymentsTestCase):
         """
         body = self.pantalla().content.decode()
 
-        self.assertIn('data-numero="41314"', body)
-        self.assertIn('data-numero="267"', body)
+        # Con sus ceros: la opcion propone lo que se va a escribir en el
+        # campo, y el campo muestra el numero tal como ira impreso.
+        self.assertIn('data-numero="0041314"', body)
+        self.assertIn('data-numero="0000267"', body)
 
     def test_a_hand_numbered_book_proposes_nothing(self):
         body = self.pantalla().content.decode()
@@ -351,7 +354,69 @@ class FormularioDeCobroTests(PaymentsTestCase):
 
         self.assertIn('name="number"', body)
         self.assertNotIn("disabled", str(campo))
-        self.assertEqual(campo.value(), 41314)
+        self.assertEqual(campo.value(), "0041314")
+
+    def test_the_proposed_number_keeps_its_leading_zeros(self):
+        """El campo muestra lo que se va a imprimir, no el entero pelado.
+
+        El comprobante que se entrega dice «B001-0041314». Sin los ceros el
+        operador leía 41314 en pantalla y otra cosa en el papel, y el que
+        después buscaba ese papel no encontraba por cuál de los dos buscar.
+        """
+        response = self.pantalla()
+
+        self.assertEqual(response.context["form"]["number"].value(), "0041314")
+        self.assertIn('value="0041314"', response.content.decode())
+
+    def test_a_number_written_with_zeros_is_the_same_number(self):
+        """«003031» y «3031» son el mismo comprobante.
+
+        Los ceros son cómo se lee, no cuánto vale: exigirlos -o prohibirlos-
+        sería inventarle al operador una regla que el block de papel no tiene.
+        """
+        formulario = PaymentRegisterForm(
+            data={
+                "amount": "50.00",
+                "method": Payment.Method.CASH,
+                "settled": "1",
+                "series": "B001",
+                "number": "003031",
+            }
+        )
+
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertEqual(formulario.cleaned_data["number"], 3031)
+
+    def test_a_number_that_is_not_digits_is_rejected(self):
+        formulario = PaymentRegisterForm(
+            data={
+                "amount": "50.00",
+                "method": Payment.Method.CASH,
+                "settled": "1",
+                "series": "B001",
+                "number": "30-31",
+            }
+        )
+
+        self.assertFalse(formulario.is_valid())
+        self.assertIn("number", formulario.errors)
+
+    def test_the_receipt_is_issued_with_the_number_written_with_zeros(self):
+        """De punta a punta: lo escrito con ceros llega al papel igual."""
+        self.client.post(
+            reverse("payments:register", args=[self.customer.pk]),
+            {
+                "amount": "50.00",
+                "method": Payment.Method.CASH,
+                "settled": "1",
+                "series": "B001",
+                "number": "0041314",
+            },
+        )
+        receipt = Receipt.objects.latest("pk")
+
+        self.assertEqual(receipt.number, 41314)
+        self.assertEqual(receipt.full_number, "B001-0041314")
 
     def test_the_screen_opens_on_the_first_book_that_numbers_itself(self):
         """No en el primero de la lista, que es un block de cobrador.
@@ -418,5 +483,5 @@ class ComprobanteDelTalonarioTests(PaymentsTestCase):
             allocations=[(charge, Decimal("50.00"))],
         )
 
-        self.assertEqual(receipt.full_number, "S010-000267")
+        self.assertEqual(receipt.full_number, "S010-0000267")
         self.assertEqual(Receipt.objects.filter(sequence__code="S010-RED-OPTICA").count(), 1)

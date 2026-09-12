@@ -151,7 +151,7 @@ class PaymentHistoryScreenTests(AccountScreensTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Mensualidad 08/2026")
-        self.assertContains(response, "R001-000001")
+        self.assertContains(response, "R001-0000001")
 
     def test_a_voided_payment_stays_visible(self):
         """El historial no esconde lo anulado.
@@ -201,7 +201,7 @@ class ReceiptsScreenTests(AccountScreensTestCase):
         response = self.client.get(self.receipts_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "R001-000001")
+        self.assertContains(response, "R001-0000001")
 
     def test_the_receipt_of_a_voided_payment_is_marked(self):
         payment, receipt = register_payment(

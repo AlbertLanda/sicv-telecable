@@ -6,7 +6,14 @@ from django import forms
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
-from .models import Charge, ChargeConcept, Payment, ZERO
+from .models import (
+    Charge,
+    ChargeConcept,
+    Payment,
+    ZERO,
+    RECEIPT_NUMBER_WIDTH,
+    format_receipt_number,
+)
 from .services import default_concept, monthly_reference
 
 
@@ -59,8 +66,11 @@ class SeriesSelect(forms.Select):
         sequence = self.sequences.get(str(value))
 
         if sequence is not None:
-            option["attrs"]["data-numero"] = (
-                "" if sequence.next_number is None else sequence.next_number
+            # Formateado, no crudo: es lo que se va a escribir en el campo y
+            # lo que acabara impreso en el papel. Crudo, elegir la serie
+            # borraba los ceros del numero que el operador tenia delante.
+            option["attrs"]["data-numero"] = format_receipt_number(
+                sequence.next_number
             )
 
         return option
@@ -108,10 +118,18 @@ class PaymentRegisterForm(forms.Form):
     # El correlativo lo propone la serie, pero se escribe: hay blocks de papel
     # que ya vienen numerados y el operador tiene que poder poner el que toca.
     # Opcional porque las series que numeran solas no necesitan que lo envie.
-    number = forms.IntegerField(
+    #
+    # Cadena y no entero, aunque se guarde como entero. Lo que el operador
+    # tiene delante es la representacion impresa del comprobante -«003031»-, y
+    # un IntegerField la normaliza a 3031 en cuanto el formulario se vuelve a
+    # pintar: el campo se quedaba sin sus ceros y dejaba de parecerse al papel
+    # que se iba a entregar. El valor numerico se recupera al limpiar, que es
+    # donde hace falta.
+    number = forms.CharField(
         label="Número",
-        min_value=1,
         required=False,
+        max_length=RECEIPT_NUMBER_WIDTH + 4,
+        widget=forms.TextInput(attrs={"inputmode": "numeric"}),
     )
 
     method = forms.ChoiceField(
@@ -178,6 +196,33 @@ class PaymentRegisterForm(forms.Form):
         self.fields["collector"].queryset = collector_options()
 
         _style_widgets(self)
+
+    def clean_number(self):
+        """De la cadena escrita al entero que se guarda.
+
+        Los ceros a la izquierda se aceptan y se descartan aqui: «003031» y
+        «3031» son el mismo comprobante, y obligar a escribir los ceros -o
+        prohibirlos- seria inventarle una regla al operador que el papel no
+        tiene.
+        """
+        escrito = (self.cleaned_data.get("number") or "").strip()
+
+        if not escrito:
+            return None
+
+        if not escrito.isdigit():
+            raise forms.ValidationError(
+                "El número del comprobante se escribe solo con dígitos."
+            )
+
+        numero = int(escrito)
+
+        if numero < 1:
+            raise forms.ValidationError(
+                "El número del comprobante debe ser mayor a cero."
+            )
+
+        return numero
 
     def clean_reference(self):
         return (self.cleaned_data.get("reference") or "").strip()

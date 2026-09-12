@@ -4,6 +4,22 @@
 
 {% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
 
+{% comment %}
+Historial de pagos.
+
+Lleva las mismas columnas que el tablero de deuda -abonado, fecha, cantidad,
+detalle, periodo, moneda, monto, documento y vencimiento- porque es la misma
+lista leída del otro lado: lo que ya se cobró. Un operador que salta de una
+pestaña a la otra encuentra las columnas donde las dejó, y el «Documento» es
+la única que cambia de significado: en deuda está casi siempre vacío y aquí
+siempre lleva el comprobante que cerró la fila.
+
+Una fila por deuda pagada y no por pago. Es lo que el abonado pregunta -«¿mi
+mensualidad de octubre está pagada?»- y lo único que permite que el periodo y
+el vencimiento quepan en la fila: un pago que cubrió tres meses tiene tres
+periodos y tres vencimientos, y agrupado por pago no cabía ninguno.
+{% endcomment %}
+
 {% block content %}
 
 <div class="tc-content">
@@ -12,101 +28,80 @@
 
     <section class="tc-card tc-section tc-full">
 
-        <div class="tc-section-head">
+        <div class="tc-section-head banner">
             <h2 class="tc-section-title">
-                <i class="bi bi-clock-history"></i>Historial de pagos
+                <i class="bi bi-clock-history"></i>Pagos
             </h2>
-            {% if page_obj %}
-                <span class="tc-pill">{{ page_obj.paginator.count }} movimiento{{ page_obj.paginator.count|pluralize }}</span>
-            {% endif %}
         </div>
 
-        {% if payments %}
+        {% if rows %}
 
             <div class="table-responsive">
                 <table class="tc-table">
                     <thead>
                         <tr>
+                            <th>Abonado</th>
                             <th>Fecha</th>
-                            <th>Comprobante</th>
-                            <th>Medio de pago</th>
-                            <th>Operación</th>
-                            <th>Aplicado a</th>
+                            <th class="num">Cantidad</th>
+                            <th>Detalle</th>
+                            <th>Periodo</th>
+                            <th>Moneda</th>
                             <th class="num">Monto</th>
-                            <th>Estado</th>
-                            {% if can_void_payment %}<th></th>{% endif %}
+                            <th>Documento</th>
+                            <th>Vencimiento</th>
+                            <th>Observación</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for payment in payments %}
-                            <tr {% if payment.status == "VOIDED" %}style="opacity:.62;"{% endif %}>
+                        {% for row in rows %}
+                            <tr {% if row.payment.status == "VOIDED" %}style="opacity:.62;"{% endif %}>
                                 <td>
-                                    {{ payment.received_at|date:"d/m/Y H:i" }}
-                                    <span class="tc-sub">
-                                        {% if payment.collector %}
-                                            Cobró {{ payment.collector }} ·
-                                        {% endif %}
-                                        {{ payment.received_by }}
-                                    </span>
+                                    <a href="{% url 'customers:detail' pk=customer.pk %}">
+                                        {{ customer.code }}
+                                    </a>
                                 </td>
+                                <td>{{ row.date|date:"d/m/Y" }}</td>
+                                <td class="num">
+                                    {% if row.quantity %}
+                                        {{ row.quantity|floatformat:5 }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.detail }}</td>
+                                <td>{{ row.period|default:"—" }}</td>
+                                <td>{{ row.currency }}</td>
+                                <td class="num">S/ {{ row.amount|floatformat:2 }}</td>
                                 <td>
-                                    {% if payment.receipt %}
-                                        <a href="{% url 'payments:receipt_detail' pk=payment.receipt.pk %}">
-                                            {{ payment.receipt.full_number }}
+                                    {% if row.receipt %}
+                                        <a href="{% url 'payments:receipt_detail' pk=row.receipt.pk %}">
+                                            {{ row.receipt.full_number }}
                                         </a>
                                     {% else %}
                                         <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ payment.get_method_display }}</td>
-                                <td>{{ payment.reference|default:"—" }}</td>
+                                <td>{{ row.due_date|date:"d/m/Y"|default:"—" }}</td>
+
+                                {% comment %}
+                                La observación del cobro, y el motivo cuando
+                                se anuló: es la misma columna -por qué esta
+                                fila dice lo que dice- y un pago anulado sin
+                                su motivo deja al operador sin nada que
+                                contestar cuando el abonado pregunta.
+                                {% endcomment %}
                                 <td>
-                                    {% for allocation in payment.allocations.all %}
-                                        {{ allocation.charge.description }}
-                                        <span class="tc-sub">
-                                            S/ {{ allocation.amount|floatformat:2 }}
-                                            {% if allocation.discount %}
-                                                · descuento S/ {{ allocation.discount|floatformat:2 }}
-                                            {% endif %}
-                                        </span>
-                                    {% empty %}
-                                        <span class="text-muted">Sin aplicar</span>
-                                        <span class="tc-sub">Queda como saldo a favor</span>
-                                    {% endfor %}
-                                </td>
-                                <td class="num">S/ {{ payment.amount|floatformat:2 }}</td>
-                                <td>
-                                    {% if payment.status == "VOIDED" %}
+                                    {% if row.payment.status == "VOIDED" %}
                                         <span class="tc-pill danger">Anulado</span>
-                                        <span class="tc-sub">{{ payment.void_reason }}</span>
-                                    {% elif payment.status == "PENDING" %}
+                                        <span class="tc-sub">{{ row.payment.void_reason }}</span>
+                                    {% elif row.payment.status == "PENDING" %}
                                         <span class="tc-pill warning">Pendiente</span>
                                         <span class="tc-sub">El dinero no ha entrado</span>
-                                    {% else %}
-                                        <span class="tc-pill success">Cancelado</span>
+                                    {% endif %}
+                                    {% if row.note %}
+                                        <span class="tc-sub">{{ row.note }}</span>
                                     {% endif %}
                                 </td>
-                                {% if can_void_payment %}
-                                    <td class="text-end">
-                                        {% if payment.status != "VOIDED" %}
-                                            <form method="post"
-                                                  action="{% url 'payments:void' pk=payment.pk %}"
-                                                  class="d-flex gap-1 justify-content-end">
-                                                {% csrf_token %}
-                                                <input type="text"
-                                                       name="reason"
-                                                       class="tc-input"
-                                                       style="max-width:11rem;"
-                                                       placeholder="Motivo"
-                                                       maxlength="200"
-                                                       required>
-                                                <button type="submit" class="tc-icon-btn" title="Anular pago">
-                                                    <i class="bi bi-x-lg"></i>
-                                                </button>
-                                            </form>
-                                        {% endif %}
-                                    </td>
-                                {% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>

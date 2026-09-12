@@ -21,6 +21,12 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
         --tc-warning: #f6b700;
         --tc-warning-bg: #fff9e8;
         --tc-success: #0b9a52;
+
+        /* Margen lateral de las tarjetas. Lo comparten la cabecera, el
+           cuerpo, las celdas de los bordes de la tabla y el paginador: las
+           cuatro cosas se leen como una sola columna cuando arrancan en la
+           misma linea, y antes cada una elegia la suya. */
+        --tc-pad-x: 18px;
     }
 
     body { color: var(--tc-text); }
@@ -77,19 +83,19 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     .tc-section { overflow:hidden; }
-    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px var(--tc-pad-x); }
 
     /* Cabecera en franja, como la del sistema anterior: marca donde empieza
        lo que se lee o se llena. Nacio dentro de «Nueva deuda» y se quedaba
        alli hasta decidir si todas las cabeceras irian asi; la tercera
        pantalla que la pidio -la tabla de deudas- resolvio la duda, y tres
        copias del mismo trazo se separan al primer ajuste. */
-    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:13px 26px; }
+    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:14px var(--tc-pad-x); }
     .tc-section-head.banner .tc-section-title { color:#fff; }
     .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
     .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
     .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
-    .tc-section-body { padding:0 14px 14px; }
+    .tc-section-body { padding:0 var(--tc-pad-x) 16px; }
     .tc-data-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px 28px; }
     .tc-data-label { font-size:.69rem; color:#74859a; margin-bottom:2px; }
     .tc-data-value { font-size:.78rem; color:#1b385d; font-weight:500; }
@@ -100,9 +106,18 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-map-btn { margin-top:8px; width:100%; }
 
     .tc-table { width:100%; margin:0; border-collapse:collapse; }
-    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:8px 9px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
-    .tc-table td { color:#334f6b; font-size:.69rem; padding:9px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
+    /* La cabecera de columnas respira mas por arriba que por abajo: encima
+       tiene la franja de la tarjeta, y pegada a ella los titulos parecian
+       parte del titulo de la seccion en vez del encabezado de la tabla. */
+    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:16px 12px 11px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
+    .tc-table td { color:#334f6b; font-size:.69rem; padding:12px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
     .tc-table tr:last-child td { border-bottom:0; }
+
+    /* Las celdas de los extremos se alinean con la cabecera de la tarjeta.
+       Pegadas al borde, la primera columna parecia caerse fuera de la caja
+       y la ultima quedaba sin aire contra el filo. */
+    .tc-table th:first-child, .tc-table td:first-child { padding-left:var(--tc-pad-x); }
+    .tc-table th:last-child, .tc-table td:last-child { padding-right:var(--tc-pad-x); }
     .tc-table a { color:#1473d4; text-decoration:none; font-weight:700; }
     .tc-table .status-warning { display:inline-block; padding:2px 7px; border-radius:5px; background:#ffc928; color:#332900; font-weight:700; }
     .tc-table .status-success { display:inline-block; padding:2px 7px; border-radius:4px; background:#0aa25c; color:#fff; font-weight:700; }
@@ -146,7 +161,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     /* Pie de tabla. Vive dentro de la tarjeta, separado por su linea: el
        operador tiene que ver de un vistazo que lo que mira es una pagina y
        no todo lo que hay. */
-    .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:11px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:13px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#fbfdff; }
     .tc-pager-count { font-size:.72rem; color:#6a809a; }
     .tc-pager-actions { display:flex; gap:8px; }
     .tc-pager .tc-btn { min-height:32px; padding:5px 12px; font-size:.73rem; }
@@ -200,13 +215,13 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-choices { display:flex; flex-wrap:wrap; gap:8px 18px; }
     .tc-choice { display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:#2e4763; }
 
-    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:9px; border-top:1px solid var(--tc-border); }
+    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:12px; border-top:1px solid var(--tc-border); }
     .tc-table td.num, .tc-table th.num { text-align:right; white-space:nowrap; }
-    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:2px; }
+    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:5px; }
 
-    .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
 
-    .tc-empty { padding:18px 14px; font-size:.78rem; color:#5c7590; }
+    .tc-empty { padding:26px var(--tc-pad-x); font-size:.78rem; color:#5c7590; }
 
     .tc-metric-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
 
@@ -264,7 +279,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     /* Pie de tarjeta: donde se confirma o se abandona. Mismo trazo que el pie
        de las tablas, para que la pantalla tenga un solo lenguaje. */
-    .tc-card-footer { display:flex; flex-wrap:wrap; gap:10px; padding:12px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-card-footer { display:flex; flex-wrap:wrap; gap:10px; padding:13px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#fbfdff; }
 
     /* Menu de desbordamiento de la ficha. Hereda de Bootstrap la
        mecanica y de aqui el trazo, para que no parezca de otra app. */

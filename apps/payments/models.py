@@ -773,6 +773,93 @@ class PaymentAllocation(models.Model):
         return f"{self.charge} <- S/ {self.amount}"
 
 
+# Ancho del correlativo impreso. El numero se guarda como entero -es lo que
+# permite pedir el siguiente y exigir que no se repita-, pero en el papel y en
+# la pantalla se lee con sus ceros: el comprobante 41316 del block de CABLE
+# LOS ANDES se entrega como «B001-0041316», y el operador que busca ese papel
+# busca esa cadena, no el numero 41316.
+#
+# Siete, que es lo que imprimen los blocks del sistema que se reemplaza: CABLE
+# LOS ANDES va por 0041316 e INVERSIONES por 0031985. Uno solo para todos
+# mientras todos impriman igual; el dia que un talonario imprima con otro
+# ancho, esto deja de ser una constante y pasa a ser un campo suyo, al lado de
+# la serie y del ultimo numero.
+RECEIPT_NUMBER_WIDTH = 7
+
+
+def format_receipt_number(number):
+    """El correlativo tal como va impreso, con sus ceros a la izquierda.
+
+    Vive aqui y no en cada sitio que lo escribe porque son cuatro -el numero
+    completo del recibo, el aviso de duplicado, la opcion del desplegable y el
+    campo del formulario- y cuatro copias del mismo formato se separan el dia
+    que el ancho cambie.
+    """
+    if number is None:
+        return ""
+
+    return f"{int(number):0{RECEIPT_NUMBER_WIDTH}d}"
+
+
+class Issuer(models.Model):
+    """La empresa que emite el comprobante.
+
+    El grupo factura con varias razones sociales -CABLE LOS ANDES,
+    INVERSIONES, SPEEDY QUANTICO- y cada talonario pertenece a una. Cuál sale
+    impresa en el papel no es una preferencia de la pantalla: la decide el
+    talonario que el operador elige al cobrar, igual que el correlativo.
+
+    Vive aquí y no en la sede porque una sede atiende para varias razones
+    sociales y una razón social cobra desde varias sedes: son dos ejes
+    distintos, y colgarla de `Branch` obligaría a inventar una sede por
+    empresa.
+    """
+
+    code = models.CharField(
+        max_length=10,
+        unique=True,
+        verbose_name="Código",
+    )
+
+    business_name = models.CharField(
+        max_length=120,
+        verbose_name="Razón social",
+    )
+
+    ruc = models.CharField(
+        max_length=11,
+        verbose_name="RUC",
+    )
+
+    address = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="Dirección fiscal",
+    )
+
+    phone = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Teléfono",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activa",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Empresa emisora"
+        verbose_name_plural = "Empresas emisoras"
+        ordering = ["business_name"]
+
+    def __str__(self):
+        return self.business_name
+
+
 class ReceiptSequence(models.Model):
     """
     Un talonario de comprobantes, con su correlativo.
@@ -802,6 +889,27 @@ class ReceiptSequence(models.Model):
     series = models.CharField(
         max_length=8,
         verbose_name="Serie impresa",
+    )
+
+    # La razon social que sale impresa. Opcional porque los talonarios ya
+    # existian antes de que el papel llevara emisor, y un talonario sin
+    # empresa imprime sin cabecera en vez de dejar el cobro parado.
+    issuer = models.ForeignKey(
+        Issuer,
+        on_delete=models.PROTECT,
+        related_name="sequences",
+        null=True,
+        blank=True,
+        verbose_name="Empresa emisora",
+    )
+
+    # Como se titula el documento en el recuadro de la derecha. Es del
+    # talonario y no de la empresa: la misma razon social emite boletas,
+    # facturas y recibos de servicio publico, y cada block es de un tipo.
+    document_title = models.CharField(
+        max_length=60,
+        default="RECIBO DE SERVICIO PÚBLICO ELECTRÓNICO",
+        verbose_name="Título del documento",
     )
 
     label = models.CharField(
@@ -916,7 +1024,7 @@ class Receipt(models.Model):
 
     @property
     def full_number(self):
-        return f"{self.series}-{self.number:06d}"
+        return f"{self.series}-{format_receipt_number(self.number)}"
 
     @property
     def is_voided(self):

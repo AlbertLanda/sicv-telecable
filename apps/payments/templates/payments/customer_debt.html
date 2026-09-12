@@ -140,10 +140,21 @@
                                         {% endfor %}
                                     </td>
                                     <td>
+                                        {% comment %}
+                                        La fecha sola. Llevaba debajo una
+                                        etiqueta «Vencido» que repetia lo que
+                                        la fecha ya decia, y que al ocupar un
+                                        segundo renglon hacia esa fila mas
+                                        alta que las demas: en una lista larga
+                                        esa diferencia de altura se lee como
+                                        si fueran bloques distintos y no filas
+                                        iguales.
+
+                                        El compromiso si se queda: es un
+                                        acuerdo que la fecha de vencimiento no
+                                        puede contar.
+                                        {% endcomment %}
                                         {{ charge.due_date|date:"d/m/Y" }}
-                                        {% if charge.is_overdue %}
-                                            <span class="tc-sub"><span class="tc-pill danger">Vencido</span></span>
-                                        {% endif %}
                                         {% with commitment=charge.active_commitment %}
                                             {% if commitment %}
                                                 <span class="tc-sub">
