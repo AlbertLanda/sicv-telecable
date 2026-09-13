@@ -392,6 +392,64 @@ class Charge(models.Model):
         return self.status
 
 
+class PaymentCommitmentInstallment(models.Model):
+    """Una de las cuotas en que el abonado promete pagar lo comprometido.
+
+    El compromiso sigue teniendo **una** fecha, `committed_date`, y es la que
+    aplaza el corte. Las cuotas son el detalle de cómo piensa pagarlo, no otra
+    promesa: si cada cuota protegiera hasta la siguiente, la protección se
+    renovaría sola y un plan de quince cuotas dejaría al abonado fuera del
+    corte durante meses sin que nadie lo volviera a decidir.
+
+    Tabla aparte y no quince pares de columnas en el compromiso. Son quince
+    filas en el formulario del sistema que se reemplaza, pero lo normal es
+    llenar dos o tres: treinta columnas vacías por cada compromiso describirían
+    el formulario en vez del acuerdo, y el día que haga falta una dieciseisava
+    habría que migrar la tabla entera.
+    """
+
+    commitment = models.ForeignKey(
+        "PaymentCommitment",
+        on_delete=models.CASCADE,
+        related_name="installments",
+        verbose_name="Compromiso",
+    )
+
+    # El numero que ocupa en el formulario. Se guarda en vez de deducirse del
+    # orden porque el operador puede llenar la 1 y la 3 y dejar la 2 en blanco,
+    # y al volver a abrirlo tiene que encontrarlas donde las puso.
+    number = models.PositiveSmallIntegerField(
+        verbose_name="Cuota",
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Monto",
+    )
+
+    due_date = models.DateField(
+        verbose_name="Fecha",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Cuota del compromiso"
+        verbose_name_plural = "Cuotas del compromiso"
+        ordering = ["commitment", "number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["commitment", "number"],
+                name="unique_installment_number_per_commitment",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Cuota {self.number} - S/ {self.amount}"
+
+
 class ChargeConcept(models.Model):
     """El catálogo de conceptos cobrables de la empresa.
 
@@ -918,6 +976,27 @@ class ReceiptSequence(models.Model):
         help_text="Como se lee en el desplegable de cobro.",
     )
 
+    class PrintFormat(models.TextChoices):
+        SHEET = "SHEET", "Media hoja apaisada"
+        TICKET = "TICKET", "Tique en vertical"
+
+    # En que papel sale. Los blocks de boleta (B001..B007) se imprimen en el
+    # tique estrecho en vertical; las facturas y los recibos de servicio
+    # publico siguen en la media hoja apaisada.
+    #
+    # Se guarda por talonario en vez de deducirse de la serie -«empieza por
+    # B»- por la misma razon que `document_title`: un block puede cambiar de
+    # formato sin cambiar de nombre, y entonces la regla deducida obligaria a
+    # renombrar el talonario para arreglar el papel. Ademas los blocks de un
+    # cobrador tambien son boletas y **no** van en tique, asi que la letra de
+    # la serie no bastaria para decidirlo.
+    print_format = models.CharField(
+        max_length=10,
+        choices=PrintFormat.choices,
+        default=PrintFormat.SHEET,
+        verbose_name="Formato impreso",
+    )
+
     autonumber = models.BooleanField(
         default=True,
         verbose_name="Numera sola",
@@ -947,6 +1026,22 @@ class ReceiptSequence(models.Model):
         verbose_name="Último correlativo emitido",
     )
 
+    # De qué ventanillas se ofrece. Un talonario es papel que está en un
+    # cajón: la oficina que no lo tiene no puede emitir de él, y ofrecérselo
+    # sería invitarla a numerar un block que no tiene delante.
+    #
+    # Muchos a muchos porque el mismo block se comparte: «F001 - CABLE LOS
+    # ANDES» va por el 8323 tanto en el Local Principal de Jauja como en la
+    # Oficina 2 y en Apata, con un solo correlativo. Una fila por oficina
+    # daría tres correlativos para un block que es uno.
+    offices = models.ManyToManyField(
+        Office,
+        through="OfficeSequence",
+        related_name="receipt_sequences",
+        blank=True,
+        verbose_name="Oficinas que lo ofrecen",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -965,6 +1060,61 @@ class ReceiptSequence(models.Model):
             return None
 
         return self.last_number + 1
+
+
+class OfficeSequence(models.Model):
+    """Qué talonarios ofrece una oficina, y en qué orden los ofrece.
+
+    Existe como tabla propia -y no como un `ManyToManyField` pelado- porque la
+    relación lleva un dato suyo: **el orden**. Los tres blocks que se imprimen
+    «S003» salen en Jauja Cajas como SPEEDY, VELOCIDAD, RED ÓPTICA y en
+    Huancayo El Tambo como VELOCIDAD, RED ÓPTICA, SPEEDY. Son los mismos tres
+    talonarios y cada ventanilla los tiene apilados a su manera, así que el
+    orden no puede vivir en el talonario: ahí solo cabe una respuesta y hacen
+    falta dos.
+
+    `ReceiptSequence.position` sigue existiendo y sigue sirviendo: ordena la
+    lista completa cuando no hay oficina elegida, que es lo que ve un
+    despliegue sin padrón de oficinas cargado.
+    """
+
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.CASCADE,
+        related_name="sequence_links",
+        verbose_name="Oficina",
+    )
+
+    sequence = models.ForeignKey(
+        ReceiptSequence,
+        on_delete=models.CASCADE,
+        related_name="office_links",
+        verbose_name="Talonario",
+    )
+
+    position = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Orden en la lista de la oficina",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Talonario de una oficina"
+        verbose_name_plural = "Talonarios por oficina"
+        ordering = ["office", "position", "sequence"]
+        constraints = [
+            # Un talonario se ofrece una vez en cada ventanilla. Repetido,
+            # saldria dos veces en el mismo desplegable y el operador tendria
+            # que elegir entre dos opciones que son la misma.
+            models.UniqueConstraint(
+                fields=["office", "sequence"],
+                name="unique_sequence_per_office",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.office} - {self.sequence}"
 
 
 class Receipt(models.Model):
@@ -1078,9 +1228,29 @@ class PaymentCommitment(models.Model):
         verbose_name="Se compromete a pagar el",
     )
 
+    # Lo que el operador quiera dejar dicho. Se llamaba «motivo» y era
+    # obligatorio -aplazar el corte de quien ya debe hay que poder explicarlo-;
+    # el formulario del sistema que se reemplaza lo pide como observaciones y
+    # no lo exige, y esa es la regla que se adopta.
     reason = models.CharField(
         max_length=200,
-        verbose_name="Motivo del compromiso",
+        blank=True,
+        verbose_name="Observaciones",
+    )
+
+    # Quien firma por el abonado, cuando no es el mismo. El sistema anterior lo
+    # pide en el papel del compromiso: el acuerdo lo asume una persona, y si no
+    # es el titular hay que poder decir quien fue.
+    representative = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Representante",
+    )
+
+    representative_document = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="DNI del representante",
     )
 
     status = models.CharField(
@@ -1140,14 +1310,6 @@ class PaymentCommitment(models.Model):
 
     def __str__(self):
         return f"Compromiso {self.committed_date:%d/%m/%Y} · S/ {self.amount}"
-
-    def clean(self):
-        super().clean()
-
-        if not self.reason or not self.reason.strip():
-            raise ValidationError({
-                "reason": "Indique por qué se concede el compromiso.",
-            })
 
     def is_expired(self, on=None):
         """La fecha prometida ya pasó y el compromiso sigue vigente."""

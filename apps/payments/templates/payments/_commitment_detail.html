@@ -1,0 +1,124 @@
+{% comment %}
+Un compromiso ya concedido: la misma ficha que el alta, con todo bloqueado.
+
+Mismas etiquetas y mismo orden que `_commitment_fields.html`. El operador que
+abre un compromiso está comprobando lo que se acordó, y compararlo contra una
+ficha distinta -otras etiquetas, otro orden- le obliga a traducir entre las
+dos. Con la misma ficha, la comprobación es mirar el mismo sitio.
+
+Bloqueado con `disabled` y no con `readonly`: un compromiso concedido no se
+corrige, se anula y se concede otro. `readonly` deja el campo enfocable y con
+aspecto de editable, que invita a intentarlo. Es el criterio del comprobante.
+
+Espera `commitment`.
+{% endcomment %}
+
+<div class="tc-form">
+
+    <div class="tc-form-label">Código</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm"
+               value="{{ commitment.pk }}" disabled>
+    </div>
+
+    <div class="tc-form-label">Fecha</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-md"
+               value="{{ commitment.created_at|date:'d/m/Y' }}" disabled>
+    </div>
+
+    <div class="tc-form-label">Hora</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm"
+               value="{{ commitment.created_at|date:'H:i:s' }}" disabled>
+    </div>
+
+    <div class="tc-form-label">Fecha de pago</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-md"
+               value="{{ commitment.committed_date|date:'d/m/Y' }}" disabled>
+    </div>
+
+    <div class="tc-form-label">Autoriza</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-lg"
+               value="{{ commitment.authorized_by|default:commitment.granted_by }}"
+               disabled>
+    </div>
+
+    <div class="tc-form-label top">Deuda</div>
+    <div class="tc-form-field">
+        <div class="tc-debt-list">
+            {% for charge in commitment.charges.all %}
+                <div class="tc-debt-line">
+                    <span>
+                        {{ charge.description }}
+                        {% if charge.period_label %}
+                            <span class="tc-sub">{{ charge.period_label }}</span>
+                        {% endif %}
+                    </span>
+                    <span class="tc-debt-line-monto">
+                        {{ charge.balance|floatformat:2 }}
+                    </span>
+                </div>
+            {% empty %}
+                <div class="tc-debt-line text-muted">
+                    El compromiso no quedó asociado a ninguna deuda.
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="tc-form-label">Total</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm"
+               value="{{ commitment.amount|floatformat:2 }}" disabled>
+    </div>
+
+    {% comment %}
+    Solo las cuotas que se llenaron. Las quince filas en blanco tienen sentido
+    en el alta -son los huecos que el operador puede usar-, pero aquí dirían
+    que se pactaron quince cuotas y trece quedaron sin fecha.
+    {% endcomment %}
+    {% for installment in commitment.installments.all %}
+        <div class="tc-form-label">Cuota {{ installment.number }}</div>
+        <div class="tc-form-field">
+            <div class="tc-field-row">
+                <input type="text" class="tc-input tc-readonly tc-w-sm"
+                       value="{{ installment.amount|floatformat:2 }}"
+                       aria-label="Monto de la cuota {{ installment.number }}"
+                       disabled>
+                <input type="text" class="tc-input tc-readonly tc-w-md"
+                       value="{{ installment.due_date|date:'d/m/Y' }}"
+                       aria-label="Fecha de la cuota {{ installment.number }}"
+                       disabled>
+            </div>
+        </div>
+    {% endfor %}
+
+    <div class="tc-form-label">Representante</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-xl"
+               value="{{ commitment.representative }}" disabled>
+    </div>
+
+    <div class="tc-form-label">DNI de rep.</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm"
+               value="{{ commitment.representative_document }}" disabled>
+    </div>
+
+    <div class="tc-form-label top">Observaciones</div>
+    <div class="tc-form-field">
+        <textarea class="form-control tc-readonly tc-w-xl" rows="3"
+                  disabled>{{ commitment.reason }}</textarea>
+    </div>
+
+    <div class="tc-form-label">Anulado</div>
+    <div class="tc-form-field">
+        <input type="checkbox" class="form-check-input" disabled
+               {% if commitment.status == "CANCELLED" %}checked{% endif %}
+               aria-label="Anulado">
+    </div>
+
+</div>

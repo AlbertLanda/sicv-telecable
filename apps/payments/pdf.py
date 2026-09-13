@@ -18,6 +18,7 @@ aquí, en `invoicing`, para poder comprobarla sin abrir un PDF y mirarlo.
 
 import base64
 import hashlib
+from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
@@ -37,8 +38,13 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from .invoicing import amount_in_words, receipt_lines, receipt_totals
-from .models import format_receipt_number
+from .invoicing import (
+    IGV_RATE,
+    amount_in_words,
+    receipt_lines,
+    receipt_totals,
+)
+from .models import ReceiptSequence, format_receipt_number
 
 
 # Media hoja apaisada, que es el tamaño en que se entrega este papel: dos por
@@ -68,6 +74,13 @@ LOGO_PATTERN = f"{LOGO_STEM}*"
 # JPG porque conserva la transparencia, que en una cabecera se nota.
 LOGO_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
 
+# Cuanto se puede apartar un pixel del blanco para seguir siendo margen.
+#
+# Un umbral y no igualdad exacta: el archivo de hoy es un JPEG, y un JPEG no
+# guarda el blanco exacto -lo deja en 250 y pico-, asi que comparar a pelo no
+# recortaria nada. Bajo, para no comerse un trazo claro del dibujo.
+UMBRAL_BLANCO = 18
+
 NEGRO = colors.black
 LINEA = colors.HexColor("#000000")
 
@@ -82,6 +95,16 @@ RADIO = 1.6 * mm
 ESQUINAS = ("ROUNDEDCORNERS", [RADIO, RADIO, RADIO, RADIO])
 
 # Alto de la fila de cabecera de la tabla del detalle.
+# El logotipo de la media hoja y la columna en la que vive.
+#
+# Se mide contra el recuadro del RUC que tiene enfrente, que es la otra pieza
+# de la cabecera: los dos rondan los 24 mm de alto y la franja queda
+# equilibrada. A 13 mm el logotipo llenaba media columna y dejaba el resto en
+# aire, con la razon social al lado a 15 pt: se leia como un icono perdido en
+# la esquina y no como la marca de quien emite el papel.
+ALTO_LOGO_HOJA = 24 * mm
+COLUMNA_LOGO_HOJA = 30 * mm
+
 ALTO_CABECERA = 7.5 * mm
 
 # Lo que mide la fila vacía del final cuando no sobra hueco que repartir -un
@@ -92,6 +115,365 @@ RELLENO_MINIMO = 4 * mm
 # Lo que el marco de la página reserva arriba y abajo por su cuenta. Es el
 # valor por defecto de ReportLab y no aparece en `documento.height`.
 FRAME_PADDING = 6
+
+
+# ------------------------------------------------------------------
+# El tique de boleta.
+#
+# Los blocks B001..B007 se entregan en un rollo estrecho, no en la media hoja
+# apaisada: todo en una columna, centrado arriba y alineado abajo. Cual de los
+# dos formatos toca lo dice el talonario (`print_format`), no la letra de la
+# serie -los blocks de un cobrador tambien son boletas y van en media hoja-.
+# ------------------------------------------------------------------
+
+# Ancho de rollo de 80 mm, que es el papel de la impresora de tiques.
+ANCHO_TIQUE = 80 * mm
+MARGEN_TIQUE = 4 * mm
+
+# El alto se calcula midiendo el contenido: un tique es tan largo como lo que
+# tiene que decir. Fijarlo dejaria media cuarta en blanco en un cobro de una
+# linea y cortaria uno de diez.
+ALTO_TIQUE_MINIMO = 120 * mm
+COLA_TIQUE = 6 * mm
+
+# Alto del logotipo. La imagen es casi cuadrada, asi que sale tambien unos
+# 26 mm de ancho: cerca de un tercio de los 80 mm del rollo.
+ALTO_LOGO_TIQUE = 26 * mm
+
+# La linea de guiones que separa bloques. Es la del papel original: no es un
+# filete, son guiones, y se dibuja con texto para que se corte donde se corte
+# el rollo siga leyendose igual.
+#
+# El numero de pares esta contado para que quepa en un renglon: con mas, el
+# ultimo par pasaba a una segunda linea y el separador salia con un muñon
+# debajo.
+GUIONES = "- " * 55
+
+
+def _estilos_tique():
+    """Los cuerpos del tique, mas pequenos que los de la media hoja.
+
+    No heredan de `_estilos()`: ahi los tamanos estan pensados para un papel
+    que se lee a un brazo de distancia sobre el mostrador, y el tique se lee
+    en la mano. Compartirlos habria atado dos formatos que no tienen por que
+    moverse juntos.
+    """
+    base = getSampleStyleSheet()
+    normal = base["Normal"]
+
+    def estilo(nombre, size, leading, **extra):
+        return ParagraphStyle(
+            nombre, parent=normal, fontSize=size, leading=leading, **extra
+        )
+
+    # Los cuerpos salen medidos del papel de referencia, no elegidos: el
+    # tique se compara con el del sistema que se reemplaza puesto al lado, y
+    # una escala propia -aunque fuera legible- se nota en cuanto los dos estan
+    # sobre el mostrador. Tres escalones y nada mas: identidad del emisor,
+    # cuerpo del documento y letra pequeña legal.
+    return {
+        "empresa": estilo(
+            "t_empresa", 8, 9.6, fontName="Helvetica-Bold", alignment=1
+        ),
+        "empresa_pie": estilo("t_empresa_pie", 6.2, 7.6, alignment=1),
+        # El RUC es la linea mas grande del papel despues del logotipo: es el
+        # dato por el que se identifica al emisor ante SUNAT.
+        "ruc": estilo("t_ruc", 11, 13.5, fontName="Helvetica-Bold", alignment=1),
+        "titulo": estilo(
+            "t_titulo", 10, 12.5, fontName="Helvetica-Bold", alignment=1
+        ),
+        "numero": estilo(
+            "t_numero", 10, 12.5, fontName="Helvetica-Bold", alignment=1
+        ),
+        "etiqueta": estilo("t_etiqueta", 7.5, 9.4, fontName="Helvetica-Bold"),
+        "dato": estilo("t_dato", 7.5, 9.4),
+        "th": estilo("t_th", 7.5, 9.4, fontName="Helvetica-Bold"),
+        "th_num": estilo(
+            "t_th_num", 7.5, 9.4, fontName="Helvetica-Bold", alignment=2
+        ),
+        "celda": estilo("t_celda", 7, 8.8),
+        "num": estilo("t_num", 7, 8.8, alignment=2),
+        "guiones": estilo("t_guiones", 5.5, 6),
+        "letras": estilo("t_letras", 7.5, 9.4, fontName="Helvetica-Bold"),
+        "legal": estilo("t_legal", 5.4, 6.6, alignment=1),
+        "resumen": estilo(
+            "t_resumen", 5.4, 6.6,
+            alignment=1,
+            textColor=colors.HexColor("#3b6ea5"),
+        ),
+        "anulado": estilo(
+            "t_anulado", 9, 11,
+            fontName="Helvetica-Bold",
+            alignment=1,
+            textColor=colors.HexColor("#a52f22"),
+        ),
+    }
+
+
+def _sin_relleno(tabla, extra=()):
+    """Tabla sin bordes ni aire lateral, que es como se apilan las del tique."""
+    tabla.setStyle(
+        TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0.8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0.8),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            *extra,
+        ])
+    )
+
+    return tabla
+
+
+def _guiones_tique(estilos):
+    return Paragraph(GUIONES, estilos["guiones"])
+
+
+def _cabecera_tique(receipt, estilos, ancho):
+    """Logotipo, razon social, direcciones, telefono y RUC. Todo centrado."""
+    sequence = receipt.sequence
+    issuer = sequence.issuer
+
+    piezas = []
+
+    # El logotipo ocupa cerca de un tercio del ancho del rollo, como en el
+    # papel de referencia. A 11 mm se quedaba en una marca de agua arriba del
+    # todo: en un tique de 80 mm es lo primero que identifica de quien es el
+    # papel, y a esa escala habia que acercarselo a los ojos para verlo.
+    logo = _logo(ALTO_LOGO_TIQUE)
+
+    # `_logo` devuelve una cadena vacía cuando no hay dibujo que poner, no
+    # None: comparar contra None dejaba pasar esa cadena y el tique reventaba
+    # al pedirle alineación a un texto. Un despliegue sin el archivo tiene que
+    # poder entregar el papel igual.
+    if logo:
+        logo.hAlign = "CENTER"
+        piezas.append(logo)
+        piezas.append(Spacer(1, 1.5 * mm))
+
+    if issuer:
+        piezas.append(Paragraph(issuer.business_name, estilos["empresa"]))
+
+        # Las direcciones son varios renglones de la cabecera, no varios
+        # domicilios: vienen en un campo separadas por salto de linea y se
+        # pintan una debajo de otra, como en el papel.
+        for renglon in (issuer.address or "").splitlines():
+            if renglon.strip():
+                piezas.append(Paragraph(renglon.strip(), estilos["empresa_pie"]))
+
+        if issuer.phone:
+            piezas.append(
+                Paragraph(f"Teléfono {issuer.phone}", estilos["empresa_pie"])
+            )
+
+        piezas.append(Spacer(1, 1.5 * mm))
+        piezas.append(Paragraph(f"RUC {issuer.ruc}", estilos["ruc"]))
+
+    piezas.append(Spacer(1, 2 * mm))
+    piezas.append(Paragraph(sequence.document_title, estilos["titulo"]))
+    piezas.append(
+        Paragraph(
+            f"{receipt.series}-{format_receipt_number(receipt.number)}",
+            estilos["numero"],
+        )
+    )
+
+    return piezas
+
+
+def _abonado_tique(receipt, estilos, ancho):
+    """Filas etiqueta / valor con a quien se le cobro."""
+    payment = receipt.payment
+    customer = payment.customer
+    direccion = customer.addresses.filter(is_primary=True).first()
+
+    etiqueta = 21 * mm
+    filas = [
+        [
+            Paragraph("F. EMISIÓN", estilos["etiqueta"]),
+            Paragraph(
+                receipt.issued_at.strftime("%d/%m/%Y"), estilos["dato"]
+            ),
+        ],
+        [
+            Paragraph("CÓDIGO", estilos["etiqueta"]),
+            # El codigo del abonado y su documento comparten renglon, como en
+            # el papel: son las dos maneras de nombrarlo y se leen juntas.
+            _sin_relleno(Table(
+                [[
+                    Paragraph(customer.code, estilos["dato"]),
+                    Paragraph(
+                        customer.get_document_type_display().upper(),
+                        estilos["etiqueta"],
+                    ),
+                    Paragraph(customer.document_number, estilos["dato"]),
+                ]],
+                colWidths=[22 * mm, 11 * mm, None],
+            )),
+        ],
+        [
+            Paragraph("ABONADO", estilos["etiqueta"]),
+            Paragraph(str(customer).upper(), estilos["dato"]),
+        ],
+        [
+            Paragraph("DIRECCIÓN", estilos["etiqueta"]),
+            Paragraph(
+                (direccion.address if direccion else "").upper(),
+                estilos["dato"],
+            ),
+        ],
+        [
+            Paragraph("MONEDA", estilos["etiqueta"]),
+            Paragraph("SOLES", estilos["dato"]),
+        ],
+    ]
+
+    return _sin_relleno(
+        Table(filas, colWidths=[etiqueta, ancho - etiqueta])
+    )
+
+
+def _detalle_tique(receipt, estilos, ancho, lines):
+    """El detalle, con la cantidad delante de la descripcion.
+
+    La cantidad va entre corchetes pegada al concepto y no en columna propia:
+    en 80 mm una columna para «1.00000» se come el ancho que necesita la
+    descripcion, que es lo que el abonado lee para reconocer su mes.
+    """
+    pu = 16 * mm
+    total = 14 * mm
+
+    filas = [[
+        Paragraph("DESCRIPCIÓN", estilos["th"]),
+        Paragraph("P/U", estilos["th_num"]),
+        Paragraph("TOTAL", estilos["th_num"]),
+    ]]
+
+    for linea in lines:
+        filas.append([
+            Paragraph(
+                f"[{linea['quantity']:.5f}] {linea['description']}",
+                estilos["celda"],
+            ),
+            Paragraph(f"{linea['unit_price']:.6f}", estilos["num"]),
+            Paragraph(f"{linea['total']:.2f}", estilos["num"]),
+        ])
+
+    return _sin_relleno(
+        Table(filas, colWidths=[ancho - pu - total, pu, total]),
+        extra=[("BOTTOMPADDING", (0, 0), (-1, 0), 2.2)],
+    )
+
+
+def _importes_tique(estilos, ancho, totals):
+    """El recuadro de importes: columna de concepto, «S/» y cifra."""
+    moneda = 8 * mm
+    cifra = 18 * mm
+
+    filas = [
+        ("OP. GRAVADA", totals["gravada"], False),
+        ("OP. EXONERADA", totals["exonerada"], False),
+        ("DESCUENTOS", totals["discount"], False),
+        (f"I.G.V. {IGV_RATE:.0%}", totals["igv"], False),
+        ("TOTAL", totals["total"], True),
+    ]
+
+    datos = []
+
+    for concepto, importe, fuerte in filas:
+        estilo_texto = estilos["etiqueta"] if fuerte else estilos["dato"]
+        estilo_cifra = estilos["letras"] if fuerte else estilos["num"]
+
+        datos.append([
+            Paragraph(concepto, estilo_texto),
+            Paragraph("S/", estilos["dato"]),
+            Paragraph(
+                f"{importe:.2f}",
+                estilo_cifra if fuerte else estilos["num"],
+            ),
+        ])
+
+    return _sin_relleno(
+        Table(datos, colWidths=[ancho - moneda - cifra, moneda, cifra]),
+        extra=[("ALIGN", (2, 0), (2, -1), "RIGHT")],
+    )
+
+
+def _pie_tique(receipt, estilos, ancho, totals):
+    """Importe en letras, condicion de pago, QR y leyenda legal."""
+    piezas = [
+        Paragraph(amount_in_words(totals["total"]), estilos["letras"]),
+        Spacer(1, 1.5 * mm),
+        Paragraph("CONDICIÓN DE PAGO", estilos["etiqueta"]),
+        Spacer(1, 2 * mm),
+    ]
+
+    codigo = _qr(receipt, totals, 30 * mm)
+    codigo.hAlign = "CENTER"
+    piezas.append(codigo)
+
+    piezas.append(Paragraph(_resumen(receipt, totals), estilos["resumen"]))
+    piezas.append(
+        Paragraph(
+            "Representación impresa de "
+            f"{receipt.sequence.document_title}, verifique su "
+            "comprobante en www.sunat.gob.pe",
+            estilos["legal"],
+        )
+    )
+
+    return piezas
+
+
+def _render_ticket(receipt, buffer, lines, totals):
+    """El tique de boleta, tan largo como lo que tiene que decir.
+
+    Se arma dos veces: la primera para medir cuanto ocupa la historia, la
+    segunda ya sobre una pagina de ese alto. Un tique de rollo no tiene alto
+    fijo, y darle uno dejaria media cuarta en blanco en un cobro de una linea.
+    """
+    estilos = _estilos_tique()
+    ancho = ANCHO_TIQUE - 2 * MARGEN_TIQUE
+
+    historia = []
+
+    if receipt.is_voided:
+        historia.append(
+            Paragraph(
+                f"ANULADO — {receipt.payment.void_reason}", estilos["anulado"]
+            )
+        )
+        historia.append(Spacer(1, 2 * mm))
+
+    historia.extend(_cabecera_tique(receipt, estilos, ancho))
+    historia.append(Spacer(1, 2.5 * mm))
+    historia.append(_abonado_tique(receipt, estilos, ancho))
+    historia.append(_guiones_tique(estilos))
+    historia.append(_detalle_tique(receipt, estilos, ancho, lines))
+    historia.append(_guiones_tique(estilos))
+    historia.append(_importes_tique(estilos, ancho, totals))
+    historia.append(Spacer(1, 1.5 * mm))
+    historia.extend(_pie_tique(receipt, estilos, ancho, totals))
+
+    alto = sum(
+        pieza.wrap(ancho, ALTO_TIQUE_MINIMO * 4)[1] for pieza in historia
+    )
+    alto = max(ALTO_TIQUE_MINIMO, alto + 2 * MARGEN_TIQUE + COLA_TIQUE)
+
+    documento = SimpleDocTemplate(
+        buffer,
+        pagesize=(ANCHO_TIQUE, alto),
+        leftMargin=MARGEN_TIQUE,
+        rightMargin=MARGEN_TIQUE,
+        topMargin=MARGEN_TIQUE,
+        bottomMargin=MARGEN_TIQUE,
+        title=receipt.full_number,
+        author=str(receipt.sequence.issuer or "SICV"),
+    )
+    documento.build(historia)
+
+    return f"{receipt.full_number}.pdf"
 
 
 def _estilos():
@@ -157,6 +539,53 @@ def find_logo():
     return sorted(candidatos, key=preferencia)[0]
 
 
+def _sin_margen_blanco(ruta):
+    """El archivo sin el aire en blanco que lo rodea, o el archivo tal cual.
+
+    El logotipo que se deja en MEDIA_ROOT viene con margen dentro de la propia
+    imagen -el de hoy, un 13% arriba y un 19% abajo-, y ese margen es parte del
+    dibujo: al colocarlo alineado con la parte de arriba de su celda, lo que se
+    ve arranca tres milímetros por debajo de la razón social que tiene al lado
+    y el logotipo parece caído.
+
+    Se recorta al dibujar y no en el archivo. El logotipo lo deja alguien en su
+    sitio, no viene con el código, así que no es nuestro para reescribirlo; y un
+    recorte al vuelo sigue valiendo cuando lo cambien por otro con distinto
+    aire, que es lo que va a pasar.
+
+    Si no se puede recortar se devuelve el archivo sin tocar: un logotipo un
+    poco caído es mejor que una ventanilla que no puede entregar el papel.
+    """
+    try:
+        from PIL import Image as PilImage, ImageChops
+    except Exception:
+        return str(ruta)
+
+    try:
+        original = PilImage.open(ruta).convert("RGB")
+        blanco = PilImage.new("RGB", original.size, (255, 255, 255))
+        mascara = (
+            ImageChops.difference(original, blanco)
+            .convert("L")
+            .point(lambda valor: 255 if valor > UMBRAL_BLANCO else 0)
+        )
+        caja = mascara.getbbox()
+    except Exception:
+        return str(ruta)
+
+    # Sin caja el dibujo es todo blanco; recortarlo lo dejaría en nada.
+    if caja is None:
+        return str(ruta)
+
+    # Como archivo en memoria y no como imagen de PIL: `platypus.Image` espera
+    # una ruta o algo que se pueda abrir, y una imagen de PIL la rechaza.
+    recortado = BytesIO()
+    original.crop(caja).save(recortado, format="PNG")
+    recortado.seek(0)
+
+    return recortado
+
+
 def _logo(alto):
     """El logotipo, o nada si no se puede dibujar.
 
@@ -171,7 +600,7 @@ def _logo(alto):
         return ""
 
     try:
-        imagen = Image(str(ruta))
+        imagen = Image(_sin_margen_blanco(ruta))
         proporcion = imagen.imageWidth / imagen.imageHeight
     except Exception:
         return ""
@@ -221,8 +650,12 @@ def _cabecera(receipt, estilos, ancho):
     )
 
     tabla = Table(
-        [[_logo(13 * mm), identidad, recuadro]],
-        colWidths=[26 * mm, ancho - 26 * mm - 68 * mm, 68 * mm],
+        [[_logo(ALTO_LOGO_HOJA), identidad, recuadro]],
+        colWidths=[
+            COLUMNA_LOGO_HOJA,
+            ancho - COLUMNA_LOGO_HOJA - 68 * mm,
+            68 * mm,
+        ],
     )
     tabla.setStyle(
         TableStyle([
@@ -497,9 +930,17 @@ def render_receipt(receipt, buffer):
     operador lo va a buscar en su carpeta de descargas: el mismo texto que lee
     en la pantalla y en el papel.
     """
-    estilos = _estilos()
     lines = receipt_lines(receipt)
     totals = receipt_totals(receipt, lines)
+
+    # En que papel sale lo dice el talonario, como ya decia quien emite y con
+    # que numero. Deducirlo aqui de la serie -«empieza por B»- pondria la
+    # regla en el dibujo, y los blocks de un cobrador, que tambien son
+    # boletas, acabarian en el papel equivocado.
+    if receipt.sequence.print_format == ReceiptSequence.PrintFormat.TICKET:
+        return _render_ticket(receipt, buffer, lines, totals)
+
+    estilos = _estilos()
 
     margen = 8 * mm
     ancho = PAGE_SIZE[0] - 2 * margen

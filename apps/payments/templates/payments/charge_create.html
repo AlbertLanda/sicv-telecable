@@ -8,17 +8,16 @@
 <style>
     /* El aire de la ficha. Los valores compartidos estan pensados para
        tarjetas de consulta -filas cortas que se leen de un vistazo-, y en un
-       formulario que se llena dejaban la primera fila pegada a la cabecera y
-       las etiquetas contra el borde de la tarjeta.
+       formulario que se llena dejaban la primera fila pegada a la cabecera.
 
-       Se separan tres cosas distintas: la rejilla de la franja y del filo
-       (padding del cuerpo), una fila de la siguiente (gap de fila), y el par
-       etiqueta/campo de la izquierda del par de la derecha (gap de columna,
-       el mas ancho: sin el, la etiqueta «Fecha» se leia como parte del campo
-       «Codigo» que termina justo antes). */
-    .tc-sheet .tc-section-body { padding:24px 26px 26px; }
+       El margen lateral ya no se toca aqui: lo pone `.tc-sheet` en el sistema
+       compartido, para que lo hereden por igual la franja, los campos y el
+       pie. Aqui quedan las separaciones verticales -la primera fila de la
+       franja, una fila de la siguiente- y el gap de columna, el mas ancho:
+       sin el, la etiqueta «Fecha» se leia como parte del campo «Codigo» que
+       termina justo antes. */
     .tc-sheet .tc-form.cols-2 { gap:18px 28px; }
-    .tc-sheet .tc-card-footer { padding:14px 26px; }
+    .tc-sheet .tc-card-footer { padding:14px var(--tc-pad-x); }
 
     /* Los campos compuestos -moneda y monto, monto y su boton- van juntos,
        no pegados. */

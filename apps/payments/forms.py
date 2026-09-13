@@ -176,7 +176,7 @@ class PaymentRegisterForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, office=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Las series y los cobradores se resuelven al construir el formulario
@@ -184,7 +184,14 @@ class PaymentRegisterForm(forms.Form):
         # nueva ni un vendedor recien creado hasta reiniciar el servidor.
         from .services import collector_options, receipt_series_options
 
-        sequences = receipt_series_options()
+        # De donde se cobra decide que talonarios hay. La oficina llega desde
+        # la vista, que la lee de la barra superior, y tiene que ser la misma
+        # al pintar y al validar: armar las opciones sin ella dejaria pasar en
+        # el POST una serie de otra ventanilla, porque `ChoiceField` valida
+        # justo contra estas opciones.
+        self.office = office
+
+        sequences = receipt_series_options(office=office)
 
         self.fields["series"].choices = [
             (sequence.code, sequence.label) for sequence in sequences
@@ -420,15 +427,25 @@ class PaymentCommitmentForm(forms.Form):
 
     Los cargos llegan como un campo por fila del tablero de deuda, igual que
     en el cobro: cuántos hay depende del abonado y no del formulario.
+
+    El reparto de campos es el del sistema que se reemplaza -código, fecha y
+    hora del sistema, fecha de pago, autoriza, la deuda elegida, el total, las
+    cuotas, el representante y las observaciones-, para que el operador
+    reconozca la pantalla que usa a diario.
     """
 
+    # Quince filas de cuota, como el formulario del sistema anterior. Son las
+    # que el operador espera ver: lo normal es llenar dos o tres, y las que
+    # queden en blanco no se guardan.
+    INSTALLMENTS = 15
+
     committed_date = forms.DateField(
-        label="Se compromete a pagar el",
+        label="Fecha de pago",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
 
     amount = forms.DecimalField(
-        label="Monto comprometido",
+        label="Total",
         min_value=Decimal("0.01"),
         max_digits=10,
         decimal_places=2,
@@ -443,9 +460,23 @@ class PaymentCommitmentForm(forms.Form):
         empty_label="",
     )
 
+    representative = forms.CharField(
+        label="Representante",
+        max_length=120,
+        required=False,
+    )
+
+    representative_document = forms.CharField(
+        label="DNI de rep.",
+        max_length=20,
+        required=False,
+    )
+
     reason = forms.CharField(
-        label="Motivo del compromiso",
+        label="Observaciones",
         max_length=200,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -455,15 +486,58 @@ class PaymentCommitmentForm(forms.Form):
 
         self.fields["authorized_by"].queryset = authorizer_options()
 
-        _style_widgets(self)
-
-    def clean_reason(self):
-        reason = (self.cleaned_data.get("reason") or "").strip()
-
-        if not reason:
-            raise forms.ValidationError(
-                "Indique por qué se concede el compromiso: aplazar un corte "
-                "es una decisión que alguien tiene que poder explicar."
+        # Las cuotas se declaran aqui y no arriba porque son quince pares
+        # iguales: escribirlos a mano seria treinta declaraciones que hay que
+        # mantener a la vez, y cambiar el numero de filas obligaria a tocarlas
+        # una por una.
+        for numero in self.installment_numbers():
+            self.fields[f"installment_{numero}_amount"] = forms.DecimalField(
+                label=f"Cuota {numero}",
+                min_value=Decimal("0.01"),
+                max_digits=10,
+                decimal_places=2,
+                required=False,
+            )
+            self.fields[f"installment_{numero}_date"] = forms.DateField(
+                label=f"Fecha de la cuota {numero}",
+                required=False,
+                widget=forms.DateInput(attrs={"type": "date"}),
             )
 
-        return reason
+        _style_widgets(self)
+
+    @classmethod
+    def installment_numbers(cls):
+        return range(1, cls.INSTALLMENTS + 1)
+
+    def installment_rows(self):
+        """Las filas de cuota, para que la plantilla las recorra.
+
+        La plantilla no sabe cuantas hay ni como se llaman los campos: los pide
+        aqui. Escribir las quince filas en el HTML dejaba el numero de cuotas
+        dicho en dos sitios.
+        """
+        for numero in self.installment_numbers():
+            yield (
+                numero,
+                self[f"installment_{numero}_amount"],
+                self[f"installment_{numero}_date"],
+            )
+
+    def installments(self):
+        """El plan tal como se tecleo: (numero, monto, fecha) por fila.
+
+        Se devuelven tambien las filas a medias -monto sin fecha o al reves-
+        para que el servicio pueda rechazarlas diciendo cual: filtrarlas aqui
+        dejaria pasar en silencio una cuota que el operador creia haber puesto.
+        """
+        datos = getattr(self, "cleaned_data", {})
+
+        return [
+            (
+                numero,
+                datos.get(f"installment_{numero}_amount"),
+                datos.get(f"installment_{numero}_date"),
+            )
+            for numero in self.installment_numbers()
+        ]

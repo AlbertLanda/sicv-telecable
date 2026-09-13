@@ -20,11 +20,14 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.organization.context_processors import ACTIVE_OFFICE_SESSION_KEY
+from apps.organization.context_processors import (
+    ACTIVE_BRANCH_SESSION_KEY,
+    ACTIVE_OFFICE_SESSION_KEY,
+)
 from apps.organization.models import Office
 from apps.payments.forms import PaymentRegisterForm
 from apps.payments.models import Charge, Payment, Receipt, ReceiptSequence
-from apps.payments.services import register_payment
+from apps.payments.services import receipt_series_options, register_payment
 from apps.payments.tests.base import PaymentsTestCase
 
 
@@ -57,15 +60,15 @@ class TalonarioTests(PaymentsTestCase):
     def test_the_seeded_books_start_where_the_old_system_left_them(self):
         """El número anotado es el próximo a imprimir, no el último entregado.
 
-        Guardarlo tal cual como «último emitido» saltaría el 0041314: el
-        primer recibo de B001 saldría 0041315 y el talonario de papel y el
+        Guardarlo tal cual como «último emitido» saltaría el 0041316: el
+        primer recibo de B001 saldría 0041317 y el talonario de papel y el
         sistema dejarían de coincidir desde el primer cobro.
         """
         esperados = {
-            "B001": 41314,
-            "B002": 31981,
+            "B001": 41316,
+            "B002": 31985,
             "F001": 8323,
-            "F002": 5597,
+            "F002": 5599,
             "S010-VELOCIDAD": 3031,
             "S010-RED-OPTICA": 267,
             "S010-SPEEDY": 569,
@@ -81,15 +84,15 @@ class TalonarioTests(PaymentsTestCase):
     def test_the_first_receipt_of_a_book_carries_the_number_announced(self):
         _, receipt = self.cobrar(series="B001")
 
-        self.assertEqual(receipt.number, 41314)
+        self.assertEqual(receipt.number, 41316)
         self.assertEqual(receipt.series, "B001")
-        self.assertEqual(receipt.full_number, "B001-0041314")
+        self.assertEqual(receipt.full_number, "B001-0041316")
 
     def test_the_next_one_continues(self):
         self.cobrar(series="B001")
         _, receipt = self.cobrar(series="B001")
 
-        self.assertEqual(receipt.number, 41315)
+        self.assertEqual(receipt.number, 41317)
 
     def test_the_three_s010_books_run_on_their_own(self):
         """«S010» nombra tres blocks distintos y cada uno va por su cuenta.
@@ -133,9 +136,9 @@ class TalonarioTests(PaymentsTestCase):
         self.assertEqual(receipt.number, 99000)
 
     def test_writing_a_number_ahead_moves_the_book_forward(self):
-        """Saltar del 41314 al 99000 no deja el correlativo detrás.
+        """Saltar del 41316 al 99000 no deja el correlativo detrás.
 
-        Si se quedara donde estaba, el siguiente cobro propondría 41315 y
+        Si se quedara donde estaba, el siguiente cobro propondría 41317 y
         recorrería otra vez números que ya se entregaron.
         """
         self.cobrar(series="B001", number=99000)
@@ -332,7 +335,7 @@ class FormularioDeCobroTests(PaymentsTestCase):
 
         # Con sus ceros: la opcion propone lo que se va a escribir en el
         # campo, y el campo muestra el numero tal como ira impreso.
-        self.assertIn('data-numero="0041314"', body)
+        self.assertIn('data-numero="0041316"', body)
         self.assertIn('data-numero="0000267"', body)
 
     def test_a_hand_numbered_book_proposes_nothing(self):
@@ -354,19 +357,19 @@ class FormularioDeCobroTests(PaymentsTestCase):
 
         self.assertIn('name="number"', body)
         self.assertNotIn("disabled", str(campo))
-        self.assertEqual(campo.value(), "0041314")
+        self.assertEqual(campo.value(), "0041316")
 
     def test_the_proposed_number_keeps_its_leading_zeros(self):
         """El campo muestra lo que se va a imprimir, no el entero pelado.
 
-        El comprobante que se entrega dice «B001-0041314». Sin los ceros el
-        operador leía 41314 en pantalla y otra cosa en el papel, y el que
+        El comprobante que se entrega dice «B001-0041316». Sin los ceros el
+        operador leía 41316 en pantalla y otra cosa en el papel, y el que
         después buscaba ese papel no encontraba por cuál de los dos buscar.
         """
         response = self.pantalla()
 
-        self.assertEqual(response.context["form"]["number"].value(), "0041314")
-        self.assertIn('value="0041314"', response.content.decode())
+        self.assertEqual(response.context["form"]["number"].value(), "0041316")
+        self.assertIn('value="0041316"', response.content.decode())
 
     def test_a_number_written_with_zeros_is_the_same_number(self):
         """«003031» y «3031» son el mismo comprobante.
@@ -410,13 +413,13 @@ class FormularioDeCobroTests(PaymentsTestCase):
                 "method": Payment.Method.CASH,
                 "settled": "1",
                 "series": "B001",
-                "number": "0041314",
+                "number": "0041316",
             },
         )
         receipt = Receipt.objects.latest("pk")
 
-        self.assertEqual(receipt.number, 41314)
-        self.assertEqual(receipt.full_number, "B001-0041314")
+        self.assertEqual(receipt.number, 41316)
+        self.assertEqual(receipt.full_number, "B001-0041316")
 
     def test_the_screen_opens_on_the_first_book_that_numbers_itself(self):
         """No en el primero de la lista, que es un block de cobrador.
@@ -485,3 +488,223 @@ class ComprobanteDelTalonarioTests(PaymentsTestCase):
 
         self.assertEqual(receipt.full_number, "S010-0000267")
         self.assertEqual(Receipt.objects.filter(sequence__code="S010-RED-OPTICA").count(), 1)
+
+
+class PadronDeTalonariosPorOficinaTests(PaymentsTestCase):
+    """Cada ventanilla ofrece los blocks que tiene en el cajón.
+
+    Un talonario es papel, y el papel está en un sitio. Ofrecer en Apata un
+    block que vive en Oroya invita a numerar algo que nadie tiene delante, y
+    el número que salga no va a coincidir con ningún talonario real.
+
+    El padrón entra por migración, así que estas pruebas leen el que el
+    sistema trae de fábrica en vez de sembrar uno propio: lo que se está
+    comprobando es que las diez listas del sistema anterior quedaron escritas
+    tal cual.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="Cargo de prueba",
+            amount=Decimal("50.00"),
+            due_date=timezone.localdate() + timedelta(days=10),
+        )
+
+        self.user = self.make_user(
+            "cajera",
+            permissions=["view_charge", "add_payment", "view_payment"],
+        )
+        self.login(self.user)
+
+    def office(self, code):
+        return Office.objects.get(code=code)
+
+    def books_of(self, code):
+        """Los códigos que esa ventanilla ofrece, en su orden, sin los de mano."""
+        return [
+            sequence.code
+            for sequence in receipt_series_options(office=self.office(code))
+            if sequence.autonumber
+        ]
+
+    def atender_desde(self, code):
+        """Pone la barra superior en esa ventanilla, como haría el operador."""
+        office = self.office(code)
+
+        session = self.client.session
+        session[ACTIVE_BRANCH_SESSION_KEY] = office.branch.pk
+        session[ACTIVE_OFFICE_SESSION_KEY] = office.pk
+        session.save()
+
+        return office
+
+    def test_each_office_offers_the_books_of_the_old_system(self):
+        """Las listas son las del sistema que se reemplaza, oficina por oficina."""
+        esperado = {
+            "JAUJA-PRINCIPAL": [
+                "B001", "B002", "F001", "F002",
+                "S010-VELOCIDAD", "S010-RED-OPTICA", "S010-SPEEDY", "VCOND",
+            ],
+            "JAUJA-CAJAS": [
+                "B003-CLA", "F002-CLA",
+                "S003-SPEEDY", "S003-VELOCIDAD", "S003-RED-OPTICA", "VCOND",
+            ],
+            "JAUJA-YAUYOS": ["VCOND"],
+            "OROYA-OF2": ["B001-INV", "B002-CLA", "F001-INV", "VCOND-INV"],
+        }
+
+        for code, codigos in esperado.items():
+            with self.subTest(oficina=code):
+                self.assertEqual(self.books_of(code), codigos)
+
+    def test_each_office_keeps_its_own_order(self):
+        """Los mismos tres blocks, apilados distinto en cada ventanilla.
+
+        «S003» sale en Jauja Cajas como SPEEDY, VELOCIDAD, RED ÓPTICA y en
+        Huancayo El Tambo como VELOCIDAD, RED ÓPTICA, SPEEDY. Son los mismos
+        tres talonarios: por eso el orden vive en la relación y no en el
+        talonario, donde solo cabría una de las dos respuestas.
+        """
+        cajas = [code for code in self.books_of("JAUJA-CAJAS") if code.startswith("S003")]
+        tambo = [code for code in self.books_of("HUANCAYO-ELTAMBO") if code.startswith("S003")]
+
+        self.assertEqual(cajas, ["S003-SPEEDY", "S003-VELOCIDAD", "S003-RED-OPTICA"])
+        self.assertEqual(tambo, ["S003-VELOCIDAD", "S003-RED-OPTICA", "S003-SPEEDY"])
+
+    def test_a_shared_book_keeps_a_single_counter(self):
+        """«F001 - CABLE LOS ANDES» es un block, no uno por oficina.
+
+        Está en el cajón del Local Principal de Jauja, en el de la Oficina 2 y
+        en el de Apata, y va por el 8323 en los tres. Si cada ventanilla
+        llevara su propia cuenta, tres cajas emitirían el mismo número sobre
+        el mismo papel.
+        """
+        self.assertIn("F001", self.books_of("JAUJA-PRINCIPAL"))
+        self.assertIn("F001", self.books_of("JAUJA-APATA"))
+
+        _, primero = register_payment(
+            customer=self.customer,
+            amount=Decimal("10.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            series="F001",
+        )
+        _, segundo = register_payment(
+            customer=self.customer,
+            amount=Decimal("10.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            series="F001",
+        )
+
+        self.assertEqual(primero.number, 8323)
+        self.assertEqual(segundo.number, 8324)
+
+    def test_the_collector_books_are_offered_everywhere(self):
+        """Los blocks de un cobrador no son de una ventanilla.
+
+        Son papel que él lleva encima, así que aparecen se cobre donde se
+        cobre. Por eso no figuran en la lista de ninguna oficina y aquí se
+        comprueba que están en todas.
+        """
+        for office in Office.objects.all():
+            with self.subTest(oficina=office.code):
+                codigos = [
+                    sequence.code
+                    for sequence in receipt_series_options(office=office)
+                ]
+
+                self.assertIn("JU1", codigos)
+
+    def test_the_deposit_offers_what_its_main_office_offers(self):
+        """Lo que llega por banco cae en el depósito, y tiene que poder emitir.
+
+        No tiene blocks propios -nadie está parado ahí-, así que ofrece los
+        del local principal de su sede. Sin talonario no se podría registrar
+        una transferencia.
+        """
+        self.assertEqual(
+            self.books_of("JAUJA-DEPOSITO"),
+            self.books_of("JAUJA-PRINCIPAL"),
+        )
+
+    def test_without_an_office_the_whole_list_is_offered(self):
+        """Un despliegue sin padrón de oficinas sigue cobrando.
+
+        Es el mismo criterio que hace opcional la oficina en el cobro: la sede
+        basta para saber qué caja recibió el dinero, y quedarse sin series
+        dejaría la ventanilla parada por una tabla que nadie llenó.
+        """
+        codigos = [sequence.code for sequence in receipt_series_options()]
+
+        self.assertIn("B001", codigos)
+        self.assertIn("S002-SPEEDY", codigos)
+
+    def test_an_office_outside_the_padron_falls_back_to_the_whole_list(self):
+        """Una ventanilla que el padrón no nombra no se queda muda."""
+        recien_creada = Office.objects.create(
+            branch=self.branch,
+            code="SED01-NUEVA",
+            name="Ventanilla nueva",
+        )
+
+        codigos = [
+            sequence.code
+            for sequence in receipt_series_options(office=recien_creada)
+        ]
+
+        self.assertIn("B001", codigos)
+
+    def test_the_screen_only_offers_the_books_of_the_active_office(self):
+        self.atender_desde("JAUJA-CAJAS")
+
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk])
+        )
+        codigos = [
+            sequence.code for sequence in response.context["receipt_series"]
+        ]
+
+        self.assertIn("B003-CLA", codigos)
+        self.assertNotIn("S010-VELOCIDAD", codigos)
+
+    def test_a_book_from_another_office_is_refused(self):
+        """El guardia es el servidor, no el desplegable.
+
+        Que la opción no esté en la lista pintada no basta: el POST se puede
+        armar a mano. Cobrar desde Jauja Cajas con un block del Local
+        Principal emitiría un número sobre papel que esa ventanilla no tiene.
+        """
+        self.atender_desde("JAUJA-CAJAS")
+
+        emitidos = Receipt.objects.count()
+
+        response = self.client.post(
+            reverse("payments:register", args=[self.customer.pk]),
+            {
+                "amount": "50.00",
+                "method": Payment.Method.CASH,
+                "settled": "1",
+                "series": "S010-VELOCIDAD",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("series", response.context["form"].errors)
+        self.assertEqual(Receipt.objects.count(), emitidos)
+
+    def test_the_screen_opens_on_the_first_book_of_that_office(self):
+        """El talonario propuesto es el de la ventanilla, no el de la lista global."""
+        self.atender_desde("JAUJA-CAJAS")
+
+        response = self.client.get(
+            reverse("payments:register", args=[self.customer.pk])
+        )
+
+        self.assertEqual(response.context["form"]["series"].value(), "B003-CLA")

@@ -12,13 +12,20 @@
 
     <section class="tc-card tc-section tc-full">
 
-        <div class="tc-section-head">
+        {% comment %}
+        Cabecera en franja azul y sin contador, como la deuda y el historial.
+
+        Llevaba una píldora «N emitidos» que decía lo mismo que el pie del
+        paginador dos líneas más abajo -«N registros · página 1 de 1»-, y el
+        pie lo dice mejor: cuenta el total aunque la tabla muestre una página,
+        mientras que la píldora, al leer del paginador, iba a acabar diciendo
+        el total junto a una tabla de quince filas sin explicar la diferencia.
+        Es la misma razón por la que salió de la pantalla de deuda.
+        {% endcomment %}
+        <div class="tc-section-head banner">
             <h2 class="tc-section-title">
                 <i class="bi bi-receipt"></i>Comprobantes de pago
             </h2>
-            {% if page_obj %}
-                <span class="tc-pill">{{ page_obj.paginator.count }} emitido{{ page_obj.paginator.count|pluralize }}</span>
-            {% endif %}
         </div>
 
         {% if receipts %}

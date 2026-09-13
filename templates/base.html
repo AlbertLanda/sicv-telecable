@@ -440,7 +440,6 @@
                     <form method="post" action="{% url 'organization:set_active_office' %}">
                         {% csrf_token %}
                         <input type="hidden" name="office" value="{{ office.pk }}">
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
                         <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office }}</button>
                     </form>
                 </li>
@@ -461,7 +460,6 @@
                     <form method="post" action="{% url 'organization:set_active_branch' %}">
                         {% csrf_token %}
                         <input type="hidden" name="branch" value="{{ branch.pk }}">
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
                         <button type="submit" class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}">{{ branch.name }}</button>
                     </form>
                 </li>

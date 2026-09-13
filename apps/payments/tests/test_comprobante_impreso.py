@@ -234,7 +234,8 @@ class LaRazonSocialLaDecideElTalonarioTests(PaymentsTestCase):
             andes.sequence.issuer.business_name, "CABLE LOS ANDES E.I.R.L."
         )
         self.assertEqual(
-            inversiones.sequence.issuer.business_name, "INVERSIONES E.I.R.L."
+            inversiones.sequence.issuer.business_name,
+            "INVERSIONES EN TELECOMUNICACIONES DIGITALES S.A.C.",
         )
         self.assertNotEqual(
             andes.sequence.issuer.ruc, inversiones.sequence.issuer.ruc
@@ -457,7 +458,7 @@ class ElPapelLlenaLaHojaTests(PaymentsTestCase):
             branch=self.branch,
             user=self.cashier,
             allocations=[(self.charge, Decimal("79.00"))],
-            series="B001",
+            series="F001",
         )
 
     def medir(self):
@@ -568,7 +569,7 @@ class LasCajasVanRedondeadasTests(PaymentsTestCase):
             branch=self.branch,
             user=self.cashier,
             allocations=[(self.charge, Decimal("79.00"))],
-            series="B001",
+            series="F001",
         )
 
     def curvas(self):
@@ -627,3 +628,332 @@ class EmpresaEmisoraTests(PaymentsTestCase):
         empresa = Issuer.objects.get(code="SPQ")
 
         self.assertEqual(str(empresa), "SPEEDY QUANTICO E.I.R.L.")
+
+
+class LaBoletaVaEnTiqueTests(PaymentsTestCase):
+    """Los blocks de boleta numerados se entregan en un rollo estrecho.
+
+    Son dos papeles distintos y el sistema tiene que saber cuál toca. Lo dice
+    el talonario (`print_format`) y no la letra de la serie: los blocks de un
+    cobrador también son boletas y **no** van en tique, así que una regla
+    deducida de «empieza por B» los mandaría al papel equivocado.
+    """
+
+    # 80 mm de rollo, en puntos.
+    ANCHO_TIQUE = 80 * mm
+
+    def setUp(self):
+        super().setUp()
+
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            concept=Charge.Concept.MONTHLY,
+            description="INTERNET 300MG",
+            period=date(2026, 8, 1),
+            period_end=date(2026, 8, 31),
+            amount=Decimal("79.00"),
+            due_date=date(2026, 8, 31),
+        )
+
+    def papel(self, series, number=None):
+        """El ancho y el alto de la página, en puntos.
+
+        `number` solo hace falta para los blocks que no numeran solos: los de
+        un cobrador vienen numerados de papel y el cobro los exige.
+        """
+        _, receipt = register_payment(
+            customer=self.customer,
+            amount=Decimal("79.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(self.charge, Decimal("79.00"))],
+            series=series,
+            number=number,
+        )
+
+        buffer = BytesIO()
+        pdf.render_receipt(receipt, buffer)
+
+        medidas = re.search(
+            rb"/MediaBox\s*\[([^\]]+)\]", buffer.getvalue()
+        )
+
+        self.assertIsNotNone(medidas, f"{series}: el PDF no declara su página")
+
+        bordes = [float(valor) for valor in medidas.group(1).split()]
+
+        return bordes[2] - bordes[0], bordes[3] - bordes[1]
+
+    def test_a_boleta_book_prints_on_the_narrow_roll(self):
+        ancho, alto = self.papel("B001")
+
+        self.assertAlmostEqual(ancho, self.ANCHO_TIQUE, places=1)
+        self.assertGreater(alto, ancho, "el tique se entrega en vertical")
+
+    def test_an_invoice_book_keeps_the_half_sheet(self):
+        """La factura no cambia: sigue en la media hoja apaisada."""
+        ancho, alto = self.papel("F001")
+
+        self.assertAlmostEqual(ancho, pdf.PAGE_SIZE[0], places=1)
+        self.assertGreater(ancho, alto, "la media hoja va apaisada")
+
+    def test_a_public_service_receipt_keeps_the_half_sheet(self):
+        ancho, alto = self.papel("VCOND")
+
+        self.assertAlmostEqual(ancho, pdf.PAGE_SIZE[0], places=1)
+
+    def test_a_collector_book_keeps_the_half_sheet(self):
+        """Es boleta y aun así no va en tique.
+
+        Es el caso que obliga a guardar el formato en el talonario: por la
+        serie -«B: JU1»- y por el título del documento, este block es una
+        boleta como B001, y sin embargo se entrega en el otro papel.
+        """
+        sequence = ReceiptSequence.objects.get(code="JU1")
+
+        self.assertEqual(sequence.document_title, "BOLETA DE VENTA ELECTRÓNICA")
+        self.assertEqual(
+            sequence.print_format, ReceiptSequence.PrintFormat.SHEET
+        )
+
+        ancho, _ = self.papel("JU1", number=120)
+
+        self.assertAlmostEqual(ancho, pdf.PAGE_SIZE[0], places=1)
+
+    def test_every_numbered_boleta_book_prints_on_the_roll(self):
+        """Los diez blocks B00x del padrón, ninguno olvidado."""
+        boletas = ReceiptSequence.objects.filter(
+            series__startswith="B0",
+            autonumber=True,
+        )
+
+        self.assertEqual(boletas.count(), 10)
+
+        for sequence in boletas:
+            with self.subTest(talonario=sequence.code):
+                self.assertEqual(
+                    sequence.print_format,
+                    ReceiptSequence.PrintFormat.TICKET,
+                )
+
+    def test_the_ticket_carries_what_the_paper_declares(self):
+        """El tique dice lo mismo que la media hoja, en otro sitio."""
+        _, receipt = register_payment(
+            customer=self.customer,
+            amount=Decimal("79.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(self.charge, Decimal("79.00"))],
+            series="B001",
+        )
+
+        buffer = BytesIO()
+        pdf.render_receipt(receipt, buffer)
+        crudo = buffer.getvalue()
+
+        # Se busca en el PDF entero y no en el texto extraído: comprimido, el
+        # contenido es binario, y lo que se comprueba es que el dato llegó al
+        # archivo, no dónde quedó dibujado.
+        original = pdf.SimpleDocTemplate
+
+        with patch.object(
+            pdf, "SimpleDocTemplate", partial(original, pageCompression=0)
+        ):
+            buffer = BytesIO()
+            pdf.render_receipt(receipt, buffer)
+            crudo = buffer.getvalue()
+
+        for dato in (
+            b"BOLETA DE VENTA",
+            b"EMISI",
+            b"ABONADO",
+            b"MONEDA",
+            b"DESCRIPCI",
+            b"OP. GRAVADA",
+            b"I.G.V.",
+            b"CONDICI",
+            b"sunat.gob.pe",
+        ):
+            with self.subTest(dato=dato):
+                self.assertIn(dato, crudo)
+
+    def test_the_ticket_grows_with_the_detail(self):
+        """Un tique es tan largo como lo que tiene que decir.
+
+        Con alto fijo, un cobro de una línea dejaba media cuarta de rollo en
+        blanco y uno de diez se cortaba.
+        """
+        corto = self.papel("B001")[1]
+
+        for mes in range(6):
+            cargo = Charge.objects.create(
+                customer=self.customer,
+                concept=Charge.Concept.OTHER,
+                description=f"ANEXO {mes}",
+                amount=Decimal("20.00"),
+                due_date=date(2026, 8, 31),
+            )
+            register_payment(
+                customer=self.customer,
+                amount=Decimal("20.00"),
+                method=Payment.Method.CASH,
+                branch=self.branch,
+                user=self.cashier,
+                allocations=[(cargo, Decimal("20.00"))],
+                series="B002",
+            )
+
+        cargos = [
+            Charge.objects.create(
+                customer=self.customer,
+                concept=Charge.Concept.OTHER,
+                description=f"MENSUALIDAD {mes}",
+                amount=Decimal("30.00"),
+                due_date=date(2026, 9, 30),
+            )
+            for mes in range(6)
+        ]
+        _, largo = register_payment(
+            customer=self.customer,
+            amount=Decimal("180.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(cargo, Decimal("30.00")) for cargo in cargos],
+            series="B002",
+        )
+
+        buffer = BytesIO()
+        pdf.render_receipt(largo, buffer)
+        bordes = [
+            float(valor)
+            for valor in re.search(
+                rb"/MediaBox\s*\[([^\]]+)\]", buffer.getvalue()
+            ).group(1).split()
+        ]
+
+        self.assertGreater(bordes[3] - bordes[1], corto)
+
+
+class LosDatosDelEmisorTests(PaymentsTestCase):
+    """INVERSIONES ya no imprime un RUC de relleno."""
+
+    def test_inversiones_carries_its_real_identity(self):
+        issuer = Issuer.objects.get(code="INV")
+
+        self.assertEqual(
+            issuer.business_name,
+            "INVERSIONES EN TELECOMUNICACIONES DIGITALES S.A.C.",
+        )
+        self.assertEqual(issuer.ruc, "20603110456")
+
+    def test_the_two_addresses_are_two_lines(self):
+        """Son dos renglones de la cabecera del papel, no dos domicilios.
+
+        Por eso viven en un campo separados por salto de línea: el sistema no
+        tiene que distinguirlos, solo imprimirlos uno debajo de otro.
+        """
+        issuer = Issuer.objects.get(code="INV")
+        renglones = issuer.address.splitlines()
+
+        self.assertEqual(len(renglones), 2)
+        self.assertIn("Jauja", renglones[0])
+        self.assertIn("La Oroya", renglones[1])
+
+
+class ElLogotipoSeDibujaSinSuMargenTests(PaymentsTestCase):
+    """El archivo del logotipo trae aire dentro, y ese aire estorba.
+
+    El que hay hoy en MEDIA_ROOT lleva un 13% de blanco arriba y un 19% abajo.
+    Colocado alineado con la parte superior de su celda, lo que se ve arranca
+    tres milímetros por debajo de la razón social que tiene al lado, y el
+    logotipo parece caído en los dos papeles.
+
+    Se recorta al dibujar y no en el archivo: el logotipo lo deja alguien en su
+    sitio, no viene con el código.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            concept=Charge.Concept.OTHER,
+            description="ANEXO",
+            amount=Decimal("50.00"),
+            due_date=date(2026, 9, 30),
+        )
+
+    def dibujo_con_marco(self, carpeta, margen):
+        """Un logotipo de 100x100 con `margen` píxeles de blanco alrededor."""
+        from PIL import Image as PilImage, ImageDraw
+
+        lienzo = PilImage.new("RGB", (100, 100), (255, 255, 255))
+        pincel = ImageDraw.Draw(lienzo)
+        pincel.rectangle(
+            [margen, margen, 99 - margen, 99 - margen], fill=(10, 60, 120)
+        )
+
+        destino = Path(carpeta) / f"{pdf.LOGO_STEM}.png"
+        lienzo.save(destino)
+
+        return destino
+
+    def test_the_white_margin_is_cropped_away(self):
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_marco(carpeta, margen=20)
+
+            recortado = pdf._sin_margen_blanco(archivo)
+
+            from PIL import Image as PilImage
+
+            self.assertEqual(PilImage.open(recortado).size, (60, 60))
+
+    def test_a_drawing_without_margin_is_left_alone(self):
+        """Sin aire que quitar, el recorte no se inventa ninguno."""
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_marco(carpeta, margen=0)
+
+            recortado = pdf._sin_margen_blanco(archivo)
+
+            from PIL import Image as PilImage
+
+            self.assertEqual(PilImage.open(recortado).size, (100, 100))
+
+    def test_an_all_white_drawing_is_not_cropped_to_nothing(self):
+        """Recortar un dibujo en blanco lo dejaría en nada."""
+        from PIL import Image as PilImage
+
+        with TemporaryDirectory() as carpeta:
+            archivo = Path(carpeta) / f"{pdf.LOGO_STEM}.png"
+            PilImage.new("RGB", (40, 40), (255, 255, 255)).save(archivo)
+
+            self.assertEqual(pdf._sin_margen_blanco(archivo), str(archivo))
+
+    def test_both_papers_print_without_any_logo(self):
+        """Sin el archivo, la ventanilla entrega el papel igual.
+
+        El tique preguntaba `is not None` y `_logo` devuelve cadena vacía, así
+        que la cadena pasaba el guardia y el papel reventaba al pedirle
+        alineación a un texto. Un despliegue al que no le han dejado el dibujo
+        tiene que poder cobrar.
+        """
+        for series in ("B001", "F001"):
+            with self.subTest(talonario=series):
+                _, receipt = register_payment(
+                    customer=self.customer,
+                    amount=Decimal("10.00"),
+                    method=Payment.Method.CASH,
+                    branch=self.branch,
+                    user=self.cashier,
+                    allocations=[],
+                    series=series,
+                )
+
+                with patch.object(pdf, "find_logo", lambda: None):
+                    buffer = BytesIO()
+                    pdf.render_receipt(receipt, buffer)
+
+                self.assertGreater(len(buffer.getvalue()), 0)

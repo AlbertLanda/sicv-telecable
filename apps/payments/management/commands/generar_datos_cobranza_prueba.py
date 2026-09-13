@@ -12,6 +12,13 @@ completa lo que falte en vez de inflar la deuda.
     python manage.py generar_datos_cobranza_prueba
     python manage.py generar_datos_cobranza_prueba --abonado JA01-A0000001
     python manage.py generar_datos_cobranza_prueba --meses 6 --dry-run
+    python manage.py generar_datos_cobranza_prueba --serie B001 B002
+
+`--serie` emite ademas un cobro desde cada talonario que se le indique, para
+poder mirar el papel que sale de ese block concreto -la boleta B00x va en
+tique y la factura en media hoja, y hasta que no hay un comprobante emitido de
+cada uno no hay forma de verlo-. Los cobros normales del comando salen del
+talonario por defecto, que no es ninguno de esos.
 """
 
 from datetime import timedelta
@@ -23,7 +30,8 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.customers.models import Customer
-from apps.payments.models import Charge, Payment
+from apps.organization.models import Office
+from apps.payments.models import Charge, Payment, Receipt, ReceiptSequence
 from apps.payments.services import (
     create_manual_charge,
     first_day_of,
@@ -60,6 +68,18 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--serie",
+            nargs="+",
+            default=[],
+            metavar="CODIGO",
+            help=(
+                "Emite además un cobro desde cada talonario indicado, para "
+                "ver el papel que sale de ese block. Idempotente por "
+                "talonario: si el abonado ya tiene un comprobante suyo, no "
+                "se emite otro."
+            ),
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Muestra lo que haría y revierte los cambios.",
@@ -92,8 +112,10 @@ class Command(BaseCommand):
         extra = self._issue_manual_charge(customer)
         payments = self._register_payments(customer)
         commitment = self._grant_commitment(customer)
+        muestras = self._issue_sample_receipts(customer, options["serie"])
 
         self._report(charges, extra, payments, commitment, customer)
+        self._report_samples(muestras)
 
         if dry_run:
             transaction.set_rollback(True)
@@ -255,6 +277,110 @@ class Command(BaseCommand):
             registered.append((payment, receipt))
 
         return registered
+
+    def _issue_sample_receipts(self, customer, codes):
+        """Un cobro por talonario indicado, para poder mirar su papel.
+
+        Idempotente por talonario y no por abonado: los cobros normales del
+        comando se saltan si el abonado ya tiene alguno, pero aquí se ha
+        nombrado un block concreto a propósito. Lo que no se hace es emitir
+        dos veces del mismo: volver a correr el comando no llena la caja de
+        comprobantes repetidos.
+        """
+        muestras = []
+
+        for code in codes:
+            sequence = ReceiptSequence.objects.filter(code=code).first()
+
+            if sequence is None:
+                raise CommandError(
+                    f"No existe el talonario «{code}». Los que hay: "
+                    + ", ".join(
+                        ReceiptSequence.objects.filter(is_active=True)
+                        .order_by("position")
+                        .values_list("code", flat=True)
+                    )
+                )
+
+            ya_tiene = Receipt.objects.filter(
+                payment__customer=customer, sequence=sequence
+            ).first()
+
+            if ya_tiene:
+                muestras.append((sequence, ya_tiene, False))
+                continue
+
+            # Hasta tres deudas en el mismo cobro. Un comprobante de una
+            # linea no ensena lo que hay que mirar del papel -la tabla del
+            # detalle, el precio unitario a seis decimales y como suman las
+            # tres columnas-, que es justo lo que se quiere comprobar.
+            cubiertos = list(
+                Charge.objects.filter(customer=customer)
+                .outstanding()
+                .order_by("due_date")[:3]
+            )
+
+            if not cubiertos:
+                raise CommandError(
+                    f"El abonado no tiene deuda abierta que cobrar con "
+                    f"«{code}». Corra el comando sin --serie primero."
+                )
+
+            _, receipt = register_payment(
+                customer=customer,
+                amount=sum(
+                    (charge.balance for charge in cubiertos), Decimal("0.00")
+                ),
+                method=Payment.Method.CASH,
+                branch=customer.branch,
+                # Desde una ventanilla que de verdad ofrezca ese block: el
+                # padrón dice de qué oficina sale cada talonario, y un cobro
+                # sembrado desde otra sería un ejemplo que la pantalla no
+                # dejaría repetir.
+                office=self._office_offering(sequence, customer),
+                user=self._pick_user(),
+                note=f"Cobro de ejemplo desde el talonario {sequence.code}.",
+                allocations=[
+                    (charge, charge.balance) for charge in cubiertos
+                ],
+                series=sequence.code,
+                # Los blocks que no numeran solos vienen numerados de papel,
+                # así que hay que darles uno.
+                number=None if sequence.autonumber else 1,
+            )
+
+            muestras.append((sequence, receipt, True))
+
+        return muestras
+
+    def _office_offering(self, sequence, customer):
+        """Una ventanilla de la sede del abonado que ofrezca ese talonario."""
+        return (
+            Office.objects.filter(
+                branch=customer.branch,
+                is_active=True,
+                is_deposit=False,
+                sequence_links__sequence=sequence,
+            )
+            .order_by("sequence_links__position")
+            .first()
+        )
+
+    def _report_samples(self, muestras):
+        if not muestras:
+            return
+
+        self.stdout.write("")
+        self.stdout.write(self.style.MIGRATE_HEADING("  Comprobantes de ejemplo"))
+
+        for sequence, receipt, nuevo in muestras:
+            formato = sequence.get_print_format_display()
+            marca = "emitido" if nuevo else "ya existía"
+
+            self.stdout.write(
+                f"    {receipt.full_number}  ·  {sequence.label}  ·  "
+                f"{formato}  ({marca})"
+            )
 
     def _grant_commitment(self, customer):
         """Un compromiso vigente sobre la deuda más vieja que quede abierta."""

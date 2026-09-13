@@ -88,25 +88,77 @@ class ActiveBranchTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.headers["Location"])
 
-    def test_external_next_is_not_followed(self):
-        """El formulario no debe servir de trampolín a otro dominio."""
+    def test_changing_branch_lands_on_the_search(self):
+        """Cambiar de sede deja atrás lo que se estaba mirando.
+
+        No tiene sentido seguir viendo la ficha de un abonado de Jauja con la
+        barra diciendo Oroya: la pantalla entera pasa a hablar de otro sitio.
+        Antes se volvía a la pantalla anterior y el operador se quedaba
+        delante de un abonado que ya no era del padrón que tenía elegido.
+        """
+        response = self.client.post(self.url, {"branch": self.oroya.pk})
+
+        self.assertRedirects(response, reverse("customers:search"))
+
+    def test_changing_branch_is_no_springboard_to_another_site(self):
+        """El destino no lo decide el formulario, así que no hay a dónde ir.
+
+        Cuando el destino venía en un campo del POST había que validarlo
+        contra el propio host. Ahora es fijo: se comprueba que un intento de
+        colarlo no llega a ninguna parte.
+        """
         response = self.client.post(self.url, {
             "branch": self.oroya.pk,
             "next": "https://sitio-externo.example.com/",
         })
 
-        self.assertEqual(response.status_code, 302)
-        self.assertNotIn("sitio-externo", response.headers["Location"])
+        self.assertRedirects(response, reverse("customers:search"))
 
-    def test_internal_next_is_followed(self):
-        destination = reverse("accounts:profile")
+    def test_changing_branch_forgets_the_customer_being_consulted(self):
+        """El abonado elegido era del padrón de la sede anterior.
 
-        response = self.client.post(self.url, {
-            "branch": self.oroya.pk,
-            "next": destination,
-        })
+        Las entradas de cuenta del menú resuelven el abonado por la sesión, y
+        dejarlo puesto haría que siguieran abriendo a alguien de la otra sede
+        con la barra ya cambiada.
+        """
+        session = self.client.session
+        session["selected_customer_id"] = 12345
+        session.save()
 
-        self.assertRedirects(response, destination)
+        self.client.post(self.url, {"branch": self.oroya.pk})
+
+        self.assertNotIn("selected_customer_id", self.client.session)
+
+    def test_changing_office_lands_on_the_search_too(self):
+        """La ventanilla decide de qué talonarios se emite.
+
+        Una pantalla de cobro armada con las series de una oficina deja de
+        valer en cuanto se elige otra, así que se vuelve al buscador en vez
+        de dejar delante un formulario que ya no corresponde.
+        """
+        response = self.client.post(
+            reverse("organization:set_active_office"),
+            {"office": self.huancayo_office.pk},
+        )
+
+        self.assertRedirects(response, reverse("customers:search"))
+
+    def test_changing_office_keeps_the_customer(self):
+        """La sede no ha cambiado, así que el abonado sigue siendo de aquí.
+
+        Soltarlo sería perder un dato que sigue valiendo: lo que deja de
+        valer es la pantalla, y de eso ya se encarga volver al buscador.
+        """
+        session = self.client.session
+        session["selected_customer_id"] = 12345
+        session.save()
+
+        self.client.post(
+            reverse("organization:set_active_office"),
+            {"office": self.huancayo_office.pk},
+        )
+
+        self.assertEqual(self.client.session["selected_customer_id"], 12345)
 
     def test_user_without_branch_defaults_to_huancayo(self):
         self.user.branch = None

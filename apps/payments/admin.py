@@ -6,6 +6,7 @@ from .models import (
     Payment,
     PaymentAllocation,
     Receipt,
+    OfficeSequence,
     ReceiptSequence,
 )
 
@@ -93,6 +94,25 @@ class ReceiptAdmin(admin.ModelAdmin):
     date_hierarchy = "issued_at"
 
 
+class OfficeSequenceInline(admin.TabularInline):
+    """De qué ventanillas se ofrece este talonario.
+
+    Va como inline del talonario y no como pantalla aparte porque la pregunta
+    que se hace es siempre «¿dónde está este block?»: un block de papel se
+    mueve de cajón, se acaba y se reemplaza, y quien lo gestiona tiene delante
+    el talonario, no la oficina.
+
+    `position` es el orden dentro del desplegable de esa ventanilla, que es
+    suyo: los mismos tres «S003» van en distinto orden en Jauja Cajas y en
+    Huancayo El Tambo.
+    """
+
+    model = OfficeSequence
+    extra = 0
+    autocomplete_fields = ["office"]
+    ordering = ["office", "position"]
+
+
 @admin.register(ReceiptSequence)
 class ReceiptSequenceAdmin(admin.ModelAdmin):
     # El código manda y la serie impresa se repite, así que la lista muestra
@@ -107,5 +127,6 @@ class ReceiptSequenceAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     ]
-    list_filter = ["autonumber", "is_active"]
+    list_filter = ["autonumber", "is_active", "offices"]
     search_fields = ["code", "series", "label"]
+    inlines = [OfficeSequenceInline]

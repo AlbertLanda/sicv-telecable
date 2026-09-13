@@ -291,6 +291,17 @@ class PaymentRegisterView(
     def board_selection(self):
         return self._selected_charges(list(outstanding_charges(self.customer)))
 
+    def active_office(self):
+        """La ventanilla desde la que se atiende ahora.
+
+        Se resuelve aqui y no en cada sitio que la necesita porque tiene que
+        ser **la misma** al pintar el formulario y al validarlo: el desplegable
+        de series se arma con ella, y `ChoiceField` valida contra esas mismas
+        opciones. Resueltas por separado, un POST podria validarse contra una
+        lista distinta de la que el operador tuvo delante.
+        """
+        return get_active_office(self.request)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         charges = list(outstanding_charges(self.customer))
@@ -300,7 +311,11 @@ class PaymentRegisterView(
         # monto llega ya sumado -y con el pronto pago aplicado cuando
         # corresponde- para que no tenga que recalcular a mano lo que las
         # filas ya decian.
-        series = receipt_series_options()
+        # De donde se esta cobrando decide que talonarios hay. Lo dice la
+        # barra superior, igual que al guardar: si la lista se armara sin
+        # ella, la pantalla ofreceria blocks de otra ventanilla.
+        office = self.active_office()
+        series = receipt_series_options(office=office)
 
         # La pantalla se abre con el comprobante que se emitiria si el
         # operador no cambiara nada, asi que el talonario propuesto es el
@@ -327,13 +342,16 @@ class PaymentRegisterView(
 
         if selected and "form" not in kwargs:
             context["form"] = PaymentRegisterForm(
+                office=office,
                 initial=dict(
                     inicial,
                     amount=sum((charge.balance for charge in selected), ZERO),
-                )
+                ),
             )
 
-        context.setdefault("form", PaymentRegisterForm(initial=inicial))
+        context.setdefault(
+            "form", PaymentRegisterForm(office=office, initial=inicial)
+        )
         context["charges"] = charges
         context["selected_charges"] = selected
         context["selected_ids"] = [charge.pk for charge in selected]
@@ -369,7 +387,17 @@ class PaymentRegisterView(
         return [charge for charge in charges if str(charge.pk) in wanted]
 
     def post(self, request, *args, **kwargs):
-        form = PaymentRegisterForm(request.POST)
+        # Donde se esta cobrando lo dice la barra superior y solo ella. La
+        # ficha lo muestra pero no lo pregunta: eran dos sitios para decidir
+        # lo mismo, y el que se quedaba sin mirar -el de la barra- seguia
+        # gobernando el resto de la sesion.
+        #
+        # Se resuelve antes de armar el formulario porque decide que series
+        # son validas: una serie de otra ventanilla no entra, y el guardia no
+        # es el desplegable -que el navegador puede saltarse- sino esto.
+        office = self.active_office()
+
+        form = PaymentRegisterForm(request.POST, office=office)
         charges = list(outstanding_charges(self.customer))
 
         if not form.is_valid():
@@ -391,15 +419,6 @@ class PaymentRegisterView(
             ] or None
 
         branch = get_active_branch(request)
-
-        # Donde se esta cobrando lo dice la barra superior y solo ella. La
-        # ficha lo muestra pero no lo pregunta: eran dos sitios para decidir
-        # lo mismo, y el que se quedaba sin mirar -el de la barra- seguia
-        # gobernando el resto de la sesion.
-        #
-        # Sin oficinas cargadas queda en blanco y el cobro sigue: la sede
-        # basta para saber que caja lo recibio.
-        office = get_active_office(request, branch=branch)
 
         if branch is None:
             form.add_error(
@@ -689,6 +708,74 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         return redirect("payments:debt", pk=self.customer.pk)
 
 
+class PaymentCommitmentDetailView(
+    PermissionRequiredMixin, CustomerScopedMixin, DetailView
+):
+    """Un compromiso ya concedido, con la opcion de anularlo.
+
+    Se llega desde el aviso del tablero de deuda. Cuelga del abonado y no solo
+    del compromiso para que la miga de pan y las pestañas sepan de quien se
+    esta hablando, igual que el resto de la cuenta.
+    """
+
+    template_name = "payments/commitment_detail.html"
+    permission_required = "payments.view_charge"
+    context_object_name = "commitment"
+    pk_url_kwarg = "commitment_pk"
+
+    def get_queryset(self):
+        # Acotado al abonado de la URL: un compromiso de otro cliente no se
+        # abre por poner su numero a mano.
+        return PaymentCommitment.objects.filter(
+            customer=self.customer
+        ).select_related("granted_by", "authorized_by")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_grant_commitment"] = self.request.user.has_perm(
+            "payments.grant_paymentcommitment"
+        )
+        context["now"] = timezone.localtime()
+
+        return context
+
+
+class PaymentCommitmentPdfView(
+    PermissionRequiredMixin, CustomerScopedMixin, DetailView
+):
+    """El compromiso como papel, para firmarlo.
+
+    Cuelga del compromiso y no del abonado por la misma razon que el PDF del
+    comprobante: es el mismo documento por otra salida, no otra pantalla.
+    """
+
+    permission_required = "payments.view_charge"
+    context_object_name = "commitment"
+    pk_url_kwarg = "commitment_pk"
+
+    def get_queryset(self):
+        return PaymentCommitment.objects.filter(
+            customer=self.customer
+        ).select_related("customer", "granted_by", "authorized_by")
+
+    def render_to_response(self, context, **kwargs):
+        from .commitment_pdf import render_commitment
+
+        buffer = BytesIO()
+        nombre = render_commitment(self.object, buffer)
+        buffer.seek(0)
+
+        # `ver=1` lo abre en el visor del navegador; sin el, se descarga. Es el
+        # mismo reparto que el comprobante: imprimir es mirar el papel en la
+        # pestaña de al lado, guardar es otra cosa.
+        return FileResponse(
+            buffer,
+            as_attachment="ver" not in self.request.GET,
+            filename=nombre,
+            content_type="application/pdf",
+        )
+
+
 class PaymentCommitmentCreateView(
     PermissionRequiredMixin,
     CustomerScopedMixin,
@@ -724,7 +811,6 @@ class PaymentCommitmentCreateView(
         context["selected_total"] = sum(
             (charge.balance for charge in selected), ZERO
         )
-        context["commitments"] = customer_commitments(self.customer)
         context["now"] = timezone.localtime()
 
         return context
@@ -741,10 +827,15 @@ class PaymentCommitmentCreateView(
                 customer=self.customer,
                 charges=selected,
                 committed_date=form.cleaned_data["committed_date"],
-                reason=form.cleaned_data["reason"],
+                reason=form.cleaned_data.get("reason", ""),
                 amount=form.cleaned_data.get("amount"),
                 user=request.user,
                 authorized_by=form.cleaned_data.get("authorized_by"),
+                installments=form.installments(),
+                representative=form.cleaned_data.get("representative", ""),
+                representative_document=form.cleaned_data.get(
+                    "representative_document", ""
+                ),
             )
         except ValidationError as exc:
             form.add_error(None, exc)

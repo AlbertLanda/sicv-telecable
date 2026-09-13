@@ -26,6 +26,7 @@ from .models import (
     Payment,
     PaymentAllocation,
     PaymentCommitment,
+    PaymentCommitmentInstallment,
     Receipt,
     ReceiptSequence,
     ZERO,
@@ -619,11 +620,14 @@ def grant_commitment(
     customer,
     charges,
     committed_date,
-    reason,
     user,
+    reason="",
     amount=None,
     day=None,
     authorized_by=None,
+    installments=None,
+    representative="",
+    representative_document="",
 ):
     """Concede un compromiso de pago sobre cargos concretos.
 
@@ -633,6 +637,13 @@ def grant_commitment(
     El monto, si no se indica, es el saldo de los cargos elegidos. Se permite
     indicarlo aparte porque el abonado puede comprometerse por menos de lo que
     debe, y ese acuerdo hay que poder registrarlo tal como se hizo.
+
+    `installments` es el plan de cuotas -pares (numero, monto, fecha)- con el
+    que el abonado piensa pagarlo. Es detalle del acuerdo y no otra promesa:
+    la fecha que aplaza el corte sigue siendo `committed_date`, una sola. Si
+    cada cuota protegiera hasta la siguiente, la proteccion se renovaria sola y
+    un plan de quince cuotas dejaria al abonado fuera del corte durante meses
+    sin que nadie lo volviera a decidir.
     """
     day = day or timezone.localdate()
     charges = list(charges)
@@ -675,11 +686,15 @@ def grant_commitment(
             f"elegidos (S/ {outstanding})."
         )
 
+    cuotas = _clean_installments(installments, amount)
+
     commitment = PaymentCommitment(
         customer=customer,
         amount=amount,
         committed_date=committed_date,
         reason=(reason or "").strip(),
+        representative=(representative or "").strip(),
+        representative_document=(representative_document or "").strip(),
         granted_by=user,
         authorized_by=authorized_by,
     )
@@ -689,7 +704,63 @@ def grant_commitment(
     commitment.save()
     commitment.charges.set(charges)
 
+    for numero, monto, fecha in cuotas:
+        PaymentCommitmentInstallment.objects.create(
+            commitment=commitment,
+            number=numero,
+            amount=monto,
+            due_date=fecha,
+        )
+
     return commitment
+
+
+def _clean_installments(installments, amount):
+    """Valida el plan de cuotas contra lo que se esta comprometiendo.
+
+    Dos reglas, y las dos por el mismo motivo: el plan describe como se paga lo
+    comprometido, no puede prometer otra cosa.
+
+    - Una cuota necesita monto **y** fecha. Media cuota no dice nada: ni
+      cuanto ni cuando, y guardarla dejaria un plan que no se puede seguir.
+    - La suma de las cuotas no puede pasar del monto comprometido. Pasarse
+      seria un plan para pagar mas de lo que se acaba de acordar, y el papel
+      diria dos cifras distintas sobre el mismo acuerdo.
+
+    Que sume **menos** si se acepta: el operador puede dejar apuntadas las dos
+    primeras cuotas y el resto para cuando se sepa.
+    """
+    if not installments:
+        return []
+
+    cuotas = []
+
+    for numero, monto, fecha in installments:
+        if monto is None and fecha is None:
+            continue
+
+        if monto is None or fecha is None:
+            raise ValidationError(
+                f"La cuota {numero} necesita monto y fecha: con uno de los dos "
+                f"no se sabe ni cuanto ni cuando."
+            )
+
+        if Decimal(monto) <= ZERO:
+            raise ValidationError(
+                f"El monto de la cuota {numero} debe ser mayor a cero."
+            )
+
+        cuotas.append((numero, Decimal(monto), fecha))
+
+    total = sum((monto for _, monto, _ in cuotas), ZERO)
+
+    if total > amount:
+        raise ValidationError(
+            f"Las cuotas suman S/ {total} y el compromiso es de S/ {amount}: "
+            f"el plan no puede prometer mas de lo acordado."
+        )
+
+    return cuotas
 
 
 def customer_commitments(customer):
@@ -711,12 +782,24 @@ def customer_commitments(customer):
     return commitments
 
 
-def receipt_series_options():
-    """Los talonarios en uso, en el orden de la ventanilla.
+def receipt_series_options(office=None):
+    """Los talonarios que ofrece una ventanilla, en el orden en que los ofrece.
 
     Salen de las filas de ReceiptSequence, que es donde vive el correlativo:
     ofrecer una serie que no tiene fila obligaria a crearla al vuelo dentro
     del cobro, y el numero se emitiria sin el bloqueo que evita repetirlo.
+
+    **Varian por oficina** porque un talonario es papel que esta en un cajon.
+    Apata no puede emitir del block que vive en Oroya, y ofrecerselo invita a
+    numerar algo que nadie tiene delante. El orden tambien es de la oficina:
+    los tres «S003» salen en Jauja Cajas como SPEEDY, VELOCIDAD, RED OPTICA y
+    en Huancayo El Tambo al reves, asi que lo dice la relacion.
+
+    Sin oficina -o con una que el padron no nombra- se devuelve la lista
+    completa. Es el mismo criterio que hace opcional la oficina en el cobro:
+    un despliegue sin padron cargado sigue cobrando, porque la sede basta para
+    saber que caja recibio el dinero, y quedarse sin series dejaria la
+    ventanilla parada por una tabla que nadie lleno.
 
     R001 no esta entre ellas. Era el talonario propio del sistema, el que se
     uso mientras no habia padron, y sigue existiendo porque sus comprobantes
@@ -726,6 +809,17 @@ def receipt_series_options():
     vuelo para que la lista no quede vacia volveria a meter R001 por la puerta
     de atras en cada base recien creada.
     """
+    if office is not None:
+        propios = list(
+            ReceiptSequence.objects.filter(
+                is_active=True,
+                office_links__office=office,
+            ).order_by("office_links__position", "position", "label")
+        )
+
+        if propios:
+            return propios
+
     return list(ReceiptSequence.objects.filter(is_active=True))
 
 
