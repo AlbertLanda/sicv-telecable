@@ -12,8 +12,50 @@ comprobarla sin abrir un PDF y mirarlo.
 
 from decimal import Decimal, ROUND_HALF_UP
 
+from apps.customers.models import Customer
+
 
 ZERO = Decimal("0.00")
+
+# Catálogo 06 de SUNAT: cómo se nombra el documento del receptor cuando el
+# comprobante se declara. El sistema guarda «DNI» porque es lo que el operador
+# lee en pantalla, y el QR pide «1»; traducir aquí evita que la pantalla tenga
+# que hablar en códigos para que el papel salga bien.
+SUNAT_RECEIVER_DOCUMENTS = {
+    Customer.DocumentType.DNI: "1",
+    Customer.DocumentType.CE: "4",
+    Customer.DocumentType.RUC: "6",
+    Customer.DocumentType.PASSPORT: "7",
+}
+
+# Sin documento identificado. Es un valor del propio catálogo, no un hueco: la
+# boleta de menos de S/ 700 puede emitirse sin receptor, y el campo va igual.
+SUNAT_NO_DOCUMENT = "0"
+
+
+def sunat_receiver_document(document_type):
+    """El código del catálogo 06 para ese tipo de documento."""
+    return SUNAT_RECEIVER_DOCUMENTS.get(document_type, SUNAT_NO_DOCUMENT)
+
+
+def payment_condition(payment):
+    """Si el comprobante se emitió al contado o al crédito.
+
+    No es un campo aparte: lo dice la fecha de vencimiento. Un cobro que se
+    entrega con el dinero delante no vence, y solo se le pone vencimiento al
+    que se emite para pagar después. Eso es crédito.
+
+    Se mira el vencimiento y **no** el estado del pago, aunque el estado
+    también lo distinga al emitirlo. Una factura al crédito que después se
+    cobra sigue siendo al crédito: la F002-0005029 que se reproduce dice
+    «CREDITO» y lleva fecha de cancelación, las dos cosas a la vez. Leyendo
+    el estado, esa misma factura cambiaría de condición al confirmarse y
+    reimprimirla daría un papel distinto del entregado.
+    """
+    if payment.due_date:
+        return "CREDITO"
+
+    return "CONTADO"
 
 # IGV peruano. Es un tipo de interés del Estado, no una constante del sistema:
 # cuando cambie, cambia aquí y el papel entero se recalcula.

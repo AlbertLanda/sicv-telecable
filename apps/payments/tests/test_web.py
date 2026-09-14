@@ -201,7 +201,11 @@ class ReceiptsScreenTests(AccountScreensTestCase):
         response = self.client.get(self.receipts_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "R001-0000001")
+        # Serie y numero van en columnas separadas, como en el padron del
+        # sistema que se reemplaza, asi que el numero completo ya no se
+        # escribe de una pieza en la lista.
+        self.assertContains(response, "R001")
+        self.assertContains(response, "0000001")
 
     def test_the_receipt_of_a_voided_payment_is_marked(self):
         payment, receipt = register_payment(

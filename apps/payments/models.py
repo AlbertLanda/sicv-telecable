@@ -976,6 +976,24 @@ class ReceiptSequence(models.Model):
         help_text="Como se lee en el desplegable de cobro.",
     )
 
+    # Catálogo 01 de SUNAT: qué clase de documento es, en el código con el
+    # que se declara. Va aquí y no deducido de `document_title` por lo mismo
+    # que el formato impreso: el título es texto libre que alguien puede
+    # reescribir -«BOLETA DE VENTA» sin «ELECTRÓNICA», por ejemplo- y una
+    # regla que lo lea dejaría de reconocerlo sin avisar, con el QR saliendo
+    # mal desde ese momento.
+    class SunatCode(models.TextChoices):
+        FACTURA = "01", "Factura"
+        BOLETA = "03", "Boleta de venta"
+        RECIBO_SERVICIO = "14", "Recibo por servicios públicos"
+
+    sunat_code = models.CharField(
+        max_length=2,
+        choices=SunatCode.choices,
+        default=SunatCode.BOLETA,
+        verbose_name="Código SUNAT del documento",
+    )
+
     class PrintFormat(models.TextChoices):
         SHEET = "SHEET", "Media hoja apaisada"
         TICKET = "TICKET", "Tique en vertical"
@@ -1173,8 +1191,20 @@ class Receipt(models.Model):
         return self.full_number
 
     @property
+    def printed_number(self):
+        """El correlativo solo, sin la serie.
+
+        La lista de comprobantes presenta serie y numero en columnas
+        separadas -como el padron del sistema que se reemplaza-, y sin esto
+        la plantilla tendria que repetir los ceros a la izquierda por su
+        cuenta; que es justo lo que `format_receipt_number` existe para
+        evitar.
+        """
+        return format_receipt_number(self.number)
+
+    @property
     def full_number(self):
-        return f"{self.series}-{format_receipt_number(self.number)}"
+        return f"{self.series}-{self.printed_number}"
 
     @property
     def is_voided(self):

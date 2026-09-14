@@ -43,6 +43,8 @@ from .invoicing import (
     amount_in_words,
     receipt_lines,
     receipt_totals,
+    payment_condition,
+    sunat_receiver_document,
 )
 from .models import ReceiptSequence, format_receipt_number
 
@@ -405,7 +407,10 @@ def _pie_tique(receipt, estilos, ancho, totals):
     piezas = [
         Paragraph(amount_in_words(totals["total"]), estilos["letras"]),
         Spacer(1, 1.5 * mm),
-        Paragraph("CONDICIÓN DE PAGO", estilos["etiqueta"]),
+        Paragraph(
+            f"CONDICIÓN DE PAGO   {payment_condition(receipt.payment)}",
+            estilos["etiqueta"],
+        ),
         Spacer(1, 2 * mm),
     ]
 
@@ -670,8 +675,27 @@ def _cabecera(receipt, estilos, ancho):
     return tabla
 
 
+def _es_factura(receipt):
+    """Si este papel es una factura.
+
+    La factura lleva cuatro cosas que el recibo y la boleta no -condición de
+    pago, guía de remisión, detracción y el cuadro de cuotas-, y se pregunta
+    desde tres sitios distintos del dibujo. Se responde por el código de
+    SUNAT del talonario y no por la letra de la serie: `F002` y `F002-CLA`
+    son dos blocks de la misma serie impresa, y mañana puede haber una
+    factura que no empiece por F.
+    """
+    return receipt.sequence.sunat_code == ReceiptSequence.SunatCode.FACTURA
+
+
 def _abonado(receipt, estilos, ancho):
-    """La caja del abonado: a quién se le cobró y cuándo."""
+    """La caja del abonado: a quién se le cobró y cuándo.
+
+    La columna de la derecha crece en la factura: lleva además la condición
+    de pago y la guía de remisión, que es como las emite el sistema que se
+    reemplaza. En el recibo y en la boleta esas dos filas no existen -no
+    estarían en blanco, no estarían-.
+    """
     payment = receipt.payment
     customer = payment.customer
     direccion = customer.addresses.filter(is_primary=True).first()
@@ -692,12 +716,24 @@ def _abonado(receipt, estilos, ancho):
         colWidths=[16 * mm, 96 * mm],
     )
 
+    filas_derecha = [
+        par("F. Emisión", receipt.issued_at.strftime("%d/%m/%Y %H:%M:%S")),
+        par("Moneda", "SOLES"),
+    ]
+
+    if _es_factura(receipt):
+        filas_derecha.append(
+            par("Condición de pago", payment_condition(payment))
+        )
+        # En blanco: el sistema no emite guías de remisión. La fila va igual
+        # porque el formato la tiene, y un hueco con su etiqueta se lee como
+        # «no aplica»; la fila ausente, en cambio, haría que dos facturas de
+        # la misma empresa no tuvieran la misma forma.
+        filas_derecha.append(par("G. Remisión", ""))
+
     derecha = Table(
-        [
-            par("F. Emisión", receipt.issued_at.strftime("%d/%m/%Y %H:%M:%S")),
-            par("Moneda", "SOLES"),
-        ],
-        colWidths=[18 * mm, 34 * mm],
+        filas_derecha,
+        colWidths=[26 * mm, 26 * mm],
     )
 
     interno = TableStyle([
@@ -801,24 +837,35 @@ def _detalle(receipt, estilos, ancho, lines, relleno=RELLENO_MINIMO):
 def _qr(receipt, totals, tamaño):
     """El código del comprobante, con los datos que lo identifican.
 
-    Lleva el orden con el que SUNAT los publica -emisor, tipo, serie, número,
-    IGV, total, fecha y documento del receptor- para que el día que el papel
-    sea un comprobante declarado, el contenido ya sea el que toca y solo haya
-    que firmarlo.
+    Diez campos separados por `|`, en el orden exacto de un comprobante
+    declarado. Está comprobado contra uno: se escaneó el QR de la boleta
+    B003-0034430 de INVERSIONES -aceptada por SUNAT- y devolvió
+
+        20603110456|03|B003|0034430|9.15|60.00|2025-12-22|1|20723004|R5Betfw/…
+
+    Los dos campos que antes iban en castellano -«BOLETA DE VENTA
+    ELECTRÓNICA» y «DNI»- resultaron ser códigos de catálogo, `03` y `1`, y el
+    décimo campo, que faltaba, es el valor resumen que ya se imprime debajo.
+
+    Sigue sin ser un comprobante declarado: el valor resumen es el de
+    `_resumen`, calculado sobre los datos del propio recibo, y no el hash del
+    XML firmado. Lo que esto fija es la forma, para que el día que se declare
+    solo cambie ese último campo.
     """
     issuer = receipt.sequence.issuer
     customer = receipt.payment.customer
 
     contenido = "|".join([
         issuer.ruc if issuer else "",
-        receipt.sequence.document_title,
+        receipt.sequence.sunat_code,
         receipt.series,
         format_receipt_number(receipt.number),
         f"{totals['igv']:.2f}",
         f"{totals['total']:.2f}",
         receipt.issued_at.strftime("%Y-%m-%d"),
-        customer.document_type,
+        sunat_receiver_document(customer.document_type),
         customer.document_number,
+        _resumen(receipt, totals),
     ])
 
     widget = qr.QrCodeWidget(contenido)
@@ -873,25 +920,33 @@ def _pie(receipt, estilos, ancho, totals):
         ),
         Spacer(1, 4 * mm),
         Paragraph(f"Resumen: {_resumen(receipt, totals)}", estilos["pie"]),
-        Paragraph(
-            f"Representación impresa de {receipt.sequence.document_title}",
-            estilos["pie"],
-        ),
+        Paragraph(_leyenda(receipt), estilos["pie"]),
     ]
+
+    filas = [
+        ("Op. Gravada", f"S/{totals['gravada']:.2f}"),
+        ("Op. Exonerada", f"S/{totals['exonerada']:.2f}"),
+        ("Op. Inafecta", f"S/{totals['inafecta']:.2f}"),
+        ("Op. Gratuita", f"S/{totals['gratuita']:.2f}"),
+        ("Total Dscto", f"S/{totals['discount']:.2f}"),
+        ("I.G.V.", f"S/{totals['igv']:.2f}"),
+        ("Importe Total", f"S/{totals['total']:.2f}"),
+    ]
+
+    if _es_factura(receipt):
+        # Sin importe, como en el papel original. El sistema no liquida
+        # detracciones, y escribir «S/0.00» donde no hay operación afirmaría
+        # que se calculó y dio cero. El hueco dice que no aplica.
+        #
+        # Total Neto es lo que queda tras la detracción; sin ella sería el
+        # importe total otra vez, repetido un renglón más abajo.
+        filas.extend([("Detracción", ""), ("Total Neto", "")])
 
     importes = Table(
         [
             [Paragraph(etiqueta, estilos["pie"]),
-             Paragraph(f"S/{valor:.2f}", estilos["num"])]
-            for etiqueta, valor in (
-                ("Op. Gravada", totals["gravada"]),
-                ("Op. Exonerada", totals["exonerada"]),
-                ("Op. Inafecta", totals["inafecta"]),
-                ("Op. Gratuita", totals["gratuita"]),
-                ("Total Dscto", totals["discount"]),
-                ("I.G.V.", totals["igv"]),
-                ("Importe Total", totals["total"]),
-            )
+             Paragraph(valor, estilos["num"])]
+            for etiqueta, valor in filas
         ],
         colWidths=[28 * mm, 24 * mm],
     )
@@ -917,6 +972,105 @@ def _pie(receipt, estilos, ancho, totals):
             ("LEFTPADDING", (0, 0), (0, 0), 0),
             ("RIGHTPADDING", (-1, 0), (-1, 0), 0),
             ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ])
+    )
+
+    return tabla
+
+
+def _leyenda(receipt):
+    """La línea legal del pie.
+
+    La factura invita a comprobarla en SUNAT y el recibo no: es lo que
+    imprime cada uno en el sistema que se reemplaza, donde los dos están
+    declarados de verdad. Aquí todavía no lo están -no hay XML firmado ni
+    envío-, así que esa invitación promete una consulta que hoy devolvería
+    que el comprobante no existe. Se reproduce el formato porque es el
+    encargo; que la promesa se sostenga depende de que se declare, no de
+    esta línea.
+    """
+    leyenda = f"Representación impresa de {receipt.sequence.document_title}"
+
+    if _es_factura(receipt):
+        return f"{leyenda}, verifique su comprobante en www.sunat.gob.pe"
+
+    return leyenda
+
+
+# Cuantas cuotas caben de ancho en la hoja. El papel original las reparte en
+# tres columnas de «Nº Cuota / F. Venc. / Monto», y con una sola cuota deja
+# las otras dos vacías en vez de estirar la primera.
+CUOTAS_POR_FILA = 3
+
+
+def _cuotas(receipt, estilos, ancho, totals):
+    """El cuadro de cuotas del pie, o None si no lo lleva.
+
+    Solo la factura al crédito: al contado no hay nada que vencer, y el papel
+    original no dibuja el cuadro. Hoy siempre es **una** cuota -la fecha de
+    vencimiento del comprobante por su importe entero-, que es como emite el
+    sistema que se reemplaza. El día que una factura se pacte en varias, las
+    cuotas serán filas propias y esto leerá de ellas en vez de derivarlas.
+
+    El pendiente es el total y no el saldo de hoy: el papel dice lo que se
+    debía al emitirlo, no lo que se deba cuando alguien lo reimprima. Si
+    cambiara al pagarse, dos copias del mismo comprobante dirían cifras
+    distintas.
+    """
+    payment = receipt.payment
+
+    if not _es_factura(receipt) or payment_condition(payment) != "CREDITO":
+        return None
+
+    cuotas = [(1, payment.due_date, totals["total"])]
+
+    grupo = ancho / CUOTAS_POR_FILA
+    anchos = [grupo * 0.28, grupo * 0.34, grupo * 0.38] * CUOTAS_POR_FILA
+
+    cabecera = []
+    for _ in range(CUOTAS_POR_FILA):
+        cabecera.extend([
+            Paragraph("Nº Cuota", estilos["etiqueta"]),
+            Paragraph("F. Venc.", estilos["etiqueta"]),
+            Paragraph("Monto", estilos["etiqueta"]),
+        ])
+
+    filas = []
+    for inicio in range(0, len(cuotas), CUOTAS_POR_FILA):
+        fila = []
+        for numero, vence, monto in cuotas[inicio:inicio + CUOTAS_POR_FILA]:
+            fila.extend([
+                Paragraph(str(numero), estilos["pie"]),
+                Paragraph(
+                    vence.strftime("%d/%m/%Y") if vence else "", estilos["pie"]
+                ),
+                Paragraph(f"{monto:.2f}", estilos["pie"]),
+            ])
+        fila.extend([""] * (3 * CUOTAS_POR_FILA - len(fila)))
+        filas.append(fila)
+
+    resumen = [
+        Paragraph(
+            f"Monto neto pendiente de pago: S/{totals['total']:.2f}",
+            estilos["etiqueta"],
+        ),
+        "",
+        "",
+        Paragraph(f"Total de cuotas: {len(cuotas)}", estilos["etiqueta"]),
+    ] + [""] * (3 * CUOTAS_POR_FILA - 4)
+
+    tabla = Table([resumen, cabecera] + filas, colWidths=anchos)
+    tabla.setStyle(
+        TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("SPAN", (0, 0), (2, 0)),
+            ("SPAN", (3, 0), (5, 0)),
+            ("LINEABOVE", (0, 0), (-1, 0), 1.1, LINEA),
+            ("LINEBELOW", (0, 1), (-1, 1), 0.6, LINEA),
+            ("TOPPADDING", (0, 0), (-1, -1), 1.4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 1.4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
         ])
     )
 
@@ -970,7 +1124,13 @@ def render_receipt(receipt, buffer):
     cabecera = _cabecera(receipt, estilos, ancho)
     abonado = _abonado(receipt, estilos, ancho)
     pie = _pie(receipt, estilos, ancho, totals)
+    cuotas = _cuotas(receipt, estilos, ancho, totals)
     separadores = [3.5 * mm, 3 * mm, 3 * mm]
+
+    # El cuadro de cuotas cuelga del pie y va pegado a el: es su continuacion,
+    # no otro bloque. Cuenta para el hueco que se reparte, o el estiron del
+    # detalle lo empujaria a una segunda hoja.
+    cola = [pie] if cuotas is None else [pie, Spacer(1, 2 * mm), cuotas]
 
     # El detalle se arma dos veces: la primera para saber cuánto ocupa por sí
     # solo, la segunda ya con el hueco que sobra metido en su fila vacía. Sin
@@ -980,7 +1140,7 @@ def render_receipt(receipt, buffer):
 
     ocupado = sum(separadores) + sum(
         pieza.wrap(ancho, documento.height)[1]
-        for pieza in encabezado + [cabecera, abonado, detalle, pie]
+        for pieza in encabezado + [cabecera, abonado, detalle] + cola
     )
 
     # El marco de la página añade su propio relleno arriba y abajo, que no
@@ -1003,8 +1163,8 @@ def render_receipt(receipt, buffer):
             Spacer(1, separadores[1]),
             detalle,
             Spacer(1, separadores[2]),
-            pie,
         ]
+        + cola
     )
 
     return f"{receipt.full_number}.pdf"

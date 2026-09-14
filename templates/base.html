@@ -375,6 +375,11 @@
         .tc-stat .metric { font-size:1.25rem; color:#123f70; font-weight:700; }
         .tc-stat .label { font-size:.72rem; color:#64748b; margin-top:4px; }
         .tc-stat i { margin-left:4px; color:#12a465; }
+        /* Ciclo y deuda: los dos datos menores de la identidad, en la misma
+           fila que el telefono y el correo y con su mismo peso. De un solo
+           color -iconos y valores incluidos-, como `.tc-ident`. */
+        .tc-meta { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; font-size:.78rem; color:#4e6581; }
+        .tc-meta i { margin-right:6px; }
 
         @media (max-width: 1200px) {
             .tc-hero { grid-template-columns:1fr; }

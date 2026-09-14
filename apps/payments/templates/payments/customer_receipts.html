@@ -32,14 +32,27 @@
 
             <div class="table-responsive">
                 <table class="tc-table">
+                    {% comment %}
+                    Las columnas son las del padron de comprobantes del
+                    sistema que se reemplaza: codigo, emision, serie, numero,
+                    cancelacion y anulado. Salieron sede, monto y estado.
+
+                    Sede y monto los dice ya el propio comprobante, y el
+                    estado era una pildora que repetia lo que ahora se lee en
+                    las dos ultimas columnas: un comprobante sin fecha de
+                    cancelacion esta pendiente y uno con fecha de anulacion
+                    esta anulado. La fecha responde ademas «cuando», que la
+                    pildora no respondia.
+                    {% endcomment %}
                     <thead>
                         <tr>
-                            <th>Comprobante</th>
-                            <th>Emitido</th>
+                            <th>Código</th>
+                            <th>Emisión</th>
+                            <th>Serie</th>
+                            <th>Número</th>
                             <th>Medio de pago</th>
-                            <th>Sede</th>
-                            <th class="num">Monto</th>
-                            <th>Estado</th>
+                            <th>Cancelación</th>
+                            <th>Anulado</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -48,28 +61,30 @@
                             <tr {% if receipt.is_voided %}style="opacity:.62;"{% endif %}>
                                 <td>
                                     <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}">
-                                        {{ receipt.full_number }}
+                                        {{ receipt.pk|stringformat:"07d" }}
                                     </a>
                                 </td>
-                                <td>
-                                    {{ receipt.issued_at|date:"d/m/Y H:i" }}
-                                    <span class="tc-sub">{{ receipt.payment.received_by }}</span>
-                                </td>
+                                <td>{{ receipt.issued_at|date:"d/m/Y H:i" }}</td>
+                                <td>{{ receipt.series }}</td>
+                                <td>{{ receipt.printed_number }}</td>
                                 <td>
                                     {{ receipt.payment.get_method_display }}
                                     {% if receipt.payment.reference %}
                                         <span class="tc-sub">Op. {{ receipt.payment.reference }}</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ receipt.payment.branch.name }}</td>
-                                <td class="num">S/ {{ receipt.payment.amount|floatformat:2 }}</td>
                                 <td>
-                                    {% if receipt.is_voided %}
-                                        <span class="tc-pill danger">Anulado</span>
-                                    {% elif receipt.payment.status == "PENDING" %}
-                                        <span class="tc-pill warning">Pendiente</span>
+                                    {% if receipt.payment.paid_at %}
+                                        {{ receipt.payment.paid_at|date:"d/m/Y" }}
                                     {% else %}
-                                        <span class="tc-pill success">Vigente</span>
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if receipt.payment.voided_at %}
+                                        {{ receipt.payment.voided_at|date:"d/m/Y" }}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end">

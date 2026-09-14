@@ -266,7 +266,7 @@ class CustomerReceiptsView(PermissionRequiredMixin, CustomerScopedMixin, ListVie
     def get_queryset(self):
         return (
             Receipt.objects.filter(payment__customer=self.customer)
-            .select_related("payment", "payment__received_by", "payment__branch")
+            .select_related("payment")
         )
 
 

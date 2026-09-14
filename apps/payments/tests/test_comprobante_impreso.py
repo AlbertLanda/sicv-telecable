@@ -1,16 +1,3 @@
-"""
-El papel: qué dice el comprobante que se entrega al abonado.
-
-Dos cosas se fijan aquí. La primera, que quién emite lo decide el talonario:
-el block de CABLE LOS ANDES imprime esa razón social con su RUC, y el de
-SPEEDY QUANTICO la suya, sin que la pantalla tenga que preguntar nada aparte
-del talonario que ya elige para el correlativo.
-
-La segunda, la aritmética que el papel declara. El sistema guarda el dinero
-con el IGV dentro -la mensualidad de S/ 79 es S/ 79- y el comprobante tiene
-que abrirlo. Las cifras de estas pruebas salen de un comprobante real del
-sistema que se reemplaza, para que el papel nuevo diga lo mismo que el viejo.
-"""
 
 import re
 from datetime import date
@@ -25,6 +12,7 @@ from reportlab.lib.units import mm
 
 from django.urls import reverse
 
+from apps.customers.models import Customer
 from apps.payments import pdf
 
 from apps.payments.invoicing import (
@@ -231,7 +219,7 @@ class LaRazonSocialLaDecideElTalonarioTests(PaymentsTestCase):
         inversiones = self.cobrar("B002")
 
         self.assertEqual(
-            andes.sequence.issuer.business_name, "CABLE LOS ANDES E.I.R.L."
+            andes.sequence.issuer.business_name, "CABLE LOS ANDES S.A.C."
         )
         self.assertEqual(
             inversiones.sequence.issuer.business_name,
@@ -241,14 +229,26 @@ class LaRazonSocialLaDecideElTalonarioTests(PaymentsTestCase):
             andes.sequence.issuer.ruc, inversiones.sequence.issuer.ruc
         )
 
-    def test_the_three_s010_books_share_the_company(self):
-        """«S010» nombra tres blocks distintos de la misma empresa."""
+    def test_the_three_s010_books_are_three_companies(self):
+        """«S010» nombra tres blocks de tres razones sociales distintas.
+
+        Se sembraron los tres bajo SPEEDY QUANTICO, que era lo que se sabía
+        entonces. VELOCIDAD DE LOS ANDES y RED OPTICA son empresas aparte con
+        su propio RUC, así que el recibo de un block salía con el RUC de otra.
+        """
         empresas = {
-            sequence.issuer.business_name
+            sequence.code: sequence.issuer.ruc
             for sequence in ReceiptSequence.objects.filter(series="S010")
         }
 
-        self.assertEqual(empresas, {"SPEEDY QUANTICO E.I.R.L."})
+        self.assertEqual(
+            empresas,
+            {
+                "S010-VELOCIDAD": "20609510103",
+                "S010-RED-OPTICA": "20610540369",
+                "S010-SPEEDY": "20610526455",
+            },
+        )
 
     def test_the_title_belongs_to_the_book_not_the_company(self):
         """La misma razón social emite boletas, facturas y recibos."""
@@ -616,11 +616,19 @@ class LasCajasVanRedondeadasTests(PaymentsTestCase):
 class EmpresaEmisoraTests(PaymentsTestCase):
     """El modelo de la razón social."""
 
-    def test_the_three_companies_of_the_group_are_seeded(self):
+    def test_the_companies_of_the_group_are_seeded(self):
+        """Las cinco que emiten. ECO NET no entra: no tiene talonario, y una
+        emisora sin talonario no llega a imprimirse en ningún sitio."""
         self.assertEqual(
             set(Issuer.objects.values_list("code", flat=True)),
-            {"CLA", "INV", "SPQ"},
+            {"CLA", "INV", "SPQ", "VEL", "ROP"},
         )
+
+    def test_no_company_keeps_a_placeholder_ruc(self):
+        """El RUC de relleno se imprimía tal cual en la boleta y la factura."""
+        for empresa in Issuer.objects.all():
+            with self.subTest(empresa=empresa.code):
+                self.assertFalse(empresa.ruc.startswith("2000000000"))
 
     def test_a_company_reads_as_its_business_name(self):
         """Es lo que sale impreso: nombrarla por su código en la pantalla
@@ -957,3 +965,281 @@ class ElLogotipoSeDibujaSinSuMargenTests(PaymentsTestCase):
                     pdf.render_receipt(receipt, buffer)
 
                 self.assertGreater(len(buffer.getvalue()), 0)
+
+
+class ElCodigoQrTests(PaymentsTestCase):
+    """El QR, contra el de un comprobante declarado de verdad.
+
+    El patrón no es una lectura de la norma: es el QR de la boleta
+    B003-0034430 de INVERSIONES, aceptada por SUNAT, escaneado del papel:
+
+        20603110456|03|B003|0034430|9.15|60.00|2025-12-22|1|20723004|R5Betfw/…
+
+    Lo que se fija aquí es esa forma. El contenido todavía no lo respalda una
+    declaración -el último campo es un resumen nuestro, no el hash de un XML
+    firmado-, pero el día que lo sea, solo ese campo cambia.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.charge = Charge.objects.create(
+            customer=self.customer,
+            subscription=self.subscription,
+            concept=Charge.Concept.MONTHLY,
+            amount=Decimal("60.00"),
+            due_date=date(2026, 9, 30),
+        )
+
+    def cobrar(self, series="B001"):
+        return register_payment(
+            customer=self.customer,
+            amount=Decimal("60.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(self.charge, Decimal("60.00"))],
+            series=series,
+        )[1]
+
+    def contenido(self, receipt):
+        """Lo que se codifica, sin dibujar el PDF."""
+        widget = pdf._qr(receipt, receipt_totals(receipt), 30 * mm).contents[0]
+
+        return widget.value
+
+    def test_it_carries_ten_pipe_separated_fields(self):
+        campos = self.contenido(self.cobrar()).split("|")
+
+        self.assertEqual(len(campos), 10)
+
+    def test_the_document_type_is_the_catalogue_code_not_its_name(self):
+        """Iba «BOLETA DE VENTA ELECTRÓNICA» donde el comprobante real lleva
+        «03». El QR no se lee con los ojos: un nombre ahí no lo entiende
+        nadie."""
+        campos = self.contenido(self.cobrar("B001")).split("|")
+
+        self.assertEqual(campos[1], "03")
+
+    def test_a_factura_declares_itself_as_one(self):
+        campos = self.contenido(self.cobrar("F001")).split("|")
+
+        self.assertEqual(campos[1], "01")
+
+    def test_the_receiver_document_is_the_catalogue_code_too(self):
+        """El sistema guarda «DNI», que es lo que el operador lee; el QR pide
+        «1»."""
+        campos = self.contenido(self.cobrar()).split("|")
+
+        self.assertEqual(campos[7], "1")
+        self.assertEqual(campos[8], self.customer.document_number)
+
+    def test_a_company_is_identified_by_its_ruc_code(self):
+        self.customer.document_type = Customer.DocumentType.RUC
+        self.customer.document_number = "20123456789"
+        self.customer.save(update_fields=["document_type", "document_number"])
+
+        campos = self.contenido(self.cobrar("F001")).split("|")
+
+        self.assertEqual(campos[7], "6")
+
+    def test_the_number_keeps_its_leading_zeros(self):
+        """El comprobante real lleva `0034430`, no `34430`."""
+        campos = self.contenido(self.cobrar()).split("|")
+
+        self.assertEqual(len(campos[3]), 7)
+        self.assertTrue(campos[3].startswith("0"))
+
+    def test_the_issue_date_goes_the_way_sunat_writes_it(self):
+        """`2025-12-22` en el comprobante real, no `22/12/2025`."""
+        receipt = self.cobrar()
+
+        campos = self.contenido(receipt).split("|")
+
+        self.assertEqual(campos[6], receipt.issued_at.strftime("%Y-%m-%d"))
+        self.assertRegex(campos[6], r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_the_last_field_is_the_same_summary_that_is_printed(self):
+        """En el comprobante real, el décimo campo y la línea «Resumen:» de
+        debajo del QR dicen lo mismo. Si se separaran, el papel se estaría
+        contradiciendo a sí mismo."""
+        receipt = self.cobrar()
+        totals = receipt_totals(receipt)
+
+        campos = self.contenido(receipt).split("|")
+
+        self.assertEqual(campos[9], pdf._resumen(receipt, totals))
+
+    def test_the_amounts_are_the_ones_in_the_box(self):
+        receipt = self.cobrar()
+        totals = receipt_totals(receipt)
+
+        campos = self.contenido(receipt).split("|")
+
+        self.assertEqual(campos[4], f"{totals['igv']:.2f}")
+        self.assertEqual(campos[5], f"{totals['total']:.2f}")
+
+    def test_the_issuer_ruc_opens_the_code(self):
+        receipt = self.cobrar()
+
+        campos = self.contenido(receipt).split("|")
+
+        self.assertEqual(campos[0], receipt.sequence.issuer.ruc)
+
+
+class LaFacturaTraeLoSuyoTests(PaymentsTestCase):
+    """Lo que la factura lleva y el recibo y la boleta no.
+
+    Reproduce la F002-0005029 de INVERSIONES: condición de pago, guía de
+    remisión, detracción, total neto, el cuadro de cuotas y la leyenda que
+    invita a verificar en SUNAT. El resto de la hoja es el mismo dibujo.
+    """
+
+    # El importe de la F002-0005029 que se reproduce.
+    IMPORTE = Decimal("494.30")
+
+    def cobrar(self, series="F001", settled=True, due_date=None):
+        """Un cobro con su propia deuda: dos llamadas no se pisan el saldo."""
+        charge = Charge.objects.create(
+            customer=self.customer,
+            subscription=self.subscription,
+            concept=Charge.Concept.MONTHLY,
+            amount=self.IMPORTE,
+            due_date=date(2026, 7, 31),
+        )
+
+        return register_payment(
+            customer=self.customer,
+            amount=self.IMPORTE,
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(charge, self.IMPORTE)],
+            series=series,
+            settled=settled,
+            due_date=due_date,
+        )[1]
+
+    def texto(self, pieza):
+        """Todo el texto de una tabla armada, sin dibujar el PDF."""
+        trozos = []
+
+        def recorrer(cosa):
+            if hasattr(cosa, "_cellvalues"):
+                for fila in cosa._cellvalues:
+                    for celda in fila:
+                        recorrer(celda)
+            elif isinstance(cosa, (list, tuple)):
+                for item in cosa:
+                    recorrer(item)
+            elif hasattr(cosa, "text"):
+                trozos.append(cosa.text)
+            elif isinstance(cosa, str):
+                trozos.append(cosa)
+
+        recorrer(pieza)
+
+        return "\n".join(trozos)
+
+    def cabecera_de(self, receipt):
+        return self.texto(_estilos_y(receipt, pdf._abonado))
+
+    def test_a_factura_announces_its_payment_condition(self):
+        receipt = self.cobrar()
+
+        self.assertIn("Condición de pago", self.cabecera_de(receipt))
+        self.assertIn("CONTADO", self.cabecera_de(receipt))
+
+    def test_a_factura_emitted_pending_is_on_credit(self):
+        """Emitido «Cancelado: No» es dinero que no entró y que vence: eso es
+        crédito, y no hace falta un campo aparte que lo diga."""
+        receipt = self.cobrar(settled=False, due_date=date(2026, 7, 31))
+
+        self.assertIn("CREDITO", self.cabecera_de(receipt))
+
+    def test_a_factura_keeps_the_dispatch_note_row_even_if_empty(self):
+        """El sistema no emite guías. La fila va igual: sin ella, dos facturas
+        de la misma empresa no tendrían la misma forma."""
+        self.assertIn("G. Remisión", self.cabecera_de(self.cobrar()))
+
+    def test_a_receipt_carries_neither_of_those_rows(self):
+        """En el recibo no están en blanco: no están."""
+        cabecera = self.cabecera_de(self.cobrar("S010-SPEEDY"))
+
+        self.assertNotIn("Condición de pago", cabecera)
+        self.assertNotIn("G. Remisión", cabecera)
+
+    def pie_de(self, receipt):
+        totals = receipt_totals(receipt)
+
+        return self.texto(pdf._pie(receipt, pdf._estilos(), 194 * mm, totals))
+
+    def test_the_factura_box_adds_detraction_and_net_total(self):
+        pie = self.pie_de(self.cobrar())
+
+        self.assertIn("Detracción", pie)
+        self.assertIn("Total Neto", pie)
+
+    def test_the_receipt_box_keeps_its_seven_rows(self):
+        pie = self.pie_de(self.cobrar("S010-SPEEDY"))
+
+        self.assertNotIn("Detracción", pie)
+        self.assertNotIn("Total Neto", pie)
+
+    def test_only_the_factura_invites_to_verify_at_sunat(self):
+        self.assertIn("www.sunat.gob.pe", pdf._leyenda(self.cobrar()))
+        self.assertNotIn(
+            "www.sunat.gob.pe", pdf._leyenda(self.cobrar("S010-SPEEDY"))
+        )
+
+    def cuotas_de(self, receipt):
+        totals = receipt_totals(receipt)
+
+        return pdf._cuotas(receipt, pdf._estilos(), 194 * mm, totals)
+
+    def test_a_credit_factura_shows_its_instalment(self):
+        receipt = self.cobrar(settled=False, due_date=date(2026, 7, 31))
+
+        cuotas = self.texto(self.cuotas_de(receipt))
+
+        self.assertIn("Total de cuotas: 1", cuotas)
+        self.assertIn("Monto neto pendiente de pago: S/494.30", cuotas)
+        self.assertIn("31/07/2026", cuotas)
+        self.assertIn("494.30", cuotas)
+
+    def test_a_cash_factura_has_no_instalment_box(self):
+        """Al contado no hay nada que vencer, y el papel original no lo
+        dibuja."""
+        self.assertIsNone(self.cuotas_de(self.cobrar()))
+
+    def test_a_receipt_never_has_the_instalment_box(self):
+        receipt = self.cobrar(
+            "S010-SPEEDY", settled=False, due_date=date(2026, 7, 31)
+        )
+
+        self.assertIsNone(self.cuotas_de(receipt))
+
+    def test_the_pending_amount_does_not_move_when_it_is_paid(self):
+        """El papel dice lo que se debía al emitirlo. Si cambiara al pagarse,
+        dos copias del mismo comprobante dirían cifras distintas."""
+        receipt = self.cobrar(settled=False, due_date=date(2026, 7, 31))
+        antes = self.texto(self.cuotas_de(receipt))
+
+        receipt.payment.confirm()
+
+        self.assertEqual(self.texto(self.cuotas_de(receipt)), antes)
+
+    def test_the_credit_factura_still_fits_on_one_sheet(self):
+        """El cuadro de cuotas cuelga del pie. Si no entrara en el hueco que
+        reparte el detalle, empujaría el pie a una segunda hoja."""
+        receipt = self.cobrar(settled=False, due_date=date(2026, 7, 31))
+        buffer = BytesIO()
+
+        render_receipt(receipt, buffer)
+
+        self.assertEqual(buffer.getvalue().count(b"/Type /Page\n"), 1)
+
+
+def _estilos_y(receipt, pieza):
+    """La pieza del dibujo, armada con los estilos y el ancho de la hoja."""
+    return pieza(receipt, pdf._estilos(), 194 * mm)
