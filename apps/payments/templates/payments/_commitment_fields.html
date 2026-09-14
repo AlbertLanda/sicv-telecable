@@ -1,0 +1,175 @@
+{% comment %}
+Los datos del compromiso, con el reparto del sistema que se reemplaza: código,
+fecha y hora del sistema, fecha de pago, autoriza, la deuda elegida, el total,
+las cuotas, el representante y las observaciones.
+
+Vive aparte porque lo piden dos sitios -esta pantalla y la del compromiso ya
+concedido, que es la misma bloqueada- y tienen que decir lo mismo en el mismo
+orden. Copiado, el primer campo que se añadiera solo aparecería en uno.
+
+Espera `form`, `now`, `selected_charges` y `selected_total`.
+{% endcomment %}
+
+<div class="tc-form">
+
+    {% comment %}
+    Código, fecha y hora los pone el sistema. Se muestran para que el operador
+    reconozca la pantalla, no para editarlos.
+    {% endcomment %}
+    <div class="tc-form-label">Código</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
+    </div>
+
+    <div class="tc-form-label">Fecha</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-md"
+               value="{{ now|date:'d/m/Y' }}" disabled>
+    </div>
+
+    <div class="tc-form-label">Hora</div>
+    <div class="tc-form-field">
+        <input type="text" class="tc-input tc-readonly tc-w-sm"
+               value="{{ now|date:'H:i:s' }}" disabled>
+    </div>
+
+    <label class="tc-form-label" for="{{ form.committed_date.id_for_label }}">
+        Fecha de pago
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-md">{{ form.committed_date }}</div>
+        <div class="tc-form-hint">
+            Hasta este día, las deudas elegidas dejan de empujar al corte.
+        </div>
+        {% for error in form.committed_date.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <label class="tc-form-label" for="{{ form.authorized_by.id_for_label }}">
+        Autoriza
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-lg">{{ form.authorized_by }}</div>
+        <div class="tc-form-hint">
+            Quien responde por aplazar el corte. Se registra aparte de quien lo
+            teclea.
+        </div>
+        {% for error in form.authorized_by.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    {% comment %}
+    La deuda se elige en el tablero y aquí solo se lee, como en el sistema
+    anterior: son las filas que el operador acaba de marcar, y volver a
+    ofrecerlas para elegir serían dos sitios para decidir lo mismo.
+    {% endcomment %}
+    <div class="tc-form-label top">Deuda</div>
+    <div class="tc-form-field">
+        <div class="tc-debt-list">
+            {% for charge in selected_charges %}
+                <div class="tc-debt-line">
+                    <span>
+                        {{ charge.description }}
+                        {% if charge.period_label %}
+                            <span class="tc-sub">{{ charge.period_label }}</span>
+                        {% endif %}
+                    </span>
+                    <span class="tc-debt-line-monto">
+                        {{ charge.balance|floatformat:2 }}
+                    </span>
+                </div>
+            {% empty %}
+                <div class="tc-debt-line text-muted">
+                    No se marcó ninguna deuda en el tablero.
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
+        Total
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-sm">{{ form.amount }}</div>
+        <div class="tc-form-hint">
+            En blanco se compromete el saldo completo de lo elegido. Puede ser
+            menor, nunca mayor.
+        </div>
+        {% for error in form.amount.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    {% comment %}
+    Las cuotas: cómo piensa pagar lo comprometido. No son otra promesa -la
+    fecha que aplaza el corte sigue siendo la de arriba, una sola-, así que se
+    llenan las que hagan falta y las demás se quedan en blanco.
+
+    Las pinta un bucle sobre el formulario y no quince filas escritas a mano:
+    así el número de cuotas se dice en un solo sitio.
+    {% endcomment %}
+    {% for numero, monto, fecha in form.installment_rows %}
+        <label class="tc-form-label" for="{{ monto.id_for_label }}">
+            Cuota {{ numero }}
+        </label>
+        <div class="tc-form-field">
+            <div class="tc-field-row">
+                <div class="tc-w-sm">{{ monto }}</div>
+                <div class="tc-w-md">{{ fecha }}</div>
+            </div>
+            {% for error in monto.errors %}
+                <div class="tc-form-error">{{ error }}</div>
+            {% endfor %}
+            {% for error in fecha.errors %}
+                <div class="tc-form-error">{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endfor %}
+
+    <label class="tc-form-label" for="{{ form.representative.id_for_label }}">
+        Representante
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-xl">{{ form.representative }}</div>
+        <div class="tc-form-hint">
+            Quien firma por el abonado, cuando no es él mismo.
+        </div>
+        {% for error in form.representative.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <label class="tc-form-label" for="{{ form.representative_document.id_for_label }}">
+        DNI de rep.
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-sm">{{ form.representative_document }}</div>
+        {% for error in form.representative_document.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    <label class="tc-form-label top" for="{{ form.reason.id_for_label }}">
+        Observaciones
+    </label>
+    <div class="tc-form-field">
+        <div class="tc-w-xl">{{ form.reason }}</div>
+        {% for error in form.reason.errors %}
+            <div class="tc-form-error">{{ error }}</div>
+        {% endfor %}
+    </div>
+
+    {% comment %}
+    «Anulado» sale desmarcado y bloqueado: un compromiso no nace anulado. Se
+    muestra porque el formulario del sistema anterior lo tiene, y porque en la
+    pantalla del compromiso ya concedido es donde se lee si sigue en pie.
+    {% endcomment %}
+    <div class="tc-form-label">Anulado</div>
+    <div class="tc-form-field">
+        <input type="checkbox" class="form-check-input" disabled
+               aria-label="Anulado">
+    </div>
+
+</div>

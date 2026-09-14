@@ -25,6 +25,31 @@
                 <span><i class="bi bi-telephone-fill"></i>{{ customer.phone|default:"No registrado" }}</span>
                 <span><i class="bi bi-envelope"></i>{{ customer.email|default:"No registrado" }}</span>
             </div>
+
+            {% comment %}
+                Ciclo y deuda van con la identidad y no entre las cifras de
+                la derecha. Aquellas son casillas grandes que piden la misma
+                mirada cada vez que se abre una pestaña, y estas dos se
+                consultan de reojo: una es una condicion del contrato que casi
+                nunca cambia, y la otra un importe que se lee entero en la
+                pestaña de deuda.
+
+                Van de un solo color, como la linea de codigo y documento:
+                lo que distingue el dato de su rotulo es la negrita, no el
+                tono. La deuda estuvo en rojo cuando la habia y tiraba de la
+                mirada hacia la esquina menos importante de la cabecera.
+            {% endcomment %}
+            <div class="tc-meta">
+                <span>
+                    <i class="bi bi-calendar3"></i>Ciclo de facturación:
+                    <strong>{{ billing_cycle_label|default:"No registrado" }}</strong>
+                </span>
+                <span>
+                    <i class="bi bi-cash-coin"></i>Deuda:
+                    <strong>S/ {{ debt_total|floatformat:2 }}</strong>
+                </span>
+            </div>
+
         </div>
 
         {% if primary_address %}

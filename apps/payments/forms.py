@@ -6,7 +6,14 @@ from django import forms
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
-from .models import Charge, ChargeConcept, Payment, ZERO
+from .models import (
+    Charge,
+    ChargeConcept,
+    Payment,
+    ZERO,
+    RECEIPT_NUMBER_WIDTH,
+    format_receipt_number,
+)
 from .services import default_concept, monthly_reference
 
 
@@ -31,6 +38,40 @@ class ConceptSelect(forms.Select):
 
         if concept is not None:
             option["attrs"]["data-family"] = concept.family
+
+        return option
+
+
+class SeriesSelect(forms.Select):
+    """Desplegable de talonarios que lleva el número que le toca a cada uno.
+
+    Elegir la serie completa el número, y esa correspondencia es un dato del
+    talonario, no del formulario. Viaja en cada `<option>` para que la
+    pantalla lo resuelva sin volver a preguntar al servidor cada vez que el
+    operador cambia de serie.
+
+    Los blocks que no numeran solos viajan con el atributo vacío: ahí el
+    número lo escribe el operador, y proponerle uno sería inventarlo.
+    """
+
+    def __init__(self, *args, sequences=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sequences = sequences or {}
+
+    def create_option(self, name, value, label, selected, index, **kwargs):
+        option = super().create_option(
+            name, value, label, selected, index, **kwargs
+        )
+
+        sequence = self.sequences.get(str(value))
+
+        if sequence is not None:
+            # Formateado, no crudo: es lo que se va a escribir en el campo y
+            # lo que acabara impreso en el papel. Crudo, elegir la serie
+            # borraba los ceros del numero que el operador tenia delante.
+            option["attrs"]["data-numero"] = format_receipt_number(
+                sequence.next_number
+            )
 
         return option
 
@@ -72,6 +113,23 @@ class PaymentRegisterForm(forms.Form):
     series = forms.ChoiceField(
         label="Serie",
         required=False,
+    )
+
+    # El correlativo lo propone la serie, pero se escribe: hay blocks de papel
+    # que ya vienen numerados y el operador tiene que poder poner el que toca.
+    # Opcional porque las series que numeran solas no necesitan que lo envie.
+    #
+    # Cadena y no entero, aunque se guarde como entero. Lo que el operador
+    # tiene delante es la representacion impresa del comprobante -«003031»-, y
+    # un IntegerField la normaliza a 3031 en cuanto el formulario se vuelve a
+    # pintar: el campo se quedaba sin sus ceros y dejaba de parecerse al papel
+    # que se iba a entregar. El valor numerico se recupera al limpiar, que es
+    # donde hace falta.
+    number = forms.CharField(
+        label="Número",
+        required=False,
+        max_length=RECEIPT_NUMBER_WIDTH + 4,
+        widget=forms.TextInput(attrs={"inputmode": "numeric"}),
     )
 
     method = forms.ChoiceField(
@@ -118,7 +176,7 @@ class PaymentRegisterForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, office=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Las series y los cobradores se resuelven al construir el formulario
@@ -126,13 +184,52 @@ class PaymentRegisterForm(forms.Form):
         # nueva ni un vendedor recien creado hasta reiniciar el servidor.
         from .services import collector_options, receipt_series_options
 
+        # De donde se cobra decide que talonarios hay. La oficina llega desde
+        # la vista, que la lee de la barra superior, y tiene que ser la misma
+        # al pintar y al validar: armar las opciones sin ella dejaria pasar en
+        # el POST una serie de otra ventanilla, porque `ChoiceField` valida
+        # justo contra estas opciones.
+        self.office = office
+
+        sequences = receipt_series_options(office=office)
+
         self.fields["series"].choices = [
-            (sequence.series, sequence.series)
-            for sequence in receipt_series_options()
+            (sequence.code, sequence.label) for sequence in sequences
         ]
+        self.fields["series"].widget = SeriesSelect(
+            sequences={sequence.code: sequence for sequence in sequences},
+            choices=self.fields["series"].choices,
+        )
         self.fields["collector"].queryset = collector_options()
 
         _style_widgets(self)
+
+    def clean_number(self):
+        """De la cadena escrita al entero que se guarda.
+
+        Los ceros a la izquierda se aceptan y se descartan aqui: «003031» y
+        «3031» son el mismo comprobante, y obligar a escribir los ceros -o
+        prohibirlos- seria inventarle una regla al operador que el papel no
+        tiene.
+        """
+        escrito = (self.cleaned_data.get("number") or "").strip()
+
+        if not escrito:
+            return None
+
+        if not escrito.isdigit():
+            raise forms.ValidationError(
+                "El número del comprobante se escribe solo con dígitos."
+            )
+
+        numero = int(escrito)
+
+        if numero < 1:
+            raise forms.ValidationError(
+                "El número del comprobante debe ser mayor a cero."
+            )
+
+        return numero
 
     def clean_reference(self):
         return (self.cleaned_data.get("reference") or "").strip()
@@ -330,15 +427,25 @@ class PaymentCommitmentForm(forms.Form):
 
     Los cargos llegan como un campo por fila del tablero de deuda, igual que
     en el cobro: cuántos hay depende del abonado y no del formulario.
+
+    El reparto de campos es el del sistema que se reemplaza -código, fecha y
+    hora del sistema, fecha de pago, autoriza, la deuda elegida, el total, las
+    cuotas, el representante y las observaciones-, para que el operador
+    reconozca la pantalla que usa a diario.
     """
 
+    # Quince filas de cuota, como el formulario del sistema anterior. Son las
+    # que el operador espera ver: lo normal es llenar dos o tres, y las que
+    # queden en blanco no se guardan.
+    INSTALLMENTS = 15
+
     committed_date = forms.DateField(
-        label="Se compromete a pagar el",
+        label="Fecha de pago",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
 
     amount = forms.DecimalField(
-        label="Monto comprometido",
+        label="Total",
         min_value=Decimal("0.01"),
         max_digits=10,
         decimal_places=2,
@@ -353,9 +460,23 @@ class PaymentCommitmentForm(forms.Form):
         empty_label="",
     )
 
+    representative = forms.CharField(
+        label="Representante",
+        max_length=120,
+        required=False,
+    )
+
+    representative_document = forms.CharField(
+        label="DNI de rep.",
+        max_length=20,
+        required=False,
+    )
+
     reason = forms.CharField(
-        label="Motivo del compromiso",
+        label="Observaciones",
         max_length=200,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -365,15 +486,58 @@ class PaymentCommitmentForm(forms.Form):
 
         self.fields["authorized_by"].queryset = authorizer_options()
 
-        _style_widgets(self)
-
-    def clean_reason(self):
-        reason = (self.cleaned_data.get("reason") or "").strip()
-
-        if not reason:
-            raise forms.ValidationError(
-                "Indique por qué se concede el compromiso: aplazar un corte "
-                "es una decisión que alguien tiene que poder explicar."
+        # Las cuotas se declaran aqui y no arriba porque son quince pares
+        # iguales: escribirlos a mano seria treinta declaraciones que hay que
+        # mantener a la vez, y cambiar el numero de filas obligaria a tocarlas
+        # una por una.
+        for numero in self.installment_numbers():
+            self.fields[f"installment_{numero}_amount"] = forms.DecimalField(
+                label=f"Cuota {numero}",
+                min_value=Decimal("0.01"),
+                max_digits=10,
+                decimal_places=2,
+                required=False,
+            )
+            self.fields[f"installment_{numero}_date"] = forms.DateField(
+                label=f"Fecha de la cuota {numero}",
+                required=False,
+                widget=forms.DateInput(attrs={"type": "date"}),
             )
 
-        return reason
+        _style_widgets(self)
+
+    @classmethod
+    def installment_numbers(cls):
+        return range(1, cls.INSTALLMENTS + 1)
+
+    def installment_rows(self):
+        """Las filas de cuota, para que la plantilla las recorra.
+
+        La plantilla no sabe cuantas hay ni como se llaman los campos: los pide
+        aqui. Escribir las quince filas en el HTML dejaba el numero de cuotas
+        dicho en dos sitios.
+        """
+        for numero in self.installment_numbers():
+            yield (
+                numero,
+                self[f"installment_{numero}_amount"],
+                self[f"installment_{numero}_date"],
+            )
+
+    def installments(self):
+        """El plan tal como se tecleo: (numero, monto, fecha) por fila.
+
+        Se devuelven tambien las filas a medias -monto sin fecha o al reves-
+        para que el servicio pueda rechazarlas diciendo cual: filtrarlas aqui
+        dejaria pasar en silencio una cuota que el operador creia haber puesto.
+        """
+        datos = getattr(self, "cleaned_data", {})
+
+        return [
+            (
+                numero,
+                datos.get(f"installment_{numero}_amount"),
+                datos.get(f"installment_{numero}_date"),
+            )
+            for numero in self.installment_numbers()
+        ]

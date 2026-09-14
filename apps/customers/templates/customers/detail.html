@@ -142,7 +142,7 @@
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de instalación</small><span>{% if sub.installation_date %}{{ sub.installation_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de corte</small><span>{% if sub.cut_date %}{{ sub.cut_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de reconexión</small><span>{% if sub.reconnection_date %}{{ sub.reconnection_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
-                            <div class="col-md-3"><small class="text-muted d-block">Ciclo de facturación</small><span>{{ sub.billing_cycle|default:"No registrado" }}</span></div>
+                            <div class="col-md-3"><small class="text-muted d-block">Ciclo de facturación legado</small><span>{{ sub.billing_cycle|default:"No registrado" }}</span></div>
                         </div>
                     </div>
                 </div>

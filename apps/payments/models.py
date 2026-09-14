@@ -26,7 +26,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from apps.customers.models import Customer
-from apps.organization.models import Branch
+from apps.organization.models import Branch, Office
 from apps.services.models import Subscription
 
 
@@ -392,6 +392,64 @@ class Charge(models.Model):
         return self.status
 
 
+class PaymentCommitmentInstallment(models.Model):
+    """Una de las cuotas en que el abonado promete pagar lo comprometido.
+
+    El compromiso sigue teniendo **una** fecha, `committed_date`, y es la que
+    aplaza el corte. Las cuotas son el detalle de cómo piensa pagarlo, no otra
+    promesa: si cada cuota protegiera hasta la siguiente, la protección se
+    renovaría sola y un plan de quince cuotas dejaría al abonado fuera del
+    corte durante meses sin que nadie lo volviera a decidir.
+
+    Tabla aparte y no quince pares de columnas en el compromiso. Son quince
+    filas en el formulario del sistema que se reemplaza, pero lo normal es
+    llenar dos o tres: treinta columnas vacías por cada compromiso describirían
+    el formulario en vez del acuerdo, y el día que haga falta una dieciseisava
+    habría que migrar la tabla entera.
+    """
+
+    commitment = models.ForeignKey(
+        "PaymentCommitment",
+        on_delete=models.CASCADE,
+        related_name="installments",
+        verbose_name="Compromiso",
+    )
+
+    # El numero que ocupa en el formulario. Se guarda en vez de deducirse del
+    # orden porque el operador puede llenar la 1 y la 3 y dejar la 2 en blanco,
+    # y al volver a abrirlo tiene que encontrarlas donde las puso.
+    number = models.PositiveSmallIntegerField(
+        verbose_name="Cuota",
+    )
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Monto",
+    )
+
+    due_date = models.DateField(
+        verbose_name="Fecha",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Cuota del compromiso"
+        verbose_name_plural = "Cuotas del compromiso"
+        ordering = ["commitment", "number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["commitment", "number"],
+                name="unique_installment_number_per_commitment",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Cuota {self.number} - S/ {self.amount}"
+
+
 class ChargeConcept(models.Model):
     """El catálogo de conceptos cobrables de la empresa.
 
@@ -520,6 +578,22 @@ class Payment(models.Model):
         on_delete=models.PROTECT,
         related_name="payments",
         verbose_name="Sede que cobró",
+    )
+
+    # Dónde entró el dinero. La sede dice de qué ciudad es la caja; la oficina
+    # dice cuál de sus ventanillas, y el depósito de la sede es la «oficina»
+    # de lo que no entró por ninguna -una transferencia no la recibe nadie en
+    # mostrador, pero sí cae en una sede-.
+    #
+    # Opcional porque el padrón de oficinas se cargó después que los primeros
+    # cobros: exigirla habría obligado a inventar una para pagos ya emitidos.
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.PROTECT,
+        related_name="payments",
+        null=True,
+        blank=True,
+        verbose_name="Lugar de cobro",
     )
 
     received_at = models.DateTimeField(
@@ -757,20 +831,212 @@ class PaymentAllocation(models.Model):
         return f"{self.charge} <- S/ {self.amount}"
 
 
+# Ancho del correlativo impreso. El numero se guarda como entero -es lo que
+# permite pedir el siguiente y exigir que no se repita-, pero en el papel y en
+# la pantalla se lee con sus ceros: el comprobante 41316 del block de CABLE
+# LOS ANDES se entrega como «B001-0041316», y el operador que busca ese papel
+# busca esa cadena, no el numero 41316.
+#
+# Siete, que es lo que imprimen los blocks del sistema que se reemplaza: CABLE
+# LOS ANDES va por 0041316 e INVERSIONES por 0031985. Uno solo para todos
+# mientras todos impriman igual; el dia que un talonario imprima con otro
+# ancho, esto deja de ser una constante y pasa a ser un campo suyo, al lado de
+# la serie y del ultimo numero.
+RECEIPT_NUMBER_WIDTH = 7
+
+
+def format_receipt_number(number):
+    """El correlativo tal como va impreso, con sus ceros a la izquierda.
+
+    Vive aqui y no en cada sitio que lo escribe porque son cuatro -el numero
+    completo del recibo, el aviso de duplicado, la opcion del desplegable y el
+    campo del formulario- y cuatro copias del mismo formato se separan el dia
+    que el ancho cambie.
+    """
+    if number is None:
+        return ""
+
+    return f"{int(number):0{RECEIPT_NUMBER_WIDTH}d}"
+
+
+class Issuer(models.Model):
+    """La empresa que emite el comprobante.
+
+    El grupo factura con varias razones sociales -CABLE LOS ANDES,
+    INVERSIONES, SPEEDY QUANTICO- y cada talonario pertenece a una. Cuál sale
+    impresa en el papel no es una preferencia de la pantalla: la decide el
+    talonario que el operador elige al cobrar, igual que el correlativo.
+
+    Vive aquí y no en la sede porque una sede atiende para varias razones
+    sociales y una razón social cobra desde varias sedes: son dos ejes
+    distintos, y colgarla de `Branch` obligaría a inventar una sede por
+    empresa.
+    """
+
+    code = models.CharField(
+        max_length=10,
+        unique=True,
+        verbose_name="Código",
+    )
+
+    business_name = models.CharField(
+        max_length=120,
+        verbose_name="Razón social",
+    )
+
+    ruc = models.CharField(
+        max_length=11,
+        verbose_name="RUC",
+    )
+
+    address = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="Dirección fiscal",
+    )
+
+    phone = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Teléfono",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activa",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Empresa emisora"
+        verbose_name_plural = "Empresas emisoras"
+        ordering = ["business_name"]
+
+    def __str__(self):
+        return self.business_name
+
+
 class ReceiptSequence(models.Model):
     """
-    Correlativo persistente de los recibos, una fila por serie.
+    Un talonario de comprobantes, con su correlativo.
 
     Mismo criterio que el correlativo de órdenes: la fila se bloquea con
     select_for_update() antes de incrementarla, de modo que dos cajas que
     cobran a la vez no emiten el mismo número. Nunca se calcula leyendo el
     último recibo emitido.
+
+    El talonario no se identifica por la serie impresa. En el sistema que se
+    reemplaza, «S010» nombra tres talonarios distintos -VELOCIDAD, RED OPTICA
+    y SPEEDY- que van cada uno por su cuenta (3031, 267 y 569). Por eso manda
+    `code`, que es único, y `series` es solo lo que se imprime y puede
+    repetirse.
+
+    Hay talonarios que no numeran solos: los de un cobrador concreto son
+    blocks de papel que él ya trae numerados, así que el operador escribe el
+    número que toca. `autonumber` distingue unos de otros.
     """
+
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Código del talonario",
+    )
 
     series = models.CharField(
         max_length=8,
-        unique=True,
-        verbose_name="Serie",
+        verbose_name="Serie impresa",
+    )
+
+    # La razon social que sale impresa. Opcional porque los talonarios ya
+    # existian antes de que el papel llevara emisor, y un talonario sin
+    # empresa imprime sin cabecera en vez de dejar el cobro parado.
+    issuer = models.ForeignKey(
+        Issuer,
+        on_delete=models.PROTECT,
+        related_name="sequences",
+        null=True,
+        blank=True,
+        verbose_name="Empresa emisora",
+    )
+
+    # Como se titula el documento en el recuadro de la derecha. Es del
+    # talonario y no de la empresa: la misma razon social emite boletas,
+    # facturas y recibos de servicio publico, y cada block es de un tipo.
+    document_title = models.CharField(
+        max_length=60,
+        default="RECIBO DE SERVICIO PÚBLICO ELECTRÓNICO",
+        verbose_name="Título del documento",
+    )
+
+    label = models.CharField(
+        max_length=80,
+        verbose_name="Etiqueta",
+        help_text="Como se lee en el desplegable de cobro.",
+    )
+
+    # Catálogo 01 de SUNAT: qué clase de documento es, en el código con el
+    # que se declara. Va aquí y no deducido de `document_title` por lo mismo
+    # que el formato impreso: el título es texto libre que alguien puede
+    # reescribir -«BOLETA DE VENTA» sin «ELECTRÓNICA», por ejemplo- y una
+    # regla que lo lea dejaría de reconocerlo sin avisar, con el QR saliendo
+    # mal desde ese momento.
+    class SunatCode(models.TextChoices):
+        FACTURA = "01", "Factura"
+        BOLETA = "03", "Boleta de venta"
+        RECIBO_SERVICIO = "14", "Recibo por servicios públicos"
+
+    sunat_code = models.CharField(
+        max_length=2,
+        choices=SunatCode.choices,
+        default=SunatCode.BOLETA,
+        verbose_name="Código SUNAT del documento",
+    )
+
+    class PrintFormat(models.TextChoices):
+        SHEET = "SHEET", "Media hoja apaisada"
+        TICKET = "TICKET", "Tique en vertical"
+
+    # En que papel sale. Los blocks de boleta (B001..B007) se imprimen en el
+    # tique estrecho en vertical; las facturas y los recibos de servicio
+    # publico siguen en la media hoja apaisada.
+    #
+    # Se guarda por talonario en vez de deducirse de la serie -«empieza por
+    # B»- por la misma razon que `document_title`: un block puede cambiar de
+    # formato sin cambiar de nombre, y entonces la regla deducida obligaria a
+    # renombrar el talonario para arreglar el papel. Ademas los blocks de un
+    # cobrador tambien son boletas y **no** van en tique, asi que la letra de
+    # la serie no bastaria para decidirlo.
+    print_format = models.CharField(
+        max_length=10,
+        choices=PrintFormat.choices,
+        default=PrintFormat.SHEET,
+        verbose_name="Formato impreso",
+    )
+
+    autonumber = models.BooleanField(
+        default=True,
+        verbose_name="Numera sola",
+        help_text=(
+            "Si no numera sola, el operador escribe el número del block."
+        ),
+    )
+
+    # El orden del desplegable es el del sistema anterior, que no es
+    # alfabético: los tres S010 van VELOCIDAD, RED OPTICA y SPEEDY. Se guarda
+    # en vez de deducirse para que siga siendo el mismo al añadir uno nuevo.
+    position = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Orden en la lista",
+    )
+
+    # Un talonario retirado no se borra: sus comprobantes ya se entregaron y
+    # tienen que poder seguir explicándose. Deja de ofrecerse en la ventanilla
+    # y nada más.
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Se ofrece al cobrar",
     )
 
     last_number = models.PositiveIntegerField(
@@ -778,16 +1044,95 @@ class ReceiptSequence(models.Model):
         verbose_name="Último correlativo emitido",
     )
 
+    # De qué ventanillas se ofrece. Un talonario es papel que está en un
+    # cajón: la oficina que no lo tiene no puede emitir de él, y ofrecérselo
+    # sería invitarla a numerar un block que no tiene delante.
+    #
+    # Muchos a muchos porque el mismo block se comparte: «F001 - CABLE LOS
+    # ANDES» va por el 8323 tanto en el Local Principal de Jauja como en la
+    # Oficina 2 y en Apata, con un solo correlativo. Una fila por oficina
+    # daría tres correlativos para un block que es uno.
+    offices = models.ManyToManyField(
+        Office,
+        through="OfficeSequence",
+        related_name="receipt_sequences",
+        blank=True,
+        verbose_name="Oficinas que lo ofrecen",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Correlativo de recibos"
-        verbose_name_plural = "Correlativos de recibos"
-        ordering = ["series"]
+        verbose_name = "Talonario de comprobantes"
+        verbose_name_plural = "Talonarios de comprobantes"
+        ordering = ["position", "label"]
 
     def __str__(self):
-        return f"{self.series}: {self.last_number}"
+        return self.label or self.series
+
+    @property
+    def next_number(self):
+        """El que se imprimiría ahora. Vacío si el block lo numera a mano."""
+        if not self.autonumber:
+            return None
+
+        return self.last_number + 1
+
+
+class OfficeSequence(models.Model):
+    """Qué talonarios ofrece una oficina, y en qué orden los ofrece.
+
+    Existe como tabla propia -y no como un `ManyToManyField` pelado- porque la
+    relación lleva un dato suyo: **el orden**. Los tres blocks que se imprimen
+    «S003» salen en Jauja Cajas como SPEEDY, VELOCIDAD, RED ÓPTICA y en
+    Huancayo El Tambo como VELOCIDAD, RED ÓPTICA, SPEEDY. Son los mismos tres
+    talonarios y cada ventanilla los tiene apilados a su manera, así que el
+    orden no puede vivir en el talonario: ahí solo cabe una respuesta y hacen
+    falta dos.
+
+    `ReceiptSequence.position` sigue existiendo y sigue sirviendo: ordena la
+    lista completa cuando no hay oficina elegida, que es lo que ve un
+    despliegue sin padrón de oficinas cargado.
+    """
+
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.CASCADE,
+        related_name="sequence_links",
+        verbose_name="Oficina",
+    )
+
+    sequence = models.ForeignKey(
+        ReceiptSequence,
+        on_delete=models.CASCADE,
+        related_name="office_links",
+        verbose_name="Talonario",
+    )
+
+    position = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Orden en la lista de la oficina",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Talonario de una oficina"
+        verbose_name_plural = "Talonarios por oficina"
+        ordering = ["office", "position", "sequence"]
+        constraints = [
+            # Un talonario se ofrece una vez en cada ventanilla. Repetido,
+            # saldria dos veces en el mismo desplegable y el operador tendria
+            # que elegir entre dos opciones que son la misma.
+            models.UniqueConstraint(
+                fields=["office", "sequence"],
+                name="unique_sequence_per_office",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.office} - {self.sequence}"
 
 
 class Receipt(models.Model):
@@ -807,6 +1152,16 @@ class Receipt(models.Model):
         verbose_name="Pago",
     )
 
+    # El talonario del que salió. La serie se guarda además suelta porque es
+    # lo que quedó impreso en el papel: si mañana se corrige la etiqueta de un
+    # talonario, el recibo entregado sigue diciendo lo que decía.
+    sequence = models.ForeignKey(
+        ReceiptSequence,
+        on_delete=models.PROTECT,
+        related_name="receipts",
+        verbose_name="Talonario",
+    )
+
     series = models.CharField(max_length=8, verbose_name="Serie")
     number = models.PositiveIntegerField(verbose_name="Correlativo")
 
@@ -822,9 +1177,13 @@ class Receipt(models.Model):
         verbose_name_plural = "Comprobantes de pago"
         ordering = ["-issued_at", "-pk"]
         constraints = [
+            # Por talonario y no por serie impresa: los tres «S010» son
+            # blocks distintos y cada uno recorre sus propios números, así
+            # que exigir que la serie impresa no repita número haría fallar
+            # el segundo en cuanto alcanzara al primero.
             models.UniqueConstraint(
-                fields=["series", "number"],
-                name="payments_receipt_unique_series_number",
+                fields=["sequence", "number"],
+                name="payments_receipt_unique_sequence_number",
             ),
         ]
 
@@ -832,8 +1191,20 @@ class Receipt(models.Model):
         return self.full_number
 
     @property
+    def printed_number(self):
+        """El correlativo solo, sin la serie.
+
+        La lista de comprobantes presenta serie y numero en columnas
+        separadas -como el padron del sistema que se reemplaza-, y sin esto
+        la plantilla tendria que repetir los ceros a la izquierda por su
+        cuenta; que es justo lo que `format_receipt_number` existe para
+        evitar.
+        """
+        return format_receipt_number(self.number)
+
+    @property
     def full_number(self):
-        return f"{self.series}-{self.number:06d}"
+        return f"{self.series}-{self.printed_number}"
 
     @property
     def is_voided(self):
@@ -887,9 +1258,29 @@ class PaymentCommitment(models.Model):
         verbose_name="Se compromete a pagar el",
     )
 
+    # Lo que el operador quiera dejar dicho. Se llamaba «motivo» y era
+    # obligatorio -aplazar el corte de quien ya debe hay que poder explicarlo-;
+    # el formulario del sistema que se reemplaza lo pide como observaciones y
+    # no lo exige, y esa es la regla que se adopta.
     reason = models.CharField(
         max_length=200,
-        verbose_name="Motivo del compromiso",
+        blank=True,
+        verbose_name="Observaciones",
+    )
+
+    # Quien firma por el abonado, cuando no es el mismo. El sistema anterior lo
+    # pide en el papel del compromiso: el acuerdo lo asume una persona, y si no
+    # es el titular hay que poder decir quien fue.
+    representative = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Representante",
+    )
+
+    representative_document = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="DNI del representante",
     )
 
     status = models.CharField(
@@ -949,14 +1340,6 @@ class PaymentCommitment(models.Model):
 
     def __str__(self):
         return f"Compromiso {self.committed_date:%d/%m/%Y} · S/ {self.amount}"
-
-    def clean(self):
-        super().clean()
-
-        if not self.reason or not self.reason.strip():
-            raise ValidationError({
-                "reason": "Indique por qué se concede el compromiso.",
-            })
 
     def is_expired(self, on=None):
         """La fecha prometida ya pasó y el compromiso sigue vigente."""

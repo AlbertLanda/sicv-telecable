@@ -49,6 +49,19 @@ urlpatterns = [
         views.PaymentCommitmentCreateView.as_view(),
         name="commitment_create",
     ),
+    # El compromiso ya concedido. Cuelga del abonado para que la miga de pan y
+    # las pestañas sepan de quien se habla, como el resto de la cuenta.
+    path(
+        "clientes/<int:pk>/compromisos/<int:commitment_pk>/",
+        views.PaymentCommitmentDetailView.as_view(),
+        name="commitment_detail",
+    ),
+    # El mismo compromiso como papel, para que el abonado lo firme.
+    path(
+        "clientes/<int:pk>/compromisos/<int:commitment_pk>/imprimir/",
+        views.PaymentCommitmentPdfView.as_view(),
+        name="commitment_pdf",
+    ),
     path(
         "compromisos/<int:pk>/anular/",
         views.PaymentCommitmentCancelView.as_view(),
@@ -62,6 +75,14 @@ urlpatterns = [
         "comprobantes/<int:pk>/",
         views.ReceiptDetailView.as_view(),
         name="receipt_detail",
+    ),
+
+    # El mismo comprobante como archivo. Cuelga del comprobante y no del
+    # abonado porque es el mismo documento por otra salida, no otra pantalla.
+    path(
+        "comprobantes/<int:pk>/pdf/",
+        views.ReceiptPdfView.as_view(),
+        name="receipt_pdf",
     ),
     path(
         "pagos/<int:pk>/anular/",

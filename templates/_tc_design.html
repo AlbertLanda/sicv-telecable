@@ -12,6 +12,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     :root {
         --tc-blue: #0f4c7f;
         --tc-blue-dark: #0a3b66;
+        --tc-blue-hover: #1a68ad;
         --tc-blue-soft: #eef6fd;
         --tc-text: #17355f;
         --tc-muted: #64748b;
@@ -20,7 +21,33 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
         --tc-warning: #f6b700;
         --tc-warning-bg: #fff9e8;
         --tc-success: #0b9a52;
+
+        /* Margen lateral de las tarjetas. Lo comparten la cabecera, el
+           cuerpo, las celdas de los bordes de la tabla y el paginador: las
+           cuatro cosas se leen como una sola columna cuando arrancan en la
+           misma linea, y antes cada una elegia la suya. */
+        --tc-pad-x: 18px;
     }
+
+    /* Las fichas de formulario respiran mas que las tarjetas de consulta.
+       Los 18px de arriba estan pensados para tablas -filas cortas que se leen
+       de un vistazo-; en un formulario que se llena dejan las etiquetas
+       contra el borde de la tarjeta.
+
+       Se sube redefiniendo la variable sobre la tarjeta entera y no el
+       padding de su cuerpo, que es como se hacia: asi lo heredan tambien la
+       franja de la cabecera y el pie de los botones. Tocando solo el cuerpo,
+       la misma tarjeta acababa con tres margenes laterales distintos -titulo
+       a 18, campos a 26, botones a 18- y las tres zonas arrancaban en lineas
+       diferentes, que es justo lo que la variable existe para evitar. */
+    .tc-sheet { --tc-pad-x: 26px; }
+
+    /* Y respira por arriba. El cuerpo de una tarjeta de consulta arranca
+       pegado a su cabecera -es una tabla, y su primera fila ya trae el aire
+       de la cabecera de columnas-; en una ficha, el primer campo quedaba
+       contra la franja azul. Vivia copiada en cada ficha, que es como se
+       separan tres copias de la misma medida. */
+    .tc-sheet .tc-section-body { padding:24px var(--tc-pad-x) 26px; }
 
     body { color: var(--tc-text); }
 
@@ -30,11 +57,29 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
     .tc-toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
 
-    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; }
-    .tc-btn:hover { color:#0c4f9e; background:#f7fbff; }
+    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
     .tc-btn.primary { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
     .tc-btn.muted { border-color:#afc0d1; color:#31516f; }
     .tc-btn.square { width:38px; padding:0; }
+
+    /* El hover va DESPUES de las variantes, no antes. Declarado arriba tenia
+       la misma especificidad que `.tc-btn.primary` y perdia por orden: el
+       boton azul se quedaba quieto bajo el cursor y solo reaccionaba el de
+       contorno.
+
+       El azul de reposo (--tc-blue) es un azul de tinta, casi marino. Bajo el
+       cursor sube a --tc-blue-hover, que no es el mismo azul aclarado -eso lo
+       dejaria lavado, como deshabilitado- sino uno mas vivo y saturado: el
+       boton se enciende. Hundirlo se reserva para el clic. */
+    .tc-btn:hover { color:#0c4f9e; background:var(--tc-blue-soft); border-color:#1565c8; box-shadow:0 2px 6px rgba(15, 76, 127, .16); }
+    .tc-btn.primary:hover { background:var(--tc-blue-hover); border-color:var(--tc-blue-hover); color:#fff; box-shadow:0 3px 9px rgba(26, 104, 173, .32); }
+    .tc-btn.muted:hover { background:#eef2f7; border-color:#8fa3b8; color:#1f3b57; box-shadow:0 2px 6px rgba(35, 74, 112, .14); }
+
+    /* Al pulsar se hunde y vuelve al azul de tinta, para que el clic se note
+       aun cuando la pantalla tarde en responder. */
+    .tc-btn:active { box-shadow:inset 0 1px 3px rgba(10, 59, 102, .25); }
+    .tc-btn.primary:active { background:var(--tc-blue-dark); border-color:var(--tc-blue-dark); }
+    .tc-btn:focus-visible { outline:2px solid #2f7df6; outline-offset:2px; }
 
     .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
 
@@ -58,10 +103,19 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     .tc-section { overflow:hidden; }
-    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; }
+    .tc-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px var(--tc-pad-x); }
+
+    /* Cabecera en franja, como la del sistema anterior: marca donde empieza
+       lo que se lee o se llena. Nacio dentro de «Nueva deuda» y se quedaba
+       alli hasta decidir si todas las cabeceras irian asi; la tercera
+       pantalla que la pidio -la tabla de deudas- resolvio la duda, y tres
+       copias del mismo trazo se separan al primer ajuste. */
+    .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:14px var(--tc-pad-x); }
+    .tc-section-head.banner .tc-section-title { color:#fff; }
+    .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
     .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
     .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
-    .tc-section-body { padding:0 14px 14px; }
+    .tc-section-body { padding:0 var(--tc-pad-x) 16px; }
     .tc-data-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px 28px; }
     .tc-data-label { font-size:.69rem; color:#74859a; margin-bottom:2px; }
     .tc-data-value { font-size:.78rem; color:#1b385d; font-weight:500; }
@@ -72,9 +126,18 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-map-btn { margin-top:8px; width:100%; }
 
     .tc-table { width:100%; margin:0; border-collapse:collapse; }
-    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:8px 9px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
-    .tc-table td { color:#334f6b; font-size:.69rem; padding:9px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
+    /* La cabecera de columnas respira mas por arriba que por abajo: encima
+       tiene la franja de la tarjeta, y pegada a ella los titulos parecian
+       parte del titulo de la seccion en vez del encabezado de la tabla. */
+    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:16px 12px 11px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
+    .tc-table td { color:#334f6b; font-size:.69rem; padding:12px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
     .tc-table tr:last-child td { border-bottom:0; }
+
+    /* Las celdas de los extremos se alinean con la cabecera de la tarjeta.
+       Pegadas al borde, la primera columna parecia caerse fuera de la caja
+       y la ultima quedaba sin aire contra el filo. */
+    .tc-table th:first-child, .tc-table td:first-child { padding-left:var(--tc-pad-x); }
+    .tc-table th:last-child, .tc-table td:last-child { padding-right:var(--tc-pad-x); }
     .tc-table a { color:#1473d4; text-decoration:none; font-weight:700; }
     .tc-table .status-warning { display:inline-block; padding:2px 7px; border-radius:5px; background:#ffc928; color:#332900; font-weight:700; }
     .tc-table .status-success { display:inline-block; padding:2px 7px; border-radius:4px; background:#0aa25c; color:#fff; font-weight:700; }
@@ -118,7 +181,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     /* Pie de tabla. Vive dentro de la tarjeta, separado por su linea: el
        operador tiene que ver de un vistazo que lo que mira es una pagina y
        no todo lo que hay. */
-    .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:11px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:13px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#fbfdff; }
     .tc-pager-count { font-size:.72rem; color:#6a809a; }
     .tc-pager-actions { display:flex; gap:8px; }
     .tc-pager .tc-btn { min-height:32px; padding:5px 12px; font-size:.73rem; }
@@ -172,13 +235,13 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-choices { display:flex; flex-wrap:wrap; gap:8px 18px; }
     .tc-choice { display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:#2e4763; }
 
-    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:9px; border-top:1px solid var(--tc-border); }
+    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:12px; border-top:1px solid var(--tc-border); }
     .tc-table td.num, .tc-table th.num { text-align:right; white-space:nowrap; }
-    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:2px; }
+    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:5px; }
 
-    .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
 
-    .tc-empty { padding:18px 14px; font-size:.78rem; color:#5c7590; }
+    .tc-empty { padding:26px var(--tc-pad-x); font-size:.78rem; color:#5c7590; }
 
     .tc-metric-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
 
@@ -200,14 +263,97 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     /* Nota de contexto de una pantalla. Mas discreta que un alert de
        Bootstrap, que ocupaba el ancho entero y competia con los campos. */
+    /* Avisos flotantes. Arriba a la derecha, del tamano de una fila de tabla
+       y no de una tarjeta: el operador no tiene que decidir nada, solo
+       enterarse. Se apilan hacia abajo si caen varios seguidos.
+
+       Van en color pleno y no en blanco con un filo de color. La pantalla ya
+       es blanca con azules serios; un aviso del mismo temple se confunde con
+       una tarjeta mas y hay que buscarlo. En pleno se ve de reojo, que es lo
+       unico que se le pide: aparece, se lee sin mirar y se va.
+
+       El ambar lleva texto oscuro en vez de blanco -blanco sobre amarillo no
+       se lee-, y por eso el reloj y el disco del icono se tinen con
+       `currentColor` en lugar de un blanco fijo.
+
+       La barra del pie es ese reloj: se encoge durante los segundos que dura
+       el aviso, asi que se ve cuanto queda en vez de desaparecer de golpe. */
+    .tc-toast-zone { position:fixed; top:16px; right:16px; z-index:1080; display:flex; flex-direction:column; gap:9px; pointer-events:none; }
+    .tc-toast { pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:center; gap:10px; min-width:240px; max-width:360px; padding:11px 14px 13px; border-radius:8px; color:#fff; font-size:.76rem; font-weight:600; line-height:1.45; cursor:pointer; animation:tc-toast-in .18s ease-out; }
+    .tc-toast i { flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:rgba(255, 255, 255, .22); font-size:.88rem; color:inherit; }
+    .tc-toast.danger { background:linear-gradient(135deg, #f0564a 0%, #d32f2f 100%); box-shadow:0 8px 22px rgba(211, 47, 47, .34); }
+    .tc-toast.warning { background:linear-gradient(135deg, #ffb524 0%, #f08c00 100%); box-shadow:0 8px 22px rgba(240, 140, 0, .34); color:#3b2700; }
+    .tc-toast.warning i { background:rgba(0, 0, 0, .13); }
+    .tc-toast.success { background:linear-gradient(135deg, #25c46e 0%, #0f9d58 100%); box-shadow:0 8px 22px rgba(15, 157, 88, .34); }
+    .tc-toast.info { background:linear-gradient(135deg, #3089d8 0%, #1565a8 100%); box-shadow:0 8px 22px rgba(21, 101, 168, .34); }
+    .tc-toast-bar { position:absolute; left:0; bottom:0; height:3px; width:100%; background:currentColor; opacity:.45; transform-origin:left; animation:tc-toast-bar linear forwards; }
+    .tc-toast.leaving { animation:tc-toast-out .18s ease-in forwards; }
+    @keyframes tc-toast-in { from { opacity:0; transform:translateX(14px); } }
+    @keyframes tc-toast-out { to { opacity:0; transform:translateX(14px); } }
+    @keyframes tc-toast-bar { from { transform:scaleX(1); } to { transform:scaleX(0); } }
+
     .tc-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; margin-bottom:16px; border:1px solid #bfe0f5; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f2f9ff; color:#2a4d70; font-size:.73rem; line-height:1.5; }
     .tc-note i { color:var(--tc-blue); font-size:.95rem; line-height:1.3; }
     .tc-note.danger { border-color:#f2b8b1; border-left-color:#c0392b; background:#fdf3f2; color:#8f2b1f; }
     .tc-note.danger i { color:#c0392b; }
 
+    /* La deuda elegida, dentro de una ficha. Es un recuadro con una linea por
+       deuda y su importe a la derecha, como el del sistema que se reemplaza.
+
+       No es una tabla con casillas: la deuda se elige en el tablero y aqui
+       solo se lee. Volver a ofrecerla para elegir serian dos sitios para
+       decidir lo mismo, y el que se quedara sin mirar mandaria igual. */
+    .tc-debt-list { border:1px solid var(--tc-border); border-radius:6px; background:#fbfdff; padding:4px 0; max-height:150px; overflow-y:auto; }
+    .tc-debt-line { display:flex; align-items:baseline; gap:12px; padding:5px 11px; font-size:.76rem; color:#2e4763; }
+    .tc-debt-line + .tc-debt-line { border-top:1px solid #eef3f8; }
+    .tc-debt-line > span:first-child { min-width:0; }
+    .tc-debt-line-monto { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+    /* Lo que esta pendiente sobre este registro, justo encima de su tabla.
+
+       Una tarjeta por aviso, en rejilla: aqui se van acumulando cosas -hoy los
+       compromisos de pago, manana lo que venga- y puestas en fila caben varias
+       sin empujar la primera deuda por debajo del pliegue. `auto-fill` las
+       reparte solas: una ocupa lo suyo y cuatro se reparten el ancho.
+
+       El trazo es el de una tarjeta de cifra: rotulo pequeño arriba, el dato
+       que importa en grande debajo, el icono en su cuadro de color y una linea
+       de contexto al pie. Es lo mismo que se hace al resumir un numero, y esto
+       tambien es un numero que hay que leer de un vistazo antes de decidir.
+
+       Toda la tarjeta es el enlace, no un «ver» dentro de ella: el destino es
+       uno solo y un area grande se acierta sin apuntar. */
+    /* Separada de las pestañas por los mismos 14px que `tc-full`, que es lo
+       que hay entre las pestañas y cualquier otra tarjeta. Sin margen arriba
+       quedaba pegada al filo de la pestaña activa y las dos se leian como una
+       sola pieza. Por abajo no lleva nada: el hueco lo pone la tarjeta
+       siguiente con su propio margen, y sumar los dos abriria debajo el doble
+       de lo que hay encima. */
+    .tc-pendientes { display:grid; grid-template-columns:repeat(auto-fill, minmax(255px, 1fr)); gap:12px; margin:14px 0 0; }
+    /* El color va en el filo y en el icono, no en el fondo ni en las letras.
+
+       La tarjeta se tiene que ver de reojo -esto se mira antes de decidir que
+       cobrar, no se estudia- y para eso basta el filo izquierdo con el cuadro
+       del icono en color pleno: los dos se ven juntos desde lejos aunque no se
+       lea ni una palabra. El fondo blanco y el texto en el azul del sistema se
+       quedan, que es lo que hace que siga siendo legible y que no parezca de
+       otra aplicacion.
+
+       Ambar y no rojo: un compromiso vigente no es una alarma. Es un acuerdo
+       que cambia lo que se le puede decir al abonado, y en rojo competiria con
+       los avisos de algo que ha ido mal. */
+    .tc-pendiente { display:block; padding:14px 16px 15px; border:1px solid #f0cf88; border-left:4px solid #e0890c; border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(35, 74, 112, .05); text-decoration:none; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+    .tc-pendiente:hover, .tc-pendiente:focus-visible { border-color:#e5ae3e; border-left-color:#c67405; box-shadow:0 9px 22px rgba(176, 116, 12, .24); transform:translateY(-1px); }
+    .tc-pendiente-cab { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .tc-pendiente-rotulo { font-size:.74rem; font-weight:700; color:var(--tc-muted); line-height:1.35; letter-spacing:.01em; }
+    .tc-pendiente-icono { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg, #ffc12e 0%, #ef8d08 100%); color:#fff; font-size:1rem; box-shadow:0 3px 9px rgba(224, 137, 12, .38); }
+    .tc-pendiente-dato { margin-top:7px; font-size:1.16rem; font-weight:800; letter-spacing:-.01em; color:var(--tc-text); line-height:1.25; }
+    .tc-pendiente-pie { margin-top:8px; display:flex; align-items:center; gap:6px; font-size:.73rem; font-weight:700; color:#5f7893; }
+    .tc-pendiente-pie .bi { color:#e0890c; font-size:.8rem; }
+
     /* Pie de tarjeta: donde se confirma o se abandona. Mismo trazo que el pie
        de las tablas, para que la pantalla tenga un solo lenguaje. */
-    .tc-card-footer { display:flex; flex-wrap:wrap; gap:10px; padding:12px 14px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-card-footer { display:flex; flex-wrap:wrap; gap:10px; padding:13px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#fbfdff; }
 
     /* Menu de desbordamiento de la ficha. Hereda de Bootstrap la
        mecanica y de aqui el trazo, para que no parezca de otra app. */
@@ -224,4 +370,109 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
         .tc-form-label { text-align:left; }
         .tc-form-label.top { padding-top:0; }
     }
+
+    /* Quien pidio menos movimiento no ve el deslizamiento ni el reloj. El
+       aviso sigue yendose solo: el temporizador esta en el guion, no en la
+       animacion. */
+    @media (prefers-reduced-motion: reduce) {
+        .tc-toast, .tc-toast.leaving { animation:none; }
+        .tc-toast-bar { animation:none; display:none; }
+    }
 </style>
+
+{% comment %}
+El guion de los avisos viaja con su CSS, en el mismo parcial, a proposito.
+Separados, una pantalla podria cargar el uno sin el otro y el aviso saldria
+sin maqueta -o no saldria- sin que nada lo advierta.
+
+Se declara en el head y no toca el documento hasta que alguien llama a
+`tcAviso`, que es cuando crea la zona.
+
+    tcAviso("Marque la deuda que va a cobrar.");
+    tcAviso("Cobro registrado.", {tono: "success", icono: "bi-check-circle-fill"});
+{% endcomment %}
+<script>
+(function () {
+    var ZONA_ID = "tcAvisos";
+
+    function zona() {
+        var z = document.getElementById(ZONA_ID);
+
+        if (!z) {
+            z = document.createElement("div");
+            z.id = ZONA_ID;
+            z.className = "tc-toast-zone";
+            z.setAttribute("aria-live", "polite");
+            document.body.appendChild(z);
+        }
+
+        return z;
+    }
+
+    window.tcAviso = function (mensaje, opciones) {
+        var conf = opciones || {};
+        var duracion = conf.duracion || 3000;
+        var reloj = null;
+
+        var aviso = document.createElement("div");
+        aviso.className = "tc-toast " + (conf.tono || "danger");
+        aviso.setAttribute("role", "status");
+
+        var icono = document.createElement("i");
+        icono.className = "bi " + (conf.icono || "bi-exclamation-triangle-fill");
+
+        var texto = document.createElement("span");
+        texto.textContent = mensaje;
+
+        var barra = document.createElement("span");
+        barra.className = "tc-toast-bar";
+        barra.style.animationDuration = duracion + "ms";
+
+        aviso.appendChild(icono);
+        aviso.appendChild(texto);
+        aviso.appendChild(barra);
+        zona().appendChild(aviso);
+
+        function cerrar() {
+            window.clearTimeout(reloj);
+
+            if (!aviso.parentNode) {
+                return;
+            }
+
+            aviso.classList.add("leaving");
+            window.setTimeout(function () {
+                if (aviso.parentNode) {
+                    aviso.parentNode.removeChild(aviso);
+                }
+            }, 200);
+        }
+
+        function contar() {
+            reloj = window.setTimeout(cerrar, duracion);
+        }
+
+        contar();
+
+        // Con el cursor encima el reloj se detiene: si el operador fue a
+        // leerlo, no se le escapa a media frase. Al salir vuelve a empezar
+        // entero, que es mas predecible que reanudar un resto invisible.
+        aviso.addEventListener("mouseenter", function () {
+            window.clearTimeout(reloj);
+            barra.style.animationPlayState = "paused";
+        });
+
+        aviso.addEventListener("mouseleave", function () {
+            barra.style.animation = "none";
+            void barra.offsetWidth;
+            barra.style.animation = "";
+            barra.style.animationDuration = duracion + "ms";
+            contar();
+        });
+
+        aviso.addEventListener("click", cerrar);
+
+        return aviso;
+    };
+})();
+</script>

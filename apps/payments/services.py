@@ -26,9 +26,11 @@ from .models import (
     Payment,
     PaymentAllocation,
     PaymentCommitment,
+    PaymentCommitmentInstallment,
     Receipt,
     ReceiptSequence,
     ZERO,
+    format_receipt_number,
 )
 
 
@@ -238,20 +240,86 @@ def allocate_oldest_first(charges, amount, day=None):
     return plan
 
 
+def receipt_sequence(code=DEFAULT_RECEIPT_SERIES):
+    """El talonario que responde a ese código, creándolo si no existe.
+
+    Se busca por `code` y no por la serie impresa porque la serie se repite:
+    «S010» nombra tres blocks distintos, y elegir por ella devolvería
+    cualquiera de los tres.
+
+    El que se crea aquí nace retirado. Llegar a este punto significa que
+    nadie eligió ese talonario en la ventanilla -es el de respaldo, o un
+    código que no está en el padrón-, y ofrecerlo después en el desplegable
+    pondría a elegir un block que no existe en papel.
+    """
+    sequence, _ = ReceiptSequence.objects.get_or_create(
+        code=code,
+        defaults={"series": code, "label": code, "is_active": False},
+    )
+
+    return sequence
+
+
 @transaction.atomic
-def next_receipt_number(series=DEFAULT_RECEIPT_SERIES):
-    """Siguiente correlativo de la serie, bloqueando la fila.
+def next_receipt_number(sequence=DEFAULT_RECEIPT_SERIES):
+    """Siguiente correlativo del talonario, bloqueando su fila.
 
     Se bloquea con select_for_update() para que dos cajas que cobran a la vez
     no se lleven el mismo número. Nunca se deduce del último recibo emitido:
     ese cálculo da el mismo resultado a dos transacciones simultáneas.
+
+    Acepta el talonario o su código: casi todas las llamadas traen el objeto,
+    pero la firma antigua pasaba una cadena y sigue valiendo.
     """
-    sequence, _ = ReceiptSequence.objects.get_or_create(series=series)
+    if not isinstance(sequence, ReceiptSequence):
+        sequence = receipt_sequence(sequence)
+
     sequence = ReceiptSequence.objects.select_for_update().get(pk=sequence.pk)
     sequence.last_number += 1
     sequence.save(update_fields=["last_number", "updated_at"])
 
     return sequence.last_number
+
+
+@transaction.atomic
+def issue_receipt_number(sequence, number=None):
+    """El número que se imprime, venga del correlativo o del operador.
+
+    El campo es editable en pantalla -hay blocks de papel que ya vienen
+    numerados y hay que escribir el número que toca-, así que el escrito
+    manda sobre el propuesto.
+
+    Cuando el operador escribe uno en un talonario que sí numera solo, el
+    correlativo se adelanta hasta ahí: si se salta del 300 al 350, el
+    siguiente cobro sale 351 y no vuelve a repetir los que quedaron en medio.
+    """
+    if number is None:
+        if not sequence.autonumber:
+            raise ValidationError(
+                f"El talonario «{sequence.label}» no numera solo: escriba el "
+                f"número del comprobante."
+            )
+
+        return next_receipt_number(sequence)
+
+    number = int(number)
+
+    if number <= 0:
+        raise ValidationError("El número del comprobante debe ser mayor a cero.")
+
+    bloqueado = ReceiptSequence.objects.select_for_update().get(pk=sequence.pk)
+
+    if Receipt.objects.filter(sequence=bloqueado, number=number).exists():
+        raise ValidationError(
+            f"El comprobante {sequence.series}-"
+            f"{format_receipt_number(number)} ya fue emitido."
+        )
+
+    if bloqueado.autonumber and number > bloqueado.last_number:
+        bloqueado.last_number = number
+        bloqueado.save(update_fields=["last_number", "updated_at"])
+
+    return number
 
 
 def discount_for(charge, applied, day=None):
@@ -287,6 +355,8 @@ def register_payment(
     received_at=None,
     day=None,
     series=DEFAULT_RECEIPT_SERIES,
+    number=None,
+    office=None,
     collector=None,
     settled=True,
     paid_at=None,
@@ -339,12 +409,25 @@ def register_payment(
 
     received_at = received_at or timezone.now()
 
+    # El talonario se resuelve antes de tocar nada: si la serie elegida no
+    # numera sola y no vino número, el cobro no debe llegar a escribirse.
+    sequence = series
+    if not isinstance(sequence, ReceiptSequence):
+        sequence = receipt_sequence(sequence)
+
+    if number is None and not sequence.autonumber:
+        raise ValidationError(
+            f"El talonario «{sequence.label}» no numera solo: escriba el "
+            f"número del comprobante."
+        )
+
     payment = Payment(
         customer=customer,
         amount=amount,
         method=method,
         reference=(reference or "").strip(),
         branch=branch,
+        office=office,
         received_by=user,
         collector=collector,
         note=(note or "").strip(),
@@ -356,7 +439,7 @@ def register_payment(
         due_date=due_date,
     )
     payment.full_clean(
-        exclude=["received_by", "collector", "branch", "customer"]
+        exclude=["received_by", "collector", "branch", "office", "customer"]
     )
     payment.save()
 
@@ -371,8 +454,9 @@ def register_payment(
 
     receipt = Receipt.objects.create(
         payment=payment,
-        series=series,
-        number=next_receipt_number(series),
+        sequence=sequence,
+        series=sequence.series,
+        number=issue_receipt_number(sequence, number),
         issued_at=payment.received_at,
     )
 
@@ -536,11 +620,14 @@ def grant_commitment(
     customer,
     charges,
     committed_date,
-    reason,
     user,
+    reason="",
     amount=None,
     day=None,
     authorized_by=None,
+    installments=None,
+    representative="",
+    representative_document="",
 ):
     """Concede un compromiso de pago sobre cargos concretos.
 
@@ -550,6 +637,13 @@ def grant_commitment(
     El monto, si no se indica, es el saldo de los cargos elegidos. Se permite
     indicarlo aparte porque el abonado puede comprometerse por menos de lo que
     debe, y ese acuerdo hay que poder registrarlo tal como se hizo.
+
+    `installments` es el plan de cuotas -pares (numero, monto, fecha)- con el
+    que el abonado piensa pagarlo. Es detalle del acuerdo y no otra promesa:
+    la fecha que aplaza el corte sigue siendo `committed_date`, una sola. Si
+    cada cuota protegiera hasta la siguiente, la proteccion se renovaria sola y
+    un plan de quince cuotas dejaria al abonado fuera del corte durante meses
+    sin que nadie lo volviera a decidir.
     """
     day = day or timezone.localdate()
     charges = list(charges)
@@ -592,11 +686,15 @@ def grant_commitment(
             f"elegidos (S/ {outstanding})."
         )
 
+    cuotas = _clean_installments(installments, amount)
+
     commitment = PaymentCommitment(
         customer=customer,
         amount=amount,
         committed_date=committed_date,
         reason=(reason or "").strip(),
+        representative=(representative or "").strip(),
+        representative_document=(representative_document or "").strip(),
         granted_by=user,
         authorized_by=authorized_by,
     )
@@ -606,7 +704,63 @@ def grant_commitment(
     commitment.save()
     commitment.charges.set(charges)
 
+    for numero, monto, fecha in cuotas:
+        PaymentCommitmentInstallment.objects.create(
+            commitment=commitment,
+            number=numero,
+            amount=monto,
+            due_date=fecha,
+        )
+
     return commitment
+
+
+def _clean_installments(installments, amount):
+    """Valida el plan de cuotas contra lo que se esta comprometiendo.
+
+    Dos reglas, y las dos por el mismo motivo: el plan describe como se paga lo
+    comprometido, no puede prometer otra cosa.
+
+    - Una cuota necesita monto **y** fecha. Media cuota no dice nada: ni
+      cuanto ni cuando, y guardarla dejaria un plan que no se puede seguir.
+    - La suma de las cuotas no puede pasar del monto comprometido. Pasarse
+      seria un plan para pagar mas de lo que se acaba de acordar, y el papel
+      diria dos cifras distintas sobre el mismo acuerdo.
+
+    Que sume **menos** si se acepta: el operador puede dejar apuntadas las dos
+    primeras cuotas y el resto para cuando se sepa.
+    """
+    if not installments:
+        return []
+
+    cuotas = []
+
+    for numero, monto, fecha in installments:
+        if monto is None and fecha is None:
+            continue
+
+        if monto is None or fecha is None:
+            raise ValidationError(
+                f"La cuota {numero} necesita monto y fecha: con uno de los dos "
+                f"no se sabe ni cuanto ni cuando."
+            )
+
+        if Decimal(monto) <= ZERO:
+            raise ValidationError(
+                f"El monto de la cuota {numero} debe ser mayor a cero."
+            )
+
+        cuotas.append((numero, Decimal(monto), fecha))
+
+    total = sum((monto for _, monto, _ in cuotas), ZERO)
+
+    if total > amount:
+        raise ValidationError(
+            f"Las cuotas suman S/ {total} y el compromiso es de S/ {amount}: "
+            f"el plan no puede prometer mas de lo acordado."
+        )
+
+    return cuotas
 
 
 def customer_commitments(customer):
@@ -628,18 +782,45 @@ def customer_commitments(customer):
     return commitments
 
 
-def receipt_series_options():
-    """Las series de comprobante disponibles para cobrar.
+def receipt_series_options(office=None):
+    """Los talonarios que ofrece una ventanilla, en el orden en que los ofrece.
 
     Salen de las filas de ReceiptSequence, que es donde vive el correlativo:
     ofrecer una serie que no tiene fila obligaria a crearla al vuelo dentro
     del cobro, y el numero se emitiria sin el bloqueo que evita repetirlo.
-    La serie por defecto se asegura para que la ventanilla nunca quede sin
-    ninguna opcion.
-    """
-    ReceiptSequence.objects.get_or_create(series=DEFAULT_RECEIPT_SERIES)
 
-    return list(ReceiptSequence.objects.order_by("series"))
+    **Varian por oficina** porque un talonario es papel que esta en un cajon.
+    Apata no puede emitir del block que vive en Oroya, y ofrecerselo invita a
+    numerar algo que nadie tiene delante. El orden tambien es de la oficina:
+    los tres «S003» salen en Jauja Cajas como SPEEDY, VELOCIDAD, RED OPTICA y
+    en Huancayo El Tambo al reves, asi que lo dice la relacion.
+
+    Sin oficina -o con una que el padron no nombra- se devuelve la lista
+    completa. Es el mismo criterio que hace opcional la oficina en el cobro:
+    un despliegue sin padron cargado sigue cobrando, porque la sede basta para
+    saber que caja recibio el dinero, y quedarse sin series dejaria la
+    ventanilla parada por una tabla que nadie lleno.
+
+    R001 no esta entre ellas. Era el talonario propio del sistema, el que se
+    uso mientras no habia padron, y sigue existiendo porque sus comprobantes
+    ya se entregaron; lo que no hace es ofrecerse para cobrar de nuevo.
+
+    Aqui no se asegura ninguno: el padron entra por migracion, y crear uno al
+    vuelo para que la lista no quede vacia volveria a meter R001 por la puerta
+    de atras en cada base recien creada.
+    """
+    if office is not None:
+        propios = list(
+            ReceiptSequence.objects.filter(
+                is_active=True,
+                office_links__office=office,
+            ).order_by("office_links__position", "position", "label")
+        )
+
+        if propios:
+            return propios
+
+    return list(ReceiptSequence.objects.filter(is_active=True))
 
 
 def collector_options():

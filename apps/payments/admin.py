@@ -6,6 +6,7 @@ from .models import (
     Payment,
     PaymentAllocation,
     Receipt,
+    OfficeSequence,
     ReceiptSequence,
 )
 
@@ -66,9 +67,10 @@ class PaymentAdmin(admin.ModelAdmin):
         "amount",
         "method",
         "received_at",
+        "office",
         "status",
     ]
-    list_filter = ["method", "status", "branch"]
+    list_filter = ["method", "status", "branch", "office"]
     search_fields = [
         "reference",
         "customer__document_number",
@@ -86,11 +88,45 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
-    list_display = ["full_number", "payment", "issued_at"]
+    list_display = ["full_number", "sequence", "payment", "issued_at"]
+    list_filter = ["sequence"]
     search_fields = ["series", "number"]
     date_hierarchy = "issued_at"
 
 
+class OfficeSequenceInline(admin.TabularInline):
+    """De qué ventanillas se ofrece este talonario.
+
+    Va como inline del talonario y no como pantalla aparte porque la pregunta
+    que se hace es siempre «¿dónde está este block?»: un block de papel se
+    mueve de cajón, se acaba y se reemplaza, y quien lo gestiona tiene delante
+    el talonario, no la oficina.
+
+    `position` es el orden dentro del desplegable de esa ventanilla, que es
+    suyo: los mismos tres «S003» van en distinto orden en Jauja Cajas y en
+    Huancayo El Tambo.
+    """
+
+    model = OfficeSequence
+    extra = 0
+    autocomplete_fields = ["office"]
+    ordering = ["office", "position"]
+
+
 @admin.register(ReceiptSequence)
 class ReceiptSequenceAdmin(admin.ModelAdmin):
-    list_display = ["series", "last_number", "updated_at"]
+    # El código manda y la serie impresa se repite, así que la lista muestra
+    # los dos: buscando solo por «S010» aparecen tres filas distintas y hay
+    # que poder decir cuál es cuál.
+    list_display = [
+        "label",
+        "code",
+        "series",
+        "autonumber",
+        "last_number",
+        "is_active",
+        "updated_at",
+    ]
+    list_filter = ["autonumber", "is_active", "offices"]
+    search_fields = ["code", "series", "label"]
+    inlines = [OfficeSequenceInline]

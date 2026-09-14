@@ -212,7 +212,7 @@ class ReceiptTests(PaymentTestCase):
     def test_the_full_number_is_padded_for_reading(self):
         _, receipt = self.pay("80.00")
 
-        self.assertEqual(receipt.full_number, "R001-000001")
+        self.assertEqual(receipt.full_number, "R001-0000001")
 
 
 class PaymentVoidTests(PaymentTestCase):
