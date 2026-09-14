@@ -1,28 +1,32 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}
-Cerrar incidencia {{ order.order_number }}
+Finalizar incidencia {{ order.order_number }}
+{% endblock %}
+
+{% block extra_css %}
+<link
+    rel="stylesheet"
+    href="{% static 'work_orders/order_brand.css' %}"
+>
 {% endblock %}
 
 {% block content %}
 <div class="container py-4">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h2 class="mb-1">
-                Cerrar incidencia {{ order.order_number }}
-            </h2>
-            <p class="text-muted mb-0">
-                Atención remota por NOC
-            </p>
-        </div>
+    {% include "work_orders/_order_brand_header.html" %}
 
-        <a
-            href="{% url 'work_orders:detail' order.pk %}"
-            class="btn btn-outline-secondary"
-        >
-            Volver a la incidencia
-        </a>
+    <div class="tc-order-toolbar">
+        <div class="tc-order-toolbar-actions">
+            <a
+                href="{% url 'work_orders:detail' order.pk %}"
+                class="tc-btn muted"
+            >
+                <i class="bi bi-arrow-left"></i>
+                Volver a la incidencia
+            </a>
+        </div>
     </div>
 
     <div class="card mb-4">
@@ -296,43 +300,19 @@ Cerrar incidencia {{ order.order_number }}
                     {% endfor %}
                 </div>
 
-
-                <div class="mb-3">
-                    <label
-                        for="{{ form.remarks.id_for_label }}"
-                        class="form-label"
-                    >
-                        {{ form.remarks.label }}
-                    </label>
-
-                    {{ form.remarks }}
-
-                    {% if form.remarks.help_text %}
-                        <div class="form-text">
-                            {{ form.remarks.help_text }}
-                        </div>
-                    {% endif %}
-
-                    {% for error in form.remarks.errors %}
-                        <div class="text-danger small">
-                            {{ error }}
-                        </div>
-                    {% endfor %}
-                </div>
-
-
                 <div class="d-flex justify-content-end gap-2">
                     <a
                         href="{% url 'work_orders:detail' order.pk %}"
-                        class="btn btn-outline-secondary"
+                        class="tc-btn muted"
                     >
                         Cancelar
                     </a>
 
                     <button
                         type="submit"
-                        class="btn btn-success"
+                        class="tc-btn primary"
                     >
+                        <i class="bi bi-check2-circle"></i>
                         Finalizar incidencia
                     </button>
                 </div>
