@@ -394,6 +394,22 @@ class IncidentCreateForm(forms.Form):
             "Seleccione una suscripción del cliente..."
         )
 
+    def subscription_data(self):
+        """
+        Datos de solo lectura derivados de cada suscripción.
+
+        Servicio, tecnología y plan se muestran al operador,
+        pero no se reciben como datos editables del formulario.
+        """
+        return {
+            str(subscription.pk): {
+                "service": subscription.service_type.name,
+                "technology": subscription.plan.technology or "-",
+                "plan": subscription.plan.name,
+            }
+            for subscription in self.fields["subscription"].queryset
+        }
+
     def clean_subscription(self):
         subscription = self.cleaned_data["subscription"]
 

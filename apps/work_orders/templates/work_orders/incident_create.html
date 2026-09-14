@@ -228,3 +228,71 @@
 </div>
 
 {% endblock %}
+
+{% block extra_js %}
+
+{{ form.subscription_data|json_script:"incident-subscription-data" }}
+
+<script>
+(function () {
+    "use strict";
+
+    const payload = document.getElementById(
+        "incident-subscription-data"
+    );
+
+    const subscription = document.getElementById(
+        "id_subscription"
+    );
+
+    const service = document.getElementById(
+        "incident-service"
+    );
+
+    const technology = document.getElementById(
+        "incident-technology"
+    );
+
+    const plan = document.getElementById(
+        "incident-plan"
+    );
+
+    if (
+        !payload ||
+        !subscription ||
+        !service ||
+        !technology ||
+        !plan
+    ) {
+        return;
+    }
+
+    const subscriptions = JSON.parse(
+        payload.textContent
+    );
+
+    function refreshSubscriptionData() {
+        const data = subscriptions[subscription.value];
+
+        if (!data) {
+            service.value = "-";
+            technology.value = "-";
+            plan.value = "-";
+            return;
+        }
+
+        service.value = data.service || "-";
+        technology.value = data.technology || "-";
+        plan.value = data.plan || "-";
+    }
+
+    subscription.addEventListener(
+        "change",
+        refreshSubscriptionData
+    );
+
+    refreshSubscriptionData();
+})();
+</script>
+
+{% endblock %}
