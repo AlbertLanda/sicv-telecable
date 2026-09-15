@@ -311,6 +311,163 @@ class WorkOrderCreateForm(forms.ModelForm):
             "scheduled_at": data.get("scheduled_at"),
         }
 
+class IncidentCreateForm(forms.Form):
+    """
+    Alta de una incidencia para atención remota por NOC.
+
+    El operador solo declara la suscripción, el motivo reportado
+    y un detalle opcional. El tipo INCIDENT, la atención SYSTEM,
+    el estado, las fechas y la ausencia de técnico los decide
+    el dominio.
+    """
+
+    subscription = SubscriptionChoiceField(
+        queryset=Subscription.objects.none(),
+        label="Suscripción",
+        widget=forms.Select(
+            attrs={
+                "class": "form-select",
+            }
+        ),
+    )
+
+    reason_text = forms.CharField(
+        label="Motivo",
+        required=True,
+        min_length=3,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Ej.: Cliente reporta que no tiene internet."
+                ),
+            }
+        ),
+    )
+
+    detail = forms.CharField(
+        label="Detalle de la solicitud",
+        required=False,
+        max_length=3000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Información adicional proporcionada por el cliente..."
+                ),
+            }
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        customer = kwargs.pop("customer", None)
+
+        super().__init__(*args, **kwargs)
+
+        self.customer = customer
+
+        if customer is None:
+            self.fields["subscription"].queryset = (
+                Subscription.objects.none()
+            )
+        else:
+            self.fields["subscription"].queryset = (
+                Subscription.objects
+                .filter(
+                    customer=customer,
+                    is_active=True,
+                )
+                .select_related(
+                    "service_type",
+                    "plan",
+                    "address",
+                )
+                .order_by("-created_at")
+            )
+
+        self.fields["subscription"].empty_label = (
+            "Seleccione una suscripción del cliente..."
+        )
+
+    def subscription_data(self):
+        """
+        Datos de solo lectura derivados de cada suscripción.
+
+        Servicio, tecnología y plan se muestran al operador,
+        pero no se reciben como datos editables del formulario.
+        """
+        return {
+            str(subscription.pk): {
+                "service": subscription.service_type.name,
+                "technology": subscription.plan.technology or "-",
+                "plan": subscription.plan.name,
+            }
+            for subscription in self.fields["subscription"].queryset
+        }
+
+    def clean_subscription(self):
+        subscription = self.cleaned_data["subscription"]
+
+        if (
+            self.customer is not None
+            and subscription.customer_id != self.customer.pk
+        ):
+            raise forms.ValidationError(
+                "La suscripción no corresponde al cliente mostrado."
+            )
+
+        return subscription
+
+    def service_arguments(self):
+        data = self.cleaned_data
+
+        return {
+            "subscription": data["subscription"],
+            "customer": self.customer,
+            "reason_text": data["reason_text"],
+            "detail": data.get("detail", ""),
+        }
+
+class IncidentCloseForm(forms.Form):
+    """
+    Cierre simplificado de una incidencia por NOC.
+    """
+
+    attention_detail = forms.CharField(
+        label="Detalle de atención",
+        required=True,
+        min_length=3,
+        max_length=500,
+        strip=True,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Ej.: Problemas con WAN",
+            }
+        ),
+    )
+
+    observations = forms.CharField(
+        label="Observaciones",
+        required=False,
+        max_length=3000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 5,
+                "placeholder": (
+                    "Ej.: Se corrigió el problema y se validó "
+                    "el servicio con el cliente."
+                ),
+            }
+        ),
+    )
 
 class WorkOrderAssignForm(forms.Form):
 
@@ -541,3 +698,25 @@ class WorkOrderRescheduleForm(forms.Form):
         error_messages={"invalid": "Debe indicar una hora válida."},
     )
     reason = forms.CharField(required=False)
+
+class WorkOrderCancelForm(forms.Form):
+    reason = forms.CharField(
+        label="Motivo de anulación",
+        required=True,
+        min_length=5,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": (
+                    "Explique por qué se está anulando esta orden..."
+                ),
+            }
+        ),
+        help_text=(
+            "El motivo es obligatorio y quedará registrado "
+            "en el historial de la orden."
+        ),
+    )

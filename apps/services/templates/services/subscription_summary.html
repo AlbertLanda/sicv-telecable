@@ -10,7 +10,7 @@
         <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">← Volver a la ficha del cliente</a>
     </div>
 
-    {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}{% endif %}
+    {# Los avisos los pinta el shell en base.html, una sola vez para todas las pantallas. #}
 
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-light"><strong>Suscripción registrada — {{ subscription.get_status_display }}</strong></div>

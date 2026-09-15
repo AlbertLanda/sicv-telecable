@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}
+SICV - Servicios
+{% endblock %}
+
+{% block content %}
+
+<div class="py-3">
+
+    <div class="card card-custom mb-3">
+
+        <div class="card-header panel-head d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span>Servicios contratables</span>
+            {% if can_create %}
+                <a href="{% url 'services:servicetype_create' %}" class="btn btn-sm btn-light">
+                    <i class="bi bi-plus-lg"></i> Nuevo servicio
+                </a>
+            {% endif %}
+        </div>
+
+        {% if service_types %}
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Servicio</th>
+                            <th>Código</th>
+                            <th class="text-end">Planes activos</th>
+                            <th>Anexos de TV</th>
+                            <th class="text-end">Anexo: instalación</th>
+                            <th class="text-end">Anexo: mensual</th>
+                            <th>Estado</th>
+                            {% if can_edit %}<th></th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for service in service_types %}
+                            <tr {% if not service.is_active %}class="text-muted"{% endif %}>
+                                <td>
+                                    <div class="fw-semibold">{{ service.name }}</div>
+                                    {% if service.description %}
+                                        <div class="text-muted small">{{ service.description }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ service.code }}</td>
+                                <td class="text-end">{{ service.plan_count }}</td>
+                                <td>
+                                    {% if service.supports_tv_annexes %}
+                                        <span class="badge bg-success">Permite</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">No</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">S/ {{ service.annex_installation_price|floatformat:2 }}</td>
+                                <td class="text-end">S/ {{ service.annex_monthly_price|floatformat:2 }}</td>
+                                <td>
+                                    {% if service.is_active %}
+                                        <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                {% if can_edit %}
+                                    <td class="text-end">
+                                        <a href="{% url 'services:servicetype_edit' pk=service.pk %}"
+                                           class="btn btn-sm btn-outline-primary">
+                                            Editar
+                                        </a>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card-body">
+                <div class="text-muted small">
+                    El servicio es lo que se contrata y lo que decide qué órdenes
+                    de trabajo se pueden emitir sobre una suscripción. Su código
+                    no se edita: el catálogo de órdenes lo referencia.
+                </div>
+            </div>
+
+        {% else %}
+
+            <div class="card-body">
+                <div class="alert alert-info mb-0">
+                    Todavía no hay servicios registrados.
+                </div>
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+{% endblock %}

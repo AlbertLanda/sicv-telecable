@@ -1,4 +1,5 @@
-﻿from django.urls import path
+﻿from django.contrib.auth.decorators import login_required, permission_required
+from django.urls import path
 
 from . import views
 
@@ -6,12 +7,24 @@ from . import views
 app_name = "contracts"
 
 
+def require_authenticated_permission(permission, view):
+    """Anónimo -> login; autenticado sin permiso -> 403."""
+    protected = permission_required(
+        permission,
+        raise_exception=True,
+    )(view.as_view())
+    return login_required(protected)
+
+
 urlpatterns = [
 
     # Registrar contrato para un cliente
     path(
         "customers/<int:customer_pk>/contracts/create/",
-        views.ContractCreateView.as_view(),
+        require_authenticated_permission(
+            "contracts.add_contract",
+            views.ContractCreateView,
+        ),
         name="contract_create",
     ),
 

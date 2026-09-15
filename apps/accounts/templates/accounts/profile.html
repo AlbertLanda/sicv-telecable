@@ -19,11 +19,7 @@
 
         <div class="card-body px-4 pb-4">
 
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-success">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+            {# Los avisos los pinta el shell en base.html, una sola vez para todas las pantallas. #}
 
             <form method="post" novalidate>
                 {% csrf_token %}

@@ -21,16 +21,36 @@ class User(AbstractUser):
     # un administrador haya marcado permisos uno por uno en Django Admin.
     #
     # ATC necesita poder completar el ciclo que realmente realiza en oficina:
-    # registrar abonados, emitir/consultar OT y gestionar su programación.
+    # registrar y actualizar abonados, mantener sus direcciones, suscripciones
+    # y contratos, emitir/consultar OT y gestionar su programación.
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
+    #
+    # NOC, en cambio, consulta la ficha del abonado como contexto para soporte,
+    # pero no administra sus datos comerciales. Sus permisos base se limitan
+    # al flujo operativo de incidencias.
     ROLE_BASELINE_PERMISSIONS = {
         Role.ATC: frozenset(
             {
                 "customers.add_customer",
+                "customers.change_customer",
+                "customers.add_customeraddress",
+                "services.add_subscription",
+                "contracts.add_contract",
                 "work_orders.add_workorder",
                 "work_orders.view_workorder",
+                "work_orders.view_incident",
                 "work_orders.schedule_workorder",
+                "work_orders.cancel_workorder",
+            }
+        ),
+
+        Role.NOC: frozenset(
+            {
+                "work_orders.view_workorder",
+                "work_orders.view_incident",
+                "work_orders.start_incident",
+                "work_orders.close_incident",
             }
         ),
     }

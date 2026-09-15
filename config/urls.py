@@ -70,6 +70,12 @@ urlpatterns = [
         include("apps.work_orders.urls"),
     ),
 
+    # Cobranza: deuda, pagos y comprobantes del abonado.
+    path(
+        "payments/",
+        include("apps.payments.urls"),
+    ),
+
     # Portal móvil/responsive del técnico. El shell HTML no usa la sesión
     # web de ATC; toda lectura y escritura real exige TokenAuthentication.
     path(

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}
+SICV - {% if object %}Editar plan{% else %}Nuevo plan{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="py-3">
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="card card-custom mb-3">
+
+            <div class="card-header panel-head">
+                {% if object %}Editar plan{% else %}Nuevo plan{% endif %}
+            </div>
+
+            <div class="card-body">
+
+                <div class="alert alert-info">
+                    Se registra la <strong>mensualidad normal</strong>. El precio
+                    de pronto pago se calcula restándole el descuento de la
+                    política de cobro elegida, que es donde ese descuento vive.
+                    {% if object and object.billing_policy %}
+                        Con la política actual este plan cobra
+                        <strong>S/ {{ object.early_payment_price|floatformat:2 }}</strong>
+                        por pronto pago y
+                        <strong>S/ {{ object.monthly_price|floatformat:2 }}</strong> normal.
+                    {% endif %}
+                </div>
+
+                <div class="row g-3">
+
+                    <div class="col-md-4">
+                        <label for="{{ form.service_type.id_for_label }}" class="form-label">
+                            Servicio
+                        </label>
+                        {{ form.service_type }}
+                        {% for error in form.service_type.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.code.id_for_label }}" class="form-label">
+                            Código
+                        </label>
+                        {{ form.code }}
+                        {% if form.code.help_text %}
+                            <div class="form-text">{{ form.code.help_text }}</div>
+                        {% endif %}
+                        {% for error in form.code.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="{{ form.commercial_category.id_for_label }}" class="form-label">
+                            Nivel comercial
+                        </label>
+                        {{ form.commercial_category }}
+                        {% for error in form.commercial_category.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                            Nombre del plan
+                        </label>
+                        {{ form.name }}
+                        <div class="form-text">
+                            Como se ofrece en la venta, por ejemplo
+                            «PLAN INTERNET TELECABLE 400MG - 2026».
+                        </div>
+                        {% for error in form.name.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="{{ form.speed_mbps.id_for_label }}" class="form-label">
+                            Velocidad (MG)
+                        </label>
+                        {{ form.speed_mbps }}
+                        {% for error in form.speed_mbps.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="{{ form.generation.id_for_label }}" class="form-label">
+                            Generación
+                        </label>
+                        {{ form.generation }}
+                        {% for error in form.generation.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="{{ form.technology.id_for_label }}" class="form-label">
+                            Tecnología
+                        </label>
+                        {{ form.technology }}
+                        {% for error in form.technology.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="{{ form.monthly_price.id_for_label }}" class="form-label">
+                            Mensualidad normal (S/)
+                        </label>
+                        {{ form.monthly_price }}
+                        {% for error in form.monthly_price.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="{{ form.billing_policy.id_for_label }}" class="form-label">
+                            Política de cobro
+                        </label>
+                        {{ form.billing_policy }}
+                        {% if form.billing_policy.help_text %}
+                            <div class="form-text">{{ form.billing_policy.help_text }}</div>
+                        {% endif %}
+                        {% for error in form.billing_policy.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="{{ form.included_tv_points.id_for_label }}" class="form-label">
+                            TV de cortesía
+                        </label>
+                        {{ form.included_tv_points }}
+                        <div class="form-text">Solo CABLE/DUO.</div>
+                        {% for error in form.included_tv_points.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-3 d-flex flex-column justify-content-center">
+                        <div class="form-check">
+                            {{ form.requires_geographic_tariff }}
+                            <label class="form-check-label" for="{{ form.requires_geographic_tariff.id_for_label }}">
+                                Requiere tarifa por sede/zona
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            {{ form.is_active }}
+                            <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                Activo
+                            </label>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="card-body border-top d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    {% if object %}Guardar cambios{% else %}Registrar plan{% endif %}
+                </button>
+                <a href="{% url 'services:plan_list' %}" class="btn btn-outline-secondary">
+                    Cancelar
+                </a>
+            </div>
+
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

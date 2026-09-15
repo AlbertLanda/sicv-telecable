@@ -1,0 +1,88 @@
+{% load static %}
+{% load work_order_tags %}
+
+<div class="tc-order-brand">
+
+    <div class="tc-order-brand-logo">
+        <img
+            src="{% static 'work_orders/branding/telecable-logo.jpg' %}"
+            alt="Telecable"
+        >
+    </div>
+
+    <div class="tc-order-brand-main">
+
+        <div class="tc-order-brand-kicker">
+            TELECABLE · SISTEMA INTEGRADO COMERCIAL
+        </div>
+
+        <div class="tc-order-brand-title-row">
+
+            <div>
+                <h1 class="tc-order-brand-title">
+
+                    {% if order.order_type.code == "INCIDENT" %}
+                        Orden de Incidencia NOC
+                    {% else %}
+                        Orden de {{ order.order_type.name }}
+                    {% endif %}
+
+                </h1>
+
+                <div class="tc-order-brand-subtitle">
+
+                    {% if order.order_type.code == "INCIDENT" %}
+                        Atención remota de soporte técnico
+                    {% else %}
+                        Gestión operativa de servicio
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <div class="tc-order-brand-identification">
+
+                <div class="tc-order-brand-number-label">
+                    N.º DE ORDEN
+                </div>
+
+                <div class="tc-order-brand-number">
+                    {{ order.order_number }}
+                </div>
+
+                <span class="badge {{ order.status|status_css }}">
+                    {{ order.get_status_display }}
+                </span>
+
+            </div>
+
+        </div>
+
+        <div class="tc-order-brand-meta">
+
+            {% if order.branch %}
+                <span>
+                    <i class="bi bi-building"></i>
+                    {{ order.branch.name }}
+                </span>
+            {% endif %}
+
+            {% if subscription.service_type %}
+                <span>
+                    <i class="bi bi-wifi"></i>
+                    {{ subscription.service_type.name }}
+                </span>
+            {% endif %}
+
+            {% if subscription.plan %}
+                <span>
+                    <i class="bi bi-speedometer2"></i>
+                    {{ subscription.plan.name }}
+                </span>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>

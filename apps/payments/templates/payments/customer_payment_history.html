@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Historial de pagos de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% comment %}
+Historial de pagos.
+
+Lleva las mismas columnas que el tablero de deuda -abonado, fecha, cantidad,
+detalle, periodo, moneda, monto, documento y vencimiento- porque es la misma
+lista leída del otro lado: lo que ya se cobró. Un operador que salta de una
+pestaña a la otra encuentra las columnas donde las dejó, y el «Documento» es
+la única que cambia de significado: en deuda está casi siempre vacío y aquí
+siempre lleva el comprobante que cerró la fila.
+
+Una fila por deuda pagada y no por pago. Es lo que el abonado pregunta -«¿mi
+mensualidad de octubre está pagada?»- y lo único que permite que el periodo y
+el vencimiento quepan en la fila: un pago que cubrió tres meses tiene tres
+periodos y tres vencimientos, y agrupado por pago no cabía ninguno.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="history" record_title="Historial de pagos" %}
+
+    <section class="tc-card tc-section tc-full">
+
+        <div class="tc-section-head banner">
+            <h2 class="tc-section-title">
+                <i class="bi bi-clock-history"></i>Pagos
+            </h2>
+        </div>
+
+        {% if rows %}
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Abonado</th>
+                            <th>Fecha</th>
+                            <th class="num">Cantidad</th>
+                            <th>Detalle</th>
+                            <th>Periodo</th>
+                            <th>Moneda</th>
+                            <th class="num">Monto</th>
+                            <th>Documento</th>
+                            <th>Vencimiento</th>
+                            <th>Observación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr {% if row.payment.status == "VOIDED" %}style="opacity:.62;"{% endif %}>
+                                <td>
+                                    <a href="{% url 'customers:detail' pk=customer.pk %}">
+                                        {{ customer.code }}
+                                    </a>
+                                </td>
+                                <td>{{ row.date|date:"d/m/Y" }}</td>
+                                <td class="num">
+                                    {% if row.quantity %}
+                                        {{ row.quantity|floatformat:5 }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.detail }}</td>
+                                <td>{{ row.period|default:"—" }}</td>
+                                <td>{{ row.currency }}</td>
+                                <td class="num">S/ {{ row.amount|floatformat:2 }}</td>
+                                <td>
+                                    {% if row.receipt %}
+                                        <a href="{% url 'payments:receipt_detail' pk=row.receipt.pk %}">
+                                            {{ row.receipt.full_number }}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.due_date|date:"d/m/Y"|default:"—" }}</td>
+
+                                {% comment %}
+                                La observación del cobro, y el motivo cuando
+                                se anuló: es la misma columna -por qué esta
+                                fila dice lo que dice- y un pago anulado sin
+                                su motivo deja al operador sin nada que
+                                contestar cuando el abonado pregunta.
+                                {% endcomment %}
+                                <td>
+                                    {% if row.payment.status == "VOIDED" %}
+                                        <span class="tc-pill danger">Anulado</span>
+                                        <span class="tc-sub">{{ row.payment.void_reason }}</span>
+                                    {% elif row.payment.status == "PENDING" %}
+                                        <span class="tc-pill warning">Pendiente</span>
+                                        <span class="tc-sub">El dinero no ha entrado</span>
+                                    {% endif %}
+                                    {% if row.note %}
+                                        <span class="tc-sub">{{ row.note }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% include "_pager.html" %}
+
+        {% else %}
+
+            <div class="tc-empty">
+                <i class="bi bi-info-circle"></i>
+                El abonado todavía no registra pagos.
+            </div>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+{% endblock %}
