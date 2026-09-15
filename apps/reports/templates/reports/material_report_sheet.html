@@ -1,0 +1,188 @@
+{% comment %}
+La hoja del reporte de materiales.
+
+No extiende `base.html` a proposito: se abre en una pestaña nueva y es un
+documento, no una pantalla del sistema. El menu lateral, la barra superior y
+el buscador no tienen nada que hacer sobre un papel que se va a imprimir o a
+guardar en PDF, y ademas robarian el ancho que necesitan las trece columnas.
+
+Es la misma decision del sistema que se reemplaza, donde este listado tambien
+sale en su propia ventana limpia.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.title }} - {{ report.date_from|date:"d/m/Y" }}</title>
+
+    <style>
+        :root {
+            --tc-blue: #0f4c7f;
+            --tc-text: #17355f;
+            --tc-muted: #6f8197;
+            --tc-border: #d9e4ef;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 26px 30px 40px;
+            background: #fff;
+            color: var(--tc-text);
+            font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+        }
+
+        /* La franja que identifica la hoja: hora a la izquierda, titulo al
+           centro y sede a la derecha. Es lo que permite reconocer una
+           impresion cuando aparece suelta encima de una mesa.
+
+           Bajo el titulo no va nada mas. El periodo y el alcance se acaban de
+           elegir en la pantalla anterior y siguen en la barra de direcciones,
+           asi que repetirlos aqui solo separaba el titulo de su tabla. */
+        .sheet-head {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .sheet-stamp { font-size: .78rem; color: var(--tc-muted); }
+        .sheet-title { margin: 0; font-size: 1.12rem; font-weight: 800; text-align: center; }
+        .sheet-branch { font-size: .95rem; font-weight: 800; text-align: right; }
+
+        /* Trece columnas no caben en una pantalla estrecha. La tabla scrollea
+           dentro de su caja en vez de estirar la pagina, y al imprimir el
+           limite desaparece porque el papel apaisado si las admite. */
+        .sheet-scroll { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1180px;
+        }
+
+        th {
+            background: var(--tc-blue);
+            color: #fff;
+            font-size: .68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            text-align: left;
+            padding: 9px 10px;
+            white-space: nowrap;
+        }
+
+        td {
+            font-size: .75rem;
+            padding: 8px 10px;
+            border-bottom: 1px solid #edf2f6;
+            vertical-align: top;
+            white-space: nowrap;
+        }
+
+        td.wrap { white-space: normal; min-width: 180px; }
+        td.num, th.num { text-align: right; }
+
+        /* Filas alternas. En trece columnas el ojo pierde la linea a mitad de
+           la hoja, y la banda es lo que la devuelve sin añadir tinta. */
+        tbody tr:nth-child(even) { background: #f5f9fd; }
+
+        tfoot td {
+            border-top: 2px solid var(--tc-border);
+            border-bottom: 0;
+            padding-top: 12px;
+            font-weight: 800;
+            font-size: .82rem;
+            text-align: right;
+        }
+
+        /* Instalado y retirado se distinguen por color y no solo por la
+           palabra: el reporte existe para validar el retiro, asi que es la
+           columna que se busca con la vista antes que con la lectura. */
+        .chip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: .66rem;
+            font-weight: 700;
+        }
+        .chip.in { background: #e6f4ec; color: #0b6b3a; }
+        .chip.out { background: #fdecec; color: #96281b; }
+
+        .sheet-empty {
+            padding: 40px 12px;
+            text-align: center;
+            color: var(--tc-muted);
+        }
+
+        @media print {
+            body { padding: 0; font-size: 11px; }
+            .sheet-scroll { overflow: visible; }
+            table { min-width: 0; }
+            th, td { padding: 4px 5px; font-size: .62rem; }
+            thead { display: table-header-group; }
+            tr { page-break-inside: avoid; }
+            @page { size: A4 landscape; margin: 10mm; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sheet-head">
+        <span class="sheet-stamp">{% now "d/m/Y H:i" %}</span>
+        <h1 class="sheet-title">{{ report.title }}</h1>
+        <span class="sheet-branch">
+            {% if report.branch %}{{ report.branch.name }}{% else %}Todas las sedes{% endif %}
+        </span>
+    </div>
+
+    <div class="sheet-scroll">
+        <table>
+            <thead>
+                <tr>
+                    {% for column in report.columns %}
+                        <th{% if column.numeric %} class="num"{% endif %}>{{ column.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in report.rows %}
+                    <tr>
+                        <td><strong>{{ row.order_number }}</strong></td>
+                        <td>{{ row.order_type }}</td>
+                        <td>{{ row.issued_on|date:"d/m/Y H:i" }}</td>
+                        <td>{{ row.customer_code }}</td>
+                        <td class="wrap">{{ row.customer_name }}</td>
+                        <td class="wrap">{{ row.address|default:"&mdash;" }}</td>
+                        <td>{{ row.material }}</td>
+                        <td class="num">{{ row.quantity|floatformat:2 }} {{ row.unit }}</td>
+                        <td>
+                            <span class="chip {% if row.is_removal %}out{% else %}in{% endif %}">{{ row.action }}</span>
+                        </td>
+                        <td>{{ row.mac|default:"&mdash;" }}</td>
+                        <td>{% if row.attended_on %}{{ row.attended_on|date:"d/m/Y H:i" }}{% else %}&mdash;{% endif %}</td>
+                        <td>{{ row.situation }}</td>
+                        <td>{{ row.technician|default:"&mdash;" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="{{ report.columns|length }}" class="sheet-empty">
+                            No se registraron movimientos de material en este periodo.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="{{ report.columns|length }}">Total: {{ report.total }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+</body>
+</html>

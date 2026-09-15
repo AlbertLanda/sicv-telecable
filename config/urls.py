@@ -76,6 +76,14 @@ urlpatterns = [
         include("apps.payments.urls"),
     ),
 
+    # Reportes operativos. Listas transversales que cruzan a todos los
+    # abonados de una sede, a diferencia de las pantallas de cobranza, que
+    # cuelgan de la ficha de un abonado concreto.
+    path(
+        "reportes/",
+        include("apps.reports.urls"),
+    ),
+
     # Portal móvil/responsive del técnico. El shell HTML no usa la sesión
     # web de ATC; toda lectura y escritura real exige TokenAuthentication.
     path(
