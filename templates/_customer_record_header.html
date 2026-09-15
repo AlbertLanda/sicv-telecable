@@ -15,6 +15,10 @@ Las acciones de aquí son las del cliente entero. Lo que actúa sobre una tabla
 concreta -nueva orden, nueva deuda, compromiso- vive en la cabecera de esa
 tabla, junto a lo que modifica.
 
+NOC consulta esta ficha para diagnosticar incidencias, pero no administra los
+datos comerciales del abonado. Por eso toda acción mutable se pinta por
+permiso y no solo por estar autenticado.
+
 Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
 {% endcomment %}
 
@@ -28,9 +32,12 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
     </div>
 
     <div class="tc-toolbar-actions">
-        <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="tc-btn">
-            <i class="bi bi-pencil"></i>Editar datos
-        </a>
+        {% if perms.customers.change_customer %}
+            <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="tc-btn">
+                <i class="bi bi-pencil"></i>Editar datos
+            </a>
+        {% endif %}
+
         <button class="tc-btn muted" type="button" onclick="window.print()">
             <i class="bi bi-printer"></i>Imprimir
         </button>
@@ -41,6 +48,7 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
         aqui lleva las altas que de otro modo obligan a cambiar de pestaña
         para encontrar su boton.
         {% endcomment %}
+        {% if perms.payments.add_payment or perms.work_orders.add_workorder or perms.payments.add_charge or perms.customers.add_customeraddress %}
         <div class="dropdown">
             <button class="tc-btn muted square"
                     type="button"
@@ -77,13 +85,16 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
                         </a>
                     </li>
                 {% endif %}
-                <li>
-                    <a class="dropdown-item" href="{% url 'customers:address_create' customer.pk %}">
-                        <i class="bi bi-geo-alt"></i>Nueva dirección
-                    </a>
-                </li>
+                {% if perms.customers.add_customeraddress %}
+                    <li>
+                        <a class="dropdown-item" href="{% url 'customers:address_create' customer.pk %}">
+                            <i class="bi bi-geo-alt"></i>Nueva dirección
+                        </a>
+                    </li>
+                {% endif %}
             </ul>
         </div>
+        {% endif %}
     </div>
 </div>
 
