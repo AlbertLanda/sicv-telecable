@@ -13,6 +13,10 @@ Información: quién es el abonado, dónde vive y qué tiene contratado.
 todas aquí y cada una dos veces -una vista previa arriba y la tabla entera
 más abajo-, así que la pantalla arrancaba con seis bloques antes de llegar a
 un dato.
+
+Las acciones de mantenimiento se muestran por permiso. De este modo NOC puede
+consultar toda la ficha como contexto de soporte, pero no editar información
+comercial ni registrar direcciones, suscripciones o contratos.
 {% endcomment %}
 
 {% block content %}
@@ -25,7 +29,9 @@ un dato.
         <article class="tc-card tc-section">
             <div class="tc-section-head">
                 <h2 class="tc-section-title"><i class="bi bi-person-fill"></i>Datos del cliente</h2>
-                <a class="tc-btn" href="{% url 'customers:general_edit' customer_pk=customer.pk %}"><i class="bi bi-pencil"></i>Editar</a>
+                {% if perms.customers.change_customer %}
+                    <a class="tc-btn" href="{% url 'customers:general_edit' customer_pk=customer.pk %}"><i class="bi bi-pencil"></i>Editar</a>
+                {% endif %}
             </div>
             <div class="tc-section-body tc-data-grid">
                 <div><div class="tc-data-label">Nombre completo</div><div class="tc-data-value">{{ customer }}</div></div>
@@ -69,7 +75,9 @@ un dato.
     <section class="tc-card tc-section tc-full">
         <div class="tc-section-head">
             <h2 class="tc-section-title"><i class="bi bi-geo-alt-fill"></i>Direcciones</h2>
-            <a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva dirección</a>
+            {% if perms.customers.add_customeraddress %}
+                <a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva dirección</a>
+            {% endif %}
         </div>
         <div class="table-responsive">
             <table class="tc-table">
@@ -104,7 +112,9 @@ un dato.
     <section class="tc-card tc-section tc-full">
         <div class="tc-section-head">
             <h2 class="tc-section-title"><i class="bi bi-wifi"></i>Servicios contratados</h2>
-            {% if addresses %}<a class="tc-btn" href="{% url 'services:subscription_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva suscripción</a>{% endif %}
+            {% if addresses and perms.services.add_subscription %}
+                <a class="tc-btn" href="{% url 'services:subscription_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva suscripción</a>
+            {% endif %}
         </div>
         <div class="table-responsive">
             <table class="tc-table">
@@ -141,7 +151,9 @@ un dato.
     <section class="tc-card tc-section tc-full">
         <div class="tc-section-head">
             <h2 class="tc-section-title"><i class="bi bi-file-earmark-text-fill"></i>Contratos</h2>
-            {% if subscriptions %}<a class="tc-btn" href="{% url 'contracts:contract_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nuevo contrato</a>{% endif %}
+            {% if subscriptions and perms.contracts.add_contract %}
+                <a class="tc-btn" href="{% url 'contracts:contract_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nuevo contrato</a>
+            {% endif %}
         </div>
         <div class="table-responsive">
             <table class="tc-table">
