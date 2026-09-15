@@ -1,4 +1,4 @@
-﻿from django.contrib.auth.decorators import permission_required
+﻿from django.contrib.auth.decorators import login_required, permission_required
 from django.urls import path
 
 from . import views
@@ -7,13 +7,22 @@ from . import views
 app_name = "services"
 
 
+def require_authenticated_permission(permission, view):
+    """Anónimo -> login; autenticado sin permiso -> 403."""
+    protected = permission_required(
+        permission,
+        raise_exception=True,
+    )(view.as_view())
+    return login_required(protected)
+
+
 urlpatterns = [
     path(
         "customers/<int:customer_pk>/subscriptions/create/",
-        permission_required(
+        require_authenticated_permission(
             "services.add_subscription",
-            raise_exception=True,
-        )(views.SubscriptionCreateView.as_view()),
+            views.SubscriptionCreateView,
+        ),
         name="subscription_create",
     ),
     path(
