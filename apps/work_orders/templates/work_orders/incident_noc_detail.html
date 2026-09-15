@@ -86,9 +86,15 @@
 
     <div class="tc-order-toolbar">
         <div class="tc-order-toolbar-actions">
-            <a href="{% url 'work_orders:incident_noc_queue' %}" class="tc-btn muted">
-                <i class="bi bi-arrow-left"></i> Bandeja NOC
-            </a>
+            {% if request.GET.origin == "customer_orders" %}
+                <a href="{% url 'customers:orders' customer.pk %}" class="tc-btn muted">
+                    <i class="bi bi-arrow-left"></i> Órdenes del abonado
+                </a>
+            {% else %}
+                <a href="{% url 'work_orders:incident_noc_queue' %}" class="tc-btn muted">
+                    <i class="bi bi-arrow-left"></i> Bandeja NOC
+                </a>
+            {% endif %}
             <a href="{% url 'customers:detail' customer.pk %}" class="tc-btn muted">
                 <i class="bi bi-person"></i> Ficha del abonado
             </a>
@@ -347,7 +353,7 @@
                     {% for previous in prior_incidents %}
                         <div class="border-bottom pb-3">
                             <div class="d-flex justify-content-between gap-2">
-                                <a href="{% url 'work_orders:incident_noc_detail' previous.pk %}" class="fw-semibold text-decoration-none">
+                                <a href="{% url 'work_orders:incident_noc_detail' previous.pk %}{% if request.GET.origin == 'customer_orders' %}?origin=customer_orders{% endif %}" class="fw-semibold text-decoration-none">
                                     {{ previous.order_number }}
                                 </a>
                                 <span class="small text-muted">{{ previous.created_at|date:"d/m/Y" }}</span>
