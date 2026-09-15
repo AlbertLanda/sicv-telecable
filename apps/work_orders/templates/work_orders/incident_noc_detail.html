@@ -19,6 +19,13 @@
         margin-bottom: 3px;
     }
     .noc-value { color: var(--sicv-tinta); }
+    .noc-contact-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+        text-decoration: none;
+    }
     .noc-timeline {
         border-left: 2px solid var(--sicv-linea);
         margin-left: 8px;
@@ -55,6 +62,52 @@
             <a href="{% url 'work_orders:detail' order.pk %}" class="btn btn-outline-secondary">
                 Ficha general
             </a>
+        </div>
+    </div>
+
+    <div class="noc-panel p-3 mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+            <div>
+                <div class="noc-label">Contacto del abonado</div>
+                <div class="small text-muted">Datos registrados en la ficha del cliente para la atención telefónica NOC.</div>
+            </div>
+            {% if customer.phone %}
+                <a href="tel:{{ customer.phone }}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-telephone-fill"></i> Llamar al principal
+                </a>
+            {% endif %}
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="noc-label">Teléfono principal</div>
+                {% if customer.phone %}
+                    <a href="tel:{{ customer.phone }}" class="noc-contact-link">
+                        <i class="bi bi-telephone"></i> {{ customer.phone }}
+                    </a>
+                {% else %}
+                    <div class="noc-value text-muted">No registrado</div>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="noc-label">Teléfono secundario</div>
+                {% if customer.secondary_phone %}
+                    <a href="tel:{{ customer.secondary_phone }}" class="noc-contact-link">
+                        <i class="bi bi-telephone"></i> {{ customer.secondary_phone }}
+                    </a>
+                {% else %}
+                    <div class="noc-value text-muted">No registrado</div>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="noc-label">Correo</div>
+                {% if customer.email %}
+                    <a href="mailto:{{ customer.email }}" class="noc-contact-link">
+                        <i class="bi bi-envelope"></i> {{ customer.email }}
+                    </a>
+                {% else %}
+                    <div class="noc-value text-muted">No registrado</div>
+                {% endif %}
+            </div>
         </div>
     </div>
 
