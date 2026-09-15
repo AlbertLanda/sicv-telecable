@@ -101,14 +101,50 @@ class CustomerIncidentNocHistoryTests(TestCase):
             "work_orders:incident_noc_detail",
             kwargs={"pk": self.incident.pk},
         )
+        customer_history_url = f"{history_url}?origin=customer_orders"
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, history_url)
+        self.assertContains(response, customer_history_url)
         self.assertContains(response, "Ver historial NOC")
         self.assertContains(response, "Resultado / solución")
         self.assertContains(response, "Se corrigió la configuración WAN")
         self.assertContains(response, "NOC · noc_dashboard")
         self.assertNotContains(response, "Ver ficha técnica")
+
+    def test_noc_history_returns_to_customer_orders_when_opened_from_customer(self):
+        history_url = reverse(
+            "work_orders:incident_noc_detail",
+            kwargs={"pk": self.incident.pk},
+        )
+
+        response = self.client.get(
+            history_url,
+            {"origin": "customer_orders"},
+        )
+
+        customer_orders_url = reverse(
+            "customers:orders",
+            kwargs={"pk": self.customer.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, customer_orders_url)
+        self.assertContains(response, "Órdenes del abonado")
+
+    def test_noc_history_returns_to_noc_queue_by_default(self):
+        history_url = reverse(
+            "work_orders:incident_noc_detail",
+            kwargs={"pk": self.incident.pk},
+        )
+
+        response = self.client.get(history_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse("work_orders:incident_noc_queue"),
+        )
+        self.assertContains(response, "Bandeja NOC")
 
     def test_open_incident_featured_card_uses_noc_flow_not_field_flow(self):
         self.incident.status = WorkOrder.Status.PENDING
@@ -123,9 +159,12 @@ class CustomerIncidentNocHistoryTests(TestCase):
         self.assertContains(response, "Abrir historial NOC")
         self.assertContains(
             response,
-            reverse(
-                "work_orders:incident_noc_detail",
-                kwargs={"pk": self.incident.pk},
+            (
+                reverse(
+                    "work_orders:incident_noc_detail",
+                    kwargs={"pk": self.incident.pk},
+                )
+                + "?origin=customer_orders"
             ),
         )
         self.assertNotContains(response, "Ver liquidación técnica")
