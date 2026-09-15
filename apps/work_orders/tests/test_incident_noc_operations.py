@@ -98,11 +98,11 @@ class IncidentNocOperationsTests(WorkOrderTestCase):
         self.assertEqual(self.incident.status, WorkOrder.Status.IN_PROGRESS)
 
     def test_release_returns_incident_to_pending_without_losing_history(self):
-        take_incident(self.incident, self.noc_one)
-        first_started_at = self.incident.started_at
+        order = take_incident(self.incident, self.noc_one)
+        first_started_at = order.started_at
 
         order = release_incident(
-            self.incident,
+            order,
             self.noc_one,
             "Fin de turno. Continúa el siguiente operador NOC.",
         )
@@ -121,15 +121,15 @@ class IncidentNocOperationsTests(WorkOrderTestCase):
         self.assertIn("Fin de turno", history[1].remarks)
 
     def test_another_noc_can_take_released_incident(self):
-        take_incident(self.incident, self.noc_one)
-        original_started_at = self.incident.started_at
-        release_incident(
-            self.incident,
+        order = take_incident(self.incident, self.noc_one)
+        original_started_at = order.started_at
+        order = release_incident(
+            order,
             self.noc_one,
             "Cambio de turno NOC.",
         )
 
-        order = take_incident(self.incident, self.noc_two)
+        order = take_incident(order, self.noc_two)
         order.refresh_from_db()
 
         self.assertEqual(order.status, WorkOrder.Status.IN_PROGRESS)
