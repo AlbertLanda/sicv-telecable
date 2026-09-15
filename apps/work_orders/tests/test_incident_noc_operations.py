@@ -242,6 +242,28 @@ class IncidentNocOperationsTests(WorkOrderTestCase):
         self.assertContains(response, "cliente@example.com")
         self.assertContains(response, "Llamar al principal")
 
+    def test_noc_detail_is_the_operational_incident_workspace(self):
+        take_incident(self.incident, self.noc_one)
+        self.client.force_login(self.noc_one)
+
+        response = self.client.get(
+            reverse(
+                "work_orders:incident_noc_detail",
+                kwargs={"pk": self.incident.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "TELECABLE · SISTEMA INTEGRADO COMERCIAL")
+        self.assertContains(response, "Orden de Incidencia NOC")
+        self.assertContains(response, "Bandeja NOC")
+        self.assertContains(response, "Ficha del abonado")
+        self.assertContains(response, "Imprimir orden")
+        self.assertContains(response, "Liberar")
+        self.assertContains(response, "Reprogramar contacto")
+        self.assertContains(response, "Finalizar incidencia")
+        self.assertNotContains(response, "Ficha general")
+
     def test_cancel_is_allowed_after_incident_was_taken(self):
         take_incident(self.incident, self.noc_one)
 
