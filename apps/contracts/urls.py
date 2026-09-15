@@ -1,4 +1,5 @@
-﻿from django.urls import path
+﻿from django.contrib.auth.decorators import permission_required
+from django.urls import path
 
 from . import views
 
@@ -11,7 +12,10 @@ urlpatterns = [
     # Registrar contrato para un cliente
     path(
         "customers/<int:customer_pk>/contracts/create/",
-        views.ContractCreateView.as_view(),
+        permission_required(
+            "contracts.add_contract",
+            raise_exception=True,
+        )(views.ContractCreateView.as_view()),
         name="contract_create",
     ),
 
