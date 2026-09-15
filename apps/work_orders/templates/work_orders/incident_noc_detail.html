@@ -1,19 +1,28 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}NOC · {{ order.order_number }}{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{% static 'work_orders/order_brand.css' %}">
 <style>
     .noc-detail { max-width: 1180px; margin: 0 auto; }
     .noc-panel {
         border: 1px solid var(--sicv-linea);
-        border-radius: 12px;
+        border-radius: 10px;
         background: var(--sicv-superficie);
+        box-shadow: 0 4px 14px rgba(35, 74, 112, .04);
+    }
+    .noc-panel-title {
+        margin: 0;
+        color: #153f6f;
+        font-size: .98rem;
+        font-weight: 800;
     }
     .noc-label {
         color: var(--sicv-tinta-tenue);
-        font-size: .75rem;
-        font-weight: 700;
+        font-size: .72rem;
+        font-weight: 800;
         letter-spacing: .04em;
         text-transform: uppercase;
         margin-bottom: 3px;
@@ -32,6 +41,7 @@
         padding-left: 20px;
     }
     .noc-event { position: relative; padding-bottom: 18px; }
+    .noc-event:last-child { padding-bottom: 0; }
     .noc-event::before {
         content: "";
         position: absolute;
@@ -42,34 +52,113 @@
         border-radius: 50%;
         background: var(--sicv-azul);
     }
+    .noc-readonly-note {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: var(--sicv-tinta-tenue);
+        font-size: .7rem;
+        font-weight: 600;
+    }
+    .noc-owner-notice {
+        border: 1px solid #d7e3ef;
+        background: #f8fbfe;
+        color: #31516f;
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: .82rem;
+    }
+    @media (max-width: 767.98px) {
+        .noc-detail { padding-left: 10px !important; padding-right: 10px !important; }
+        .tc-order-toolbar-actions { width: 100%; }
+        .tc-order-toolbar-actions .tc-btn,
+        .tc-order-toolbar-actions form,
+        .tc-order-toolbar-actions form .tc-btn { width: 100%; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4 noc-detail">
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-        <div>
-            <div class="text-uppercase small text-muted fw-semibold">Atención NOC</div>
-            <h1 class="h3 mb-1">{{ order.order_number }}</h1>
-            <div class="text-muted">
-                {{ customer }} · {{ order.subscription.service_type.name }} · {{ order.subscription.plan.name }}
-            </div>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a href="{% url 'work_orders:incident_noc_queue' %}" class="btn btn-outline-secondary">
+
+    {# La atención NOC usa la misma identidad visual de cualquier OT. #}
+    {% include "work_orders/_order_brand_header.html" with subscription=order.subscription %}
+
+    <div class="tc-order-toolbar">
+        <div class="tc-order-toolbar-actions">
+            <a href="{% url 'work_orders:incident_noc_queue' %}" class="tc-btn muted">
                 <i class="bi bi-arrow-left"></i> Bandeja NOC
             </a>
-            <a href="{% url 'work_orders:detail' order.pk %}" class="btn btn-outline-secondary">
-                Ficha general
+            <a href="{% url 'customers:detail' customer.pk %}" class="tc-btn muted">
+                <i class="bi bi-person"></i> Ficha del abonado
+            </a>
+            <a
+                href="{% url 'work_orders:initial_print' order.pk %}"
+                class="tc-btn"
+                target="_blank"
+                rel="noopener"
+            >
+                <i class="bi bi-printer"></i> Imprimir orden
             </a>
         </div>
+
+        <div class="tc-order-toolbar-actions">
+            {% if order.status == "PENDING" %}
+                <form method="post" action="{% url 'work_orders:incident_start' order.pk %}">
+                    {% csrf_token %}
+                    <button class="tc-btn primary" type="submit">
+                        <i class="bi bi-person-check"></i> Tomar incidencia
+                    </button>
+                </form>
+            {% elif order.status == "IN_PROGRESS" and is_current_handler %}
+                <a href="{% url 'work_orders:incident_release' order.pk %}" class="tc-btn muted">
+                    <i class="bi bi-box-arrow-left"></i> Liberar
+                </a>
+                <a href="{% url 'work_orders:incident_reschedule' order.pk %}" class="tc-btn">
+                    <i class="bi bi-clock-history"></i> Reprogramar contacto
+                </a>
+                <a href="{% url 'work_orders:incident_close' order.pk %}" class="tc-btn primary">
+                    <i class="bi bi-check2-circle"></i> Finalizar incidencia
+                </a>
+            {% elif order.status == "REPROGRAMMED" %}
+                <form method="post" action="{% url 'work_orders:incident_resume' order.pk %}">
+                    {% csrf_token %}
+                    <button class="tc-btn primary" type="submit">
+                        <i class="bi bi-telephone"></i> Retomar incidencia
+                    </button>
+                </form>
+            {% endif %}
+
+            {% if can_cancel %}
+                <a href="{% url 'work_orders:incident_cancel' order.pk %}" class="tc-btn muted">
+                    <i class="bi bi-x-circle"></i> Anular
+                </a>
+            {% endif %}
+        </div>
     </div>
+
+    {% if order.status == "IN_PROGRESS" and not is_current_handler %}
+        <div class="noc-owner-notice mb-3">
+            <i class="bi bi-lock me-1"></i>
+            En atención por <strong>{{ handler|default:"otro operador NOC" }}</strong>.
+            Puedes consultar toda la información, pero solo el responsable actual puede liberar,
+            reprogramar o finalizar la atención.
+        </div>
+    {% endif %}
+
+    {% if order.status == "REPROGRAMMED" and follow_up %}
+    <div class="alert alert-info mb-3">
+        <div class="fw-bold">Próximo contacto: {{ follow_up.new_schedule|date:"d/m/Y H:i" }}</div>
+        <div>{{ follow_up.reason }}</div>
+        <div class="small mt-1">Registrado por {{ follow_up.created_by }} · {{ follow_up.created_at|date:"d/m/Y H:i" }}</div>
+    </div>
+    {% endif %}
 
     <div class="noc-panel p-3 mb-3">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
             <div>
-                <div class="noc-label">Contacto del abonado</div>
-                <div class="small text-muted">Datos registrados en la ficha del cliente para la atención telefónica NOC.</div>
+                <h2 class="noc-panel-title">Contacto del abonado</h2>
+                <div class="small text-muted">Datos registrados para la atención telefónica NOC.</div>
             </div>
             {% if customer.phone %}
                 <a href="tel:{{ customer.phone }}" class="btn btn-primary btn-sm">
@@ -112,80 +201,36 @@
     </div>
 
     <div class="noc-panel p-3 mb-3">
-        <div class="row g-3 align-items-center">
+        <div class="row g-3 align-items-start">
             <div class="col-md-3">
+                <div class="noc-label">Cliente</div>
+                <div class="noc-value fw-semibold">{{ customer.code }} · {{ customer }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="noc-label">Dirección de atención</div>
+                <div class="noc-value">{{ order.subscription.address.address }}</div>
+            </div>
+            <div class="col-md-2">
                 <div class="noc-label">Estado</div>
                 <div class="noc-value fw-bold">{{ order.get_status_display }}</div>
             </div>
-            <div class="col-md-3">
-                <div class="noc-label">Sede</div>
-                <div class="noc-value">{{ order.branch }}</div>
-            </div>
-            <div class="col-md-3">
-                <div class="noc-label">Responsable NOC actual</div>
+            <div class="col-md-2">
+                <div class="noc-label">Responsable NOC</div>
                 <div class="noc-value {% if not handler %}text-muted{% endif %}">
-                    {{ handler|default:"Sin responsable activo" }}
+                    {{ handler|default:"Sin responsable" }}
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="noc-label">Creada</div>
                 <div class="noc-value">{{ order.created_at|date:"d/m/Y H:i" }}</div>
             </div>
         </div>
     </div>
 
-    {% if order.status == "REPROGRAMMED" and follow_up %}
-    <div class="alert alert-info mb-3">
-        <div class="fw-bold">Próximo contacto: {{ follow_up.new_schedule|date:"d/m/Y H:i" }}</div>
-        <div>{{ follow_up.reason }}</div>
-        <div class="small mt-1">Registrado por {{ follow_up.created_by }} · {{ follow_up.created_at|date:"d/m/Y H:i" }}</div>
-    </div>
-    {% endif %}
-
-    <div class="noc-panel p-3 mb-3">
-        <div class="d-flex flex-wrap gap-2">
-            {% if order.status == "PENDING" %}
-                <form method="post" action="{% url 'work_orders:incident_start' order.pk %}">
-                    {% csrf_token %}
-                    <button class="btn btn-primary" type="submit">
-                        <i class="bi bi-person-check"></i> Tomar incidencia
-                    </button>
-                </form>
-            {% elif order.status == "IN_PROGRESS" and is_current_handler %}
-                <a href="{% url 'work_orders:incident_release' order.pk %}" class="btn btn-outline-secondary">
-                    <i class="bi bi-box-arrow-left"></i> Liberar
-                </a>
-                <a href="{% url 'work_orders:incident_reschedule' order.pk %}" class="btn btn-outline-primary">
-                    <i class="bi bi-clock-history"></i> Reprogramar contacto
-                </a>
-                <a href="{% url 'work_orders:incident_close' order.pk %}" class="btn btn-primary">
-                    <i class="bi bi-check2-circle"></i> Finalizar incidencia
-                </a>
-            {% elif order.status == "IN_PROGRESS" %}
-                <div class="alert alert-light border mb-0 py-2">
-                    En atención por <strong>{{ handler|default:"otro operador NOC" }}</strong>. Puedes consultar la ficha, pero no modificar la atención.
-                </div>
-            {% elif order.status == "REPROGRAMMED" %}
-                <form method="post" action="{% url 'work_orders:incident_resume' order.pk %}">
-                    {% csrf_token %}
-                    <button class="btn btn-primary" type="submit">
-                        <i class="bi bi-telephone"></i> Retomar incidencia
-                    </button>
-                </form>
-            {% endif %}
-
-            {% if can_cancel %}
-                <a href="{% url 'work_orders:incident_cancel' order.pk %}" class="btn btn-outline-danger ms-md-auto">
-                    <i class="bi bi-x-circle"></i> Anular
-                </a>
-            {% endif %}
-        </div>
-    </div>
-
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="noc-panel p-3 mb-3">
-                <h2 class="h5 mb-3">Incidencia reportada</h2>
+                <h2 class="noc-panel-title mb-3">Incidencia reportada</h2>
                 <div class="noc-label">Motivo</div>
                 <div class="noc-value mb-3">{{ order.reason_text|linebreaksbr }}</div>
                 {% if order.detail %}
@@ -195,7 +240,7 @@
             </div>
 
             <div class="noc-panel p-3 mb-3">
-                <h2 class="h5 mb-3">Historial de la incidencia</h2>
+                <h2 class="noc-panel-title mb-3">Historial de la incidencia</h2>
                 {% if status_history %}
                     <div class="noc-timeline">
                     {% for entry in status_history %}
@@ -219,7 +264,7 @@
 
             {% if reprogrammings %}
             <div class="noc-panel p-3 mb-3">
-                <h2 class="h5 mb-3">Reprogramaciones de contacto</h2>
+                <h2 class="noc-panel-title mb-3">Reprogramaciones de contacto</h2>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
@@ -247,7 +292,7 @@
         <div class="col-lg-5">
             {% if order.status == "ATTENDED" and order.incident_detail %}
             <div class="noc-panel p-3 mb-3">
-                <h2 class="h5 mb-3">Resultado NOC</h2>
+                <h2 class="noc-panel-title mb-3">Resultado NOC</h2>
                 <div class="noc-label">Detalle de atención</div>
                 <div class="noc-value mb-3">{{ order.incident_detail.attention_detail|linebreaksbr }}</div>
                 {% if order.incident_detail.observations %}
@@ -261,7 +306,10 @@
             {% endif %}
 
             <div class="noc-panel p-3 mb-3">
-                <h2 class="h5 mb-3">Contexto técnico previo</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="noc-panel-title">Contexto técnico previo</h2>
+                    <span class="noc-readonly-note"><i class="bi bi-lock"></i> Solo lectura</span>
+                </div>
                 {% if technical_context %}
                     <div class="row g-3">
                         <div class="col-6">
@@ -282,7 +330,7 @@
                         </div>
                     </div>
                     <div class="small text-muted mt-3">
-                        Fuente: {{ technical_context.source_order.order_number }} · solo lectura
+                        Fuente: {{ technical_context.source_order.order_number }}
                     </div>
                 {% else %}
                     <p class="text-muted mb-0">No hay información técnica previa disponible.</p>
@@ -291,7 +339,7 @@
 
             <div class="noc-panel p-3">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 mb-0">Incidencias anteriores</h2>
+                    <h2 class="noc-panel-title">Incidencias anteriores</h2>
                     <span class="badge text-bg-light">{{ prior_incidents|length }}</span>
                 </div>
                 {% if prior_incidents %}
