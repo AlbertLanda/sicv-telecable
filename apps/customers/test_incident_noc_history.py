@@ -18,7 +18,10 @@ class CustomerIncidentNocHistoryTests(TestCase):
     """La pestaña de órdenes trata una incidencia como historial NOC, no campo."""
 
     def setUp(self):
-        self.branch = Branch.objects.create(code="JAUJA", name="Jauja")
+        # Jauja e INCIDENT ya son datos maestros sembrados por migraciones.
+        # Las pruebas deben reutilizarlos para comportarse igual que una BD
+        # creada desde cero y no chocar contra sus restricciones únicas.
+        self.branch = Branch.objects.get(code="JAUJA")
         self.zone = Zone.objects.create(branch=self.branch, name="Centro")
         self.user = User.objects.create_user(
             username="noc_dashboard",
@@ -66,10 +69,7 @@ class CustomerIncidentNocHistoryTests(TestCase):
             status=Subscription.Status.ACTIVE,
             service_number=1,
         )
-        self.incident_type = OrderType.objects.create(
-            code="INCIDENT",
-            name="Incidencia",
-        )
+        self.incident_type = OrderType.objects.get(code="INCIDENT")
         self.incident = WorkOrder.objects.create(
             order_number="OT-2026-900001",
             subscription=self.subscription,
