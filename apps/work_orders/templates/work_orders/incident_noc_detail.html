@@ -82,7 +82,7 @@
     </div>
 
     {% if order.status == "REPROGRAMMED" and follow_up %}
-    <div class="alert {% if follow_up.new_schedule <= now %}alert-danger{% else %}alert-info{% endif %} mb-3">
+    <div class="alert alert-info mb-3">
         <div class="fw-bold">Próximo contacto: {{ follow_up.new_schedule|date:"d/m/Y H:i" }}</div>
         <div>{{ follow_up.reason }}</div>
         <div class="small mt-1">Registrado por {{ follow_up.created_by }} · {{ follow_up.created_at|date:"d/m/Y H:i" }}</div>
