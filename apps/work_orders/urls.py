@@ -1,12 +1,26 @@
 from django.urls import path
 
-from . import legacy_views, print_views, scheduling_views, views
+from . import incident_noc, legacy_views, print_views, scheduling_views, views
 
 
 app_name = "work_orders"
 
 
 urlpatterns = [
+
+    # Bandeja colaborativa de NOC. Todos los operadores autorizados ven la
+    # misma cola; tomar/retomar una incidencia se resuelve de forma exclusiva
+    # en el dominio para evitar atenciones cruzadas.
+    path(
+        "noc/incidents/",
+        incident_noc.NocIncidentQueueView.as_view(),
+        name="incident_noc_queue",
+    ),
+    path(
+        "noc/incidents/notifications/",
+        incident_noc.IncidentNotificationsView.as_view(),
+        name="incident_notifications",
+    ),
 
     # Tablero de programación: las órdenes abiertas de la sede por día.
     # No asigna técnicos; organiza cuándo se espera atender cada OT.
@@ -35,29 +49,56 @@ urlpatterns = [
         name="create",
     ),
 
-    # Registrar un incidente para un cliente. La vista valida que el cliente
-    # tenga un servicio activo y que la sede del operador coincida con la del cliente.
+    # Registrar una incidencia para un cliente.
     path(
         "customers/<int:customer_pk>/incidents/create/",
         views.IncidentCreateView.as_view(),
         name="incident_create",
     ),
 
-    # Asignación de un técnico a una orden. Solo ATC puede asignar; el técnico no. La asignación no borra la OT, solo la marca como ASSIGNED y registra la fecha y el técnico asignado. La OT asignada no puede reprogramarse ni atenderse por otro técnico.
+    # Ficha operativa NOC: responsabilidad actual, reprogramaciones,
+    # trazabilidad e incidencias anteriores de la misma suscripción.
     path(
-        "<int:pk>/incident/start/",
-        views.IncidentStartAttentionView.as_view(),
-        name="incident_start",
+        "<int:pk>/incident/noc/",
+        incident_noc.NocIncidentDetailView.as_view(),
+        name="incident_noc_detail",
     ),
 
+    # Se conserva el nombre `incident_start` para no romper enlaces ya
+    # existentes, pero la acción ahora significa "Tomar incidencia".
+    path(
+        "<int:pk>/incident/start/",
+        incident_noc.IncidentClaimView.as_view(),
+        name="incident_start",
+    ),
+    path(
+        "<int:pk>/incident/release/",
+        incident_noc.IncidentReleaseView.as_view(),
+        name="incident_release",
+    ),
+    path(
+        "<int:pk>/incident/reschedule/",
+        incident_noc.IncidentRescheduleView.as_view(),
+        name="incident_reschedule",
+    ),
+    path(
+        "<int:pk>/incident/resume/",
+        incident_noc.IncidentResumeView.as_view(),
+        name="incident_resume",
+    ),
     path(
         "<int:pk>/incident/close/",
-        views.IncidentCloseView.as_view(),
+        incident_noc.IncidentNocCloseView.as_view(),
         name="incident_close",
+    ),
+    path(
+        "<int:pk>/incident/cancel/",
+        incident_noc.IncidentNocCancelView.as_view(),
+        name="incident_cancel",
     ),
 
     # Presentación administrativa de la OT emitida. Deliberadamente excluye
-    # ficha técnica, evidencias y liquidación para separar solicitud initial
+    # ficha técnica, evidencias y liquidación para separar solicitud inicial
     # de la ejecución registrada después por el técnico.
     path(
         "<int:pk>/initial/",
@@ -82,16 +123,16 @@ urlpatterns = [
         name="start",
     ),
 
-
-    # Anulación de una orden de trabajo. Solo ATC puede anular; el técnico no. La anulación no borra la OT, solo la marca como CANCELLED y registra la fecha y el motivo. La OT cancelada no puede reprogramarse ni atenderse.
+    # Anulación genérica de órdenes físicas. Las incidencias NOC usan la ruta
+    # específica `/incident/cancel/`, que también cubre EN ATENCIÓN y
+    # REPROGRAMADA sin mezclar esas reglas con el flujo de campo.
     path(
         "<int:pk>/cancel/",
         views.WorkOrderCancelView.as_view(),
         name="cancel",
     ),
 
-    # Ficha única de la orden: la misma pantalla sirve a ATC (solo lectura)
-    # y al técnico asignado (además completa ficha técnica y evidencias).
+    # Ficha única de la orden para el flujo general.
     path(
         "<int:pk>/",
         views.WorkOrderDetailView.as_view(),
