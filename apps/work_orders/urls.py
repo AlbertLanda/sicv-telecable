@@ -1,6 +1,13 @@
 from django.urls import path
 
-from . import incident_noc, legacy_views, print_views, scheduling_views, views
+from . import (
+    incident_derivation,
+    incident_noc,
+    legacy_views,
+    print_views,
+    scheduling_views,
+    views,
+)
 
 
 app_name = "work_orders"
@@ -85,6 +92,11 @@ urlpatterns = [
         "<int:pk>/incident/resume/",
         incident_noc.IncidentResumeView.as_view(),
         name="incident_resume",
+    ),
+    path(
+        "<int:pk>/incident/derive-fault/",
+        incident_derivation.IncidentDeriveFaultView.as_view(),
+        name="incident_derive_fault",
     ),
     path(
         "<int:pk>/incident/close/",
