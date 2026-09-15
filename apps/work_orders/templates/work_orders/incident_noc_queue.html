@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Incidencias NOC{% endblock %}
+
+{% block extra_css %}
+<style>
+    .noc-wrap { max-width: 1280px; margin: 0 auto; }
+    .noc-kpi {
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+        background: var(--sicv-superficie);
+        padding: 16px 18px;
+        height: 100%;
+    }
+    .noc-kpi-label {
+        color: var(--sicv-tinta-tenue);
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .noc-kpi-value { font-size: 1.65rem; font-weight: 800; color: var(--sicv-tinta); }
+    .noc-card {
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+        background: var(--sicv-superficie);
+    }
+    .noc-reason { color: var(--sicv-tinta); font-weight: 600; }
+    .noc-meta { color: var(--sicv-tinta-tenue); font-size: .85rem; }
+    .noc-overdue { border-left: 4px solid #dc3545; }
+    .noc-toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 1080;
+        max-width: 380px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 noc-wrap">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <div class="text-uppercase small text-muted fw-semibold">Operación NOC</div>
+            <h1 class="h3 mb-1">Incidencias</h1>
+            <p class="text-muted mb-0">
+                Cola compartida. Una incidencia solo puede estar en atención por un operador a la vez.
+            </p>
+        </div>
+        <button class="btn btn-outline-secondary" type="button" onclick="window.location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> Actualizar
+        </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="noc-kpi">
+                <div class="noc-kpi-label">Pendientes</div>
+                <div class="noc-kpi-value" id="noc-pending-count">{{ pending_count }}</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="noc-kpi">
+                <div class="noc-kpi-label">En atención</div>
+                <div class="noc-kpi-value">{{ in_progress_count }}</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="noc-kpi">
+                <div class="noc-kpi-label">Reprogramadas</div>
+                <div class="noc-kpi-value">{{ reprogrammed_count }}</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="noc-kpi">
+                <div class="noc-kpi-label">Contactos vencidos</div>
+                <div class="noc-kpi-value" id="noc-due-count">{{ overdue_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    {% if items %}
+        <div class="d-grid gap-3">
+        {% for item in items %}
+            <div class="noc-card p-3 {% if item.is_overdue %}noc-overdue{% endif %}">
+                <div class="row align-items-center g-3">
+                    <div class="col-lg-3">
+                        <div class="fw-bold">{{ item.order.order_number }}</div>
+                        <div class="noc-meta">
+                            {{ item.order.branch }} · {{ item.order.created_at|date:"d/m/Y H:i" }}
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <div class="noc-reason">{{ item.order.reason_text|truncatechars:110 }}</div>
+                        <div class="noc-meta mt-1">
+                            {{ item.order.subscription.customer }} · {{ item.order.subscription.plan.name }}
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        {% if item.order.status == "PENDING" %}
+                            <span class="badge text-bg-warning">Pendiente</span>
+                            <div class="noc-meta mt-2">Disponible para cualquier NOC.</div>
+                        {% elif item.order.status == "IN_PROGRESS" %}
+                            <span class="badge text-bg-primary">En atención</span>
+                            <div class="noc-meta mt-2">
+                                Responsable: <strong>{{ item.handler|default:"Sin identificar" }}</strong>
+                            </div>
+                        {% elif item.order.status == "REPROGRAMMED" %}
+                            <span class="badge text-bg-info">Reprogramada</span>
+                            {% if item.follow_up %}
+                                <div class="noc-meta mt-2">
+                                    Próximo contacto:
+                                    <strong>{{ item.follow_up.new_schedule|date:"d/m/Y H:i" }}</strong>
+                                </div>
+                                {% if item.is_overdue %}
+                                    <div class="text-danger small fw-semibold mt-1">Contacto pendiente/vencido</div>
+                                {% endif %}
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="col-lg-2 text-lg-end">
+                        <div class="d-flex flex-wrap justify-content-lg-end gap-2">
+                            <a
+                                href="{% url 'work_orders:incident_noc_detail' item.order.pk %}"
+                                class="btn btn-sm btn-outline-secondary"
+                            >Ver</a>
+
+                            {% if item.order.status == "PENDING" %}
+                                <form method="post" action="{% url 'work_orders:incident_start' item.order.pk %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-primary" type="submit">Tomar</button>
+                                </form>
+                            {% elif item.order.status == "REPROGRAMMED" %}
+                                <form method="post" action="{% url 'work_orders:incident_resume' item.order.pk %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn-sm btn-primary" type="submit">Retomar</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+        </div>
+    {% else %}
+        <div class="card card-custom shadow-sm">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-check2-circle fs-1 text-success"></i>
+                <h2 class="h5 mt-3">No hay incidencias abiertas</h2>
+                <p class="text-muted mb-0">La cola NOC está al día.</p>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<div class="alert alert-primary shadow noc-toast" id="noc-new-toast" role="alert">
+    <div class="fw-bold mb-1"><i class="bi bi-bell-fill"></i> Nueva incidencia NOC</div>
+    <div id="noc-new-toast-text">Se registró una nueva incidencia.</div>
+    <a href="#" class="alert-link" id="noc-new-toast-link">Ver incidencia</a>
+</div>
+
+{{ initial_pending_ids|json_script:"noc-known-incidents" }}
+<script>
+(function () {
+    "use strict";
+
+    const knownNode = document.getElementById("noc-known-incidents");
+    const known = new Set(JSON.parse(knownNode ? knownNode.textContent : "[]"));
+    const toast = document.getElementById("noc-new-toast");
+    const toastText = document.getElementById("noc-new-toast-text");
+    const toastLink = document.getElementById("noc-new-toast-link");
+    const pendingCount = document.getElementById("noc-pending-count");
+    const dueCount = document.getElementById("noc-due-count");
+
+    async function pollIncidents() {
+        try {
+            const response = await fetch(
+                "{% url 'work_orders:incident_notifications' %}",
+                {headers: {"X-Requested-With": "XMLHttpRequest"}}
+            );
+            if (!response.ok) return;
+
+            const data = await response.json();
+            pendingCount.textContent = data.pending_count;
+            dueCount.textContent = data.due_count;
+
+            const newIncident = data.pending.find(item => !known.has(item.id));
+            data.pending.forEach(item => known.add(item.id));
+
+            if (newIncident) {
+                toastText.textContent = `${newIncident.number} · ${newIncident.reason}`;
+                toastLink.href = newIncident.detail_url;
+                toast.style.display = "block";
+                window.setTimeout(() => { toast.style.display = "none"; }, 12000);
+            }
+        } catch (error) {
+            // Un fallo de red no interrumpe el trabajo del operador; el próximo
+            // ciclo vuelve a consultar automáticamente.
+        }
+    }
+
+    window.setInterval(pollIncidents, 20000);
+})();
+</script>
+{% endblock %}
