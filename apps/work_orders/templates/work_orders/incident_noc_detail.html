@@ -123,6 +123,9 @@
                 <a href="{% url 'work_orders:incident_reschedule' order.pk %}" class="tc-btn">
                     <i class="bi bi-clock-history"></i> Reprogramar contacto
                 </a>
+                <a href="{% url 'work_orders:incident_derive_fault' order.pk %}{% if request.GET.origin == 'customer_orders' %}?origin=customer_orders{% endif %}" class="tc-btn">
+                    <i class="bi bi-tools"></i> Derivar a avería
+                </a>
                 <a href="{% url 'work_orders:incident_close' order.pk %}" class="tc-btn primary">
                     <i class="bi bi-check2-circle"></i> Finalizar incidencia
                 </a>
@@ -148,7 +151,17 @@
             <i class="bi bi-lock me-1"></i>
             En atención por <strong>{{ handler|default:"otro operador NOC" }}</strong>.
             Puedes consultar toda la información, pero solo el responsable actual puede liberar,
-            reprogramar o finalizar la atención.
+            reprogramar, derivar a campo o finalizar la atención.
+        </div>
+    {% endif %}
+
+    {% if order.status == "DERIVED" %}
+        <div class="alert alert-info mb-3">
+            <div class="fw-bold"><i class="bi bi-tools me-1"></i> Incidencia derivada a campo</div>
+            <div class="small mt-1">
+                La atención remota terminó en derivación. El número de la avería generada y el
+                diagnóstico NOC permanecen registrados en el historial de la incidencia.
+            </div>
         </div>
     {% endif %}
 
@@ -222,9 +235,13 @@
             </div>
             <div class="col-md-2">
                 <div class="noc-label">Responsable NOC</div>
-                <div class="noc-value {% if not handler %}text-muted{% endif %}">
-                    {{ handler|default:"Sin responsable" }}
-                </div>
+                {% if order.status == "DERIVED" %}
+                    <div class="noc-value text-muted">Derivada a campo</div>
+                {% else %}
+                    <div class="noc-value {% if not handler %}text-muted{% endif %}">
+                        {{ handler|default:"Sin responsable" }}
+                    </div>
+                {% endif %}
             </div>
             <div class="col-md-2">
                 <div class="noc-label">Creada</div>
