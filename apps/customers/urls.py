@@ -1,9 +1,15 @@
+from django.contrib.auth.decorators import permission_required
 from django.urls import path
 
 from . import dashboard_views, views
 
 
 app_name = "customers"
+
+
+def require(permission, view):
+    """Protege acciones mutables también cuando se abre la URL directamente."""
+    return permission_required(permission, raise_exception=True)(view.as_view())
 
 
 urlpatterns = [
@@ -18,7 +24,7 @@ urlpatterns = [
     # Registrar nuevo cliente
     path(
         "create/",
-        views.CustomerInitialCreateView.as_view(),
+        require("customers.add_customer", views.CustomerInitialCreateView),
         name="create",
     ),
 
@@ -40,21 +46,21 @@ urlpatterns = [
     # Registrar datos generales del cliente
     path(
         "create/general/",
-        views.CustomerGeneralDataView.as_view(),
+        require("customers.add_customer", views.CustomerGeneralDataView),
         name="general_create",
     ),
 
     # Editar datos generales del cliente
     path(
         "<int:customer_pk>/edit/general/",
-        views.CustomerGeneralDataEditView.as_view(),
+        require("customers.change_customer", views.CustomerGeneralDataEditView),
         name="general_edit",
     ),
 
     # Registrar dirección
     path(
         "<int:customer_pk>/addresses/create/",
-        views.CustomerAddressCreateView.as_view(),
+        require("customers.add_customeraddress", views.CustomerAddressCreateView),
         name="address_create",
     ),
 
