@@ -102,12 +102,15 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             </div>
         </section>
 
-        <section class="sidebar-section" data-sidebar-section="reportes dashboard actividad reciente">
+        <section class="sidebar-section" data-sidebar-section="reportes materiales retiro almacen logistica dashboard actividad reciente">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
                 <i class="bi bi-pie-chart"></i><span>Reportes</span><i class="bi bi-chevron-down chev"></i>
             </button>
             <div class="collapse show" id="sidebarReportes">
                 <div class="sidebar-links">
+                    {% if perms.inventory.view_workordermaterialmovement %}
+                        <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam"></i>Materiales</a>
+                    {% endif %}
                     <span class="sidebar-link-pending"><span>Dashboard</span><span class="pending-tag">pendiente</span></span>
                     <span class="sidebar-link-pending"><span>Actividad reciente</span><span class="pending-tag">pendiente</span></span>
                 </div>
