@@ -55,7 +55,7 @@ del abonado, una incidencia siempre abre esa ficha especializada.
 
             {% if featured_open_order.order_type.code == "INCIDENT" %}
                 {% if perms.work_orders.view_incident %}
-                    <a href="{% url 'work_orders:incident_noc_detail' featured_open_order.pk %}" class="tc-btn muted">
+                    <a href="{% url 'work_orders:incident_noc_detail' featured_open_order.pk %}?origin=customer_orders" class="tc-btn muted">
                         <i class="bi bi-clock-history"></i> Abrir historial NOC
                     </a>
                 {% endif %}
@@ -153,7 +153,7 @@ del abonado, una incidencia siempre abre esa ficha especializada.
                     <tr>
                         <td>
                             {% if order.order_type.code == "INCIDENT" and perms.work_orders.view_incident %}
-                                <a href="{% url 'work_orders:incident_noc_detail' order.pk %}">{{ order.order_number }}</a>
+                                <a href="{% url 'work_orders:incident_noc_detail' order.pk %}?origin=customer_orders">{{ order.order_number }}</a>
                             {% else %}
                                 <a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a>
                             {% endif %}
@@ -208,7 +208,7 @@ del abonado, una incidencia siempre abre esa ficha especializada.
                             <a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>
                             {% if order.order_type.code == "INCIDENT" %}
                                 {% if perms.work_orders.view_incident %}
-                                    <a class="tc-icon-btn" href="{% url 'work_orders:incident_noc_detail' order.pk %}" title="Ver historial NOC"><i class="bi bi-clock-history"></i></a>
+                                    <a class="tc-icon-btn" href="{% url 'work_orders:incident_noc_detail' order.pk %}?origin=customer_orders" title="Ver historial NOC"><i class="bi bi-clock-history"></i></a>
                                 {% endif %}
                             {% elif perms.work_orders.view_workorder %}
                                 <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>
