@@ -3,6 +3,7 @@
 
     const tokenKey = "sicv.technician.token";
     const nativeFetch = window.fetch.bind(window);
+    const terminalValues = Array.from({length: 16}, (_, index) => String(index + 1).padStart(2, "0"));
     let activeOrderId = null;
     let napSearchTimer = null;
 
@@ -83,11 +84,51 @@
         }
     }
 
+    function initTerminalSelect() {
+        const current = document.querySelector("#field-terminal");
+        if (!current || current.tagName === "SELECT") return;
+
+        const select = document.createElement("select");
+        select.id = current.id;
+        select.name = current.name || "terminal";
+        select.disabled = current.disabled;
+        select.setAttribute("aria-label", "Borne");
+
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Seleccione borne...";
+        select.append(placeholder);
+
+        terminalValues.forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            select.append(option);
+        });
+
+        const currentValue = String(current.value || "").trim();
+        const number = Number.parseInt(currentValue, 10);
+        if (Number.isInteger(number) && number >= 1 && number <= 16) {
+            select.value = String(number).padStart(2, "0");
+        }
+
+        current.replaceWith(select);
+    }
+
     function createNapSearchBox(input) {
         if (!input || document.querySelector("#field-nap-search-results")) return null;
 
         input.autocomplete = "off";
         input.placeholder = "Escribe código o nombre de la NAP";
+
+        // El resultado debe flotar sobre el formulario, no aumentar la altura
+        // de la grilla y empujar Borne/MAC/Precinto mientras se está buscando.
+        const wrapper = document.createElement("div");
+        wrapper.id = "field-nap-search-wrapper";
+        wrapper.style.position = "relative";
+        wrapper.style.width = "100%";
+        input.insertAdjacentElement("beforebegin", wrapper);
+        wrapper.append(input);
 
         const help = document.createElement("small");
         help.id = "field-nap-search-help";
@@ -99,18 +140,20 @@
         const results = document.createElement("div");
         results.id = "field-nap-search-results";
         results.hidden = true;
-        results.style.marginTop = "6px";
+        results.style.position = "absolute";
+        results.style.top = "calc(100% + 6px)";
+        results.style.left = "0";
+        results.style.right = "0";
         results.style.border = "1px solid #d0d5dd";
         results.style.borderRadius = "10px";
         results.style.background = "#fff";
-        results.style.maxHeight = "240px";
+        results.style.maxHeight = "180px";
         results.style.overflowY = "auto";
-        results.style.boxShadow = "0 10px 24px rgba(16, 24, 40, 0.10)";
-        results.style.position = "relative";
-        results.style.zIndex = "20";
+        results.style.boxShadow = "0 10px 24px rgba(16, 24, 40, 0.14)";
+        results.style.zIndex = "50";
 
-        input.insertAdjacentElement("afterend", results);
-        results.insertAdjacentElement("afterend", help);
+        wrapper.append(results);
+        wrapper.insertAdjacentElement("afterend", help);
         return results;
     }
 
@@ -149,7 +192,7 @@
             button.dataset.napId = nap.id;
             button.style.display = "block";
             button.style.width = "100%";
-            button.style.padding = "11px 12px";
+            button.style.padding = "10px 12px";
             button.style.border = "0";
             button.style.borderBottom = "1px solid #eaecf0";
             button.style.background = "#fff";
@@ -244,5 +287,6 @@
         return response;
     };
 
+    initTerminalSelect();
     initNapSearch();
 })();
