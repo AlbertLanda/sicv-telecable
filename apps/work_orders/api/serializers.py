@@ -258,12 +258,18 @@ class AvailableWorkOrderSerializer(WorkOrderListSerializer):
         source="subscription.address.district",
         read_only=True,
     )
+    reason = serializers.CharField(
+        source="reason.name",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta(WorkOrderListSerializer.Meta):
         fields = WorkOrderListSerializer.Meta.fields + [
             "branch",
             "zone",
             "district",
+            "reason",
         ]
         read_only_fields = fields
 
