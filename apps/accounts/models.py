@@ -20,6 +20,12 @@ class User(AbstractUser):
     # Capacidades mínimas que nacen del rol operativo y no dependen de que
     # un administrador haya marcado permisos uno por uno en Django Admin.
     #
+    # Administrador gestiona el personal operativo desde el SICV. Usa los
+    # permisos estándar de Django sobre User (ver/agregar/cambiar), pero no el
+    # permiso de borrado: las cuentas se desactivan para conservar trazabilidad.
+    # Una cuenta con is_superuser=True queda por encima de este rol y conserva
+    # todos los permisos del sistema.
+    #
     # ATC necesita poder completar el ciclo que realmente realiza en oficina:
     # registrar y actualizar abonados, mantener sus direcciones, suscripciones
     # y contratos, emitir/consultar OT y gestionar su programación. También
@@ -29,23 +35,11 @@ class User(AbstractUser):
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
     #
-    # Contabilidad administra el personal operativo desde el SICV. Usa los
-    # permisos estándar de Django sobre User (ver/agregar/cambiar), pero no el
-    # permiso de borrado: las cuentas se desactivan para conservar trazabilidad.
-    # Administrador hereda esas mismas capacidades aunque no sea superusuario.
-    #
-    # NOC, en cambio, consulta la ficha del abonado como contexto para soporte,
-    # pero no administra sus datos comerciales. Sus permisos base se limitan
-    # al flujo operativo de incidencias.
+    # NOC consulta la ficha del abonado como contexto para soporte, pero no
+    # administra sus datos comerciales. Sus permisos base se limitan al flujo
+    # operativo de incidencias.
     ROLE_BASELINE_PERMISSIONS = {
         Role.ADMIN: frozenset(
-            {
-                "accounts.view_user",
-                "accounts.add_user",
-                "accounts.change_user",
-            }
-        ),
-        Role.ACCOUNTING: frozenset(
             {
                 "accounts.view_user",
                 "accounts.add_user",
@@ -70,7 +64,6 @@ class User(AbstractUser):
                 "payments.add_payment",
             }
         ),
-
         Role.NOC: frozenset(
             {
                 "work_orders.view_workorder",
