@@ -123,6 +123,20 @@ class PersonnelManagementTests(TestCase):
         self.assertNotIn(self.deposit, form.fields["allowed_offices"].queryset)
         self.assertContains(response, "disponibles automáticamente")
 
+    def test_cash_offices_are_rendered_as_independent_checkboxes(self):
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("accounts:personnel_edit", kwargs={"pk": self.atc.pk})
+        )
+        form = response.context["form"]
+
+        self.assertEqual(form.fields["allowed_offices"].widget.input_type, "checkbox")
+        self.assertContains(response, 'name="allowed_offices"', count=3)
+        self.assertContains(response, self.main_office.name)
+        self.assertContains(response, self.cash_office.name)
+        self.assertNotContains(response, "Ctrl")
+
     def test_cross_branch_cash_office_is_rejected(self):
         self.client.force_login(self.admin)
 
