@@ -3,7 +3,13 @@
 
     const tokenKey = "sicv.technician.token";
     const nativeFetch = window.fetch.bind(window);
-    const terminalValues = Array.from({length: 16}, (_, index) => String(index + 1).padStart(2, "0"));
+    const terminalValues = Array.from({length: 16}, (_, index) => {
+        const number = index + 1;
+        return {
+            value: String(number),
+            label: String(number).padStart(2, "0"),
+        };
+    });
     let activeOrderId = null;
     let napSearchTimer = null;
 
@@ -99,17 +105,17 @@
         placeholder.textContent = "Seleccione borne...";
         select.append(placeholder);
 
-        terminalValues.forEach((value) => {
+        terminalValues.forEach(({value, label}) => {
             const option = document.createElement("option");
             option.value = value;
-            option.textContent = value;
+            option.textContent = label;
             select.append(option);
         });
 
         const currentValue = String(current.value || "").trim();
         const number = Number.parseInt(currentValue, 10);
         if (Number.isInteger(number) && number >= 1 && number <= 16) {
-            select.value = String(number).padStart(2, "0");
+            select.value = String(number);
         }
 
         current.replaceWith(select);
