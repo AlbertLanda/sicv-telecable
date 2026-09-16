@@ -33,6 +33,11 @@ class ATCRoleBaselinePermissionTests(TestCase):
             self.user.has_perm("payments.grant_paymentcommitment")
         )
 
+    def test_atc_cannot_manage_personnel(self):
+        self.assertFalse(self.user.has_perm("accounts.view_user"))
+        self.assertFalse(self.user.has_perm("accounts.add_user"))
+        self.assertFalse(self.user.has_perm("accounts.change_user"))
+
     def test_inactive_atc_does_not_inherit_role_capabilities(self):
         self.user.is_active = False
 
@@ -40,3 +45,28 @@ class ATCRoleBaselinePermissionTests(TestCase):
         self.assertFalse(self.user.has_perm("work_orders.schedule_workorder"))
         self.assertFalse(self.user.has_perm("payments.view_payment"))
         self.assertFalse(self.user.has_perm("payments.add_payment"))
+
+
+class PersonnelManagerRoleBaselinePermissionTests(TestCase):
+    def test_accounting_can_manage_personnel_without_delete_permission(self):
+        user = User.objects.create_user(
+            username="accounting_test",
+            role=User.Role.ACCOUNTING,
+            is_active=True,
+        )
+
+        self.assertTrue(user.has_perm("accounts.view_user"))
+        self.assertTrue(user.has_perm("accounts.add_user"))
+        self.assertTrue(user.has_perm("accounts.change_user"))
+        self.assertFalse(user.has_perm("accounts.delete_user"))
+
+    def test_admin_role_can_manage_personnel_without_being_superuser(self):
+        user = User.objects.create_user(
+            username="admin_role_test",
+            role=User.Role.ADMIN,
+            is_active=True,
+        )
+
+        self.assertTrue(user.has_perm("accounts.view_user"))
+        self.assertTrue(user.has_perm("accounts.add_user"))
+        self.assertTrue(user.has_perm("accounts.change_user"))
