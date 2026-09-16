@@ -3,6 +3,8 @@
 
     const tokenKey = "sicv.technician.token";
     const nativeFetch = window.fetch.bind(window);
+    const evidenceFileAccept = "image/jpeg,image/png,image/webp,application/pdf";
+    const evidenceCameraAccept = "image/jpeg,image/png,image/webp";
     const terminalValues = Array.from({length: 16}, (_, index) => {
         const number = index + 1;
         return {
@@ -255,6 +257,114 @@
         });
     }
 
+    function initFieldSheetUx() {
+        const notes = document.querySelector("#field-notes");
+        const notesField = notes?.closest(".field");
+        if (notesField) {
+            // Las notas históricas siguen en el DOM para que portal.js las
+            // preserve al guardar, pero el flujo nuevo concentra la observación
+            // opcional en el cierre general de la Orden Técnica.
+            notesField.hidden = true;
+        }
+
+        const saveButton = document.querySelector("#field-save");
+        if (saveButton) saveButton.textContent = "Guardar datos técnicos";
+
+        const help = document.querySelector("#field-sheet-help");
+        if (help) {
+            help.dataset.editableText = "Registra y guarda NAP, borne, MAC/equipo y precinto encontrados en campo.";
+        }
+
+        const finalRemarks = document.querySelector("#completion-remarks");
+        const finalRemarksLabel = finalRemarks?.closest(".field")?.querySelector("span");
+        if (finalRemarksLabel) finalRemarksLabel.textContent = "Observación general de la orden (opcional)";
+        if (finalRemarks) {
+            finalRemarks.placeholder = "Registra aquí cualquier observación general relevante antes de finalizar la atención";
+        }
+    }
+
+    function syncEvidenceSelection() {
+        const input = document.querySelector("#evidence-file");
+        const selected = document.querySelector("#evidence-selected-file");
+        if (!input || !selected) return;
+        const file = input.files?.[0];
+        selected.textContent = file ? `Archivo listo: ${file.name}` : "Ningún archivo seleccionado.";
+    }
+
+    function initEvidenceCapture() {
+        const input = document.querySelector("#evidence-file");
+        const originalBox = input?.closest(".upload-box");
+        if (!input || !originalBox || document.querySelector("#evidence-camera-trigger")) return;
+
+        const box = document.createElement("div");
+        box.className = "upload-box";
+
+        const title = document.createElement("span");
+        title.textContent = "Adjuntar evidencia";
+
+        const help = document.createElement("small");
+        help.textContent = "Toma una foto con el celular o selecciona JPG, PNG, WEBP o PDF · máximo 10 MB";
+
+        const actions = document.createElement("div");
+        actions.style.display = "grid";
+        actions.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
+        actions.style.gap = "10px";
+        actions.style.marginTop = "12px";
+
+        const cameraButton = document.createElement("button");
+        cameraButton.id = "evidence-camera-trigger";
+        cameraButton.type = "button";
+        cameraButton.className = "btn btn-primary btn-block";
+        cameraButton.textContent = "Tomar foto";
+
+        const libraryButton = document.createElement("button");
+        libraryButton.id = "evidence-file-trigger";
+        libraryButton.type = "button";
+        libraryButton.className = "btn btn-secondary btn-block";
+        libraryButton.textContent = "Galería o PDF";
+
+        const selected = document.createElement("small");
+        selected.id = "evidence-selected-file";
+        selected.className = "helper";
+        selected.style.display = "block";
+        selected.style.marginTop = "10px";
+        selected.textContent = "Ningún archivo seleccionado.";
+
+        input.hidden = true;
+        input.accept = evidenceFileAccept;
+        actions.append(cameraButton, libraryButton);
+        box.append(title, help, input, actions, selected);
+        originalBox.replaceWith(box);
+
+        const syncDisabled = () => {
+            cameraButton.disabled = input.disabled;
+            libraryButton.disabled = input.disabled;
+        };
+
+        cameraButton.addEventListener("click", () => {
+            if (input.disabled) return;
+            input.value = "";
+            input.accept = evidenceCameraAccept;
+            input.setAttribute("capture", "environment");
+            input.click();
+        });
+
+        libraryButton.addEventListener("click", () => {
+            if (input.disabled) return;
+            input.value = "";
+            input.accept = evidenceFileAccept;
+            input.removeAttribute("capture");
+            input.click();
+        });
+
+        input.addEventListener("change", syncEvidenceSelection);
+        new MutationObserver(syncDisabled).observe(input, {
+            attributes: true,
+            attributeFilter: ["disabled"],
+        });
+        syncDisabled();
+    }
+
     window.fetch = async function (input, init = {}) {
         const response = await nativeFetch(input, init);
 
@@ -286,6 +396,16 @@
                 );
                 void refreshAutomaticExcess(materialsUrl);
             }
+
+            // portal.js limpia el input después de una carga exitosa. Dejamos
+            // que complete ese ciclo y luego sincronizamos el texto visible.
+            if (
+                response.ok &&
+                method === "POST" &&
+                /\/evidences\/(?:\?.*)?$/.test(url)
+            ) {
+                setTimeout(syncEvidenceSelection, 0);
+            }
         } catch (_error) {
             // Nunca se altera la respuesta original del API por un refresco UI.
         }
@@ -295,4 +415,6 @@
 
     initTerminalSelect();
     initNapSearch();
+    initFieldSheetUx();
+    initEvidenceCapture();
 })();
