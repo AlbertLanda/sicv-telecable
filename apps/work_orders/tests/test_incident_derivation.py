@@ -61,7 +61,6 @@ class IncidentDerivationTests(WorkOrderTestCase):
             "fault_reason": self.fault_reason,
             "diagnosis": "No hay acceso remoto y la ONT permanece fuera de línea.",
             "field_detail": "Revisar fibra, conectores y potencia óptica en domicilio.",
-            "priority": WorkOrder.Priority.HIGH,
         }
         values.update(overrides)
         return derive_incident_to_fault(
@@ -83,7 +82,7 @@ class IncidentDerivationTests(WorkOrderTestCase):
         self.assertEqual(fault.subscription, self.subscription)
         self.assertEqual(fault.order_type, self.fault_type)
         self.assertEqual(fault.reason, self.fault_reason)
-        self.assertEqual(fault.priority, WorkOrder.Priority.HIGH)
+        self.assertEqual(fault.priority, WorkOrder.Priority.NORMAL)
         self.assertEqual(fault.created_by, self.noc)
         self.assertIn(self.incident.order_number, fault.detail)
         self.assertIn("Diagnóstico NOC", fault.detail)
@@ -168,6 +167,20 @@ class IncidentDerivationTests(WorkOrderTestCase):
             ),
         )
 
+    def test_derivation_form_does_not_ask_priority(self):
+        self.client.force_login(self.noc)
+
+        response = self.client.get(
+            reverse(
+                "work_orders:incident_derive_fault",
+                kwargs={"pk": self.incident.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Prioridad")
+        self.assertNotContains(response, 'name="priority"')
+
     def test_derive_view_creates_fault_and_redirects_to_incident_history(self):
         self.client.force_login(self.noc)
         url = reverse(
@@ -182,7 +195,6 @@ class IncidentDerivationTests(WorkOrderTestCase):
                 "fault_reason": self.fault_reason.pk,
                 "diagnosis": "No hay acceso remoto a la ONT del abonado.",
                 "field_detail": "Revisar potencia, drop y conectores en campo.",
-                "priority": WorkOrder.Priority.NORMAL,
             },
             follow=True,
         )
@@ -199,7 +211,5 @@ class IncidentDerivationTests(WorkOrderTestCase):
 
         self.incident.refresh_from_db()
         self.assertEqual(self.incident.status, WorkOrder.Status.DERIVED)
-        self.assertEqual(
-            WorkOrder.objects.filter(order_type=self.fault_type).count(),
-            1,
-        )
+        fault = WorkOrder.objects.get(order_type=self.fault_type)
+        self.assertEqual(fault.priority, WorkOrder.Priority.NORMAL)
