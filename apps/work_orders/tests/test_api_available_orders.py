@@ -314,7 +314,7 @@ class AvailableWorkOrdersContentTests(AvailableWorkOrdersAPITestCase):
         La comparación es contra el conjunto exacto: si alguien agrega un
         campo sin decidirlo, la prueba falla en vez de dejarlo pasar.
         """
-        self.create_order()
+        self.create_order(reason=self.installation_reason)
 
         self.authenticate(self.technician)
 
@@ -339,16 +339,19 @@ class AvailableWorkOrdersContentTests(AvailableWorkOrdersAPITestCase):
                 "scheduled_date",
                 "agenda_date",
                 "created_at",
-                # Propios de la bandeja de disponibles: ubicar para decidir.
+                # Propios de la bandeja de disponibles: ubicar y entender
+                # rápidamente el trabajo antes de tomarlo.
                 "branch",
                 "zone",
                 "district",
+                "reason",
             },
         )
 
         self.assertEqual(row["status"], WorkOrder.Status.PENDING)
         self.assertEqual(row["status_display"], "Pendiente")
         self.assertEqual(row["order_type"], "Instalación")
+        self.assertEqual(row["reason"], "Cliente nuevo")
         self.assertEqual(row["branch"], "Sede Central")
         self.assertEqual(row["zone"], "Zona Norte")
         self.assertEqual(row["district"], "Chachapoyas")
