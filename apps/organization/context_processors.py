@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from apps.organization.models import Branch, Office
 
 
@@ -8,10 +10,10 @@ from apps.organization.models import Branch, Office
 ACTIVE_BRANCH_SESSION_KEY = "active_branch_id"
 
 
-# Oficina activa. Hoy es solo contexto visible en la barra: no acota
-# ninguna consulta. Se registra desde ahora porque el flujo de caja la
-# va a necesitar -cada cobro se hace en una oficina concreta-, y así el
-# operador ya la tiene elegida cuando esa pantalla exista.
+# Oficina activa. Decide desde qué ventanilla o depósito se registra un cobro.
+# La sesión solo conserva una oficina que siga estando autorizada para el
+# usuario; si el administrador revoca una oficina física, deja de ser válida
+# inmediatamente aunque hubiera quedado seleccionada antes.
 ACTIVE_OFFICE_SESSION_KEY = "active_office_id"
 
 
@@ -59,16 +61,51 @@ def get_active_branch(request):
     )
 
 
+def available_offices_for_user(user, branch):
+    """Oficinas que el usuario puede seleccionar en una sede.
+
+    Para ATC, las oficinas físicas requieren autorización explícita del
+    administrador. Su oficina principal también cuenta como autorizada para
+    mantener compatibilidad con usuarios existentes. Los depósitos de la sede
+    son compartidos porque representan pagos bancarios/transferencias y no una
+    caja física entregada a una colaboradora.
+
+    Administradores conservan acceso total. Los demás roles mantienen el
+    comportamiento previo hasta que su propia política operativa se defina.
+    """
+    if not getattr(user, "is_authenticated", False) or branch is None:
+        return Office.objects.none()
+
+    offices = Office.objects.filter(branch=branch, is_active=True)
+
+    if user.is_superuser or getattr(user, "role", None) == "ADMIN":
+        return offices
+
+    if getattr(user, "role", None) == "ATC":
+        return (
+            offices
+            .filter(
+                Q(is_deposit=True)
+                | Q(pk=getattr(user, "office_id", None))
+                | Q(authorized_users=user)
+            )
+            .distinct()
+        )
+
+    return offices
+
+
 def get_active_office(request, branch=None):
     """
     Oficina desde la que se está atendiendo ahora.
 
     Orden de resolución:
-    1. oficina elegida en la sesión;
-    2. oficina asignada al usuario si pertenece a la sede activa;
-    3. primera oficina activa de la sede activa, sin contar su deposito:
-       nadie atiende desde ahi, y elegirlo solo haria que los cobros de un
-       operador recien creado dijeran que el dinero entro por banco.
+    1. oficina elegida en la sesión, solo si sigue autorizada;
+    2. oficina principal del usuario, si está autorizada y no es depósito;
+    3. primera oficina física autorizada de la sede activa.
+
+    El depósito nunca se selecciona automáticamente: representa un pago por
+    banco/transferencia y debe elegirse de forma consciente en la barra.
     """
     if not request.user.is_authenticated:
         return None
@@ -79,32 +116,27 @@ def get_active_office(request, branch=None):
     if branch is None:
         return None
 
+    allowed = available_offices_for_user(request.user, branch)
     office_id = request.session.get(ACTIVE_OFFICE_SESSION_KEY)
 
     if office_id:
-        office = Office.objects.filter(
-            pk=office_id,
-            branch=branch,
-            is_active=True,
+        office = allowed.filter(pk=office_id).first()
+
+        if office:
+            return office
+
+    if request.user.office_id:
+        office = allowed.filter(
+            pk=request.user.office_id,
+            is_deposit=False,
         ).first()
 
         if office:
             return office
 
-    if (
-        request.user.office_id
-        and request.user.office.branch_id == branch.pk
-        and request.user.office.is_active
-    ):
-        return request.user.office
-
     return (
-        Office.objects
-        .filter(
-            branch=branch,
-            is_active=True,
-            is_deposit=False,
-        )
+        allowed
+        .filter(is_deposit=False)
         .order_by("name", "pk")
         .first()
     )
@@ -180,19 +212,7 @@ def organization(request):
         return {}
 
     active_branch = get_active_branch(request)
-
-    # La barra ofrece todas las ubicaciones de la sede, su deposito incluido.
-    # El deposito es donde cae lo que llega por banco, y quien cobra una
-    # transferencia lo elige aqui antes de registrarla: la pantalla de cobro
-    # no vuelve a preguntarlo, solo muestra lo que esta elegido.
-    #
-    # Esta abierto a cualquiera a proposito y por ahora: quien puede cobrar
-    # contra el deposito es una decision de rol que todavia no esta tomada.
-    offices = (
-        Office.objects.filter(branch=active_branch, is_active=True)
-        if active_branch
-        else Office.objects.none()
-    )
+    offices = available_offices_for_user(request.user, active_branch)
 
     return {
         "active_branch": active_branch,
