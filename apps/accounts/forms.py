@@ -73,11 +73,11 @@ class OfficeSelectMultiple(forms.SelectMultiple):
 
 
 class PersonnelForm(forms.ModelForm):
-    """Datos operativos que Contabilidad necesita administrar en el SICV.
+    """Datos operativos que Administración necesita manejar en el SICV.
 
     No expone grupos, permisos individuales, staff ni superusuario. Esa capa
-    queda en el admin técnico. Las oficinas habilitadas son solo ventanillas
-    físicas; los depósitos se comparten automáticamente con ATC.
+    queda reservada a la administración técnica. Las oficinas habilitadas son
+    solo ventanillas físicas; los depósitos se comparten automáticamente con ATC.
     """
 
     class Meta:
@@ -137,8 +137,10 @@ class PersonnelForm(forms.ModelForm):
         self.fields["email"].required = False
         self.fields["phone"].required = False
 
-        # Contabilidad administra personal operativo, no cuentas de
-        # administrador. Solo un superusuario puede crear/asignar ese rol.
+        # Un administrador operativo puede gestionar personal, pero crear o
+        # asignar nuevas cuentas ADMIN queda reservado al superusuario. Así
+        # podemos tener un administrador del SICV y, por encima, una cuenta
+        # administrativa con permisos ampliados.
         if actor is not None and not actor.is_superuser:
             self.fields["role"].choices = [
                 choice
@@ -159,7 +161,7 @@ class PersonnelForm(forms.ModelForm):
         role = cleaned.get("role")
 
         if self.actor is not None and not self.actor.is_superuser and role == User.Role.ADMIN:
-            self.add_error("role", "Solo un administrador técnico puede asignar este rol.")
+            self.add_error("role", "Solo un superusuario puede asignar el rol Administrador.")
 
         if office and branch and office.branch_id != branch.pk:
             self.add_error("office", "La oficina principal debe pertenecer a la sede seleccionada.")
