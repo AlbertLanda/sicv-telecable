@@ -449,6 +449,10 @@
     }
 
     function renderPlan(plan) {
+        // El bloque puede no venir: una orden cuya suscripcion se sirviera sin
+        // plan dejaria `plan_details` en null. Se pinta con guiones en vez de
+        // reventar, porque el resto de la ficha -direccion, motivo, horario-
+        // sigue siendo util para ir a trabajar.
         const data = plan || {};
 
         setDetailText("#detail-plan-name", data.name, "Sin plan");
@@ -461,6 +465,10 @@
         setDetailText("#detail-plan-technology", data.technology, "No registrada");
         setDetailText(
             "#detail-plan-tv",
+            // El cero es un dato, no un vacio: "0 puntos" significa que
+            // ninguna salida de TV entra sin cargo, y el tecnico tiene que
+            // saberlo antes de cablear. Por eso se compara contra null y no
+            // se usa un condicional que trate el 0 como ausencia.
             data.included_tv_points === null || data.included_tv_points === undefined
                 ? ""
                 : `${data.included_tv_points}`,
@@ -469,6 +477,9 @@
         setDetailText("#detail-plan-annexes", data.annex_count);
         setDetailText("#detail-plan-tv-total", data.total_tv_points);
 
+        // El contrato prevalece sobre el catálogo, incluso si su importe es
+        // cero o no existe tarifa geográfica. No inventar precios cuando la
+        // respuesta de una API antigua todavía no incluye estos campos.
         for (const [selector, amount] of [
             ["#detail-plan-monthly-base", data.base_monthly_fee],
             ["#detail-plan-monthly-annexes", data.annex_monthly_charge],
