@@ -36,9 +36,16 @@ class PersonnelManagementTests(TestCase):
             code="PER-OTRA-01",
             name="Caja ajena",
         )
-        self.accounting = User.objects.create_user(
-            username="sandra_test",
+        self.admin = User.objects.create_user(
+            username="sandra_admin_test",
             password="Telecable-2026-Sandra!",
+            role=User.Role.ADMIN,
+            branch=self.branch,
+            is_active=True,
+        )
+        self.accounting = User.objects.create_user(
+            username="accounting_test",
+            password="Telecable-2026-Accounting!",
             role=User.Role.ACCOUNTING,
             branch=self.branch,
             is_active=True,
@@ -51,8 +58,8 @@ class PersonnelManagementTests(TestCase):
             is_active=True,
         )
 
-    def test_accounting_can_open_personnel_list(self):
-        self.client.force_login(self.accounting)
+    def test_admin_can_open_personnel_list(self):
+        self.client.force_login(self.admin)
 
         response = self.client.get(reverse("accounts:personnel_list"))
 
@@ -61,6 +68,13 @@ class PersonnelManagementTests(TestCase):
         self.assertContains(response, self.atc.username)
         self.assertContains(response, "Nuevo personal")
 
+    def test_accounting_cannot_open_personnel_list(self):
+        self.client.force_login(self.accounting)
+
+        response = self.client.get(reverse("accounts:personnel_list"))
+
+        self.assertEqual(response.status_code, 403)
+
     def test_atc_cannot_open_personnel_list(self):
         self.client.force_login(self.atc)
 
@@ -68,8 +82,8 @@ class PersonnelManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_accounting_can_create_atc_with_authorized_cash_offices(self):
-        self.client.force_login(self.accounting)
+    def test_admin_can_create_atc_with_authorized_cash_offices(self):
+        self.client.force_login(self.admin)
 
         response = self.client.post(
             reverse("accounts:personnel_create"),
@@ -100,7 +114,7 @@ class PersonnelManagementTests(TestCase):
         )
 
     def test_deposit_is_not_offered_as_assignable_cash_office(self):
-        self.client.force_login(self.accounting)
+        self.client.force_login(self.admin)
 
         response = self.client.get(reverse("accounts:personnel_create"))
         form = response.context["form"]
@@ -110,7 +124,7 @@ class PersonnelManagementTests(TestCase):
         self.assertContains(response, "disponibles automáticamente")
 
     def test_cross_branch_cash_office_is_rejected(self):
-        self.client.force_login(self.accounting)
+        self.client.force_login(self.admin)
 
         response = self.client.post(
             reverse("accounts:personnel_edit", kwargs={"pk": self.atc.pk}),
@@ -133,8 +147,8 @@ class PersonnelManagementTests(TestCase):
         self.atc.refresh_from_db()
         self.assertNotEqual(self.atc.office, self.foreign_office)
 
-    def test_accounting_cannot_assign_admin_role(self):
-        self.client.force_login(self.accounting)
+    def test_regular_admin_cannot_assign_admin_role(self):
+        self.client.force_login(self.admin)
 
         response = self.client.post(
             reverse("accounts:personnel_create"),
@@ -151,13 +165,13 @@ class PersonnelManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(User.objects.filter(username="admin_inventado").exists())
 
-    def test_accounting_cannot_edit_superuser(self):
+    def test_regular_admin_cannot_edit_superuser(self):
         root = User.objects.create_superuser(
             username="root_personnel_test",
             password="Telecable-2026-Root!",
             role=User.Role.ADMIN,
         )
-        self.client.force_login(self.accounting)
+        self.client.force_login(self.admin)
 
         response = self.client.get(
             reverse("accounts:personnel_edit", kwargs={"pk": root.pk})
@@ -165,9 +179,34 @@ class PersonnelManagementTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_superuser_can_create_another_admin_account(self):
+        root = User.objects.create_superuser(
+            username="root_creator_test",
+            password="Telecable-2026-RootCreator!",
+            role=User.Role.ADMIN,
+        )
+        self.client.force_login(root)
+
+        response = self.client.post(
+            reverse("accounts:personnel_create"),
+            {
+                "username": "admin_secundario",
+                "role": User.Role.ADMIN,
+                "branch": self.branch.pk,
+                "is_active": "on",
+                "password1": "Telecable-2026-AdminSec!",
+                "password2": "Telecable-2026-AdminSec!",
+            },
+        )
+
+        self.assertRedirects(response, reverse("accounts:personnel_list"))
+        created = User.objects.get(username="admin_secundario")
+        self.assertEqual(created.role, User.Role.ADMIN)
+        self.assertFalse(created.is_superuser)
+
     def test_non_atc_does_not_keep_cash_office_authorizations(self):
         self.atc.allowed_offices.add(self.cash_office)
-        self.client.force_login(self.accounting)
+        self.client.force_login(self.admin)
 
         response = self.client.post(
             reverse("accounts:personnel_edit", kwargs={"pk": self.atc.pk}),
