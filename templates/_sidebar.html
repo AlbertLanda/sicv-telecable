@@ -85,16 +85,19 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
         </section>
 
         {% comment %}
-        Configurar. El catalogo comercial se cargaba solo por comando o desde
-        el admin de Django; estas pantallas lo ponen en manos del area
-        comercial, que es quien decide precios y niveles.
+        Configurar. El catálogo comercial y la administración operativa del
+        personal viven aquí. El admin de Django queda como herramienta técnica;
+        Contabilidad trabaja desde la pantalla simple de Personal del SICV.
         {% endcomment %}
-        <section class="sidebar-section" data-sidebar-section="configurar planes servicios catalogo precios">
+        <section class="sidebar-section" data-sidebar-section="configurar personal usuarios planes servicios catalogo precios">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarConfigurar" aria-expanded="true">
                 <i class="bi bi-sliders"></i><span>Configurar</span><i class="bi bi-chevron-down chev"></i>
             </button>
             <div class="collapse show" id="sidebarConfigurar">
                 <div class="sidebar-links">
+                    {% if perms.accounts.view_user %}
+                        <a class="sidebar-link" href="{% url 'accounts:personnel_list' %}"><i class="bi bi-people"></i>Personal</a>
+                    {% endif %}
                     {% if perms.services.view_plan %}
                         <a class="sidebar-link" href="{% url 'services:plan_list' %}"><i class="bi bi-list-stars"></i>Planes</a>
                     {% endif %}
