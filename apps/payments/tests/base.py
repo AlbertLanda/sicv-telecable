@@ -81,10 +81,17 @@ class PaymentsTestCase(TestCase):
         self.cashier = self.make_user("caja1")
 
     def make_user(self, username, permissions=(), role=None):
+        # Los tests de payments necesitan que ``permissions=[...]`` describa
+        # exactamente las capacidades que se están probando. ATC ya posee
+        # permisos base de cobranza por rol, así que usarlo implícitamente
+        # convertiría usuarios llamados "sinpermiso" en usuarios autorizados
+        # y haría imposible aislar permisos individuales. Cuando una prueba
+        # necesite específicamente el comportamiento del rol ATC, debe pasar
+        # role=User.Role.ATC de forma explícita.
         user = User.objects.create_user(
             username=username,
             password="test1234",
-            role=role or User.Role.ATC,
+            role=role or User.Role.ACCOUNTING,
             branch=self.branch,
         )
 
