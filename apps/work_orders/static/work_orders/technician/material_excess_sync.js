@@ -14,6 +14,23 @@
         return Number.isFinite(number) ? `S/ ${number.toFixed(2)}` : "S/ 0.00";
     }
 
+    function normalize(value) {
+        return String(value || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toUpperCase();
+    }
+
+    function setInstallationExcessVisibility(order) {
+        const panel = document.querySelector("#materials-panel");
+        if (!panel) return;
+
+        // El dominio de excesos vigente es exclusivamente de instalación.
+        // Una avería puede consumir cable y queda registrada en materiales,
+        // pero no debe mostrar una tarifa de "metraje de instalación".
+        panel.hidden = !normalize(order?.order_type).includes("INSTALACION");
+    }
+
     function renderAutomaticExcess(payload) {
         const list = document.querySelector("#materials-list");
         const empty = document.querySelector("#materials-empty");
@@ -70,6 +87,18 @@
                 init.method || (typeof input !== "string" ? input.method : "GET")
             ).toUpperCase();
 
+            // El detalle de la OT decide si el panel de excesos corresponde.
+            if (
+                response.ok &&
+                method === "GET" &&
+                /\/work-orders\/\d+\/(?:\?.*)?$/.test(url)
+            ) {
+                void response.clone().json().then(setInstallationExcessVisibility);
+            }
+
+            // Al agregar, corregir o quitar un material, el backend ya dejó el
+            // metraje sincronizado. Refrescamos el resumen sin pedir al técnico
+            // que vuelva a declarar el mismo cable.
             if (
                 response.ok &&
                 (method === "POST" || method === "DELETE") &&
