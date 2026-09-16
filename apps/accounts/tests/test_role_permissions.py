@@ -25,9 +25,9 @@ class ATCRoleBaselinePermissionTests(TestCase):
         self.assertTrue(self.user.has_perm("payments.view_payment"))
         self.assertTrue(self.user.has_perm("payments.view_receipt"))
 
-    def test_atc_does_not_inherit_payment_mutation_permissions(self):
+    def test_atc_can_register_payment_but_not_administer_billing(self):
+        self.assertTrue(self.user.has_perm("payments.add_payment"))
         self.assertFalse(self.user.has_perm("payments.add_charge"))
-        self.assertFalse(self.user.has_perm("payments.add_payment"))
         self.assertFalse(self.user.has_perm("payments.void_payment"))
         self.assertFalse(
             self.user.has_perm("payments.grant_paymentcommitment")
@@ -39,3 +39,4 @@ class ATCRoleBaselinePermissionTests(TestCase):
         self.assertFalse(self.user.has_perm("customers.add_customer"))
         self.assertFalse(self.user.has_perm("work_orders.schedule_workorder"))
         self.assertFalse(self.user.has_perm("payments.view_payment"))
+        self.assertFalse(self.user.has_perm("payments.add_payment"))
