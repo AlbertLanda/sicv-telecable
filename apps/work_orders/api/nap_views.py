@@ -25,7 +25,7 @@ TERMINAL_MAX = 16
 
 
 def _normalize_terminal(value):
-    """Devuelve el borne canónico 01..16 o None si el valor no es válido."""
+    """Devuelve el borne canónico 1..16 o None si el valor no es válido."""
     raw = str(value or "").strip()
     if not raw:
         return ""
@@ -35,7 +35,10 @@ def _normalize_terminal(value):
     number = int(raw)
     if number < TERMINAL_MIN or number > TERMINAL_MAX:
         return None
-    return f"{number:02d}"
+    # El sistema ya guarda este campo sin cero inicial. Conservamos ese
+    # contrato para no alterar fichas/liquidaciones históricas; la UI es la
+    # responsable de mostrar 01..16 al técnico.
+    return str(number)
 
 
 class NetworkAccessPointSearchView(TechnicianWorkOrderObjectMixin, GenericAPIView):
