@@ -91,21 +91,21 @@ class TechnicianNapCatalogTests(WorkOrderTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sheet = WorkOrderFieldSheet.objects.get(work_order=order)
         self.assertEqual(sheet.nap, nap.name)
-        self.assertEqual(sheet.terminal, "05")
+        self.assertEqual(sheet.terminal, "5")
 
-    def test_terminal_accepts_01_to_16_and_normalizes_single_digit(self):
+    def test_terminal_accepts_01_to_16_and_uses_historical_storage_format(self):
         order = self.create_assigned_order()
         self.api.post(self.url("start", order), {}, format="json")
 
         response = self.api.patch(
             self.url("field_sheet", order),
-            {"terminal": "8"},
+            {"terminal": "08"},
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sheet = WorkOrderFieldSheet.objects.get(work_order=order)
-        self.assertEqual(sheet.terminal, "08")
+        self.assertEqual(sheet.terminal, "8")
 
         response = self.api.patch(
             self.url("field_sheet", order),
@@ -154,7 +154,7 @@ class TechnicianNapCatalogTests(WorkOrderTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sheet = WorkOrderFieldSheet.objects.get(work_order=order)
         self.assertEqual(sheet.nap, "NAP-LEGADA-01")
-        self.assertEqual(sheet.terminal, "07")
+        self.assertEqual(sheet.terminal, "7")
 
 
 class ImportNetworkAccessPointsCommandTests(TestCase):
