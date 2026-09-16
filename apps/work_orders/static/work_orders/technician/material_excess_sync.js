@@ -3,6 +3,8 @@
 
     const tokenKey = "sicv.technician.token";
     const nativeFetch = window.fetch.bind(window);
+    let activeOrderId = null;
+    let napSearchTimer = null;
 
     function text(value, fallback = "0") {
         if (value === null || value === undefined || value === "") return fallback;
@@ -19,6 +21,13 @@
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
             .toUpperCase();
+    }
+
+    function authHeaders() {
+        const headers = new Headers();
+        const token = sessionStorage.getItem(tokenKey);
+        if (token) headers.set("Authorization", `Token ${token}`);
+        return headers;
     }
 
     function setInstallationExcessVisibility(order) {
@@ -63,12 +72,8 @@
     }
 
     async function refreshAutomaticExcess(materialsUrl) {
-        const headers = new Headers();
-        const token = sessionStorage.getItem(tokenKey);
-        if (token) headers.set("Authorization", `Token ${token}`);
-
         try {
-            const response = await nativeFetch(materialsUrl, {headers});
+            const response = await nativeFetch(materialsUrl, {headers: authHeaders()});
             if (!response.ok) return;
             const payload = await response.json();
             renderAutomaticExcess(payload);
@@ -76,6 +81,129 @@
             // El flujo principal ya informa errores de red. Este refresco solo
             // mantiene sincronizado el resumen visual y no debe duplicar avisos.
         }
+    }
+
+    function createNapSearchBox(input) {
+        if (!input || document.querySelector("#field-nap-search-results")) return null;
+
+        input.autocomplete = "off";
+        input.placeholder = "Escribe código o nombre de la NAP";
+
+        const help = document.createElement("small");
+        help.id = "field-nap-search-help";
+        help.textContent = "Escribe al menos 2 caracteres y selecciona una NAP del catálogo de la sede.";
+        help.style.display = "block";
+        help.style.marginTop = "6px";
+        help.style.color = "#667085";
+
+        const results = document.createElement("div");
+        results.id = "field-nap-search-results";
+        results.hidden = true;
+        results.style.marginTop = "6px";
+        results.style.border = "1px solid #d0d5dd";
+        results.style.borderRadius = "10px";
+        results.style.background = "#fff";
+        results.style.maxHeight = "240px";
+        results.style.overflowY = "auto";
+        results.style.boxShadow = "0 10px 24px rgba(16, 24, 40, 0.10)";
+        results.style.position = "relative";
+        results.style.zIndex = "20";
+
+        input.insertAdjacentElement("afterend", results);
+        results.insertAdjacentElement("afterend", help);
+        return results;
+    }
+
+    function renderNapResults(payload) {
+        const input = document.querySelector("#field-nap");
+        const resultsBox = document.querySelector("#field-nap-search-results");
+        if (!input || !resultsBox) return;
+
+        resultsBox.replaceChildren();
+        const results = payload?.results || [];
+
+        if (!payload?.catalog_enabled) {
+            const empty = document.createElement("div");
+            empty.textContent = "El catálogo NAP de esta sede aún no fue cargado.";
+            empty.style.padding = "12px";
+            empty.style.color = "#667085";
+            resultsBox.append(empty);
+            resultsBox.hidden = false;
+            return;
+        }
+
+        if (!results.length) {
+            const empty = document.createElement("div");
+            empty.textContent = "No se encontraron NAP con ese código o nombre.";
+            empty.style.padding = "12px";
+            empty.style.color = "#667085";
+            resultsBox.append(empty);
+            resultsBox.hidden = false;
+            return;
+        }
+
+        results.forEach((nap) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = nap.name;
+            button.dataset.napId = nap.id;
+            button.style.display = "block";
+            button.style.width = "100%";
+            button.style.padding = "11px 12px";
+            button.style.border = "0";
+            button.style.borderBottom = "1px solid #eaecf0";
+            button.style.background = "#fff";
+            button.style.textAlign = "left";
+            button.style.cursor = "pointer";
+            button.addEventListener("click", () => {
+                input.value = nap.name;
+                input.dataset.napId = String(nap.id);
+                resultsBox.hidden = true;
+                input.focus();
+            });
+            resultsBox.append(button);
+        });
+        resultsBox.hidden = false;
+    }
+
+    async function searchNaps(query) {
+        if (!activeOrderId) return;
+        try {
+            const url = `/api/technicians/work-orders/${activeOrderId}/naps/?q=${encodeURIComponent(query)}`;
+            const response = await nativeFetch(url, {headers: authHeaders()});
+            if (!response.ok) return;
+            renderNapResults(await response.json());
+        } catch (_error) {
+            const resultsBox = document.querySelector("#field-nap-search-results");
+            if (resultsBox) resultsBox.hidden = true;
+        }
+    }
+
+    function initNapSearch() {
+        const input = document.querySelector("#field-nap");
+        const resultsBox = createNapSearchBox(input);
+        if (!input || !resultsBox) return;
+
+        input.addEventListener("input", () => {
+            input.dataset.napId = "";
+            clearTimeout(napSearchTimer);
+            const query = input.value.trim();
+            if (query.length < 2 || !activeOrderId) {
+                resultsBox.hidden = true;
+                return;
+            }
+            napSearchTimer = setTimeout(() => searchNaps(query), 250);
+        });
+
+        input.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") resultsBox.hidden = true;
+        });
+
+        document.addEventListener("click", (event) => {
+            if (event.target !== input && !resultsBox.contains(event.target)) {
+                resultsBox.hidden = true;
+            }
+        });
     }
 
     window.fetch = async function (input, init = {}) {
@@ -87,12 +215,11 @@
                 init.method || (typeof input !== "string" ? input.method : "GET")
             ).toUpperCase();
 
-            // El detalle de la OT decide si el panel de excesos corresponde.
-            if (
-                response.ok &&
-                method === "GET" &&
-                /\/work-orders\/\d+\/(?:\?.*)?$/.test(url)
-            ) {
+            // El detalle de la OT decide si el panel de excesos corresponde y
+            // también identifica qué OT debe usarse al buscar NAP por sede.
+            const detailMatch = url.match(/\/work-orders\/(\d+)\/(?:\?.*)?$/);
+            if (response.ok && method === "GET" && detailMatch) {
+                activeOrderId = detailMatch[1];
                 void response.clone().json().then(setInstallationExcessVisibility);
             }
 
@@ -116,4 +243,6 @@
 
         return response;
     };
+
+    initNapSearch();
 })();
