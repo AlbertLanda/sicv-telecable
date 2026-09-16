@@ -35,7 +35,7 @@ class ProfileView(LoginRequiredMixin, UpdateView):
 
 
 class PersonnelListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
-    """Directorio operativo de personal para Contabilidad y Administración."""
+    """Directorio operativo de personal para Administración."""
 
     model = User
     template_name = "accounts/personnel_list.html"
@@ -106,8 +106,9 @@ class PersonnelUpdateView(LoginRequiredMixin, PermissionRequiredMixin, UpdateVie
     def get_object(self, queryset=None):
         user = super().get_object(queryset=queryset)
 
-        # Contabilidad administra personal operativo. Las cuentas técnicas de
-        # superusuario/administrador quedan reservadas a otro superusuario.
+        # Un administrador operativo administra personal común. Las cuentas
+        # de administrador y superusuario quedan reservadas al superusuario,
+        # que representa la capa administrativa con permisos ampliados.
         if (
             not self.request.user.is_superuser
             and (user.is_superuser or user.role == User.Role.ADMIN)
