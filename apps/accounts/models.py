@@ -29,6 +29,10 @@ class User(AbstractUser):
     # NOC, en cambio, consulta la ficha del abonado como contexto para soporte,
     # pero no administra sus datos comerciales. Sus permisos base se limitan
     # al flujo operativo de incidencias.
+    #
+    # Almacén necesita consultar los movimientos de materiales para acceder al
+    # reporte logístico. No hereda permisos de incidencias NOC: ambos módulos
+    # comparten navegación, pero responden a responsabilidades distintas.
     ROLE_BASELINE_PERMISSIONS = {
         Role.ATC: frozenset(
             {
@@ -51,6 +55,12 @@ class User(AbstractUser):
                 "work_orders.view_incident",
                 "work_orders.start_incident",
                 "work_orders.close_incident",
+            }
+        ),
+
+        Role.WAREHOUSE: frozenset(
+            {
+                "inventory.view_workordermaterialmovement",
             }
         ),
     }
