@@ -283,6 +283,20 @@
         }
     }
 
+    function initMaterialRemarksUx() {
+        ["#installed-material-remarks", "#removed-material-remarks"].forEach((selector) => {
+            const input = document.querySelector(selector);
+            const field = input?.closest(".field");
+            if (!input || !field) return;
+
+            // Se conserva el campo en el DOM/backend para no romper registros
+            // históricos ni el contrato del API. En el flujo nuevo el técnico
+            // concentra cualquier observación en el cierre general de la OT.
+            input.value = "";
+            field.hidden = true;
+        });
+    }
+
     function syncEvidenceSelection() {
         const input = document.querySelector("#evidence-file");
         const selected = document.querySelector("#evidence-selected-file");
@@ -416,5 +430,6 @@
     initTerminalSelect();
     initNapSearch();
     initFieldSheetUx();
+    initMaterialRemarksUx();
     initEvidenceCapture();
 })();
