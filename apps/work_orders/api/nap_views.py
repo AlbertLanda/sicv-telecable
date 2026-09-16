@@ -20,6 +20,24 @@ from apps.work_orders.nap_catalog import NetworkAccessPoint
 from apps.work_orders.services import update_field_sheet
 
 
+TERMINAL_MIN = 1
+TERMINAL_MAX = 16
+
+
+def _normalize_terminal(value):
+    """Devuelve el borne canónico 01..16 o None si el valor no es válido."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if not raw.isdigit():
+        return None
+
+    number = int(raw)
+    if number < TERMINAL_MIN or number > TERMINAL_MAX:
+        return None
+    return f"{number:02d}"
+
+
 class NetworkAccessPointSearchView(TechnicianWorkOrderObjectMixin, GenericAPIView):
     """Busca NAP activas exclusivamente dentro de la sede de la OT propia."""
 
@@ -82,6 +100,15 @@ class CatalogFieldSheetView(TechnicianWorkOrderObjectMixin, GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
+
+        if "terminal" in data:
+            terminal = _normalize_terminal(data.get("terminal"))
+            if terminal is None:
+                return Response(
+                    {"terminal": ["Seleccione un borne válido del 01 al 16."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            data["terminal"] = terminal
 
         if "nap" in data:
             incoming_nap = (data.get("nap") or "").strip()
