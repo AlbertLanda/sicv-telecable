@@ -121,7 +121,7 @@ class PersonnelManagementTests(TestCase):
 
         self.assertNotIn(self.deposit, form.fields["office"].queryset)
         self.assertNotIn(self.deposit, form.fields["allowed_offices"].queryset)
-        self.assertContains(response, "disponibles automáticamente")
+        self.assertContains(response, "se habilitan automáticamente")
 
     def test_cash_offices_are_rendered_as_independent_checkboxes(self):
         self.client.force_login(self.admin)
@@ -130,9 +130,14 @@ class PersonnelManagementTests(TestCase):
             reverse("accounts:personnel_edit", kwargs={"pk": self.atc.pk})
         )
         form = response.context["form"]
+        expected = form.fields["allowed_offices"].queryset.count()
 
         self.assertEqual(form.fields["allowed_offices"].widget.input_type, "checkbox")
-        self.assertContains(response, 'name="allowed_offices"', count=3)
+        self.assertContains(
+            response,
+            'type="checkbox" name="allowed_offices"',
+            count=expected,
+        )
         self.assertContains(response, self.main_office.name)
         self.assertContains(response, self.cash_office.name)
         self.assertNotContains(response, "Ctrl")
