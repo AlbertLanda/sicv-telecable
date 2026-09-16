@@ -22,7 +22,11 @@ class User(AbstractUser):
     #
     # ATC necesita poder completar el ciclo que realmente realiza en oficina:
     # registrar y actualizar abonados, mantener sus direcciones, suscripciones
-    # y contratos, emitir/consultar OT y gestionar su programación.
+    # y contratos, emitir/consultar OT y gestionar su programación. También
+    # necesita consultar la situación económica del abonado para responder en
+    # ventanilla o por teléfono: deuda, historial de pagos y comprobantes.
+    # Esos permisos son solo de lectura; registrar/anular pagos, crear cargos o
+    # conceder compromisos siguen requiriendo permisos explícitos.
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
     #
@@ -42,6 +46,9 @@ class User(AbstractUser):
                 "work_orders.view_incident",
                 "work_orders.schedule_workorder",
                 "work_orders.cancel_workorder",
+                "payments.view_charge",
+                "payments.view_payment",
+                "payments.view_receipt",
             }
         ),
 
