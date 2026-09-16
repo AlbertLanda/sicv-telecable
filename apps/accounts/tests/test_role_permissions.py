@@ -20,8 +20,22 @@ class ATCRoleBaselinePermissionTests(TestCase):
         self.assertTrue(self.user.has_perm("work_orders.schedule_workorder"))
         self.assertFalse(self.user.has_perm("work_orders.assign_workorder"))
 
+    def test_atc_can_consult_customer_billing_information(self):
+        self.assertTrue(self.user.has_perm("payments.view_charge"))
+        self.assertTrue(self.user.has_perm("payments.view_payment"))
+        self.assertTrue(self.user.has_perm("payments.view_receipt"))
+
+    def test_atc_does_not_inherit_payment_mutation_permissions(self):
+        self.assertFalse(self.user.has_perm("payments.add_charge"))
+        self.assertFalse(self.user.has_perm("payments.add_payment"))
+        self.assertFalse(self.user.has_perm("payments.void_payment"))
+        self.assertFalse(
+            self.user.has_perm("payments.grant_paymentcommitment")
+        )
+
     def test_inactive_atc_does_not_inherit_role_capabilities(self):
         self.user.is_active = False
 
         self.assertFalse(self.user.has_perm("customers.add_customer"))
         self.assertFalse(self.user.has_perm("work_orders.schedule_workorder"))
+        self.assertFalse(self.user.has_perm("payments.view_payment"))
