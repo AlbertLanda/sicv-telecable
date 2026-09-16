@@ -30,9 +30,13 @@ from apps.work_orders.models import (
     OrderReason,
     OrderType,
     WorkOrder,
+    WorkOrderFieldSheet,
     WorkOrderStatusHistory,
 )
-from apps.work_orders.services import create_work_order
+from apps.work_orders.services import (
+    create_work_order,
+    get_subscription_technical_context,
+)
 
 
 DERIVATION_MARKER = "Incidencia NOC origen: {order_number}"
@@ -183,6 +187,50 @@ def derived_fault_for_incident(order):
     )
 
 
+def _seed_fault_field_sheet_from_previous_context(fault_order):
+    """Carga en la nueva avería los últimos datos técnicos conocidos.
+
+    NAP, borne, MAC/equipo y precinto describen el estado conocido del punto de
+    servicio. Si ya fueron registrados en una OT física anterior no se obliga
+    al siguiente técnico a digitarlos de nuevo: la avería nace con una copia
+    editable de esos valores. Las observaciones NO se heredan porque pertenecen
+    a la visita anterior y deben quedar vacías para la nueva atención.
+
+    La OT anterior conserva su propia ficha sin modificación; esta es una
+    fotografía inicial independiente que el técnico de la avería podrá
+    corregir cuando tome la orden.
+    """
+    context = get_subscription_technical_context(
+        fault_order.subscription,
+        exclude_order=fault_order,
+    )
+
+    if not context or context.get("field_sheet") is None:
+        return None
+
+    source_sheet = context["field_sheet"]
+
+    if source_sheet.is_empty:
+        return None
+
+    inherited_values = {
+        "nap": source_sheet.nap,
+        "terminal": source_sheet.terminal,
+        "equipment_code": source_sheet.equipment_code,
+        "seal_number": source_sheet.seal_number,
+    }
+
+    if not any(inherited_values.values()):
+        return None
+
+    return WorkOrderFieldSheet.objects.create(
+        work_order=fault_order,
+        notes="",
+        updated_by=None,
+        **inherited_values,
+    )
+
+
 def _mark_incident_derived(order, user, fault_order, diagnosis):
     """IN_PROGRESS -> DERIVED con defensa optimista y trazabilidad."""
     now = timezone.now()
@@ -283,6 +331,8 @@ def derive_incident_to_fault(
         detail=child_detail,
         scheduled_at=None,
     )
+
+    _seed_fault_field_sheet_from_previous_context(fault_order)
 
     _mark_incident_derived(
         order,
