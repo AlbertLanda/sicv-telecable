@@ -297,6 +297,18 @@
         });
     }
 
+    function initLiquidationUx() {
+        const notes = document.querySelector("#liquidation-notes");
+        const field = notes?.closest(".field");
+        if (!notes || !field) return;
+
+        // El cierre previo ya ofrece una observación general opcional. En la
+        // liquidación el técnico solo debe describir obligatoriamente el trabajo
+        // ejecutado/solución; se conserva technical_notes vacío por compatibilidad.
+        notes.value = "";
+        field.hidden = true;
+    }
+
     function syncEvidenceSelection() {
         const input = document.querySelector("#evidence-file");
         const selected = document.querySelector("#evidence-selected-file");
@@ -431,5 +443,6 @@
     initNapSearch();
     initFieldSheetUx();
     initMaterialRemarksUx();
+    initLiquidationUx();
     initEvidenceCapture();
 })();
