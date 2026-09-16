@@ -94,7 +94,7 @@
             <div class="col-md-6">
                 <label class="form-label fw-semibold" for="{{ form.fault_reason.id_for_label }}">{{ form.fault_reason.label }}</label>
                 {{ form.fault_reason }}
-                <div class="form-text">Opcional; el diagnóstico escrito siempre quedará registrado.</div>
+                <div class="form-text">Opcional; solo se muestran los motivos del tipo de avería seleccionado.</div>
                 {% for error in form.fault_reason.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
             </div>
             <div class="col-12">
@@ -124,4 +124,75 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const faultType = document.getElementById("id_fault_type");
+    const faultReason = document.getElementById("id_fault_reason");
+
+    if (!faultType || !faultReason) {
+        return;
+    }
+
+    // El backend ya valida que el motivo pertenezca a la avería elegida.
+    // Aquí replicamos esa relación en la interfaz para que NOC nunca vea
+    // motivos de Cable cuando eligió Internet, ni viceversa.
+    const reasonOptions = Array.from(faultReason.options)
+        .filter(option => option.value)
+        .map(option => ({
+            value: option.value,
+            text: option.textContent.trim(),
+            selected: option.selected,
+        }));
+
+    const initialReason = faultReason.value;
+
+    function refreshReasons() {
+        const selectedTypeOption = faultType.options[faultType.selectedIndex];
+        const selectedTypeName = selectedTypeOption && selectedTypeOption.value
+            ? selectedTypeOption.textContent.trim()
+            : "";
+        const previousValue = faultReason.value || initialReason;
+
+        faultReason.replaceChildren();
+
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "Sin motivo catalogado";
+        faultReason.appendChild(emptyOption);
+
+        if (!selectedTypeName) {
+            faultReason.value = "";
+            faultReason.disabled = true;
+            return;
+        }
+
+        const prefix = `${selectedTypeName} - `;
+        const compatibleReasons = reasonOptions.filter(option =>
+            option.text.startsWith(prefix)
+        );
+
+        compatibleReasons.forEach(optionData => {
+            const option = document.createElement("option");
+            option.value = optionData.value;
+            // El selector de tipo ya da el contexto; evitamos repetirlo.
+            option.textContent = optionData.text.slice(prefix.length);
+            faultReason.appendChild(option);
+        });
+
+        faultReason.disabled = false;
+
+        if (compatibleReasons.some(option => option.value === previousValue)) {
+            faultReason.value = previousValue;
+        } else {
+            faultReason.value = "";
+        }
+    }
+
+    faultType.addEventListener("change", refreshReasons);
+    refreshReasons();
+});
+</script>
 {% endblock %}
