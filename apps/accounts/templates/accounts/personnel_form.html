@@ -3,6 +3,46 @@
 {% block title %}SICV - {{ form_title }}{% endblock %}
 
 {% block content %}
+<style>
+    .office-check-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: .65rem;
+    }
+    .office-check-card {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        min-height: 48px;
+        padding: .7rem .85rem;
+        margin: 0;
+        border: 1px solid var(--sicv-line);
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+    }
+    .office-check-card:hover {
+        border-color: #8bbbea;
+        background: #f7fbff;
+    }
+    .office-check-card:has(input:checked) {
+        border-color: #4c9df0;
+        background: #eef6ff;
+        box-shadow: 0 0 0 2px rgba(44, 139, 236, .08);
+    }
+    .office-check-card .form-check-input {
+        margin: 0;
+        flex: 0 0 auto;
+    }
+    .office-check-copy {
+        color: #244b70;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    .office-check-card[hidden] { display: none !important; }
+</style>
+
 <div class="py-3">
     <div class="card card-custom mb-3">
         <div class="card-header panel-head d-flex align-items-center justify-content-between gap-2">
@@ -93,18 +133,28 @@
                     <div class="col-12">
                         <h6 class="mb-1">Oficinas habilitadas para cobro en efectivo</h6>
                         <div class="text-muted small">
-                            Este bloque solo aplica al rol Atención al Cliente. Los depósitos bancarios de la sede quedan disponibles automáticamente para ATC y no se asignan aquí.
+                            Marque las oficinas físicas donde esta persona puede recibir dinero en efectivo. Puede activar o quitar una oficina con un solo clic.
                         </div>
                     </div>
-                    <div class="col-lg-7">
-                        <label class="form-label fw-semibold" for="{{ form.allowed_offices.id_for_label }}">{{ form.allowed_offices.label }}</label>
-                        {{ form.allowed_offices }}
-                        {% if form.allowed_offices.help_text %}<div class="form-text">{{ form.allowed_offices.help_text }}</div>{% endif %}
+                    <div class="col-lg-8">
+                        <label class="form-label fw-semibold">{{ form.allowed_offices.label }}</label>
+                        <div id="allowedOfficesGrid" class="office-check-grid">
+                            {% for checkbox in form.allowed_offices %}
+                                <label class="office-check-card">
+                                    {{ checkbox.tag }}
+                                    <span class="office-check-copy">{{ checkbox.choice_label }}</span>
+                                </label>
+                            {% empty %}
+                                <div class="text-muted small">No hay oficinas físicas activas disponibles.</div>
+                            {% endfor %}
+                        </div>
+                        {% if form.allowed_offices.help_text %}<div class="form-text mt-2">{{ form.allowed_offices.help_text }}</div>{% endif %}
                         {% for error in form.allowed_offices.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
-                    <div class="col-lg-5">
+                    <div class="col-lg-4">
                         <div class="alert alert-info mb-0">
-                            <strong>Depósitos:</strong> no necesitan marcarse. Un ATC puede seleccionar el depósito de la sede cuando registra una transferencia, depósito bancario o billetera.
+                            <strong><i class="bi bi-bank me-1"></i> Depósitos</strong><br>
+                            No necesitan marcarse. El depósito de la sede está disponible automáticamente para ATC cuando registra una transferencia, depósito bancario o billetera.
                         </div>
                     </div>
                 </div>
@@ -129,10 +179,12 @@
     const branch = document.getElementById("{{ form.branch.id_for_label }}");
     const role = document.getElementById("{{ form.role.id_for_label }}");
     const office = document.getElementById("{{ form.office.id_for_label }}");
-    const allowed = document.getElementById("{{ form.allowed_offices.id_for_label }}");
     const atcCashScope = document.getElementById("atcCashScope");
+    const allowedCheckboxes = Array.from(
+        document.querySelectorAll('input[name="{{ form.allowed_offices.html_name }}"]')
+    );
 
-    function filterOptions(select, branchId) {
+    function filterOfficeSelect(select, branchId) {
         if (!select) return;
 
         Array.from(select.options).forEach(function (option) {
@@ -146,16 +198,30 @@
         });
     }
 
+    function refreshAllowedOffices() {
+        const branchId = branch ? branch.value : "";
+        const isAtc = role && role.value === "ATC";
+
+        allowedCheckboxes.forEach(function (checkbox) {
+            const visible = !branchId || checkbox.dataset.branch === branchId;
+            const wrapper = checkbox.closest(".office-check-card");
+
+            if (wrapper) wrapper.hidden = !visible;
+            checkbox.disabled = !isAtc || !visible;
+            if (!visible) checkbox.checked = false;
+        });
+    }
+
     function refreshBranch() {
         const branchId = branch ? branch.value : "";
-        filterOptions(office, branchId);
-        filterOptions(allowed, branchId);
+        filterOfficeSelect(office, branchId);
+        refreshAllowedOffices();
     }
 
     function refreshRole() {
         const isAtc = role && role.value === "ATC";
         if (atcCashScope) atcCashScope.style.display = isAtc ? "" : "none";
-        if (allowed) allowed.disabled = !isAtc;
+        refreshAllowedOffices();
     }
 
     if (branch) branch.addEventListener("change", refreshBranch);
