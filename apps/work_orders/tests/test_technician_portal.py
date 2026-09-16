@@ -29,11 +29,25 @@ class TechnicianPortalShellTests(TestCase):
         self.assertContains(response, "MAC / Equipo")
         self.assertContains(response, "Material utilizado en domicilio")
         self.assertContains(response, "Material retirado de domicilio")
-        self.assertContains(response, "Metraje de instalación")
+        self.assertContains(response, "Metraje y exceso de instalación")
         self.assertContains(response, "Cable UTP")
         self.assertContains(response, "Cable coaxial RG6")
         self.assertContains(response, "Fibra óptica Drop")
         self.assertContains(response, "Fotos y archivos")
+
+    def test_installation_meterage_is_an_automatic_summary_not_a_second_form(self):
+        response = self.client.get(reverse("technician_portal:home"))
+        body = response.content.decode()
+
+        self.assertIn(
+            "Resumen automático de los cables instalados por metro",
+            body,
+        )
+        self.assertIn(
+            '<form id="materials-form" class="form-grid compact-form-grid" hidden>',
+            body,
+        )
+        self.assertIn("material_excess_sync.js", body)
 
     def test_portal_keeps_textual_address_and_maps_action_visible(self):
         response = self.client.get(reverse("technician_portal:home"))
