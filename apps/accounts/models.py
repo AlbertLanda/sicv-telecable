@@ -23,10 +23,9 @@ class User(AbstractUser):
     # ATC necesita poder completar el ciclo que realmente realiza en oficina:
     # registrar y actualizar abonados, mantener sus direcciones, suscripciones
     # y contratos, emitir/consultar OT y gestionar su programación. También
-    # necesita consultar la situación económica del abonado para responder en
-    # ventanilla o por teléfono: deuda, historial de pagos y comprobantes.
-    # Esos permisos son solo de lectura; registrar/anular pagos, crear cargos o
-    # conceder compromisos siguen requiriendo permisos explícitos.
+    # necesita consultar la situación económica del abonado y registrar cobros
+    # desde una oficina autorizada. Crear cargos, anular pagos y conceder
+    # compromisos siguen requiriendo permisos explícitos.
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
     #
@@ -49,6 +48,7 @@ class User(AbstractUser):
                 "payments.view_charge",
                 "payments.view_payment",
                 "payments.view_receipt",
+                "payments.add_payment",
             }
         ),
 
@@ -85,6 +85,17 @@ class User(AbstractUser):
         null=True,
         blank=True,
         verbose_name="Oficina"
+    )
+
+    # Oficinas físicas en las que el administrador autoriza al usuario a
+    # registrar cobros. Para ATC esta lista controla qué ventanillas aparecen
+    # en la barra superior. Los depósitos no se asignan aquí: son medios
+    # compartidos de la sede y se habilitan automáticamente.
+    allowed_offices = models.ManyToManyField(
+        Office,
+        related_name="authorized_users",
+        blank=True,
+        verbose_name="Oficinas habilitadas para cobro",
     )
 
     # Dato de contacto, no de identidad: a diferencia de username/nombres,
