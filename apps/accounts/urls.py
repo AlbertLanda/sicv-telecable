@@ -10,6 +10,25 @@ app_name = "accounts"
 
 urlpatterns = [
 
+    # Gestión operativa de personal dentro del SICV. Contabilidad y
+    # Administración usan estas pantallas; el admin de Django queda como
+    # herramienta técnica, no como interfaz cotidiana.
+    path(
+        "personal/",
+        views.PersonnelListView.as_view(),
+        name="personnel_list",
+    ),
+    path(
+        "personal/nuevo/",
+        views.PersonnelCreateView.as_view(),
+        name="personnel_create",
+    ),
+    path(
+        "personal/<int:pk>/editar/",
+        views.PersonnelUpdateView.as_view(),
+        name="personnel_edit",
+    ),
+
     # Mi perfil: identidad de solo lectura + contacto editable.
     path(
         "perfil/",
