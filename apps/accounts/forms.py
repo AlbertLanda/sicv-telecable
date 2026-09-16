@@ -59,8 +59,8 @@ class OfficeSelect(forms.Select):
         return option
 
 
-class OfficeSelectMultiple(forms.SelectMultiple):
-    """Versión múltiple del selector de oficinas físicas por sede."""
+class OfficeCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
+    """Casillas de oficinas físicas, con sede disponible para filtrado JS."""
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(
@@ -115,8 +115,8 @@ class PersonnelForm(forms.ModelForm):
             "role": forms.Select(attrs={"class": "form-select"}),
             "branch": forms.Select(attrs={"class": "form-select"}),
             "office": OfficeSelect(attrs={"class": "form-select"}),
-            "allowed_offices": OfficeSelectMultiple(
-                attrs={"class": "form-select", "size": "7"}
+            "allowed_offices": OfficeCheckboxSelectMultiple(
+                attrs={"class": "form-check-input"}
             ),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -149,8 +149,8 @@ class PersonnelForm(forms.ModelForm):
             ]
 
         self.fields["allowed_offices"].help_text = (
-            "Solo aplica a Atención al Cliente. Los depósitos de la sede se "
-            "habilitan automáticamente y no necesitan marcarse aquí."
+            "Marque las cajas físicas donde el personal ATC puede recibir efectivo. "
+            "Los depósitos de la sede se habilitan automáticamente."
         )
 
     def clean(self):
