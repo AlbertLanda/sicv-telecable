@@ -39,7 +39,7 @@ DERIVATION_MARKER = "Incidencia NOC origen: {order_number}"
 
 
 class IncidentDeriveFaultForm(forms.Form):
-    """Solo pide a NOC la decisión técnica que no puede derivarse del cliente."""
+    """Solo pide a NOC la decisión técnica necesaria para derivar a campo."""
 
     fault_type = forms.ModelChoiceField(
         queryset=OrderType.objects.none(),
@@ -85,12 +85,6 @@ class IncidentDeriveFaultForm(forms.Form):
                 ),
             }
         ),
-    )
-    priority = forms.ChoiceField(
-        label="Prioridad",
-        choices=WorkOrder.Priority.choices,
-        initial=WorkOrder.Priority.NORMAL,
-        widget=forms.Select(attrs={"class": "form-select"}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -233,7 +227,6 @@ def derive_incident_to_fault(
     diagnosis,
     field_detail,
     fault_reason=None,
-    priority=WorkOrder.Priority.NORMAL,
 ):
     """Crea una avería física y deja la incidencia marcada como derivada."""
     _require_permission(user, INCIDENT_TAKE_PERMISSION, "deriva la incidencia a campo")
@@ -286,7 +279,7 @@ def derive_incident_to_fault(
         reason=fault_reason,
         reason_text=order.reason_text,
         attention_type=WorkOrder.AttentionType.FIELD,
-        priority=priority or WorkOrder.Priority.NORMAL,
+        priority=WorkOrder.Priority.NORMAL,
         detail=child_detail,
         scheduled_at=None,
     )
@@ -348,11 +341,6 @@ class IncidentDeriveFaultView(LoginRequiredMixin, PermissionRequiredMixin, FormV
         kwargs["subscription"] = self.get_work_order().subscription
         return kwargs
 
-    def get_initial(self):
-        initial = super().get_initial()
-        initial["priority"] = self.get_work_order().priority
-        return initial
-
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         order = self.get_work_order()
@@ -370,7 +358,6 @@ class IncidentDeriveFaultView(LoginRequiredMixin, PermissionRequiredMixin, FormV
                 fault_reason=form.cleaned_data.get("fault_reason"),
                 diagnosis=form.cleaned_data["diagnosis"],
                 field_detail=form.cleaned_data["field_detail"],
-                priority=form.cleaned_data["priority"],
             )
         except ValidationError as exc:
             form.add_error(None, exc.messages)
