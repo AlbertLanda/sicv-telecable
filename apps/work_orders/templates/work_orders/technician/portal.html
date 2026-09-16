@@ -236,7 +236,7 @@
                             </div>
                             <span id="installed-materials-count" class="mini-badge">0</span>
                         </div>
-                        <p id="field-materials-help" class="helper">Inicia la atención para declarar los materiales realmente instalados o retirados.</p>
+                        <p id="field-materials-help" class="helper">Declara aquí lo que realmente queda instalado. Si el material se mide en metros (UTP, RG-6 o fibra Drop), la cantidad registrada es el metraje instalado y el SICV calcula automáticamente cualquier exceso.</p>
                         <form id="installed-material-form" class="form-grid compact-form-grid">
                             <label class="field">
                                 <span>Material instalado</span>
@@ -295,12 +295,12 @@
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Excesos</p>
-                                <h2>Metraje de instalación</h2>
+                                <h2>Metraje y exceso de instalación</h2>
                             </div>
                             <span id="materials-total" class="mini-badge">Exceso S/ 0.00</span>
                         </div>
-                        <p id="materials-help" class="helper">El técnico registra solo los metros utilizados. El SICV calcula automáticamente los metros incluidos, el exceso y el cobro.</p>
-                        <form id="materials-form" class="form-grid compact-form-grid">
+                        <p id="materials-help" class="helper">Resumen automático de los cables instalados por metro. No vuelvas a registrar el cable aquí: el SICV toma la cantidad de “Material utilizado en domicilio” y calcula metros incluidos, excedentes y cobro.</p>
+                        <form id="materials-form" class="form-grid compact-form-grid" hidden>
                             <label class="field">
                                 <span>Material</span>
                                 <select id="material-type" name="material">
@@ -318,7 +318,7 @@
                             </div>
                         </form>
                         <div id="materials-list" class="material-list"></div>
-                        <div id="materials-empty" class="empty-state compact" hidden>Aún no se registraron metrajes.</div>
+                        <div id="materials-empty" class="empty-state compact" hidden>No hay cables instalados con una regla de exceso aplicable.</div>
                     </section>
 
                     <section class="panel">
@@ -365,5 +365,6 @@
         };
     </script>
     <script src="{% static 'work_orders/technician/portal.js' %}" defer></script>
+    <script src="{% static 'work_orders/technician/material_excess_sync.js' %}" defer></script>
 </body>
 </html>
