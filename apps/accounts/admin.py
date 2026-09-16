@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from apps.accounts.models import User
+from apps.organization.models import Office
 
 
 @admin.register(User)
@@ -75,3 +76,14 @@ class UserAdmin(DjangoUserAdmin):
             },
         ),
     )
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "allowed_offices":
+            # El administrador solo asigna cajas/ventanillas físicas. Los
+            # depósitos son compartidos y se habilitan automáticamente.
+            kwargs["queryset"] = Office.objects.filter(
+                is_active=True,
+                is_deposit=False,
+            ).order_by("branch__name", "name")
+
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
