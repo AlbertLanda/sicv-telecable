@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}SICV - {{ form_title }}{% endblock %}
+
+{% block content %}
+<div class="py-3">
+    <div class="card card-custom mb-3">
+        <div class="card-header panel-head d-flex align-items-center justify-content-between gap-2">
+            <span><i class="bi bi-person-gear me-1"></i> {{ form_title }}</span>
+            <a href="{% url 'accounts:personnel_list' %}" class="btn btn-sm btn-light">Volver</a>
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="card-body">
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="row g-3">
+                    <div class="col-12"><h6 class="mb-0">Datos del personal</h6></div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.username.id_for_label }}">{{ form.username.label }} *</label>
+                        {{ form.username }}
+                        {% for error in form.username.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+                        {{ form.first_name }}
+                        {% for error in form.first_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.last_name.id_for_label }}">{{ form.last_name.label }}</label>
+                        {{ form.last_name }}
+                        {% for error in form.last_name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                        {{ form.email }}
+                        {% for error in form.email.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>
+                        {{ form.phone }}
+                        {% for error in form.phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.role.id_for_label }}">{{ form.role.label }} *</label>
+                        {{ form.role }}
+                        {% for error in form.role.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.branch.id_for_label }}">{{ form.branch.label }}</label>
+                        {{ form.branch }}
+                        {% for error in form.branch.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.office.id_for_label }}">{{ form.office.label }}</label>
+                        {{ form.office }}
+                        <div class="form-text">Oficina habitual del colaborador. Nunca puede ser un depósito.</div>
+                        {% for error in form.office.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end pb-2">
+                        <div class="form-check form-switch">
+                            {{ form.is_active }}
+                            <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+                            <div class="form-text">Desactive una cuenta en vez de eliminarla para conservar su historial.</div>
+                        </div>
+                    </div>
+
+                    {% if form.password1 %}
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ form.password1.id_for_label }}">{{ form.password1.label }} *</label>
+                            {{ form.password1 }}
+                            {% for error in form.password1.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="{{ form.password2.id_for_label }}">{{ form.password2.label }} *</label>
+                            {{ form.password2 }}
+                            {% for error in form.password2.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+
+                <hr class="my-4">
+
+                <div id="atcCashScope" class="row g-3">
+                    <div class="col-12">
+                        <h6 class="mb-1">Oficinas habilitadas para cobro en efectivo</h6>
+                        <div class="text-muted small">
+                            Este bloque solo aplica al rol Atención al Cliente. Los depósitos bancarios de la sede quedan disponibles automáticamente para ATC y no se asignan aquí.
+                        </div>
+                    </div>
+                    <div class="col-lg-7">
+                        <label class="form-label fw-semibold" for="{{ form.allowed_offices.id_for_label }}">{{ form.allowed_offices.label }}</label>
+                        {{ form.allowed_offices }}
+                        {% if form.allowed_offices.help_text %}<div class="form-text">{{ form.allowed_offices.help_text }}</div>{% endif %}
+                        {% for error in form.allowed_offices.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="alert alert-info mb-0">
+                            <strong>Depósitos:</strong> no necesitan marcarse. Un ATC puede seleccionar el depósito de la sede cuando registra una transferencia, depósito bancario o billetera.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-footer d-flex justify-content-end gap-2">
+                <a href="{% url 'accounts:personnel_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> {{ submit_label }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    "use strict";
+
+    const branch = document.getElementById("{{ form.branch.id_for_label }}");
+    const role = document.getElementById("{{ form.role.id_for_label }}");
+    const office = document.getElementById("{{ form.office.id_for_label }}");
+    const allowed = document.getElementById("{{ form.allowed_offices.id_for_label }}");
+    const atcCashScope = document.getElementById("atcCashScope");
+
+    function filterOptions(select, branchId) {
+        if (!select) return;
+
+        Array.from(select.options).forEach(function (option) {
+            const optionBranch = option.dataset.branch;
+            if (!optionBranch) return;
+
+            const visible = !branchId || optionBranch === branchId;
+            option.hidden = !visible;
+            option.disabled = !visible;
+            if (!visible) option.selected = false;
+        });
+    }
+
+    function refreshBranch() {
+        const branchId = branch ? branch.value : "";
+        filterOptions(office, branchId);
+        filterOptions(allowed, branchId);
+    }
+
+    function refreshRole() {
+        const isAtc = role && role.value === "ATC";
+        if (atcCashScope) atcCashScope.style.display = isAtc ? "" : "none";
+        if (allowed) allowed.disabled = !isAtc;
+    }
+
+    if (branch) branch.addEventListener("change", refreshBranch);
+    if (role) role.addEventListener("change", refreshRole);
+
+    refreshBranch();
+    refreshRole();
+})();
+</script>
+{% endblock %}
