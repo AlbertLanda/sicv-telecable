@@ -121,8 +121,10 @@ class TechnicianNapCatalogTests(WorkOrderTestCase):
 
 class ImportNetworkAccessPointsCommandTests(TestCase):
     def setUp(self):
-        self.huancayo = Branch.objects.create(code="HYO", name="Huancayo")
-        Branch.objects.create(code="ORO", name="La Oroya")
+        # organization.0002 ya siembra las sedes reales. Reutilizarlas evita
+        # crear homónimos que el propio importador debe rechazar por seguridad.
+        self.huancayo = Branch.objects.get(name__iexact="Huancayo")
+        self.oroya = Branch.objects.get(name__iexact="La Oroya")
 
     def test_import_skips_empty_incomplete_and_other_branch_rows(self):
         content = "\n".join(
