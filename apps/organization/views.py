@@ -5,9 +5,10 @@ from django.views.decorators.http import require_POST
 from apps.organization.context_processors import (
     ACTIVE_BRANCH_SESSION_KEY,
     ACTIVE_OFFICE_SESSION_KEY,
+    available_offices_for_user,
     get_active_branch,
 )
-from apps.organization.models import Branch, Office
+from apps.organization.models import Branch
 
 
 # Adónde se cae al cambiar de sede o de oficina.
@@ -17,10 +18,6 @@ from apps.organization.models import Branch, Office
 # abonado de Jauja no se sigue consultando porque la barra diga ahora Oroya,
 # y una pantalla de cobro con las series de una ventanilla deja de valer en
 # cuanto se elige otra.
-#
-# Antes se volvía al `next` que el formulario traía, así que el operador
-# seguía viendo la misma ficha con la barra diciendo otra cosa. La pantalla
-# no mentía en un rincón: mentía entera, y no había nada que lo delatara.
 DESTINO_TRAS_CAMBIAR = "customers:search"
 
 
@@ -59,21 +56,17 @@ def set_active_branch(request):
 @require_POST
 @login_required
 def set_active_office(request):
-    """
-    Cambia la oficina desde la que se atiende.
+    """Cambia la oficina activa únicamente dentro del ámbito autorizado.
 
-    La oficina decide de qué talonarios se emite, así que cambiarla cambia
-    lo que la pantalla de cobro puede ofrecer: se vuelve al buscador en vez
-    de dejar delante un formulario armado con las series de otra ventanilla.
-
-    La oficina se resuelve contra la sede activa, no contra todas: elegir
-    por id una oficina de otra sede no entra en sesión.
+    Para ATC una oficina física debe haber sido habilitada por el
+    administrador. Los depósitos de la sede son compartidos y por eso están
+    incluidos automáticamente. La validación se hace en servidor: ocultar una
+    opción en la barra no basta para impedir que alguien envíe otro id a mano.
     """
+    branch = get_active_branch(request)
     office = get_object_or_404(
-        Office,
+        available_offices_for_user(request.user, branch),
         pk=request.POST.get("office"),
-        branch=get_active_branch(request),
-        is_active=True,
     )
 
     request.session[ACTIVE_OFFICE_SESSION_KEY] = office.pk
