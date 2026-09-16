@@ -14,6 +14,26 @@
     .tc-report-form { max-width:560px; }
     .tc-report-form .tc-form-field { max-width:260px; }
     .tc-report-form .tc-form-field.narrow { max-width:160px; }
+
+    /* En algunos navegadores el indicador nativo del <select> se pierde con
+       el estilo compartido del formulario y el campo termina pareciendo una
+       caja de texto. La flecha visible deja claro que Reporte y Formato son
+       listas desplegables, sin cambiar el comportamiento nativo ni el teclado. */
+    .tc-select-wrap { position:relative; }
+    .tc-select-wrap .form-select {
+        padding-right:2.35rem;
+        cursor:pointer;
+        background-image:none;
+    }
+    .tc-select-indicator {
+        position:absolute;
+        right:12px;
+        top:50%;
+        transform:translateY(-50%);
+        pointer-events:none;
+        color:#55718e;
+        font-size:.78rem;
+    }
 </style>
 {% endblock %}
 
@@ -77,12 +97,18 @@ pantalla; abrirles una pestaña dejaria una en blanco detras de la descarga.
 
                     <label class="tc-form-label" for="{{ form.scope.id_for_label }}">Reporte</label>
                     <div class="tc-form-field">
-                        {{ form.scope }}
+                        <div class="tc-select-wrap">
+                            {{ form.scope }}
+                            <i class="bi bi-chevron-down tc-select-indicator" aria-hidden="true"></i>
+                        </div>
                     </div>
 
                     <label class="tc-form-label" for="{{ form.export_format.id_for_label }}">Formato</label>
                     <div class="tc-form-field narrow">
-                        {{ form.export_format }}
+                        <div class="tc-select-wrap">
+                            {{ form.export_format }}
+                            <i class="bi bi-chevron-down tc-select-indicator" aria-hidden="true"></i>
+                        </div>
                     </div>
 
                 </div>
