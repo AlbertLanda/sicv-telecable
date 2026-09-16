@@ -46,6 +46,39 @@ DEFAULT_SCOPE = "ALL"
 SCOPE_CHOICES = [(key, value["label"]) for key, value in REPORT_SCOPES.items()]
 
 
+# Sobre qué fecha de la orden se recorta el periodo.
+#
+# Son dos preguntas distintas y cada una tiene su fecha correcta:
+#
+# «issued» -emisión- es la del reporte en pantalla. Es la fecha que la hoja
+# imprime en su primera columna, así que es la que deja cuadrar lo que se ve
+# con lo que se pidió.
+#
+# «attended» -atención real- es la de logística. El material sale de la
+# mochila del técnico cuando lo usa, no cuando ATC emitió la orden. Con corte
+# semanal la diferencia no es un caso raro: una orden emitida el viernes y
+# atendida el lunes cae en la semana equivocada todos los viernes, y el cuadre
+# de mochila no cierra por material que sí se consumió, solo que en la otra
+# semana.
+#
+# Una orden sin atender no tiene `attended_at` y por eso no entra en el
+# recorte por atención. Es lo correcto para un cuadre -material declarado en
+# una orden aún en curso todavía puede corregirse- y además vuelve solo: en
+# cuanto la orden se cierra, la siguiente consulta del mismo periodo ya la
+# trae.
+DATE_BASIS = {
+    "issued": "work_order__created_at__date",
+    "attended": "work_order__attended_at__date",
+}
+
+DEFAULT_DATE_BASIS = "issued"
+
+DATE_BASIS_CHOICES = [
+    ("issued", "Emisión de la orden"),
+    ("attended", "Atención real"),
+]
+
+
 # Las columnas, en el orden del sistema que se reemplaza.
 #
 # Se declaran una sola vez y las cuatro salidas -pantalla, PDF, Excel y Word-
@@ -136,22 +169,36 @@ def _row(movement):
     }
 
 
-def material_movements(*, branch, date_from, date_to, scope=DEFAULT_SCOPE):
+def material_movements(
+    *,
+    branch,
+    date_from,
+    date_to,
+    scope=DEFAULT_SCOPE,
+    date_basis=DEFAULT_DATE_BASIS,
+):
     """Los movimientos de material del periodo, ya acotados y ordenados.
 
-    El rango se aplica sobre la **emisión de la orden** -`created_at`-, que es
-    la fecha que el reporte muestra en su primera columna y con la que el
-    operador pide el periodo. Acotar por la fecha del movimiento daría un
-    recuento distinto del que el propio listado deja sumar: una orden emitida
-    el 30 y atendida el 2 aparecería en el reporte de un mes con la fecha de
-    emisión del otro impresa al lado, y quien cuadra el almacén no tendría
-    forma de explicar la diferencia.
+    Por defecto el rango se aplica sobre la **emisión de la orden**
+    -`created_at`-, que es la fecha que el reporte muestra en su primera
+    columna y con la que el operador pide el periodo. Acotar por la fecha del
+    movimiento daría un recuento distinto del que el propio listado deja
+    sumar: una orden emitida el 30 y atendida el 2 aparecería en el reporte de
+    un mes con la fecha de emisión del otro impresa al lado, y quien cuadra el
+    almacén no tendría forma de explicar la diferencia.
+
+    `date_basis="attended"` recorta por la atención real en vez de por la
+    emisión. No es una variante del reporte: es la pregunta de logística, que
+    cuadra mochilas por semana y necesita el día en que el material se
+    consumió. Ver `DATE_BASIS`.
 
     Las dos fechas son inclusivas. `date_to` se compara con `__date` para que
     el último día entre entero: contra el `DateTimeField` pelado, «hasta el
     15» dejaría fuera todo lo emitido después de las 00:00 de ese día, que es
     prácticamente todo.
     """
+    campo_fecha = DATE_BASIS.get(date_basis, DATE_BASIS[DEFAULT_DATE_BASIS])
+
     movements = (
         WorkOrderMaterialMovement.objects
         .select_related(
@@ -164,10 +211,10 @@ def material_movements(*, branch, date_from, date_to, scope=DEFAULT_SCOPE):
             "work_order__subscription__customer",
             "work_order__subscription__address",
         )
-        .filter(
-            work_order__created_at__date__gte=date_from,
-            work_order__created_at__date__lte=date_to,
-        )
+        .filter(**{
+            f"{campo_fecha}__gte": date_from,
+            f"{campo_fecha}__lte": date_to,
+        })
     )
 
     # La sede acota siempre. El reporte se imprime con el nombre de una sede

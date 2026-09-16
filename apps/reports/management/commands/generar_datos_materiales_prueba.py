@@ -42,7 +42,12 @@ from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.inventory.services import record_work_order_material
 from apps.organization.models import Branch, Zone
 from apps.services.models import Plan, ServiceType, Subscription
-from apps.work_orders.models import OrderType, WorkOrder, WorkOrderFieldSheet
+from apps.work_orders.models import (
+    OrderType,
+    WorkOrder,
+    WorkOrderFieldSheet,
+    WorkOrderLiquidation,
+)
 
 
 # Los números de orden de la data de prueba. Llevan prefijo propio para que
@@ -333,12 +338,23 @@ class Command(BaseCommand):
 
         return orden, creada
 
-    def cerrar(self, orden, estado):
+    def cerrar(self, orden, estado, *, tecnico=None, validada=False):
         """Deja la orden en su estado final, con su fecha de atención.
 
         Se escribe con `update()` para no disparar `change_status()`: el
         escenario necesita órdenes ya cerradas, no comprobar otra vez unas
         transiciones que tienen sus propias pruebas.
+
+        Una orden liquidada recibe además su `WorkOrderLiquidation`. En
+        operación real las dos cosas ocurren juntas —`liquidate_order()` crea
+        el documento y cambia el estado en la misma transacción—, así que
+        fijar solo el estado produciría una orden «Liquidada» sin liquidación,
+        que es una combinación que el sistema nunca genera.
+
+        Importa más de lo que parece desde que el feed de logística viaja con
+        `is_liquidated`: con el documento ausente ese campo sale en falso para
+        todas las órdenes, y quien programa al otro lado contra esta data de
+        prueba nunca vería el caso que decide si consolida el consumo.
         """
         if estado == WorkOrder.Status.IN_PROGRESS:
             return
@@ -348,6 +364,29 @@ class Command(BaseCommand):
             attended_at=timezone.now(),
         )
         orden.refresh_from_db()
+
+        if estado != WorkOrder.Status.LIQUIDATED:
+            return
+
+        # `validada` reparte los escenarios entre las dos situaciones que
+        # logística distingue: la declaración ya firme y la que todavía está
+        # en revisión. Con todas en el mismo estado, la regla de «consolidar
+        # solo lo validado» no se podría probar contra esta data.
+        revision = (
+            WorkOrderLiquidation.ReviewStatus.VALIDATED
+            if validada
+            else WorkOrderLiquidation.ReviewStatus.LIQUIDATED
+        )
+
+        WorkOrderLiquidation.objects.update_or_create(
+            work_order=orden,
+            defaults={
+                "liquidated_by": tecnico or orden.assigned_technician,
+                "liquidated_at": timezone.now(),
+                "resolution_detail": "Atención ejecutada por la data de prueba.",
+                "review_status": revision,
+            },
+        )
 
     def ficha(self, orden, tecnico, mac):
         WorkOrderFieldSheet.objects.update_or_create(
@@ -392,7 +431,8 @@ class Command(BaseCommand):
         # 1. Instalación con tres materiales: una orden, varias filas.
         creadas += self.escenario(
             numero=f"{PREFIJO}0001",
-            descripcion="Instalación con tres materiales",
+            descripcion="Instalación con tres materiales (liquidación validada)",
+            validada=True,
             subscription=self.abonado(1, sede),
             tipo=tipos["INSTALLATION"],
             sede=sede,
@@ -410,7 +450,8 @@ class Command(BaseCommand):
         # 2. Servicio con retiro: la columna Acción en su otro valor.
         creadas += self.escenario(
             numero=f"{PREFIJO}0002",
-            descripcion="Servicio con material retirado",
+            descripcion="Servicio con material retirado (liquidación validada)",
+            validada=True,
             subscription=self.abonado(2, sede),
             tipo=tipos["CABLE_SERVICES"],
             sede=sede,
@@ -508,6 +549,7 @@ class Command(BaseCommand):
         mac,
         estado,
         materiales,
+        validada=False,
     ):
         orden, creada = self.orden(
             numero=numero,
@@ -541,7 +583,7 @@ class Command(BaseCommand):
         for material, cantidad, sentido in materiales:
             self.material(orden, material, cantidad, sentido, tecnico)
 
-        self.cerrar(orden, estado)
+        self.cerrar(orden, estado, tecnico=tecnico, validada=validada)
 
         self.stdout.write(
             self.style.SUCCESS(
