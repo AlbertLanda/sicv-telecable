@@ -91,7 +91,45 @@ class TechnicianNapCatalogTests(WorkOrderTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sheet = WorkOrderFieldSheet.objects.get(work_order=order)
         self.assertEqual(sheet.nap, nap.name)
-        self.assertEqual(sheet.terminal, "5")
+        self.assertEqual(sheet.terminal, "05")
+
+    def test_terminal_accepts_01_to_16_and_normalizes_single_digit(self):
+        order = self.create_assigned_order()
+        self.api.post(self.url("start", order), {}, format="json")
+
+        response = self.api.patch(
+            self.url("field_sheet", order),
+            {"terminal": "8"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        sheet = WorkOrderFieldSheet.objects.get(work_order=order)
+        self.assertEqual(sheet.terminal, "08")
+
+        response = self.api.patch(
+            self.url("field_sheet", order),
+            {"terminal": "16"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        sheet.refresh_from_db()
+        self.assertEqual(sheet.terminal, "16")
+
+    def test_terminal_rejects_values_outside_01_to_16(self):
+        order = self.create_assigned_order()
+        self.api.post(self.url("start", order), {}, format="json")
+
+        response = self.api.patch(
+            self.url("field_sheet", order),
+            {"terminal": "17"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("terminal", response.data)
+        self.assertFalse(WorkOrderFieldSheet.objects.filter(work_order=order).exists())
 
     def test_existing_legacy_nap_can_be_kept_while_other_fields_change(self):
         order = self.create_assigned_order()
@@ -116,7 +154,7 @@ class TechnicianNapCatalogTests(WorkOrderTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sheet = WorkOrderFieldSheet.objects.get(work_order=order)
         self.assertEqual(sheet.nap, "NAP-LEGADA-01")
-        self.assertEqual(sheet.terminal, "7")
+        self.assertEqual(sheet.terminal, "07")
 
 
 class ImportNetworkAccessPointsCommandTests(TestCase):
