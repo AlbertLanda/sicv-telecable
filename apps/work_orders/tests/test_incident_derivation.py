@@ -6,8 +6,16 @@ from apps.services.models import Subscription
 from apps.work_orders.api.queries import available_work_orders
 from apps.work_orders.incident_derivation import derive_incident_to_fault
 from apps.work_orders.incident_noc import take_incident
-from apps.work_orders.models import OrderReason, OrderType, WorkOrder
-from apps.work_orders.services import create_incident_work_order
+from apps.work_orders.models import (
+    OrderReason,
+    OrderType,
+    WorkOrder,
+    WorkOrderFieldSheet,
+)
+from apps.work_orders.services import (
+    create_incident_work_order,
+    update_field_sheet,
+)
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -87,6 +95,35 @@ class IncidentDerivationTests(WorkOrderTestCase):
         self.assertIn(self.incident.order_number, fault.detail)
         self.assertIn("Diagnóstico NOC", fault.detail)
         self.assertIn("Revisar fibra", fault.detail)
+
+    def test_derivation_inherits_previous_stable_field_data(self):
+        source_order = self.create_assigned_order()
+        update_field_sheet(
+            source_order,
+            user=self.technician,
+            nap="NAP-014",
+            terminal="5",
+            equipment_code="AA:BB:CC:DD:EE:FF",
+            seal_number="PRC-000123",
+            notes="Observación propia de la visita anterior.",
+        )
+
+        _, fault = self.derive()
+
+        inherited = WorkOrderFieldSheet.objects.get(work_order=fault)
+
+        self.assertEqual(inherited.nap, "NAP-014")
+        self.assertEqual(inherited.terminal, "5")
+        self.assertEqual(inherited.equipment_code, "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(inherited.seal_number, "PRC-000123")
+        self.assertEqual(inherited.notes, "")
+        self.assertIsNone(inherited.updated_by)
+
+        source_sheet = WorkOrderFieldSheet.objects.get(work_order=source_order)
+        self.assertEqual(
+            source_sheet.notes,
+            "Observación propia de la visita anterior.",
+        )
 
     def test_derivation_records_fault_number_in_incident_history(self):
         incident, fault = self.derive()
