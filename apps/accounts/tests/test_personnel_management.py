@@ -103,8 +103,10 @@ class PersonnelManagementTests(TestCase):
         self.client.force_login(self.accounting)
 
         response = self.client.get(reverse("accounts:personnel_create"))
+        form = response.context["form"]
 
-        self.assertNotContains(response, f'value="{self.deposit.pk}"')
+        self.assertNotIn(self.deposit, form.fields["office"].queryset)
+        self.assertNotIn(self.deposit, form.fields["allowed_offices"].queryset)
         self.assertContains(response, "disponibles automáticamente")
 
     def test_cross_branch_cash_office_is_rejected(self):
