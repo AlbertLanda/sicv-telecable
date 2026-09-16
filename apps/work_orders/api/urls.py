@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import field_views, views
+from . import field_views, nap_views, views
 
 
 app_name = "work_orders_api"
@@ -14,7 +14,16 @@ urlpatterns = [
     path("<int:pk>/start/", field_views.StartWorkOrderView.as_view(), name="start"),
     path("<int:pk>/complete/", field_views.CompleteWorkOrderView.as_view(), name="complete"),
     path("<int:pk>/liquidate/", field_views.LiquidateWorkOrderView.as_view(), name="liquidate"),
-    path("<int:pk>/field-sheet/", field_views.FieldSheetView.as_view(), name="field_sheet"),
+    path(
+        "<int:pk>/field-sheet/",
+        nap_views.CatalogFieldSheetView.as_view(),
+        name="field_sheet",
+    ),
+    path(
+        "<int:pk>/naps/",
+        nap_views.NetworkAccessPointSearchView.as_view(),
+        name="nap_search",
+    ),
     path(
         "<int:pk>/field-materials/",
         field_views.WorkOrderMaterialMovementView.as_view(),
