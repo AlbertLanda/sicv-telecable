@@ -284,8 +284,12 @@ class TheRecordHeaderOffersItsActionsTests(PaymentsTestCase):
     def setUp(self):
         super().setUp()
 
+        from apps.accounts.models import User as AccountUser
+
         self.user = self.make_user(
-            "atc1", permissions=["view_charge", "view_payment", "view_receipt"]
+            "atc1",
+            permissions=["view_charge", "view_payment", "view_receipt"],
+            role=AccountUser.Role.ATC,
         )
 
     def grant_workorders(self, user):
