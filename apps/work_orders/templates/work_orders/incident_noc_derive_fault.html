@@ -107,11 +107,6 @@
                 {{ form.field_detail }}
                 {% for error in form.field_detail.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
             </div>
-            <div class="col-md-5">
-                <label class="form-label fw-semibold" for="{{ form.priority.id_for_label }}">{{ form.priority.label }}</label>
-                {{ form.priority }}
-                {% for error in form.priority.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-            </div>
         </div>
 
         <div class="d-flex flex-wrap justify-content-end gap-2 mt-4 pt-3 border-top">
