@@ -29,10 +29,29 @@ class User(AbstractUser):
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
     #
+    # Contabilidad administra el personal operativo desde el SICV. Usa los
+    # permisos estándar de Django sobre User (ver/agregar/cambiar), pero no el
+    # permiso de borrado: las cuentas se desactivan para conservar trazabilidad.
+    # Administrador hereda esas mismas capacidades aunque no sea superusuario.
+    #
     # NOC, en cambio, consulta la ficha del abonado como contexto para soporte,
     # pero no administra sus datos comerciales. Sus permisos base se limitan
     # al flujo operativo de incidencias.
     ROLE_BASELINE_PERMISSIONS = {
+        Role.ADMIN: frozenset(
+            {
+                "accounts.view_user",
+                "accounts.add_user",
+                "accounts.change_user",
+            }
+        ),
+        Role.ACCOUNTING: frozenset(
+            {
+                "accounts.view_user",
+                "accounts.add_user",
+                "accounts.change_user",
+            }
+        ),
         Role.ATC: frozenset(
             {
                 "customers.add_customer",
