@@ -112,7 +112,7 @@ COLUMNS = [
     {"key": "material", "label": "Material", "width": 14},
     {"key": "quantity", "label": "Cantidad", "width": 8, "numeric": True},
     {"key": "action", "label": "Acción", "width": 9},
-    {"key": "mac", "label": "MAC", "width": 12},
+    {"key": "mac", "label": "MAC / Equipo OT", "width": 12},
     {"key": "attended_on", "label": "Atención", "width": 8},
     {"key": "situation", "label": "Situación", "width": 9},
     {"key": "technician", "label": "Técnico", "width": 13},
@@ -134,7 +134,11 @@ def _address_of(order):
 
 
 def _mac_of(order):
-    """El MAC/equipo de la ficha de campo.
+    """El MAC/equipo general registrado en la ficha de campo de la OT.
+
+    Este valor pertenece a la orden completa, no al movimiento individual de
+    material que ocupa la fila. Por eso puede repetirse en varias filas de la
+    misma OT y no debe interpretarse como serial del material mostrado.
 
     La ficha es opcional -el técnico la llena durante la atención y puede
     cerrarse sin ella-, así que su ausencia se lee como celda vacía y no como
