@@ -28,9 +28,8 @@ from apps.inventory.models import WorkOrderMaterialMovement
 #
 # «Todo» no lleva códigos: no recorta por tipo, así que también trae las
 # órdenes cuyo tipo no tiene opción propia en la lista (retiros, cambios de
-# plan, requerimientos). Si «Todo» fuera la suma de las seis opciones, un
-# material declarado en un retiro no saldría en ninguna de las siete vistas y
-# se perdería precisamente en el reporte que existe para no perder material.
+# plan, requerimientos). Si «Todo» fuera la suma de las opciones visibles, un
+# material declarado en un tipo sin opción propia no saldría en ninguna vista.
 REPORT_SCOPES = {
     "ALL": {"label": "Todo", "codes": ()},
     "INSTALLATION": {"label": "Cable - Instalaciones", "codes": ("INSTALLATION",)},
@@ -38,7 +37,22 @@ REPORT_SCOPES = {
     "RECONNECTION": {"label": "Cable - Reconexiones", "codes": ("RECONNECTION",)},
     "CUT": {"label": "Cable - Cortes", "codes": ("CUT",)},
     "SERVICES": {"label": "Cable - Servicios", "codes": ("CABLE_SERVICES",)},
-    "FAULT": {"label": "Cable - Averías", "codes": ("CABLE_FAULT", "INTERNET_FAULT")},
+    # Se conserva FAULT como filtro combinado por compatibilidad con el
+    # reporte/API de Kevin, pero la etiqueta ya no afirma que todo sea Cable:
+    # incluye tanto CABLE_FAULT como INTERNET_FAULT.
+    "FAULT": {
+        "label": "Averías - Internet y Cable",
+        "codes": ("CABLE_FAULT", "INTERNET_FAULT"),
+    },
+    # Filtros específicos adicionales para operación y conciliación.
+    "INTERNET_FAULT": {
+        "label": "Internet - Averías",
+        "codes": ("INTERNET_FAULT",),
+    },
+    "CABLE_FAULT": {
+        "label": "Cable - Averías",
+        "codes": ("CABLE_FAULT",),
+    },
 }
 
 DEFAULT_SCOPE = "ALL"
@@ -154,10 +168,6 @@ def _row(movement):
         "quantity": movement.quantity,
         "unit": movement.material.get_unit_of_measure_display(),
         "action": movement.get_movement_type_display(),
-        # El sentido del movimiento, ya resuelto. La pantalla lo pinta en
-        # verde o en rojo, y decidirlo comparando la etiqueta visible la
-        # ataria al texto de `MovementType`: al corregir una tilde, todas
-        # las filas pasarian a pintarse del mismo color sin avisar.
         "is_removal": (
             movement.movement_type
             == WorkOrderMaterialMovement.MovementType.REMOVED
@@ -181,21 +191,13 @@ def material_movements(
 
     Por defecto el rango se aplica sobre la **emisión de la orden**
     -`created_at`-, que es la fecha que el reporte muestra en su primera
-    columna y con la que el operador pide el periodo. Acotar por la fecha del
-    movimiento daría un recuento distinto del que el propio listado deja
-    sumar: una orden emitida el 30 y atendida el 2 aparecería en el reporte de
-    un mes con la fecha de emisión del otro impresa al lado, y quien cuadra el
-    almacén no tendría forma de explicar la diferencia.
+    columna y con la que el operador pide el periodo.
 
     `date_basis="attended"` recorta por la atención real en vez de por la
-    emisión. No es una variante del reporte: es la pregunta de logística, que
-    cuadra mochilas por semana y necesita el día en que el material se
-    consumió. Ver `DATE_BASIS`.
+    emisión. Es la pregunta de logística, que cuadra mochilas por semana y
+    necesita el día en que el material se consumió.
 
-    Las dos fechas son inclusivas. `date_to` se compara con `__date` para que
-    el último día entre entero: contra el `DateTimeField` pelado, «hasta el
-    15» dejaría fuera todo lo emitido después de las 00:00 de ese día, que es
-    prácticamente todo.
+    Las dos fechas son inclusivas.
     """
     campo_fecha = DATE_BASIS.get(date_basis, DATE_BASIS[DEFAULT_DATE_BASIS])
 
@@ -217,9 +219,6 @@ def material_movements(
         })
     )
 
-    # La sede acota siempre. El reporte se imprime con el nombre de una sede
-    # en la cabecera, así que traer material de otra convertiría ese título en
-    # una afirmación falsa sobre el papel que alguien va a firmar.
     if branch is not None:
         movements = movements.filter(work_order__branch=branch)
 
@@ -228,8 +227,6 @@ def material_movements(
     if codes:
         movements = movements.filter(work_order__order_type__code__in=codes)
 
-    # Por orden y, dentro de ella, instalado antes que retirado. Es como se
-    # lee una atención: primero lo que se dejó, después lo que se trajo.
     return movements.order_by(
         "work_order__created_at",
         "work_order__order_number",
@@ -239,12 +236,7 @@ def material_movements(
 
 
 def build_report(*, branch, date_from, date_to, scope=DEFAULT_SCOPE):
-    """Todo lo que las cuatro salidas necesitan para imprimirse.
-
-    Devuelve las filas ya resueltas -no un queryset- porque PDF, Excel y Word
-    las recorren más de una vez (para medir, para pintar) y un queryset
-    consultaría la base en cada pasada.
-    """
+    """Todo lo que las cuatro salidas necesitan para imprimirse."""
     movements = material_movements(
         branch=branch,
         date_from=date_from,
