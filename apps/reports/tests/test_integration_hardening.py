@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from apps.inventory.models import WorkOrderMaterialMovement
-from apps.reports.materials import REPORT_SCOPES
+from apps.reports.materials import COLUMNS, REPORT_SCOPES
 from apps.work_orders.models import OrderType, WorkOrderLiquidation
 
 from .test_api_logistics_materials import (
@@ -111,3 +111,9 @@ class LogisticsIntegrationHardeningTests(LogisticsFeedTestCase):
         self.assertEqual(cable_rows[0]["order_type_code"], "CABLE_FAULT")
         self.assertEqual(len(all_fault_rows), 2)
         self.assertEqual(REPORT_SCOPES["FAULT"]["label"], "Averías - Internet y Cable")
+
+    def test_report_labels_mac_as_order_level_equipment(self):
+        """La hoja no debe sugerir que el MAC pertenece al material de la fila."""
+        mac_column = next(column for column in COLUMNS if column["key"] == "mac")
+
+        self.assertEqual(mac_column["label"], "MAC / Equipo OT")
