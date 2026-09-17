@@ -144,6 +144,7 @@ INSTALLED_APPS = [
     'apps.technicians',
     'apps.inventory',
     'apps.audit',
+    'apps.reports',
 ]
 
 MIDDLEWARE = [

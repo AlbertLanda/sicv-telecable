@@ -76,6 +76,14 @@ urlpatterns = [
         include("apps.payments.urls"),
     ),
 
+    # Reportes operativos. Listas transversales que cruzan a todos los
+    # abonados de una sede, a diferencia de las pantallas de cobranza, que
+    # cuelgan de la ficha de un abonado concreto.
+    path(
+        "reportes/",
+        include("apps.reports.urls"),
+    ),
+
     # Portal móvil/responsive del técnico. El shell HTML no usa la sesión
     # web de ATC; toda lectura y escritura real exige TokenAuthentication.
     path(
@@ -99,6 +107,18 @@ urlpatterns = [
     path(
         "api/technicians/",
         include("apps.accounts.api.urls"),
+    ),
+
+    # API de logística — canal sistema a sistema, no de personas.
+    #
+    # Entrega los movimientos de material declarados en campo para que el
+    # sistema de almacén los cruce con la mochila que asigna al técnico cada
+    # semana. Es de solo lectura: SICV declara consumo, logística lleva el
+    # stock, y ninguno de los dos escribe en el dominio del otro.
+    # Ver docs/api_logistics_materials.md.
+    path(
+        "api/logistics/",
+        include("apps.reports.api.urls"),
     ),
 
 ]
