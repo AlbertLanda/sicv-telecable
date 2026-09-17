@@ -112,7 +112,7 @@ COLUMNS = [
     {"key": "material", "label": "Material", "width": 14},
     {"key": "quantity", "label": "Cantidad", "width": 8, "numeric": True},
     {"key": "action", "label": "Acción", "width": 9},
-    {"key": "mac", "label": "MAC / Equipo OT", "width": 12},
+    {"key": "mac", "label": "MAC / Equipo OT", "width": 15},
     {"key": "attended_on", "label": "Atención", "width": 8},
     {"key": "situation", "label": "Situación", "width": 9},
     {"key": "technician", "label": "Técnico", "width": 13},
