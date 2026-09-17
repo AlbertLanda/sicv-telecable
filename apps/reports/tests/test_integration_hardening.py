@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.inventory.models import WorkOrderMaterialMovement
 from apps.reports.materials import REPORT_SCOPES
@@ -48,7 +49,9 @@ class LogisticsIntegrationHardeningTests(LogisticsFeedTestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["liquidation_status"], "VALIDATED")
-        self.assertGreater(rows[0]["changed_at"], watermark)
+        changed_at = parse_datetime(rows[0]["changed_at"])
+        self.assertIsNotNone(changed_at)
+        self.assertGreater(changed_at, watermark)
 
     def test_ids_reconciliation_rejects_updated_since(self):
         """La lista de ids nunca puede ser incremental."""
