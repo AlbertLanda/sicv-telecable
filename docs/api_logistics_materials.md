@@ -121,7 +121,7 @@ petición, no solo al emitir el token.
 | `scope` | ver §2.3 | `ALL` | Recorte por tipo de orden |
 | `branch` | código de sede | *todas* | Ej. `SED01` |
 | `technician` | id de usuario | *todos* | El `technician_id` de las filas |
-| `updated_since` | ISO 8601 | — | Solo lo que cambió desde ese sello |
+| `updated_since` | ISO 8601 | — | Solo lo que cambió desde ese sello. No se admite en `ids/` |
 | `page_size` | 1 – 2000 | 500 | Tamaño de página |
 | `cursor` | opaco | — | Lo entrega `next`; no se construye a mano |
 
@@ -150,10 +150,12 @@ contrastar contra el Excel del sistema anterior.
 
 #### `scope`
 
-Los mismos del desplegable del reporte: `ALL`, `INSTALLATION`, `ANNEX`,
-`RECONNECTION`, `CUT`, `SERVICES`, `FAULT`.
+Los del desplegable del reporte: `ALL`, `INSTALLATION`, `ANNEX`,
+`RECONNECTION`, `CUT`, `SERVICES`, `FAULT`, `INTERNET_FAULT` y `CABLE_FAULT`.
+`FAULT` conserva el filtro combinado de averías de Internet y Cable por
+compatibilidad; los dos últimos permiten recortarlas por separado.
 
-`ALL` no es la suma de los otros seis: no recorta por tipo, así que también
+`ALL` no es la suma de las otras opciones: no recorta por tipo, así que también
 trae las órdenes cuyo tipo no tiene opción propia (retiros, cambios de plan,
 requerimientos). Para cuadrar almacén se usa `ALL`; cualquier otro valor
 esconde material que sí salió.
@@ -213,7 +215,7 @@ tilde en el admin.
 | `quantity` | Cadena decimal con dos decimales. No redondear al leer |
 | `material_code` | **Cruzar por aquí**, nunca por `material_name` |
 | `technician_id` | **Cruzar por aquí**, nunca por `technician_name` |
-| `equipment_code` | MAC/serie de la ficha de campo. Vacío en consumibles; con valor es el dato con el que se recibe un equipo recuperado |
+| `equipment_code` | MAC/equipo general registrado en la ficha técnica de la **OT**. Puede repetirse en varias filas de la misma orden y **no identifica ni serializa el material de esa fila**. El modelo de movimiento todavía no tiene serial propio |
 | `order_number`, `customer_code` | Para abrir una celda del cuadre y llegar a la orden |
 | `is_liquidated`, `liquidation_status` | Ver §2.4 |
 | `changed_at` | La marca de agua de la sincronización. Ver §3.2 |
@@ -293,10 +295,10 @@ servidores difieren en unos segundos, una marca calculada localmente se salta
 movimientos en cada corrida y el hueco no se nota hasta que el cuadre no
 cierra.
 
-`changed_at` es el mayor entre el `updated_at` del movimiento y el de su orden.
-Es así porque liquidar o cerrar una orden **no toca** sus filas de material: un
-incremental que mirara solo el movimiento entregaría cada fila una vez y el
-`is_liquidated` de logística se quedaría en falso para siempre.
+`changed_at` representa el cambio más reciente entre el movimiento, su orden y
+la liquidación/revisión asociada. Así un cambio administrativo que modifica
+`liquidation_status` vuelve a publicar la fila aunque no se haya tocado ni el
+movimiento ni `WorkOrder.updated_at`.
 
 Un periodo vacío devuelve `watermark: null`, que se lee como «no muevas tu
 marca», no como «no hay nada más».
@@ -308,8 +310,10 @@ real: la fila desaparece. Una sincronización que solo trae altas y cambios no
 se entera nunca, y la fila sobrevive en logística descontando stock que volvió
 al almacén.
 
-Por eso existe `ids/`. Devuelve los ids **vigentes** del periodo con los mismos
-filtros; lo que logística tenga guardado y no esté en esa lista, se borra:
+Por eso existe `ids/`. Devuelve los ids **vigentes y completos** del periodo con
+los mismos filtros de dominio. `updated_since` está prohibido en este endpoint:
+una lista incremental no sirve para reconciliar borrados y podría hacer que
+logística elimine filas que siguen vigentes.
 
 ```python
 vigentes = set(requests.get(f"{url}/ids/", ...).json()["ids"])
