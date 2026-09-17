@@ -1,34 +1,33 @@
 """El feed de movimientos de material para el sistema de logística.
 
-Dos endpoints y dos preguntas distintas:
+Tres endpoints y tres preguntas distintas:
 
-    GET /api/logistics/material-movements/        el detalle del periodo
-    GET /api/logistics/material-movements/ids/    qué sigue existiendo
+    GET /api/logistics/material-movements/          el detalle del periodo
+    GET /api/logistics/material-movements/ids/      qué sigue existiendo
+    GET /api/logistics/material-movements/watermark/ hasta dónde sincronizar
 
 El primero entrega **el detalle, no el agregado**. Logística tabula por
 técnico del otro lado -es lo que hoy hace a mano con una tabla dinámica sobre
 el Excel- y ese total tiene que poder abrirse: cuando el cuadre de mochila no
-cierra por unos metros de fibra, alguien tiene que llegar a las órdenes que
-componen la suma. Un endpoint que devolviera el total ya sumado convertiría
-esa pregunta en una llamada telefónica.
+cierra por unos metros de fibra, alguien tiene que llegar a las órdenes que lo
+componen. Un endpoint que devolviera el total ya sumado convertiría esa
+pregunta en una llamada telefónica.
 
 El segundo existe por los borrados. Un técnico puede retirar un material que
 declaró por error (`inventory.services.delete_work_order_material`), y una
 sincronización que solo trae altas y cambios no se entera nunca: la fila
 sobrevive en logística descontando stock que volvió al almacén. Devolviendo
-los ids vigentes de un periodo, el otro sistema borra lo que le sobra. Se
-resuelve así, y no con un borrado lógico, para no tocar el dominio de
-inventario por una necesidad que es de la integración.
+los ids vigentes de un periodo, el otro sistema borra lo que le sobra. Esta
+consulta siempre debe ser completa para el periodo: una lista incremental de
+ids no sirve para reconciliar borrados.
 
-Ninguno de los dos consulta la base por su cuenta: los dos parten de
+Ninguno consulta la base por su cuenta: todos parten de
 `materials.material_movements()`, el mismo queryset que imprime la hoja en
-pantalla. Es lo que garantiza que el reporte y el cuadre den el mismo número —
-con dos consultas paralelas, la primera diferencia aparecería en un
-descuadre de almacén y nadie sabría cuál de las dos está mal.
+pantalla. Es lo que garantiza que el reporte y el cuadre den el mismo número.
 """
 
 from django.db.models import DateTimeField, F, Max
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -43,39 +42,19 @@ from .permissions import CanReadMaterialMovements
 from .serializers import MaterialMovementSerializer
 
 
-# Tope de ids que devuelve la reconciliación de una sola vez.
-#
-# No se pagina porque el consumidor necesita el conjunto **completo** para
-# poder restar: con media lista borraría filas vigentes que simplemente no
-# alcanzaron a entrar. Si un periodo supera el tope, la respuesta lo dice y
-# pide partirlo, que es preferible a entregar una lista incompleta que el
-# otro lado no puede distinguir de una completa.
 MAX_RECONCILIATION_IDS = 100_000
 
 
 def _consultar(request):
-    """Valida los parámetros y arma el queryset del periodo pedido.
-
-    Devuelve el queryset ya anotado con `changed_at`. Lo comparten los dos
-    endpoints: si cada uno armara su consulta, la lista de ids podría dejar
-    fuera movimientos que el detalle sí trae, y la reconciliación borraría en
-    logística filas que aquí siguen vivas.
-    """
+    """Valida parámetros y arma el queryset común del canal de logística."""
     form = MaterialMovementQueryForm(request.query_params)
 
     if not form.is_valid():
-        # `form.errors` ya viene por campo; DRF lo publica como `400` con esa
-        # misma forma, que es lo que permite al otro sistema registrar qué
-        # parámetro estaba mal en vez de «falló la sincronización».
         raise ValidationError(form.errors)
 
     dominio, sincronizacion = form.as_query()
-
     movimientos = material_movements(**dominio)
 
-    # La liquidación y la sede se traen en la misma consulta. Sin esto, cada
-    # fila serializada dispara dos consultas más, y quinientas filas por
-    # página convierten una descarga en mil viajes a la base.
     movimientos = movimientos.select_related(
         "work_order__branch",
         "work_order__liquidation",
@@ -86,18 +65,46 @@ def _consultar(request):
             work_order__assigned_technician_id=sincronizacion["technician"]
         )
 
-    # La marca de agua de la sincronización: lo más reciente entre el cambio
-    # del movimiento y el de su orden.
+    # Marca de agua real del contrato que se serializa.
     #
-    # Mirar solo el movimiento no alcanza. Liquidar, atender o cerrar una
-    # orden no toca sus filas de material, así que un incremental que se
-    # guiara por `movement.updated_at` entregaría una vez cada movimiento y
-    # nunca más — y el `is_liquidated` de logística se quedaría en falso para
-    # siempre, que es justo el campo con el que decide si consolida.
+    # No basta con movement.updated_at + WorkOrder.updated_at. El feed también
+    # expone el estado de revisión de la liquidación, y ese documento puede
+    # pasar por envío, corrección, reenvío y validación sin modificar la OT ni
+    # el movimiento. Las fechas propias de ese ciclo se incluyen explícitamente
+    # para que un incremental vuelva a entregar la fila cuando cambie cualquiera
+    # de los datos que logística observa.
+    #
+    # Coalesce evita la semántica distinta de Greatest con NULL entre SQLite y
+    # PostgreSQL: si no existe liquidación, se usa el updated_at de la OT como
+    # valor neutro y changed_at nunca queda en NULL por ese motivo.
     movimientos = movimientos.annotate(
         changed_at=Greatest(
             F("updated_at"),
             F("work_order__updated_at"),
+            Coalesce(
+                F("work_order__liquidation__updated_at"),
+                F("work_order__updated_at"),
+            ),
+            Coalesce(
+                F("work_order__liquidation__liquidated_at"),
+                F("work_order__updated_at"),
+            ),
+            Coalesce(
+                F("work_order__liquidation__submitted_at"),
+                F("work_order__updated_at"),
+            ),
+            Coalesce(
+                F("work_order__liquidation__correction_requested_at"),
+                F("work_order__updated_at"),
+            ),
+            Coalesce(
+                F("work_order__liquidation__resubmitted_at"),
+                F("work_order__updated_at"),
+            ),
+            Coalesce(
+                F("work_order__liquidation__validated_at"),
+                F("work_order__updated_at"),
+            ),
             output_field=DateTimeField(),
         )
     )
@@ -111,24 +118,13 @@ def _consultar(request):
 
 
 class LogisticsFeedPermissionMixin:
-    """Autenticación por token y permiso de consulta de movimientos.
-
-    `IsAuthenticated` responde «sé quién eres» y ya está puesto en los ajustes
-    globales; se repite aquí porque declarar `permission_classes` los
-    reemplaza por completo, y omitirlo dejaría el feed abierto a cualquiera
-    con token — incluidos los de los técnicos.
-    """
+    """Autenticación por token y permiso de consulta de movimientos."""
 
     permission_classes = [IsAuthenticated, CanReadMaterialMovements]
 
 
 class MaterialMovementListView(LogisticsFeedPermissionMixin, ListAPIView):
-    """GET — los movimientos de material del periodo, uno por fila.
-
-    Una orden que instaló tres materiales y retiró uno son cuatro filas, igual
-    que en la hoja. Es lo que permite que la columna «Cantidad» sume lo que
-    realmente se movió.
-    """
+    """GET — movimientos del periodo, una fila por movimiento."""
 
     serializer_class = MaterialMovementSerializer
     pagination_class = MaterialMovementPagination
@@ -138,17 +134,20 @@ class MaterialMovementListView(LogisticsFeedPermissionMixin, ListAPIView):
 
 
 class MaterialMovementIdListView(LogisticsFeedPermissionMixin, APIView):
-    """GET — los ids que siguen existiendo en el periodo.
-
-    La respuesta es deliberadamente pobre: un recuento y una lista de enteros.
-    No lleva el detalle porque no se usa para mostrar nada, sino para restar —
-    lo que el otro sistema tiene guardado y aquí ya no aparece es lo que hay
-    que borrar allá.
-    """
+    """GET — conjunto completo de ids que siguen vigentes en el periodo."""
 
     def get(self, request, *args, **kwargs):
-        movimientos = _consultar(request)
+        # Una reconciliación de borrados necesita el universo completo. Si se
+        # aceptara updated_since, los ids no modificados quedarían fuera y el
+        # consumidor podría borrarlos creyendo que ya no existen en SICV.
+        if request.query_params.get("updated_since"):
+            raise ValidationError({
+                "updated_since": [
+                    "No se admite en la reconciliación de ids; consulte el periodo completo."
+                ]
+            })
 
+        movimientos = _consultar(request)
         total = movimientos.count()
 
         if total > MAX_RECONCILIATION_IDS:
@@ -167,17 +166,7 @@ class MaterialMovementIdListView(LogisticsFeedPermissionMixin, APIView):
 
 
 class MaterialMovementWatermarkView(LogisticsFeedPermissionMixin, APIView):
-    """GET — el `changed_at` más alto del periodo.
-
-    Es la marca de agua que el otro sistema guarda para su siguiente
-    incremental. Se pide **a este sistema** y no se calcula allá con su propio
-    reloj: si los dos servidores difieren en unos segundos, una marca calculada
-    localmente se salta movimientos en cada corrida, y el hueco no se nota
-    hasta que el cuadre no cierra.
-
-    Un periodo sin movimientos devuelve `null`, que el consumidor debe leer
-    como «no muevas tu marca», no como «no hay nada más».
-    """
+    """GET — el `changed_at` más alto del periodo."""
 
     def get(self, request, *args, **kwargs):
         movimientos = _consultar(request)
