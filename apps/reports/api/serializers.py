@@ -99,9 +99,12 @@ class MaterialMovementSerializer(serializers.Serializer):
         read_only=True,
     )
 
-    # El equipo de la ficha de campo. Para consumibles va vacío, pero para una
-    # ONU retirada es el dato que el almacén necesita: un equipo recuperado se
-    # recibe por su serie, no por su cantidad.
+    # Código/MAC general de la ficha técnica de la OT. Este dato pertenece a
+    # la orden completa y puede repetirse en varias filas de material de una
+    # misma atención. NO identifica ni serializa el material concreto de esta
+    # fila; el modelo WorkOrderMaterialMovement todavía no guarda serial por
+    # movimiento. Se conserva el nombre `equipment_code` por compatibilidad
+    # del contrato JSON.
     equipment_code = serializers.SerializerMethodField()
 
     # --- cuándo ----------------------------------------------------------
@@ -129,13 +132,10 @@ class MaterialMovementSerializer(serializers.Serializer):
 
     # --- para sincronizar -------------------------------------------------
     #
-    # `changed_at` es el mayor entre el `updated_at` del movimiento y el de su
-    # orden, y lo anota la vista. Es el sello que el otro sistema guarda como
-    # marca de agua para pedir «solo lo que cambió desde...».
-    #
-    # No basta con el `updated_at` del movimiento: liquidar o cerrar una orden
-    # no toca sus movimientos, así que un feed incremental que mirara solo el
-    # movimiento entregaría filas con `is_liquidated` en falso para siempre.
+    # `changed_at` representa el cambio más reciente que afecte lo que viaja
+    # en la fila: el movimiento, la OT o su liquidación/revisión. Lo anota la
+    # vista y es el sello que el otro sistema guarda como marca de agua para
+    # pedir «solo lo que cambió desde...».
     updated_at = serializers.DateTimeField(read_only=True)
     changed_at = serializers.DateTimeField(read_only=True)
 
