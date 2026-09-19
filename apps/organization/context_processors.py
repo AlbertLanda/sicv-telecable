@@ -1,3 +1,5 @@
+from django.db.models import Q
+
 from apps.organization.models import Branch, Office
 
 
@@ -8,10 +10,10 @@ from apps.organization.models import Branch, Office
 ACTIVE_BRANCH_SESSION_KEY = "active_branch_id"
 
 
-# Oficina activa. Hoy es solo contexto visible en la barra: no acota
-# ninguna consulta. Se registra desde ahora porque el flujo de caja la
-# va a necesitar -cada cobro se hace en una oficina concreta-, y así el
-# operador ya la tiene elegida cuando esa pantalla exista.
+# Oficina activa. Decide desde qué ventanilla o depósito se registra un cobro.
+# La sesión solo conserva una oficina que siga estando autorizada para el
+# usuario; si el administrador revoca una oficina física, deja de ser válida
+# inmediatamente aunque hubiera quedado seleccionada antes.
 ACTIVE_OFFICE_SESSION_KEY = "active_office_id"
 
 
@@ -19,10 +21,12 @@ def get_active_branch(request):
     """
     Sede desde la que se está consultando ahora.
 
-    Orden de resolución: lo elegido en esta sesión, y si no hay nada,
-    la sede del propio usuario. Devuelve None si ninguna aplica -por
-    ejemplo, un usuario sin sede asignada que aún no eligió una-, y en
-    ese caso las consultas no se acotan por sede.
+    Orden de resolución:
+    1. sede elegida en la sesión;
+    2. sede asignada al usuario;
+    3. Huancayo como sede por defecto.
+
+    La selección activa no modifica la sede asignada al usuario.
     """
     if not request.user.is_authenticated:
         return None
@@ -30,21 +34,78 @@ def get_active_branch(request):
     branch_id = request.session.get(ACTIVE_BRANCH_SESSION_KEY)
 
     if branch_id:
-        branch = Branch.objects.filter(pk=branch_id, is_active=True).first()
+        branch = Branch.objects.filter(
+            pk=branch_id,
+            is_active=True,
+        ).first()
 
         if branch:
             return branch
 
-    return request.user.branch
+    if request.user.branch_id:
+        branch = Branch.objects.filter(
+            pk=request.user.branch_id,
+            is_active=True,
+        ).first()
+
+        if branch:
+            return branch
+
+    return (
+        Branch.objects
+        .filter(
+            code="HUANCAYO",
+            is_active=True,
+        )
+        .first()
+    )
+
+
+def available_offices_for_user(user, branch):
+    """Oficinas que el usuario puede seleccionar en una sede.
+
+    Para ATC, las oficinas físicas requieren autorización explícita del
+    administrador. Su oficina principal también cuenta como autorizada para
+    mantener compatibilidad con usuarios existentes. Los depósitos de la sede
+    son compartidos porque representan pagos bancarios/transferencias y no una
+    caja física entregada a una colaboradora.
+
+    Administradores conservan acceso total. Los demás roles mantienen el
+    comportamiento previo hasta que su propia política operativa se defina.
+    """
+    if not getattr(user, "is_authenticated", False) or branch is None:
+        return Office.objects.none()
+
+    offices = Office.objects.filter(branch=branch, is_active=True)
+
+    if user.is_superuser or getattr(user, "role", None) == "ADMIN":
+        return offices
+
+    if getattr(user, "role", None) == "ATC":
+        return (
+            offices
+            .filter(
+                Q(is_deposit=True)
+                | Q(pk=getattr(user, "office_id", None))
+                | Q(authorized_users=user)
+            )
+            .distinct()
+        )
+
+    return offices
 
 
 def get_active_office(request, branch=None):
     """
     Oficina desde la que se está atendiendo ahora.
 
-    Siempre se valida contra la sede activa: si el operador cambia de
-    sede, la oficina elegida antes deja de pertenecer a esa sede y se
-    descarta, en lugar de quedar mostrando una oficina de otra ciudad.
+    Orden de resolución:
+    1. oficina elegida en la sesión, solo si sigue autorizada;
+    2. oficina principal del usuario, si está autorizada y no es depósito;
+    3. primera oficina física autorizada de la sede activa.
+
+    El depósito nunca se selecciona automáticamente: representa un pago por
+    banco/transferencia y debe elegirse de forma consciente en la barra.
     """
     if not request.user.is_authenticated:
         return None
@@ -55,24 +116,30 @@ def get_active_office(request, branch=None):
     if branch is None:
         return None
 
+    allowed = available_offices_for_user(request.user, branch)
     office_id = request.session.get(ACTIVE_OFFICE_SESSION_KEY)
 
     if office_id:
-        office = Office.objects.filter(
-            pk=office_id,
-            branch=branch,
-            is_active=True,
+        office = allowed.filter(pk=office_id).first()
+
+        if office:
+            return office
+
+    if request.user.office_id:
+        office = allowed.filter(
+            pk=request.user.office_id,
+            is_deposit=False,
         ).first()
 
         if office:
             return office
 
-    # Sin elección válida se cae a la oficina asignada al usuario, y solo
-    # si pertenece a la sede activa.
-    if request.user.office_id and request.user.office.branch_id == branch.pk:
-        return request.user.office
-
-    return None
+    return (
+        allowed
+        .filter(is_deposit=False)
+        .order_by("name", "pk")
+        .first()
+    )
 
 
 # Ítems de "Clientes" que existían en el sistema anterior y todavía no
@@ -82,9 +149,9 @@ def get_active_office(request, branch=None):
 # sección aparte -es una sola sección, como en el sistema anterior.
 CLIENTES_PENDING_ITEMS = [
     "Datos",
-    "Deuda",
-    "Historial de pagos",
-    "Comprobantes de pago",
+    # "Deuda", "Historial de pagos" y "Comprobantes de pago" salieron de esta
+    # lista al construirse el modulo de cobranza: ya son enlaces reales en la
+    # seccion Clientes, igual que "Buscar cliente".
     "Contrato cable",
     "Contrato",
     "Orden",
@@ -106,8 +173,12 @@ CLIENTES_PENDING_ITEMS = [
 # sistema anterior:
 #   - "Soporte": ahí el proveedor atendía sus propias incidencias
 #     técnicas, y ese rol ya no existe -el soporte lo damos nosotros.
-#   - "Cliente2", "Programar" y "Configurar": no aportan nada que no
-#     esté ya en las tres secciones de arriba.
+#   - "Cliente2" y "Programar": no aportan nada que no esté ya en las
+#     tres secciones de arriba.
+#
+# "Configurar" sí se construyó, con contenido que no estaba en ninguna
+# otra sección: el mantenimiento de planes y servicios, que hasta ahora
+# solo se podía hacer por comando o desde el admin de Django.
 SIDEBAR_PENDING_SECTIONS = [
     {
         "name": "Caja",
@@ -141,18 +212,14 @@ def organization(request):
         return {}
 
     active_branch = get_active_branch(request)
-
-    offices = (
-        Office.objects.filter(branch=active_branch, is_active=True)
-        if active_branch
-        else Office.objects.none()
-    )
+    offices = available_offices_for_user(request.user, active_branch)
 
     return {
         "active_branch": active_branch,
         "available_branches": Branch.objects.filter(is_active=True),
         "active_office": get_active_office(request, branch=active_branch),
         "available_offices": offices,
+        "selected_customer_id": request.session.get("selected_customer_id"),
         "sidebar_clientes_pending_items": CLIENTES_PENDING_ITEMS,
         "sidebar_pending_sections": SIDEBAR_PENDING_SECTIONS,
     }

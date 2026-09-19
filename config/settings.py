@@ -140,9 +140,11 @@ INSTALLED_APPS = [
     'apps.services',
     'apps.contracts',
     'apps.work_orders',
+    'apps.payments',
     'apps.technicians',
     'apps.inventory',
     'apps.audit',
+    'apps.reports',
 ]
 
 MIDDLEWARE = [

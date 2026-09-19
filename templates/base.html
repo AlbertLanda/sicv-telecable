@@ -375,6 +375,11 @@
         .tc-stat .metric { font-size:1.25rem; color:#123f70; font-weight:700; }
         .tc-stat .label { font-size:.72rem; color:#64748b; margin-top:4px; }
         .tc-stat i { margin-left:4px; color:#12a465; }
+        /* Ciclo y deuda: los dos datos menores de la identidad, en la misma
+           fila que el telefono y el correo y con su mismo peso. De un solo
+           color -iconos y valores incluidos-, como `.tc-ident`. */
+        .tc-meta { display:flex; gap:18px; flex-wrap:wrap; margin-top:8px; font-size:.78rem; color:#4e6581; }
+        .tc-meta i { margin-right:6px; }
 
         @media (max-width: 1200px) {
             .tc-hero { grid-template-columns:1fr; }
@@ -391,6 +396,13 @@
             .sicv-topbar, .sicv-sidebar { display:none !important; }
             .sicv-main { margin:0 !important; padding:0 !important; }
             body { background:#fff; }
+        }
+        .sicv-messages {
+            margin: 1rem 0 0;
+        }
+
+        .sicv-messages .alert:last-child {
+            margin-bottom: 0;
         }
     </style>
 
@@ -425,7 +437,7 @@
         <div class="dropdown topbar-office">
             <a href="#" class="topbar-control dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-geo-alt-fill"></i>
-                <span>{{ active_office.name|default:"Oficina" }}</span>
+                <span>{{ active_office|default:"Oficina" }}</span>
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
                 {% for office in available_offices %}
@@ -433,8 +445,7 @@
                     <form method="post" action="{% url 'organization:set_active_office' %}">
                         {% csrf_token %}
                         <input type="hidden" name="office" value="{{ office.pk }}">
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office.name }}</button>
+                        <button type="submit" class="dropdown-item{% if office.pk == active_office.pk %} active{% endif %}">{{ office }}</button>
                     </form>
                 </li>
                 {% endfor %}
@@ -454,7 +465,6 @@
                     <form method="post" action="{% url 'organization:set_active_branch' %}">
                         {% csrf_token %}
                         <input type="hidden" name="branch" value="{{ branch.pk }}">
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
                         <button type="submit" class="dropdown-item{% if branch.pk == active_branch.pk %} active{% endif %}">{{ branch.name }}</button>
                     </form>
                 </li>
@@ -494,6 +504,27 @@
 {% endif %}
 
 <main class="{% if user.is_authenticated and not hide_sidebar %}sicv-main{% endif %}">
+
+    {% comment %}
+    Los avisos se pintan aqui y en un solo sitio.
+
+    Antes cada plantilla decidia si los mostraba, asi que un aviso emitido
+    antes de redirigir a una pantalla que no los pintaba no se consumia y
+    quedaba en la sesion: al abrir por fin una que si los pintaba salian
+    todos apilados de golpe. Al vivir en el shell se consumen en la
+    siguiente pantalla, sea cual sea, y siempre se ven igual.
+    {% endcomment %}
+    {% if messages %}
+        <div class="sicv-messages">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
 </main>
 

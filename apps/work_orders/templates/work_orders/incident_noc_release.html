@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Liberar {{ order.order_number }}{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 760px;">
+    <div class="mb-4">
+        <a href="{% url 'work_orders:incident_noc_detail' order.pk %}" class="text-decoration-none">
+            <i class="bi bi-arrow-left"></i> Volver a la incidencia
+        </a>
+        <h1 class="h3 mt-3">Liberar incidencia</h1>
+        <p class="text-muted mb-0">
+            {{ order.order_number }} · volverá a la cola pendiente para que otro operador NOC pueda tomarla.
+        </p>
+    </div>
+
+    <div class="card card-custom shadow-sm">
+        <div class="card-body">
+            <div class="alert alert-info">
+                El historial de tu atención no se elimina. Quedará registrado quién tomó la incidencia,
+                cuándo fue liberada y el motivo.
+            </div>
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+
+                <label for="{{ form.reason.id_for_label }}" class="form-label fw-semibold">
+                    {{ form.reason.label }}
+                </label>
+                {{ form.reason }}
+                {% for error in form.reason.errors %}
+                    <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{% url 'work_orders:incident_noc_detail' order.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">Liberar incidencia</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

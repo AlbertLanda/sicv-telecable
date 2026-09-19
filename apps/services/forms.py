@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from apps.customers.models import CustomerAddress
 
 from .commercial import build_commercial_quote
-from .models import Plan, ServiceType, Subscription
+from .models import BillingPolicy, Plan, ServiceType, Subscription
 
 
 class SubscriptionCreateForm(forms.ModelForm):
@@ -179,3 +179,142 @@ class SubscriptionCreateForm(forms.ModelForm):
                 self.add_error("plan", " ".join(exc.messages))
 
         return cleaned_data
+
+
+class ServiceTypeForm(forms.ModelForm):
+    """
+    Alta y edición de un tipo de servicio.
+
+    El servicio es lo que se contrata (INTERNET, CABLE, DUO) y es lo que las
+    órdenes de trabajo usan para decidir qué se puede emitir sobre una
+    suscripción. Por eso el código se pide una sola vez y no se cambia
+    después: el catálogo de órdenes y las reglas comerciales lo referencian.
+    """
+
+    class Meta:
+        model = ServiceType
+        fields = [
+            "code",
+            "name",
+            "description",
+            "supports_tv_annexes",
+            "annex_installation_price",
+            "annex_monthly_price",
+            "is_active",
+        ]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault("class", "form-check-input")
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.setdefault("class", "form-select")
+            else:
+                field.widget.attrs.setdefault("class", "form-control")
+
+        # El código identifica al servicio en el catálogo de órdenes y en las
+        # reglas comerciales. Cambiarlo desharía esas referencias en silencio.
+        if self.instance.pk:
+            self.fields["code"].disabled = True
+            self.fields["code"].help_text = (
+                "El código no se edita: el catálogo de órdenes y las reglas "
+                "comerciales lo referencian."
+            )
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+
+        if not code:
+            raise forms.ValidationError("Indique el código del servicio.")
+
+        return code
+
+
+class PlanForm(forms.ModelForm):
+    """
+    Alta y edición de un plan comercial.
+
+    El precio que se guarda es la **mensualidad normal**. El precio de pronto
+    pago no se pide: sale de restarle el descuento de la política de cobro,
+    que es donde ese descuento ya vive. Pedirlo aparte crearía dos cifras que
+    pueden dejar de coincidir, y entonces nadie sabría cuál se le cobra al
+    abonado.
+    """
+
+    class Meta:
+        model = Plan
+        fields = [
+            "service_type",
+            "code",
+            "name",
+            "generation",
+            "commercial_category",
+            "billing_policy",
+            "speed_mbps",
+            "technology",
+            "monthly_price",
+            "included_tv_points",
+            "requires_geographic_tariff",
+            "is_active",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        for name, field in self.fields.items():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault("class", "form-check-input")
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.setdefault("class", "form-select")
+            else:
+                field.widget.attrs.setdefault("class", "form-control")
+
+        self.fields["service_type"].queryset = ServiceType.objects.filter(
+            is_active=True
+        )
+        self.fields["billing_policy"].queryset = BillingPolicy.objects.filter(
+            is_active=True
+        )
+        self.fields["monthly_price"].label = "Mensualidad normal (S/)"
+        self.fields["billing_policy"].help_text = (
+            "Define el vencimiento, el descuento por pronto pago y el corte. "
+            "El precio de pronto pago se calcula con su descuento."
+        )
+
+        if self.instance.pk:
+            self.fields["code"].disabled = True
+            self.fields["code"].help_text = (
+                "El código no se edita: hay suscripciones apuntando a este plan."
+            )
+
+    def clean_code(self):
+        code = (self.cleaned_data.get("code") or "").strip().upper()
+
+        if not code:
+            raise forms.ValidationError("Indique el código del plan.")
+
+        return code
+
+    def clean(self):
+        cleaned = super().clean()
+        policy = cleaned.get("billing_policy")
+        price = cleaned.get("monthly_price")
+
+        # Un descuento que alcanza al precio dejaría la mensualidad en cero o
+        # en negativo: el plan sería gratis por pagar puntual.
+        if policy and price is not None and policy.discount_amount >= price:
+            self.add_error(
+                "monthly_price",
+                (
+                    f"La política «{policy.name}» descuenta "
+                    f"S/ {policy.discount_amount} por pronto pago, así que la "
+                    f"mensualidad normal debe ser mayor a ese importe."
+                ),
+            )
+
+        return cleaned

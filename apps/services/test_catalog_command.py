@@ -23,7 +23,22 @@ class CommercialCatalogCommandTests(TestCase):
         self.assertEqual(ServiceType.objects.filter(code__in=["INTERNET", "CABLE", "DUO"]).count(), 3)
         self.assertEqual(Plan.objects.count(), 24)
         self.assertEqual(PlanTariff.objects.filter(plan__code="CABLE-GENERAL").count(), 2)
-        self.assertEqual(CommercialCoverageRule.objects.count(), 1)
+        # Dos reglas, y se comprueba cuales: la cobertura de La Oroya para
+        # 2026 se expresa bloqueando las lineas anteriores, no exigiendo un
+        # nivel. Contar sin mirar el contenido fue lo que dejo pasar que la
+        # regla anterior -«Estandar obligatoria»- bloqueara tres de los
+        # cuatro niveles de 2026 cuando la linea se subdividio.
+        self.assertEqual(CommercialCoverageRule.objects.count(), 2)
+        self.assertEqual(
+            set(
+                CommercialCoverageRule.objects.filter(
+                    generation=2026,
+                    availability=CommercialCoverageRule.Availability.NOT_AVAILABLE,
+                    is_active=True,
+                ).values_list("commercial_category", flat=True)
+            ),
+            {Plan.Category.ECONOMIC, Plan.Category.SUPER_ECONOMIC},
+        )
         self.assertEqual(InstallationMaterialRule.objects.count(), 12)
 
         installation = OrderType.objects.get(code="INSTALLATION")

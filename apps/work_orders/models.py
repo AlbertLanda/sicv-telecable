@@ -473,6 +473,18 @@ class WorkOrder(models.Model):
         Status.CANCELLED: [],
     }
 
+    INCIDENT_ALLOWED_TRANSITIONS = {
+        Status.PENDING: [
+            Status.IN_PROGRESS,
+            Status.CANCELLED,
+        ],
+        Status.IN_PROGRESS: [
+            Status.ATTENDED,
+        ],
+        Status.ATTENDED: [],
+        Status.CANCELLED: [],
+    }
+
     # Estados en los que la orden ya está cerrada operativamente y no debe
     # admitir asignación, reasignación ni inicio de atención. Que un estado
     # sea terminal no implica que no tenga salidas administrativas: ATTENDED
@@ -554,6 +566,15 @@ class WorkOrder(models.Model):
         null=True,
         blank=True,
         verbose_name="Motivo"
+    )
+
+    reason_text = models.TextField(
+        blank=True,
+        verbose_name="Motivo registrado",
+        help_text=(
+            "Motivo escrito por el operador cuando el tipo de orden "
+            "no utiliza un motivo de catálogo."
+        ),
     )
 
     cause = models.ForeignKey(
@@ -715,10 +736,57 @@ class WorkOrder(models.Model):
                 "start_workorder",
                 "Puede iniciar la atención de órdenes de trabajo",
             ),
+            (
+                "cancel_workorder",
+                "Puede anular órdenes de trabajo",
+            ),
+            (
+                "view_incident",
+                "Puede consultar incidencias NOC",
+            ),
+            (
+                "start_incident",
+                "Puede iniciar la atención de incidencias NOC",
+            ),
+            (
+                "close_incident",
+                "Puede finalizar incidencias NOC",
+            ),
         ]
 
     def clean(self):
         super().clean()
+
+        if self.order_type_id and self.order_type.code == "INCIDENT":
+            if self.attention_type != self.AttentionType.SYSTEM:
+                raise ValidationError({
+                    "attention_type": (
+                        "Las incidencias son atendidas exclusivamente por NOC "
+                        "y deben registrarse como atención de sistema."
+                    )
+                })
+
+            if not (self.reason_text or "").strip():
+                raise ValidationError({
+                    "reason_text": (
+                        "Debe registrar el motivo de la incidencia."
+                    )
+                })
+
+            if self.scheduled_at or self.scheduled_date:
+                raise ValidationError({
+                    "scheduled_at": (
+                        "Una incidencia NOC no debe registrarse "
+                        "con fecha programada."
+                    )
+                })
+
+            if self.assigned_technician_id is not None:
+                raise ValidationError({
+                    "assigned_technician": (
+                        "Una incidencia NOC no se asigna a un técnico de campo."
+                    )
+                })
 
         if self.scheduled_at and self.scheduled_date:
             raise ValidationError({
@@ -777,8 +845,19 @@ class WorkOrder(models.Model):
             })
 
     def can_transition_to(self, new_status):
-        """Indica si la transición desde el estado actual está permitida."""
-        return new_status in self.ALLOWED_TRANSITIONS.get(self.status, [])
+        """
+        Indica si la transición desde el estado actual está permitida.
+
+        Las incidencias NOC tienen un ciclo propio y no reutilizan
+        la matriz del trabajo físico de campo.
+        """
+        transitions = (
+            self.INCIDENT_ALLOWED_TRANSITIONS
+            if self.is_incident
+            else self.ALLOWED_TRANSITIONS
+        )
+
+        return new_status in transitions.get(self.status, [])
 
     @property
     def is_closed(self):
@@ -794,7 +873,10 @@ class WorkOrder(models.Model):
         lista de estados: quien decide sigue siendo assign_technician(), esto
         solo evita ofrecer una acción que el dominio va a rechazar.
         """
-        return self.status in self.ASSIGNABLE_STATUSES
+        return (
+            not self.is_incident
+            and self.status in self.ASSIGNABLE_STATUSES
+        )
 
     @property
     def agenda_date(self):
@@ -818,8 +900,17 @@ class WorkOrder(models.Model):
         comprobación que manda sigue siendo la del dominio en cada POST.
         """
         return (
-            self.status in self.STARTABLE_STATUSES
+            not self.is_incident
+            and self.status in self.STARTABLE_STATUSES
             and self.assigned_technician_id is not None
+        )
+
+    @property
+    def is_incident(self):
+        """Indica si la orden pertenece al flujo lógico/remoto de NOC."""
+        return (
+            self.order_type_id is not None
+            and self.order_type.code == "INCIDENT"
         )
 
     @property
@@ -907,6 +998,13 @@ class WorkOrder(models.Model):
         abre una nueva en WorkOrderAssignment. Si la orden aún no estaba
         asignada, la mueve a ASSIGNED por el mecanismo oficial.
         """
+        if self.is_incident:
+            raise ValidationError({
+                "assigned_technician": (
+                    "Las incidencias son atendidas por NOC y no pueden "
+                    "asignarse a un técnico de campo."
+                )
+            })
         from apps.accounts.models import User
 
         if technician is None:
@@ -967,6 +1065,15 @@ class WorkOrder(models.Model):
     @transaction.atomic
     def start_attention(self, user=None, remarks=""):
         """Registra el inicio real de la atención y pasa a IN_PROGRESS."""
+
+        if self.is_incident:
+            raise ValidationError({
+                "status": (
+                    "Las incidencias deben iniciarse mediante el flujo "
+                    "específico de atención NOC."
+                )
+            })
+
         if self.status not in self.STARTABLE_STATUSES:
             raise ValidationError({
                 "status": (
@@ -1005,6 +1112,15 @@ class WorkOrder(models.Model):
         anterior en WorkOrderReprogramming, actualiza
         scheduled_at/scheduled_date y mueve la orden a REPROGRAMMED.
         """
+        if self.is_incident:
+            raise ValidationError({
+                "scheduled_at": (
+                    "Las incidencias NOC no admiten programación "
+                    "ni reprogramación de atención."
+                )
+            })
+
+
         if new_schedule is None and new_schedule_date is None:
             raise ValidationError({
                 "scheduled_at": "Debe indicar la nueva fecha de atención."
@@ -1088,9 +1204,112 @@ class WorkOrder(models.Model):
 
         return reprogramming
 
+    @transaction.atomic
+    def cancel(self, user=None, reason=""):
+        """
+        Anula administrativamente una orden de trabajo.
+
+        La orden no se elimina: pasa a CANCELLED y conserva trazabilidad
+        completa mediante WorkOrderStatusHistory.
+
+        El motivo es obligatorio y debe ser escrito por el usuario.
+        Si existía una asignación vigente, se cierra y se limpia el técnico
+        actual para que la orden anulada no siga apareciendo como asignada.
+        """
+        reason = (reason or "").strip()
+
+        if len(reason) < 5:
+            raise ValidationError({
+                "reason": (
+                    "Debe indicar el motivo de la anulación "
+                    "con al menos 5 caracteres."
+                )
+            })
+
+        if not self.can_transition_to(self.Status.CANCELLED):
+            raise ValidationError({
+                "status": (
+                    "No se puede anular una orden en estado "
+                    f"{self.get_status_display()}."
+                )
+            })
+
+        now = timezone.now()
+
+        self.assignments.filter(
+            unassigned_at__isnull=True
+        ).update(
+            unassigned_at=now
+        )
+
+        if self.assigned_technician_id is not None:
+            self.assigned_technician = None
+            self.save(
+                update_fields=[
+                    "assigned_technician",
+                    "updated_at",
+                ]
+            )
+
+        self.change_status(
+            self.Status.CANCELLED,
+            user=user,
+            remarks=reason,
+        )
+
+        return True
+
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
 
+class IncidentDetail(models.Model):
+    """
+    Información específica de la atención de una incidencia por NOC.
+
+    Los datos técnicos de red/equipo no se duplican aquí:
+    se consultan desde la información técnica más reciente de la suscripción.
+    """
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="incident_detail",
+        verbose_name="Incidencia",
+    )
+
+    attention_detail = models.TextField(
+        blank=True,
+        verbose_name="Detalle de atención",
+    )
+
+    observations = models.TextField(
+        blank=True,
+        verbose_name="Observaciones",
+    )
+
+    attended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="attended_incidents",
+        null=True,
+        blank=True,
+        verbose_name="Atendido por",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        verbose_name = "Detalle de incidencia"
+        verbose_name_plural = "Detalles de incidencias"
+
+    def __str__(self):
+        return f"Incidencia - {self.work_order.order_number}"
 
 class WorkOrderStatusHistory(models.Model):
     """Trazabilidad de cada cambio de estado de una orden."""

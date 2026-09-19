@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Órdenes de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+{% endblock %}
+
+{% comment %}
+Órdenes de trabajo del abonado.
+
+La OT abierta encabeza la pantalla porque es la que reclama algo: mientras
+siga abierta, el resto del historial es contexto. Si no hay ninguna, no se
+pinta el hueco.
+
+Las incidencias NOC no usan una "ficha técnica" de campo. Su fuente de verdad
+operativa es la ficha NOC, que conserva tomas, liberaciones, reprogramaciones,
+usuarios responsables y la solución registrada. Por eso, desde el historial
+del abonado, una incidencia siempre abre esa ficha especializada.
+{% endcomment %}
+
+{% block content %}
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="orders" record_title="Órdenes de trabajo" %}
+
+    {% if featured_open_order %}
+    <section class="tc-card tc-order">
+        <div class="tc-order-icon"><i class="bi bi-wrench-adjustable"></i></div>
+        <div>
+            <div class="tc-order-title">
+                <span>{% if featured_open_order.status == 'PENDING' %}Orden de trabajo pendiente{% else %}Orden de trabajo abierta{% endif %}</span>
+                <span class="tc-pill">{{ featured_open_order.order_type.name }}</span>
+                <span class="tc-pill warning">{{ featured_open_order.get_status_display }}</span>
+            </div>
+            <div class="tc-order-number">{{ featured_open_order.order_number }}</div>
+            <strong>Motivo:</strong>
+            {% if featured_open_order.reason_text %}
+                {{ featured_open_order.reason_text }}
+            {% elif featured_open_order.reason %}
+                {{ featured_open_order.reason.name }}
+            {% else %}
+                Sin motivo registrado
+            {% endif %}
+            <div class="tc-order-meta">
+                {% if featured_open_order.order_type.code == "INCIDENT" %}
+                    <strong>Atención:</strong> NOC
+                {% else %}
+                    <strong>Técnico:</strong> {{ featured_open_order.assigned_technician|default:"Sin asignar" }}
+                {% endif %}
+            </div>
+        </div>
+        <div class="tc-order-actions">
+            <a aria-label="Ver orden inicial" href="{% url 'work_orders:initial_print' featured_open_order.pk %}" class="tc-btn primary"><i class="bi bi-file-earmark-text"></i>Ver orden</a>
+
+            {% if featured_open_order.order_type.code == "INCIDENT" %}
+                {% if perms.work_orders.view_incident %}
+                    <a href="{% url 'work_orders:incident_noc_detail' featured_open_order.pk %}?origin=customer_orders" class="tc-btn muted">
+                        <i class="bi bi-clock-history"></i> Abrir historial NOC
+                    </a>
+                {% endif %}
+                {% if perms.work_orders.cancel_workorder %}
+                    {% if featured_open_order.status == "PENDING" or featured_open_order.status == "IN_PROGRESS" or featured_open_order.status == "REPROGRAMMED" %}
+                        <a href="{% url 'work_orders:incident_cancel' featured_open_order.pk %}" class="tc-btn">
+                            <i class="bi bi-x-circle"></i> Anular incidencia
+                        </a>
+                    {% endif %}
+                {% endif %}
+            {% else %}
+                <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="tc-btn muted"><i class="bi bi-file-earmark-text"></i>Ver liquidación técnica<span class="visually-hidden">Ver ficha técnica</span></a>
+                <a href="{% url 'work_orders:schedule_board' %}" class="tc-btn"><i class="bi bi-calendar3"></i>Reprogramar</a>
+                {% if perms.work_orders.cancel_workorder %}
+                    {% if featured_open_order.status == "PENDING" or featured_open_order.status == "ASSIGNED" or featured_open_order.status == "DERIVED" or featured_open_order.status == "REPROGRAMMED" %}
+                        <a
+                            href="{% url 'work_orders:cancel' featured_open_order.pk %}"
+                            class="tc-btn"
+                        >
+                            <i class="bi bi-x-circle"></i>
+                            Anular orden
+                        </a>
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-wrench-adjustable"></i>Órdenes de trabajo
+                {% if open_order_count %}<span class="tc-pill warning">{{ open_order_count }} abierta{{ open_order_count|pluralize }}</span>{% endif %}
+            </h2>
+            {% if perms.work_orders.add_workorder %}
+                <div class="dropdown">
+                    <button
+                        class="tc-btn primary dropdown-toggle"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <i class="bi bi-plus-lg"></i>
+                        Nueva orden de trabajo
+                    </button>
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="{% url 'work_orders:incident_create' customer.pk %}"
+                            >
+                                <i class="bi bi-headset me-2"></i>
+                                Incidencia
+                            </a>
+                        </li>
+
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+
+                        <li>
+                            <a
+                                class="dropdown-item"
+                                href="{% url 'work_orders:create' customer.pk %}"
+                            >
+                                <i class="bi bi-tools me-2"></i>
+                                Otra orden de trabajo
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead>
+                    <tr>
+                        <th>N.º Orden</th>
+                        <th>Servicio</th>
+                        <th>Tipo</th>
+                        <th>Motivo</th>
+                        <th>Estado</th>
+                        <th>Prioridad</th>
+                        <th>Responsable</th>
+                        <th>Resultado / solución</th>
+                        <th>Programada</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in page_obj %}
+                    <tr>
+                        <td>
+                            {% if order.order_type.code == "INCIDENT" and perms.work_orders.view_incident %}
+                                <a href="{% url 'work_orders:incident_noc_detail' order.pk %}?origin=customer_orders">{{ order.order_number }}</a>
+                            {% else %}
+                                <a href="{% url 'work_orders:detail' order.pk %}">{{ order.order_number }}</a>
+                            {% endif %}
+                        </td>
+                        <td>#{{ order.subscription.service_number }}</td>
+                        <td>{{ order.order_type.name }}{% if order.subtype %}<br><span class="text-muted">{{ order.subtype.name }}</span>{% endif %}</td>
+                        <td>
+                            {% if order.reason_text %}
+                                {{ order.reason_text }}
+                            {% elif order.reason %}
+                                {{ order.reason.name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{% if order.status == 'PENDING' %}<span class="status-warning">Pendiente</span>{% else %}{{ order.get_status_display }}{% endif %}</td>
+                        <td>{{ order.get_priority_display }}</td>
+                        <td>
+                            {% if order.order_type.code == "INCIDENT" %}
+                                {% if order.incident_detail.attended_by %}
+                                    NOC · {{ order.incident_detail.attended_by }}
+                                {% else %}
+                                    NOC
+                                {% endif %}
+                            {% else %}
+                                {{ order.assigned_technician|default:"Sin asignar" }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if order.order_type.code == "INCIDENT" %}
+                                {% if order.incident_detail.attention_detail %}
+                                    {{ order.incident_detail.attention_detail|truncatechars:90 }}
+                                {% elif order.status == "CANCELLED" %}
+                                    Anulada
+                                {% else %}
+                                    Pendiente de solución
+                                {% endif %}
+                            {% else %}
+                                {{ order.result.name|default:"-" }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if order.order_type.code == "INCIDENT" %}
+                                -
+                            {% elif order.scheduled_at %}
+                                {{ order.scheduled_at|date:"d/m/Y H:i" }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>
+                            {% if order.order_type.code == "INCIDENT" %}
+                                {% if perms.work_orders.view_incident %}
+                                    <a class="tc-icon-btn" href="{% url 'work_orders:incident_noc_detail' order.pk %}?origin=customer_orders" title="Ver historial NOC"><i class="bi bi-clock-history"></i></a>
+                                {% endif %}
+                            {% elif perms.work_orders.view_workorder %}
+                                <a class="tc-icon-btn" href="{% url 'work_orders:detail' order.pk %}" title="Ver ficha técnica"><i class="bi bi-tools"></i></a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="10">Sin órdenes registradas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% include "_pager.html" %}
+    </section>
+
+</div>
+{% endblock %}

@@ -1,0 +1,261 @@
+    .tc-order-brand {
+        display: grid;
+        grid-template-columns: 155px minmax(0, 1fr);
+        gap: 24px;
+        align-items: center;
+
+        margin-bottom: 20px;
+        padding: 20px 24px;
+
+        background: #ffffff;
+        border: 1px solid #d9e4ef;
+        border-top: 5px solid #0f4c7f;
+        border-radius: 10px;
+
+        box-shadow: 0 6px 18px rgba(35, 74, 112, .06);
+    }
+
+    .tc-order-brand-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        padding-right: 22px;
+        border-right: 1px solid #e2e8f0;
+    }
+
+    .tc-order-brand-logo img {
+        display: block;
+        width: 125px;
+        max-height: 105px;
+        object-fit: contain;
+    }
+
+    .tc-order-brand-main {
+        min-width: 0;
+    }
+
+    .tc-order-brand-kicker {
+        margin-bottom: 5px;
+
+        color: #64748b;
+        font-size: .68rem;
+        font-weight: 800;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+    }
+
+    .tc-order-brand-title-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+    }
+
+    .tc-order-brand-title {
+        margin: 0;
+
+        color: #17355f;
+        font-size: 1.55rem;
+        font-weight: 800;
+        line-height: 1.15;
+    }
+
+    .tc-order-brand-subtitle {
+        margin-top: 5px;
+
+        color: #64748b;
+        font-size: .82rem;
+    }
+
+    .tc-order-brand-identification {
+        min-width: 210px;
+        text-align: right;
+    }
+
+    .tc-order-brand-number-label {
+        color: #7a8ba0;
+        font-size: .62rem;
+        font-weight: 800;
+        letter-spacing: .08em;
+    }
+
+    .tc-order-brand-number {
+        margin: 2px 0 6px;
+
+        color: #0f4c7f;
+        font-size: 1.22rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .tc-order-brand-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 18px;
+
+        margin-top: 16px;
+        padding-top: 12px;
+
+        border-top: 1px solid #edf2f7;
+
+        color: #45627f;
+        font-size: .74rem;
+    }
+
+    .tc-order-brand-meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .tc-order-brand-meta i {
+        color: #0f4c7f;
+    }
+
+    @media (max-width: 767.98px) {
+
+        .tc-order-brand {
+            grid-template-columns: 1fr;
+            gap: 14px;
+            padding: 18px;
+        }
+
+        .tc-order-brand-logo {
+            justify-content: flex-start;
+            padding-right: 0;
+            padding-bottom: 14px;
+
+            border-right: 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tc-order-brand-logo img {
+            width: 105px;
+        }
+
+        .tc-order-brand-title-row {
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .tc-order-brand-identification {
+            min-width: 0;
+            text-align: left;
+        }
+
+        .tc-order-brand-meta {
+            flex-direction: column;
+            gap: 6px;
+        }
+    }
+
+    .tc-order-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 12px 0 18px;
+    }
+
+    .tc-order-toolbar-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .tc-order-toolbar .dropdown-menu {
+        font-size: .78rem;
+        border: 1px solid #d9e4ef;
+        box-shadow: 0 8px 20px rgba(35, 74, 112, .12);
+    }
+
+    @media (max-width: 767.98px) {
+        .tc-order-toolbar,
+        .tc-order-toolbar-actions {
+            width: 100%;
+        }
+
+        .tc-order-toolbar-actions {
+        justify-content: flex-start;
+        }
+
+        .tc-btn {
+            min-height: 40px;
+        }
+    }
+
+/* ==========================================================
+   BOTONES DE ACCIÓN DE LA ORDEN
+ ========================================================== */
+
+.tc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+
+    min-height: 38px;
+    padding: 8px 14px;
+
+    background: #ffffff;
+    border: 1px solid #2374d8;
+    border-radius: 6px;
+
+    color: #1564c0;
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1.2;
+
+    text-decoration: none;
+
+    cursor: pointer;
+    transition:
+        background-color .15s ease,
+        border-color .15s ease,
+        color .15s ease,
+        box-shadow .15s ease;
+}
+
+.tc-btn:hover {
+    background: #f4f9ff;
+    border-color: #1564c0;
+    color: #0c4f9e;
+    text-decoration: none;
+}
+
+.tc-btn:focus {
+    outline: 0;
+    box-shadow: 0 0 0 3px rgba(35, 116, 216, .14);
+}
+
+.tc-btn.primary {
+    background: #0f4c7f;
+    border-color: #0f4c7f;
+    color: #ffffff;
+}
+
+.tc-btn.primary:hover {
+    background: #0a3b66;
+    border-color: #0a3b66;
+    color: #ffffff;
+}
+
+.tc-btn.muted {
+    background: #ffffff;
+    border-color: #afc0d1;
+    color: #31516f;
+}
+
+.tc-btn.muted:hover {
+    background: #f7fafc;
+    border-color: #8199b1;
+    color: #17355f;
+}
+
+.tc-order-toolbar form {
+    margin: 0;
+}

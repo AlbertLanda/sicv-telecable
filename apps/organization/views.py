@@ -1,35 +1,24 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.organization.context_processors import (
     ACTIVE_BRANCH_SESSION_KEY,
     ACTIVE_OFFICE_SESSION_KEY,
+    available_offices_for_user,
     get_active_branch,
 )
-from apps.organization.models import Branch, Office
+from apps.organization.models import Branch
 
 
-def _back_to(request):
-    """
-    Vuelve a la pantalla desde la que se cambió, para no interrumpir lo que
-    el operador estaba haciendo.
-
-    El destino se valida contra el propio host: un `next` apuntando a otro
-    dominio se descarta y se cae a la búsqueda, de modo que estos
-    formularios no sirvan de trampolín a un sitio externo.
-    """
-    destination = request.POST.get("next", "")
-
-    if destination and url_has_allowed_host_and_scheme(
-        url=destination,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return redirect(destination)
-
-    return redirect("customers:search")
+# Adónde se cae al cambiar de sede o de oficina.
+#
+# Siempre al buscador, nunca de vuelta a la pantalla anterior. Cambiar el
+# ámbito desde el que se trabaja deja atrás lo que se estaba mirando: un
+# abonado de Jauja no se sigue consultando porque la barra diga ahora Oroya,
+# y una pantalla de cobro con las series de una ventanilla deja de valer en
+# cuanto se elige otra.
+DESTINO_TRAS_CAMBIAR = "customers:search"
 
 
 @require_POST
@@ -56,28 +45,33 @@ def set_active_branch(request):
     # ciudad hasta que alguien la note.
     request.session.pop(ACTIVE_OFFICE_SESSION_KEY, None)
 
-    return _back_to(request)
+    # Y el abonado que se estaba consultando también. Es del padrón de la
+    # sede anterior: dejarlo elegido haría que las entradas de cuenta del
+    # menú siguieran abriendo a alguien de Jauja con la barra en Oroya.
+    request.session.pop("selected_customer_id", None)
+
+    return redirect(DESTINO_TRAS_CAMBIAR)
 
 
 @require_POST
 @login_required
 def set_active_office(request):
-    """
-    Cambia la oficina desde la que se atiende.
+    """Cambia la oficina activa únicamente dentro del ámbito autorizado.
 
-    Hoy la oficina es solo contexto visible: no acota ninguna consulta.
-    Se registra desde ahora porque el flujo de caja la va a necesitar.
-
-    La oficina se resuelve contra la sede activa, no contra todas: elegir
-    por id una oficina de otra sede no entra en sesión.
+    Para ATC una oficina física debe haber sido habilitada por el
+    administrador. Los depósitos de la sede son compartidos y por eso están
+    incluidos automáticamente. La validación se hace en servidor: ocultar una
+    opción en la barra no basta para impedir que alguien envíe otro id a mano.
     """
+    branch = get_active_branch(request)
     office = get_object_or_404(
-        Office,
+        available_offices_for_user(request.user, branch),
         pk=request.POST.get("office"),
-        branch=get_active_branch(request),
-        is_active=True,
     )
 
     request.session[ACTIVE_OFFICE_SESSION_KEY] = office.pk
 
-    return _back_to(request)
+    # El abonado no se suelta: sigue siendo del padrón de esta sede, que no
+    # ha cambiado. Lo que deja de valer es la pantalla que se estaba viendo,
+    # y de eso se encarga volver al buscador.
+    return redirect(DESTINO_TRAS_CAMBIAR)

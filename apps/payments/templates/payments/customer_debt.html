@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Deudas de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+{% endblock %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Deuda" %}
+
+    {% comment %}
+    Lo que está pendiente sobre este abonado, encima de su tabla.
+
+    Una tarjeta por aviso y en rejilla: aquí se van acumulando cosas -hoy los
+    compromisos, mañana lo que venga- y puestas en fila caben varias sin
+    empujar la primera deuda por debajo del pliegue.
+
+    Se lee antes de decidir qué cobrar, no al pie: mientras el compromiso siga
+    en pie, esa deuda no empuja al corte, y eso cambia lo que el operador puede
+    decirle al abonado.
+
+    La fecha va en grande porque es lo que se responde en ventanilla -«¿hasta
+    cuándo tengo?»-; el número y el monto quedan al pie, que es lo que se mira
+    después. Toda la tarjeta enlaza al compromiso.
+    {% endcomment %}
+    {% if active_commitments %}
+        <div class="tc-pendientes">
+            {% for commitment in active_commitments %}
+                <a class="tc-pendiente"
+                   href="{% url 'payments:commitment_detail' pk=customer.pk commitment_pk=commitment.pk %}">
+                    <div class="tc-pendiente-cab">
+                        <span class="tc-pendiente-rotulo">
+                            Compromiso de pago pendiente
+                        </span>
+                        <span class="tc-pendiente-icono">
+                            <i class="bi bi-hand-thumbs-up"></i>
+                        </span>
+                    </div>
+                    <div class="tc-pendiente-dato">
+                        Paga el {{ commitment.committed_date|date:"d/m/Y" }}
+                    </div>
+                    <div class="tc-pendiente-pie">
+                        <i class="bi bi-hash"></i>{{ commitment.pk }}
+                        &middot; S/ {{ commitment.amount|floatformat:2 }}
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% comment %}
+    Un solo formulario envuelve la tabla y los botones: «Cobrar» y
+    «Compromiso» actúan sobre las filas marcadas, así que los checks y los
+    botones tienen que viajar juntos. Cada botón declara su propio destino con
+    formaction, en lugar de que la pantalla elija uno solo.
+    {% endcomment %}
+    <form method="get" id="deudasForm">
+
+        {% comment %}
+        De dónde viene el cobro. Desde el tablero se cobra lo marcado, así
+        que sin marcas hay que avisar; desde el menú de la ficha se cobra
+        un adelanto, que por definición no tiene deuda que marcar.
+        {% endcomment %}
+        <input type="hidden" name="origen" value="tablero">
+
+        <section class="tc-card tc-section tc-full">
+
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-cash-stack"></i>Deudas
+                </h2>
+            </div>
+
+            {% if debt.charges %}
+
+                <div class="table-responsive">
+                    <table class="tc-table">
+                        <thead>
+                            <tr>
+                                <th>Abonado</th>
+                                <th>Fecha</th>
+                                <th class="num">Cantidad</th>
+                                <th>Detalle</th>
+                                <th>Periodo</th>
+                                <th>Moneda</th>
+                                <th class="num">Monto</th>
+                                <th>Documento</th>
+                                <th class="text-center">Cobrar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for charge in page_obj %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'customers:detail' pk=customer.pk %}">
+                                            {{ customer.code }}
+                                        </a>
+                                    </td>
+                                    <td>{{ charge.issued_on|date:"d/m/Y" }}</td>
+                                    <td class="num">{{ charge.quantity|floatformat:5 }}</td>
+                                    <td>{{ charge.description }}</td>
+                                    <td>{{ charge.period_label|default:"—" }}</td>
+                                    <td>{{ charge.currency }}</td>
+                                    <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
+                                    <td>
+                                        {% for receipt in charge.paying_receipts %}
+                                            <a href="{% url 'payments:receipt_detail' pk=receipt.pk %}">
+                                                {{ receipt.full_number }}
+                                            </a>
+                                        {% empty %}
+                                            <span class="text-muted">—</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox"
+                                               class="form-check-input"
+                                               name="charges"
+                                               value="{{ charge.pk }}"
+                                               aria-label="Seleccionar {{ charge.description }}">
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% include "_pager.html" with show_page_size=True %}
+
+            {% else %}
+
+                <div class="tc-empty">
+                    <i class="bi bi-check-circle text-success"></i>
+                    El abonado no tiene deudas pendientes.
+                </div>
+
+            {% endif %}
+
+        </section>
+
+        <div class="tc-actions">
+            {% if can_create_charge %}
+                <button type="submit"
+                        class="tc-btn primary"
+                        formaction="{% url 'payments:charge_create' pk=customer.pk %}">
+                    <i class="bi bi-plus-lg"></i>Nuevo
+                </button>
+            {% endif %}
+            {% if can_register_payment and debt.charges %}
+                <button type="submit"
+                        class="tc-btn primary"
+                        data-exige-seleccion="cobrar"
+                        formaction="{% url 'payments:register' pk=customer.pk %}">
+                    <i class="bi bi-cash"></i>Cobrar
+                </button>
+            {% endif %}
+            {% if can_grant_commitment and debt.charges %}
+                <button type="submit"
+                        class="tc-btn primary"
+                        data-exige-seleccion="aplazar"
+                        formaction="{% url 'payments:commitment_create' pk=customer.pk %}">
+                    <i class="bi bi-hand-thumbs-up"></i>Compromiso
+                </button>
+            {% endif %}
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // «Cobrar» y «Compromiso» actúan sobre las filas marcadas. Sin ninguna, el
+    // servidor devuelve al tablero con el aviso; esto lo dice antes de ir y
+    // volver, y deja al operador donde ya estaba mirando.
+    //
+    // Se dice en un aviso flotante arriba y no en una franja bajo la tabla:
+    // ahí quedaba lejos del botón que se acababa de pulsar -y, con la tabla
+    // larga, fuera de la pantalla-, así que el clic parecía no haber hecho
+    // nada.
+    //
+    // Flotante y no modal: el operador no tiene que decidir nada, solo
+    // enterarse, y un modal le cobraría un clic de más por un descuido. Lo
+    // pinta `tcAviso`, del sistema visual compartido; se va solo a los tres
+    // segundos, y el foco baja a la primera casilla sin esperar a que se
+    // vaya, que es lo que hay que hacer a continuación.
+    (function () {
+        var formulario = document.getElementById("deudasForm");
+
+        if (!formulario) {
+            return;
+        }
+
+        var mensajes = {
+            cobrar: "Marque la deuda que va a cobrar.",
+            aplazar: "Marque las deudas que entran en el compromiso."
+        };
+
+        function hayMarcadas() {
+            return formulario.querySelectorAll(
+                'input[name="charges"]:checked'
+            ).length > 0;
+        }
+
+        formulario.addEventListener("click", function (evento) {
+            var boton = evento.target.closest("[data-exige-seleccion]");
+
+            if (!boton || hayMarcadas()) {
+                return;
+            }
+
+            // Sin el aviso no se bloquea el envio: el servidor ya devuelve
+            // al tablero con el mismo mensaje. Cortar aqui dejaria un boton
+            // que no hace nada ni explica por que.
+            if (typeof window.tcAviso !== "function") {
+                return;
+            }
+
+            evento.preventDefault();
+
+            window.tcAviso(mensajes[boton.dataset.exigeSeleccion]);
+
+            var primera = formulario.querySelector('input[name="charges"]');
+
+            if (primera) {
+                primera.focus();
+            }
+        });
+
+    })();
+</script>
+{% endblock %}

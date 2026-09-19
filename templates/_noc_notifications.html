@@ -1,0 +1,155 @@
+{% if user.is_authenticated and perms.work_orders.view_incident %}
+<style>
+    .noc-global-bell {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 1075;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--sicv-primary);
+        color: #fff;
+        text-decoration: none;
+        box-shadow: 0 8px 24px rgba(15, 79, 130, .28);
+    }
+    .noc-global-bell:hover,
+    .noc-global-bell:focus {
+        color: #fff;
+        background: var(--sicv-primary-dark);
+    }
+    .noc-global-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #dc3545;
+        color: #fff;
+        font-size: .68rem;
+        font-weight: 800;
+        border: 2px solid #fff;
+    }
+    .noc-global-toast {
+        position: fixed;
+        right: 18px;
+        bottom: 76px;
+        z-index: 1080;
+        width: min(390px, calc(100vw - 36px));
+        display: none;
+    }
+</style>
+
+<a
+    href="{% url 'work_orders:incident_noc_queue' %}"
+    class="noc-global-bell"
+    id="noc-global-bell"
+    title="Incidencias NOC"
+    aria-label="Abrir incidencias NOC"
+>
+    <i class="bi bi-bell-fill"></i>
+    <span class="noc-global-badge" id="noc-global-badge" hidden>0</span>
+</a>
+
+<div class="alert alert-primary shadow noc-global-toast" id="noc-global-toast" role="alert">
+    <div class="fw-bold mb-1">
+        <i class="bi bi-bell-fill"></i> Nueva incidencia NOC
+    </div>
+    <div id="noc-global-toast-text">Se registró una nueva incidencia.</div>
+    <a href="{% url 'work_orders:incident_noc_queue' %}" class="alert-link" id="noc-global-toast-link">
+        Ver incidencia
+    </a>
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    const endpoint = "{% url 'work_orders:incident_notifications' %}";
+    const badge = document.getElementById("noc-global-badge");
+    const toast = document.getElementById("noc-global-toast");
+    const toastText = document.getElementById("noc-global-toast-text");
+    const toastLink = document.getElementById("noc-global-toast-link");
+    const storageKey = "sicv-noc-known-pending";
+    let initialized = false;
+    let known = new Set();
+
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(storageKey) || "[]");
+        known = new Set(saved);
+        initialized = saved.length > 0;
+    } catch (error) {
+        known = new Set();
+    }
+
+    function persistKnown() {
+        try {
+            sessionStorage.setItem(storageKey, JSON.stringify(Array.from(known)));
+        } catch (error) {}
+    }
+
+    function updateBadge(count, dueCount) {
+        const total = Number(count || 0) + Number(dueCount || 0);
+        badge.textContent = total > 99 ? "99+" : String(total);
+        badge.hidden = total === 0;
+        badge.title = `${count || 0} pendientes · ${dueCount || 0} contactos vencidos`;
+    }
+
+    function showNewIncident(item) {
+        toastText.textContent = `${item.number} · ${item.reason || "Nueva incidencia"}`;
+        toastLink.href = item.detail_url;
+        toast.style.display = "block";
+        window.setTimeout(function () {
+            toast.style.display = "none";
+        }, 12000);
+    }
+
+    async function poll() {
+        try {
+            const response = await fetch(endpoint, {
+                headers: {"X-Requested-With": "XMLHttpRequest"},
+                credentials: "same-origin",
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            updateBadge(data.pending_count, data.due_count);
+
+            const ids = data.pending.map(item => item.id);
+
+            if (!initialized) {
+                ids.forEach(id => known.add(id));
+                initialized = true;
+                persistKnown();
+                return;
+            }
+
+            const newItem = data.pending.find(item => !known.has(item.id));
+            ids.forEach(id => known.add(id));
+
+            // Se descartan del almacenamiento los IDs que ya dejaron de estar
+            // pendientes para que la sesión no crezca indefinidamente.
+            known = new Set(Array.from(known).filter(id => ids.includes(id)));
+            persistKnown();
+
+            if (newItem) showNewIncident(newItem);
+        } catch (error) {
+            // La notificación es auxiliar: un corte de red no interrumpe la
+            // operación y el siguiente ciclo vuelve a intentarlo.
+        }
+    }
+
+    poll();
+    window.setInterval(poll, 20000);
+})();
+</script>
+{% endif %}

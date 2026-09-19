@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de materiales - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* Los campos del reporte son cortos -dos fechas y dos listas- y en la
+       rejilla compartida, que estira el campo hasta el borde de la tarjeta,
+       un selector de cuatro opciones acababa midiendo media pantalla. Se
+       limita el ancho del campo, no el de la rejilla: asi las etiquetas
+       siguen alineadas a la derecha contra su columna y los cuatro campos
+       arrancan en la misma vertical. */
+    .tc-report-form { max-width:560px; }
+    .tc-report-form .tc-form-field { max-width:260px; }
+    .tc-report-form .tc-form-field.narrow { max-width:160px; }
+</style>
+{% endblock %}
+
+{% comment %}
+Reporte de materiales: la pantalla que lo pide.
+
+La hoja no se pinta aqui. Sale en su propia URL -`reports:materials_list`- y
+en una pestaña nueva, como en el sistema que se reemplaza: asi el formulario
+se queda intacto detras y la siguiente consulta es cambiar un campo y volver
+a pulsar, no retroceder y reescribirlo todo.
+
+Solo Html abre pestaña. PDF, Word y Excel bajan como archivo sobre la misma
+pantalla; abrirles una pestaña dejaria una en blanco detras de la descarga.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    <div class="tc-breadcrumb">
+        Reportes &rsaquo; <strong>Materiales</strong>
+    </div>
+
+    <form method="get" action="{% url 'reports:materials_list' %}" id="reportForm" novalidate>
+
+        <section class="tc-card tc-section tc-full tc-sheet">
+
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-box-seam"></i>Reporte de materiales
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="tc-form tc-report-form">
+
+                    <label class="tc-form-label" for="{{ form.date_from.id_for_label }}">Desde</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.date_from }}
+                        {% for error in form.date_from.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.date_to.id_for_label }}">Hasta</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.date_to }}
+                        {% for error in form.date_to.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.scope.id_for_label }}">Reporte</label>
+                    <div class="tc-form-field">
+                        {{ form.scope }}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.export_format.id_for_label }}">Formato</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.export_format }}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="tc-card-footer">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-download"></i>Exportar
+                </button>
+            </div>
+
+        </section>
+
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        "use strict";
+
+        var form = document.getElementById("reportForm");
+        var formato = document.getElementById("{{ form.export_format.id_for_label }}");
+
+        if (!form || !formato) {
+            return;
+        }
+
+        // Qué formatos abren pestaña lo decide el servidor, no esta lista: es
+        // `forms.VIEWED_FORMATS`, y así la regla se puede comprobar en una
+        // prueba en vez de quedarse escrita solo aquí.
+        var enPestana = [{% for formato_visto in viewed_formats %}"{{ formato_visto }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+        // El Html y el PDF los pinta el navegador, así que sobre la pantalla
+        // actual taparian el formulario. Word y Excel se descargan: con
+        // target="_blank" dejarian una pestaña en blanco detras de la
+        // descarga que el operador tiene que cerrar a mano cada vez.
+        //
+        // Se ajusta tambien al cargar, no solo al cambiar el desplegable: el
+        // navegador recuerda el formato elegido al volver atras, y con el
+        // destino sin recalcular el primer envio iria al sitio equivocado.
+        function ajustar() {
+            form.target =
+                enPestana.indexOf(formato.value) !== -1 ? "_blank" : "_self";
+        }
+
+        formato.addEventListener("change", ajustar);
+        ajustar();
+    })();
+</script>
+{% endblock %}

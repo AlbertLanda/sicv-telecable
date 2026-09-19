@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Compromiso de pago de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% comment %}
+La pantalla completa del compromiso.
+
+Desde el tablero de deuda esto se abre en una ventana emergente, que es más
+manejable: el operador no pierde de vista lo que había marcado. Esta pantalla
+sigue existiendo y sigue siendo la que manda -es a donde va el formulario si el
+navegador no puede con la ventana, y la que se ve al entrar por la URL-, y las
+dos pintan las mismas piezas para que no se separen.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Compromiso de pago" %}
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {% comment %}
+        Las deudas elegidas viajan escondidas. Se marcan en el tablero y aquí
+        solo se leen, así que no hay casillas que las manden: sin esto, el
+        compromiso se concedería sobre nada.
+        {% endcomment %}
+        {% for charge in selected_charges %}
+            <input type="hidden" name="charges" value="{{ charge.pk }}">
+        {% endfor %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="tc-card tc-section tc-full tc-sheet">
+
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-hand-thumbs-up"></i>Compromiso de pago
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+                {% include "payments/_commitment_fields.html" %}
+            </div>
+
+        </section>
+
+        {% if selected_charges %}
+            <div class="tc-actions">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-check-lg"></i>Aceptar
+                </button>
+                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                    Cancelar
+                </a>
+            </div>
+        {% endif %}
+
+    </form>
+
+</div>
+
+{% endblock %}

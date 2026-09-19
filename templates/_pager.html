@@ -1,0 +1,88 @@
+{% comment %}
+Pie de las tablas del abonado: cuántos registros hay y cómo recorrerlos.
+
+Todas las tablas largas -órdenes, deuda, pagos, comprobantes, actividad- pasan
+por aquí para que el operador encuentre siempre el mismo control en el mismo
+sitio, y para que «página 2» signifique lo mismo en todas.
+
+Se pinta aunque quepa todo en una página. Antes solo aparecía al pasar de
+quince filas, y una tabla sin pie no dice si lo que se ve es todo o es el
+principio: el operador no tenía forma de distinguir «doce órdenes» de «las
+doce primeras».
+
+`querystring` conserva el resto de parámetros de la URL: la tabla de deuda
+lleva el tamaño de página en `filas`, y sin esto pasar de página lo perdería.
+
+Espera `page_obj`. Con `show_page_size` añade el selector de filas, que
+necesita además `page_sizes` y `page_size`.
+{% endcomment %}
+
+{% if page_obj.paginator.count %}
+    <div class="tc-pager">
+
+        <span class="tc-pager-count">
+            {{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize }}
+            &middot;
+            página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+        </span>
+
+        <div class="tc-pager-actions">
+
+            {% if show_page_size %}
+                {% comment %}
+                Cuántas filas se ven de golpe. En la deuda no es cosmético:
+                «Cobrar» y «Compromiso» actúan sobre lo marcado y la marca no
+                cruza de página, así que saldar una mora larga de una vez
+                exige poder verla entera.
+                {% endcomment %}
+                <select name="filas"
+                        class="tc-input tc-pager-size"
+                        aria-label="Filas por página"
+                        onchange="this.form.submit();">
+                    {% for size in page_sizes %}
+                        <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+                            {{ size }} filas
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+
+            {% if page_obj.has_previous %}
+                <a class="tc-btn muted" href="{% querystring page=page_obj.previous_page_number %}">
+                    <i class="bi bi-chevron-left"></i>Anterior
+                </a>
+            {% else %}
+                <span class="tc-btn muted disabled" aria-disabled="true">
+                    <i class="bi bi-chevron-left"></i>Anterior
+                </span>
+            {% endif %}
+
+            {% comment %}
+            Los números solo cuando caben. Con muchas páginas la tira se come
+            el ancho de la tarjeta y deja de leerse; ahí basta «página X de Y»
+            con los dos saltos.
+            {% endcomment %}
+            {% if page_obj.paginator.num_pages <= 10 %}
+                {% for number in page_obj.paginator.page_range %}
+                    {% if number == page_obj.number %}
+                        <span class="tc-pager-page active" aria-current="page">{{ number }}</span>
+                    {% else %}
+                        <a class="tc-pager-page" href="{% querystring page=number %}">{{ number }}</a>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+
+            {% if page_obj.has_next %}
+                <a class="tc-btn muted" href="{% querystring page=page_obj.next_page_number %}">
+                    Siguiente<i class="bi bi-chevron-right"></i>
+                </a>
+            {% else %}
+                <span class="tc-btn muted disabled" aria-disabled="true">
+                    Siguiente<i class="bi bi-chevron-right"></i>
+                </span>
+            {% endif %}
+
+        </div>
+
+    </div>
+{% endif %}

@@ -272,12 +272,113 @@
         return element("span", "mini-badge", order.status_display || order.status || "Estado");
     }
 
+    function orderTypeBadge(order) {
+        const label = text(order.order_type, "Tipo de orden");
+        const badge = element("span", "mini-badge", label);
+        const normalized = label
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toUpperCase();
+
+        let palette = {
+            color: "#475467",
+            background: "#f2f4f7",
+            border: "#d0d5dd",
+        };
+        if (normalized.includes("AVERIA INTERNET")) {
+            palette = {
+                color: "#9a3412",
+                background: "#ffedd5",
+                border: "#fdba74",
+            };
+        } else if (normalized.includes("AVERIA CABLE")) {
+            palette = {
+                color: "#6941c6",
+                background: "#f4f0ff",
+                border: "#d9d0ff",
+            };
+        } else if (normalized.includes("INSTALACION")) {
+            palette = {
+                color: "#175cd3",
+                background: "#eff8ff",
+                border: "#b2ddff",
+            };
+        }
+
+        badge.style.color = palette.color;
+        badge.style.background = palette.background;
+        badge.style.border = `1px solid ${palette.border}`;
+        return badge;
+    }
+
+    function quickInfoRow(label, value, fallback = "—") {
+        const row = element("div");
+        row.append(
+            element("dt", "", label),
+            element("dd", "", text(value, fallback)),
+        );
+        return row;
+    }
+
+    function quickOrderPanel(order) {
+        const panel = element("div", "note-box");
+        panel.hidden = true;
+
+        const heading = element("div");
+        heading.style.display = "flex";
+        heading.style.alignItems = "center";
+        heading.style.justifyContent = "space-between";
+        heading.style.gap = "10px";
+        heading.append(
+            element("strong", "", "Información rápida"),
+            orderTypeBadge(order),
+        );
+
+        const location = [order.district, order.zone || order.branch]
+            .filter(Boolean)
+            .join(" · ");
+        const scheduled = order.scheduled_at
+            ? formatDate(order.scheduled_at)
+            : text(order.scheduled_date, "Sin programación");
+        const service = `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`;
+
+        const details = element("dl", "data-list");
+        details.append(
+            quickInfoRow("Cliente", order.customer?.display_name, "Cliente"),
+            quickInfoRow("Código", order.customer?.code, "Sin código"),
+            quickInfoRow("Motivo", order.reason, "Sin motivo registrado"),
+            quickInfoRow("Servicio", service),
+            quickInfoRow("Ubicación", location, "Ubicación por confirmar"),
+            quickInfoRow("Programada", scheduled, "Sin programación"),
+            quickInfoRow("Prioridad", order.priority_display, "Normal"),
+        );
+        if (order.subtype) {
+            details.append(quickInfoRow("Subtipo", order.subtype));
+        }
+
+        const privacy = element(
+            "p",
+            "helper",
+            "La dirección exacta y la ficha completa se muestran después de tomar la orden.",
+        );
+        privacy.style.marginBottom = "0";
+
+        panel.append(heading, details, privacy);
+        return panel;
+    }
+
     function orderCard(order, mode) {
         const card = element("article", "order-card");
         const top = element("div", "order-card-top");
         const titleWrap = element("div");
-        titleWrap.append(
+        const identity = element("div");
+        identity.append(
             element("span", "order-number", text(order.order_number)),
+            " ",
+            orderTypeBadge(order),
+        );
+        titleWrap.append(
+            identity,
             element("h3", "", text(order.customer?.display_name, "Cliente")),
             element("p", "", `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`),
         );
@@ -293,18 +394,32 @@
         );
 
         const actions = element("div", "order-card-actions");
+        let quickPanel = null;
         if (mode === "available") {
+            quickPanel = quickOrderPanel(order);
+            actions.style.gridTemplateColumns = "minmax(0, .8fr) minmax(0, 1.2fr)";
+
+            const view = element("button", "btn btn-secondary btn-block", "Ver");
+            view.type = "button";
+            view.addEventListener("click", () => {
+                quickPanel.hidden = !quickPanel.hidden;
+                view.textContent = quickPanel.hidden ? "Ver" : "Ocultar";
+            });
+
             const claim = element("button", "btn btn-primary btn-block", "Tomar orden");
             claim.type = "button";
             claim.addEventListener("click", () => claimOrder(order.id, claim));
-            actions.append(claim);
+            actions.append(view, claim);
         } else {
             const detail = element("button", "btn btn-secondary btn-block", "Ver Orden Técnica");
             detail.type = "button";
             detail.addEventListener("click", () => openDetail(order.id, "mine"));
             actions.append(detail);
         }
-        card.append(top, meta, actions);
+
+        card.append(top, meta);
+        if (quickPanel) card.append(quickPanel);
+        card.append(actions);
         return card;
     }
 

@@ -28,14 +28,7 @@
     </div>
 </div>
 
-{% if messages %}
-    {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    {% endfor %}
-{% endif %}
+{# Los avisos los pinta el shell en base.html, una sola vez para todas las pantallas. #}
 
 <nav class="card card-custom mb-4">
     <div class="card-body py-2">
@@ -149,7 +142,7 @@
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de instalación</small><span>{% if sub.installation_date %}{{ sub.installation_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de corte</small><span>{% if sub.cut_date %}{{ sub.cut_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
                             <div class="col-md-3"><small class="text-muted d-block">Fecha de reconexión</small><span>{% if sub.reconnection_date %}{{ sub.reconnection_date|date:"d/m/Y" }}{% else %}No registrada{% endif %}</span></div>
-                            <div class="col-md-3"><small class="text-muted d-block">Ciclo de facturación</small><span>{{ sub.billing_cycle|default:"No registrado" }}</span></div>
+                            <div class="col-md-3"><small class="text-muted d-block">Ciclo de facturación legado</small><span>{{ sub.billing_cycle|default:"No registrado" }}</span></div>
                         </div>
                     </div>
                 </div>

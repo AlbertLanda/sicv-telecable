@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Compromiso {{ commitment.pk }} de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% comment %}
+El compromiso concedido, a pantalla completa.
+
+Desde el tablero de deuda esto se abre en una ventana emergente. Esta pantalla
+existe para que el aviso siga llevando a alguna parte cuando el navegador no
+puede con la ventana, y para que la dirección se pueda copiar y pegar. Las dos
+pintan las mismas piezas.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Compromiso de pago" %}
+
+    <section class="tc-card tc-section tc-full tc-sheet">
+
+        <div class="tc-section-head banner">
+            <h2 class="tc-section-title">
+                <i class="bi bi-hand-thumbs-up"></i>Compromiso de pago {{ commitment.pk }}
+            </h2>
+        </div>
+
+        <div class="tc-section-body">
+            {% include "payments/_commitment_detail.html" %}
+        </div>
+
+    </section>
+
+    <div class="tc-actions">
+        {% comment %}
+        El papel que el abonado firma. Se abre en la pestaña de al lado, en el
+        visor del navegador: lo que se imprime es el papel, no esta pantalla.
+        {% endcomment %}
+        <a href="{% url 'payments:commitment_pdf' pk=customer.pk commitment_pk=commitment.pk %}?ver=1"
+           target="_blank" rel="noopener"
+           class="tc-btn primary">
+            <i class="bi bi-printer"></i>Imprimir
+        </a>
+        {% if can_grant_commitment and commitment.status == "ACTIVE" %}
+            <form method="post"
+                  action="{% url 'payments:commitment_cancel' pk=commitment.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="tc-btn">
+                    <i class="bi bi-x-circle"></i>Anular compromiso
+                </button>
+            </form>
+        {% endif %}
+        <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+            Volver
+        </a>
+    </div>
+
+</div>
+
+{% endblock %}

@@ -20,17 +20,56 @@ class User(AbstractUser):
     # Capacidades mínimas que nacen del rol operativo y no dependen de que
     # un administrador haya marcado permisos uno por uno en Django Admin.
     #
+    # Administrador gestiona el personal operativo desde el SICV. Usa los
+    # permisos estándar de Django sobre User (ver/agregar/cambiar), pero no el
+    # permiso de borrado: las cuentas se desactivan para conservar trazabilidad.
+    # Una cuenta con is_superuser=True queda por encima de este rol y conserva
+    # todos los permisos del sistema.
+    #
     # ATC necesita poder completar el ciclo que realmente realiza en oficina:
-    # registrar abonados, emitir/consultar OT y gestionar su programación.
+    # registrar y actualizar abonados, mantener sus direcciones, suscripciones
+    # y contratos, emitir/consultar OT y gestionar su programación. También
+    # necesita consultar la situación económica del abonado y registrar cobros
+    # desde una oficina autorizada. Crear cargos, anular pagos y conceder
+    # compromisos siguen requiriendo permisos explícitos.
     # La asignación de técnicos NO forma parte de este conjunto: los técnicos
     # se autoasignan/toman las órdenes desde su canal propio.
+    #
+    # NOC consulta la ficha del abonado como contexto para soporte, pero no
+    # administra sus datos comerciales. Sus permisos base se limitan al flujo
+    # operativo de incidencias.
     ROLE_BASELINE_PERMISSIONS = {
+        Role.ADMIN: frozenset(
+            {
+                "accounts.view_user",
+                "accounts.add_user",
+                "accounts.change_user",
+            }
+        ),
         Role.ATC: frozenset(
             {
                 "customers.add_customer",
+                "customers.change_customer",
+                "customers.add_customeraddress",
+                "services.add_subscription",
+                "contracts.add_contract",
                 "work_orders.add_workorder",
                 "work_orders.view_workorder",
+                "work_orders.view_incident",
                 "work_orders.schedule_workorder",
+                "work_orders.cancel_workorder",
+                "payments.view_charge",
+                "payments.view_payment",
+                "payments.view_receipt",
+                "payments.add_payment",
+            }
+        ),
+        Role.NOC: frozenset(
+            {
+                "work_orders.view_workorder",
+                "work_orders.view_incident",
+                "work_orders.start_incident",
+                "work_orders.close_incident",
             }
         ),
     }
@@ -58,6 +97,17 @@ class User(AbstractUser):
         null=True,
         blank=True,
         verbose_name="Oficina"
+    )
+
+    # Oficinas físicas en las que el administrador autoriza al usuario a
+    # registrar cobros. Para ATC esta lista controla qué ventanillas aparecen
+    # en la barra superior. Los depósitos no se asignan aquí: son medios
+    # compartidos de la sede y se habilitan automáticamente.
+    allowed_offices = models.ManyToManyField(
+        Office,
+        related_name="authorized_users",
+        blank=True,
+        verbose_name="Oficinas habilitadas para cobro",
     )
 
     # Dato de contacto, no de identidad: a diferencia de username/nombres,

@@ -1,6 +1,12 @@
 ﻿{% extends "base.html" %}
 
-{% block title %}Registrar Cliente - Datos Generales{% endblock %}
+{% block title %}
+    {% if is_edit %}
+        Editar cliente - Datos generales
+    {% else %}
+        Registrar cliente - Datos generales
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 
@@ -11,11 +17,19 @@
     <div class="mb-4">
 
         <h1 class="h3 mb-1">
-            Registrar cliente
+            {% if is_edit %}
+                Editar cliente
+            {% else %}
+                Registrar cliente
+            {% endif %}
         </h1>
 
         <p class="text-muted mb-0">
-            Complete los datos generales del cliente.
+            {% if is_edit %}
+                Modifique los datos generales del cliente.
+            {% else %}
+                Complete los datos generales del cliente.
+            {% endif %}
         </p>
 
     </div>
@@ -28,11 +42,9 @@
     <div class="card shadow-sm mb-4">
 
         <div class="card-header">
-
             <strong>
                 Datos de identidad
             </strong>
-
         </div>
 
         <div class="card-body">
@@ -97,63 +109,63 @@
 
                 </div>
 
+
                 {% if person_type_display == "Persona Natural" %}
 
-                <!-- APELLIDO PATERNO -->
+                    <!-- APELLIDO PATERNO -->
 
-                <div class="col-md-4">
+                    <div class="col-md-4">
 
-                    <label class="form-label fw-semibold">
-                        Apellido paterno
-                    </label>
+                        <label class="form-label fw-semibold">
+                            Apellido paterno
+                        </label>
 
-                    <input
-                        type="text"
-                        class="form-control"
-                        value="{{ registration_data.paternal_surname }}"
-                        readonly
-                    >
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="{{ registration_data.paternal_surname }}"
+                            readonly
+                        >
 
-                </div>
-
-
-                <!-- APELLIDO MATERNO -->
-
-                <div class="col-md-4">
-
-                    <label class="form-label fw-semibold">
-                        Apellido materno
-                    </label>
-
-                    <input
-                        type="text"
-                        class="form-control"
-                        value="{{ registration_data.maternal_surname }}"
-                        readonly
-                    >
-
-                </div>
+                    </div>
 
 
-                <!-- NOMBRES -->
+                    <!-- APELLIDO MATERNO -->
 
-                <div class="col-md-4">
+                    <div class="col-md-4">
 
-                    <label class="form-label fw-semibold">
-                        Nombres
-                    </label>
+                        <label class="form-label fw-semibold">
+                            Apellido materno
+                        </label>
 
-                    <input
-                        type="text"
-                        class="form-control"
-                        value="{{ registration_data.first_name }}"
-                        readonly
-                    >
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="{{ registration_data.maternal_surname }}"
+                            readonly
+                        >
 
-                </div>
+                    </div>
 
-            {% endif %}
 
+                    <!-- NOMBRES -->
+
+                    <div class="col-md-4">
+
+                        <label class="form-label fw-semibold">
+                            Nombres
+                        </label>
+
+                        <input
+                            type="text"
+                            class="form-control"
+                            value="{{ registration_data.first_name }}"
+                            readonly
+                        >
+
+                    </div>
+
+                {% endif %}
 
             </div>
 
@@ -169,11 +181,9 @@
     <div class="card shadow-sm">
 
         <div class="card-header">
-
             <strong>
                 Datos generales
             </strong>
-
         </div>
 
 
@@ -212,17 +222,14 @@
                             <span class="text-danger">
                                 *
                             </span>
-
                         </label>
 
                         {{ form.branch }}
 
                         {% for error in form.branch.errors %}
-
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
-
                         {% endfor %}
 
                     </div>
@@ -243,17 +250,14 @@
                                 <span class="text-danger">
                                     *
                                 </span>
-
                             </label>
 
                             {{ form.business_name }}
 
                             {% for error in form.business_name.errors %}
-
                                 <div class="text-danger small mt-1">
                                     {{ error }}
                                 </div>
-
                             {% endfor %}
 
                         </div>
@@ -275,11 +279,9 @@
                         {{ form.phone }}
 
                         {% for error in form.phone.errors %}
-
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
-
                         {% endfor %}
 
                     </div>
@@ -299,11 +301,9 @@
                         {{ form.secondary_phone }}
 
                         {% for error in form.secondary_phone.errors %}
-
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
-
                         {% endfor %}
 
                     </div>
@@ -323,11 +323,9 @@
                         {{ form.email }}
 
                         {% for error in form.email.errors %}
-
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
-
                         {% endfor %}
 
                     </div>
@@ -335,27 +333,30 @@
                 </div>
 
 
-                <hr class="my-4">
+                {% if not is_edit %}
 
+                    <hr class="my-4">
 
-                <!-- ===================================================== -->
-                <!-- SIGUIENTE PASO OPCIONAL -->
-                <!-- ===================================================== -->
+                    <div class="mb-4">
 
-                <div class="mb-4">
+                        <label class="form-label fw-semibold d-block">
+                            Siguiente paso
+                        </label>
 
-    <label class="form-label fw-semibold d-block">
-        Siguiente paso
-    </label>
+                        <div class="form-text">
+                            Al registrar los datos generales continuará automáticamente
+                            al registro de la dirección del cliente. Desde ahí podrá
+                            crear una suscripción y continuar con el contrato y la
+                            orden de instalación.
+                        </div>
 
-    <div class="form-text">
-        Al registrar los datos generales continuará automáticamente
-        al registro de la dirección del cliente. Desde ahí podrá
-        crear una suscripción y continuar con el contrato y la
-        orden de instalación.
-    </div>
+                    </div>
 
-</div>
+                {% else %}
+
+                    <hr class="my-4">
+
+                {% endif %}
 
 
                 <!-- BOTONES -->
@@ -371,14 +372,27 @@
                     </button>
 
 
-                    <button
-                        type="submit"
-                        name="action"
-                        value="address"
-                        class="btn btn-primary"
-                    >
-                        Registrar cliente y continuar a direcciones →
-                    </button>
+                    {% if is_edit %}
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                        >
+                            Guardar cambios
+                        </button>
+
+                    {% else %}
+
+                        <button
+                            type="submit"
+                            name="action"
+                            value="address"
+                            class="btn btn-primary"
+                        >
+                            Registrar cliente y continuar a direcciones →
+                        </button>
+
+                    {% endif %}
 
                 </div>
 
