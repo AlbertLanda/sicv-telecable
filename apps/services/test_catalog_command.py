@@ -21,7 +21,18 @@ class CommercialCatalogCommandTests(TestCase):
         call_command("cargar_catalogo_comercial", stdout=output)
 
         self.assertEqual(ServiceType.objects.filter(code__in=["INTERNET", "CABLE", "DUO"]).count(), 3)
-        self.assertEqual(Plan.objects.count(), 24)
+
+        # Se cuentan los planes de los tres servicios que carga el comando y
+        # no todos los de la base: telefonia, fibra oscura, transporte de
+        # datos y APPS los siembra la migracion de catalogo, asi que ya
+        # existen antes de que el comando corra. Son 24 confirmados mas los
+        # dos de TV Cable sobre FTTH, que nacen aqui porque cuelgan de CABLE.
+        self.assertEqual(
+            Plan.objects.filter(
+                service_type__code__in=["INTERNET", "CABLE", "DUO"]
+            ).count(),
+            26,
+        )
         self.assertEqual(PlanTariff.objects.filter(plan__code="CABLE-GENERAL").count(), 2)
         # Dos reglas, y se comprueba cuales: la cobertura de La Oroya para
         # 2026 se expresa bloqueando las lineas anteriores, no exigiendo un
@@ -104,7 +115,21 @@ class CommercialCatalogCommandTests(TestCase):
         call_command("cargar_catalogo_comercial", "--dry-run", stdout=StringIO())
 
         self.assertFalse(ServiceType.objects.filter(code__in=["INTERNET", "CABLE", "DUO"]).exists())
-        self.assertEqual(Plan.objects.count(), 0)
+
+        # No queda ningun plan del comando. Los del catalogo de contratos
+        # siguen ahi porque no los puso el comando: los puso la migracion, y
+        # un dry run no desanda migraciones.
+        self.assertEqual(
+            Plan.objects.exclude(
+                service_type__code__in=[
+                    "TELEFONO",
+                    "FIBRA_OSCURA",
+                    "TRANSPORTE_DATOS",
+                    "APPS",
+                ]
+            ).count(),
+            0,
+        )
         self.assertEqual(PlanTariff.objects.count(), 0)
         self.assertEqual(CommercialCoverageRule.objects.count(), 0)
         self.assertEqual(InstallationMaterialRule.objects.count(), 0)

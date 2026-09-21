@@ -156,6 +156,22 @@ class ServiceType(models.Model):
         default=Decimal("5.00"),
         verbose_name="Cargo mensual por anexo",
     )
+
+    # Las aplicaciones de streaming se entregan a una cuenta, no a un
+    # domicilio: sin correo y celular el abonado no puede usar lo que
+    # contrata. Es una bandera del servicio y no una lista de codigos en el
+    # formulario, igual que `supports_tv_annexes`: manana puede haber otro
+    # servicio por cuenta, y nadie tendria que editar el codigo del contrato
+    # para que lo pida.
+    requires_playhub_account = models.BooleanField(
+        default=False,
+        verbose_name="Requiere cuenta PlayHub",
+        help_text=(
+            "Activar para servicios que se entregan a una cuenta, como APPS. "
+            "El contrato exigira correo y celular PlayHub."
+        ),
+    )
+
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

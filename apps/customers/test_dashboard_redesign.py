@@ -74,6 +74,9 @@ class CustomerDashboardRedesignTests(TestCase):
             contract_number="CONT-000001",
             customer=self.customer,
             subscription=self.subscription,
+            service_type=self.subscription.service_type,
+            plan=self.subscription.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 9, 4),
             status=Contract.Status.ACTIVE,
         )

@@ -1,7 +1,7 @@
 ﻿from django.contrib.auth.decorators import login_required, permission_required
 from django.urls import path
 
-from . import views
+from . import print_views, views
 
 
 app_name = "contracts"
@@ -40,6 +40,17 @@ urlpatterns = [
         "customers/<int:customer_pk>/contracts/<int:pk>/generate-installation/",
         views.InstallationWorkOrderCreateView.as_view(),
         name="generate_installation_order",
+    ),
+
+    # Contrato de abonado en PDF, para imprimirlo y firmarlo.
+    #
+    # Se sirve con el mismo alcance que el resumen -el contrato tiene que
+    # pertenecer al cliente de la URL- y sin permiso propio: quien puede
+    # abrir el contrato puede imprimir el documento que lo describe.
+    path(
+        "customers/<int:customer_pk>/contracts/<int:pk>/documento/",
+        print_views.ContractDocumentPdfView.as_view(),
+        name="contract_document",
     ),
 
     # Comprobante de la Orden de Instalación generada desde este contrato.

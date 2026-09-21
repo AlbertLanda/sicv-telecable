@@ -1,136 +1,202 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Contrato {{ contract.contract_number }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* La misma rejilla que el alta. Un contrato se lee donde se escribió:
+       si la vista ordenara los mismos datos de otra manera, el operador
+       tendría que aprender dos pantallas para un solo documento. */
+    .tc-sheet .tc-form.cols-2 { gap:18px 28px; }
+
+    .tc-sheet .tc-form-field > .tc-input,
+    .tc-sheet .tc-form-field > .form-control { width:100%; }
+
+    /* Banda sin relleno lateral, para que sus columnas sean las mismas que
+       las del resto de la ficha. */
+    .tc-playhub { grid-column:1/-1; padding:15px 0 17px; border-top:1px solid var(--tc-border); border-bottom:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-playhub-title { font-size:.75rem; font-weight:800; color:#1b3f6b; margin-bottom:13px; display:flex; align-items:center; gap:8px; }
+    .tc-playhub .tc-form { grid-template-columns:150px minmax(0,1fr) 150px minmax(0,1fr); gap:12px 28px; }
+
+    @media (max-width: 1100px) {
+        .tc-playhub .tc-form { grid-template-columns:150px minmax(0,1fr); }
+    }
+    @media (max-width: 700px) {
+        .tc-playhub .tc-form { grid-template-columns:1fr; }
+    }
+
+    /* --------------------------------------------------------------
+       En papel, la hoja del contrato y nada más.
+
+       La barra de acciones, las pestañas del abonado, la franja del
+       domicilio y la tarjeta de la orden de instalación son formas de
+       moverse por el sistema: no pertenecen a un documento impreso. Lo
+       que se lleva la hoja es quién es el abonado y qué dice su
+       contrato.
+
+       El armazón -barra superior y menú- ya lo esconde base.html.
+       -------------------------------------------------------------- */
+    @media print {
+        .tc-toolbar,
+        .tc-tabs,
+        .no-print {
+            display: none !important;
+        }
+
+        /* La franja azul llena de tinta media hoja. Impresa se convierte
+           en su propio trazo: el mismo título, sobre la línea que separa
+           la cabecera del contenido. */
+        .tc-section-head.banner {
+            background: #fff !important;
+            border-bottom: 1.5pt solid #0f4c7f;
+            border-radius: 0;
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .tc-section-head.banner .tc-section-title,
+        .tc-section-head.banner .tc-section-title i {
+            color: #0f4c7f !important;
+        }
+
+        .tc-card {
+            border: 0;
+            box-shadow: none;
+        }
+
+        .tc-section-body {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        .tc-input.tc-readonly {
+            background: #fff !important;
+            border-color: #999 !important;
+            color: #111 !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% comment %}
+El contrato registrado, en modo vista.
+
+Muestra los mismos campos, en el mismo orden y con la misma disposición que
+la pantalla donde se registró, todos bloqueados. Es un solo documento: que
+se lea igual escribiéndolo y consultándolo ahorra aprender dos pantallas, y
+es como lo presenta el sistema que se está reemplazando.
+
+La orden de trabajo no está aquí: el contrato es el documento comercial y la
+orden es lo que se ejecuta en campo. Se crea desde «Nueva orden de trabajo»,
+que es la puerta común a todas.
+{% endcomment %}
 
 {% block content %}
 
-<div class="container py-4">
+<div class="tc-content">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    {% include "_customer_record_header.html" with active_tab="info" record_title=contract.contract_number %}
 
-        <div>
-            <h2 class="fw-bold mb-1">
-                Resumen de contratación
+    <section class="tc-card tc-section tc-full tc-sheet">
+
+        <div class="tc-section-head banner">
+            <h2 class="tc-section-title">
+                <i class="bi bi-file-earmark-text"></i>Contrato {{ contract.contract_number }}
             </h2>
 
-            <p class="text-muted mb-0">
-                Alta comercial FTTH completada hasta contrato
-            </p>
         </div>
 
-        <a
-            href="{% url 'customers:detail' customer.pk %}#bloque-d"
-            class="btn btn-outline-secondary"
-        >
-            ← Volver a la ficha del cliente
-        </a>
+        <div class="tc-section-body">
 
-    </div>
+            <div class="tc-form cols-2">
 
-    {# Los avisos los pinta el shell en base.html, una sola vez para todas las pantallas. #}
+                <div class="tc-form-label">Código</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.pk }}" disabled>
+                </div>
 
+                <div class="tc-form-label">Número</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.contract_number }}" disabled>
+                </div>
 
-    <div class="card shadow-sm border-0 mb-4">
+                {% comment %}
+                El contrato dice lo que se firmó: su propio servicio y plan,
+                no los de la suscripción. Si mañana la suscripción cambia de
+                plan, esta vista tiene que seguir mostrando lo que el abonado
+                firmó.
+                {% endcomment %}
+                <div class="tc-form-label">Servicio</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.service_type }}" disabled>
+                </div>
 
-        <div class="card-header bg-light">
-            <strong>Cliente y domicilio</strong>
-        </div>
+                <div class="tc-form-label">Plan</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.plan }}" disabled>
+                </div>
 
-        <div class="card-body">
+                <div class="tc-form-label">Suscripción</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ subscription_label }}" disabled>
+                </div>
 
-            <div class="row g-4">
+                <div class="tc-form-label">Estado</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.get_status_display }}" disabled>
+                </div>
 
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Cliente</small>
-                    <strong>{{ customer }}</strong>
-                    {% if customer.document_number %}
-                        <div class="small text-muted">
-                            {{ customer.document_type }} {{ customer.document_number }}
+                <div class="tc-form-label">Modalidad</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.get_modality_display|default:'—' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Cuotas</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.installments }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Inicio</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{{ contract.start_date|date:'d/m/Y' }}" disabled>
+                </div>
+
+                <div class="tc-form-label">Última activación</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{% if contract.last_activation_date %}{{ contract.last_activation_date|date:'d/m/Y' }}{% else %}—{% endif %}"
+                           disabled>
+                </div>
+
+                {% if contract.service_type.requires_playhub_account %}
+                    <div class="tc-playhub">
+                        <div class="tc-playhub-title">
+                            <i class="bi bi-person-badge"></i>Cuenta PlayHub
                         </div>
-                    {% endif %}
-                </div>
 
-                <div class="col-md-6">
-                    <small class="text-muted d-block">Domicilio del servicio</small>
-                    <strong>{{ subscription.address.address }}</strong>
-                    <div class="small text-muted">
-                        {{ subscription.address.district }}
-                        {% if subscription.address.zone %}
-                            · {{ subscription.address.zone }}
-                        {% endif %}
-                    </div>
-                </div>
+                        <div class="tc-form">
+                            <div class="tc-form-label">Correo PlayHub</div>
+                            <div class="tc-form-field">
+                                <input type="text" class="tc-input tc-readonly"
+                                       value="{{ contract.playhub_email|default:'—' }}" disabled>
+                            </div>
 
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <div class="card shadow-sm border-0 mb-4">
-
-        <div class="card-header bg-light">
-            <strong>
-                Servicio y suscripción — Estado: {{ subscription.get_status_display }}
-            </strong>
-        </div>
-
-        <div class="card-body">
-
-            <div class="row g-4">
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Tipo de servicio</small>
-                    <strong>{{ subscription.service_type }}</strong>
-                </div>
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Plan</small>
-                    <strong>{{ subscription.plan }}</strong>
-                </div>
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Número de servicio</small>
-                    <strong>{{ subscription.service_number }}</strong>
-                </div>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <div class="card shadow-sm border-0 mb-4">
-
-        <div class="card-header bg-light">
-            <strong>
-                Contrato — Estado: {{ contract.get_status_display }}
-            </strong>
-        </div>
-
-        <div class="card-body">
-
-            <div class="row g-4">
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Número de contrato</small>
-                    <strong class="text-primary">{{ contract.contract_number }}</strong>
-                </div>
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Fecha de inicio</small>
-                    <strong>{{ contract.start_date }}</strong>
-                </div>
-
-                <div class="col-md-4">
-                    <small class="text-muted d-block">Fecha de finalización</small>
-                    <strong>{{ contract.end_date|default:"—" }}</strong>
-                </div>
-
-                {% if contract.notes %}
-                    <div class="col-12">
-                        <small class="text-muted d-block">Observaciones</small>
-                        {{ contract.notes }}
+                            <div class="tc-form-label">Celular PlayHub</div>
+                            <div class="tc-form-field">
+                                <input type="text" class="tc-input tc-readonly"
+                                       value="{{ contract.playhub_phone|default:'—' }}" disabled>
+                            </div>
+                        </div>
                     </div>
                 {% endif %}
 
@@ -138,118 +204,29 @@
 
         </div>
 
-    </div>
+        {% comment %}
+        El documento que el abonado firma y se lleva, al pie de la ficha,
+        donde el alta tiene sus botones.
 
-
-    <div class="card shadow-sm border-0 mb-0">
-
-        <div class="card-header bg-light">
-            <strong>Orden de instalación</strong>
+        Abre el PDF en la pestaña de al lado, en el visor del navegador, que
+        ya trae sus botones de imprimir y guardar. Es la misma regla que
+        cobranza aplica a sus comprobantes: lo que pasa por la impresora es
+        el papel, no una pantalla, y no hay página intermedia ni diálogo que
+        salte sin que nadie lo pida.
+        {% endcomment %}
+        <div class="tc-section-body tc-card-footer border-top no-print">
+            <div class="tc-actions" style="margin-top:0;">
+                <a href="{% url 'contracts:contract_document' customer.pk contract.pk %}?ver=1"
+                   target="_blank"
+                   rel="noopener"
+                   class="tc-btn primary">
+                    <i class="bi bi-printer"></i>Imprimir contrato
+                </a>
+            </div>
         </div>
 
-        <div class="card-body">
+    </section>
 
-            {% if installation_order %}
-
-                <div class="row g-4 mb-3">
-
-                    <div class="col-md-4">
-                        <small class="text-muted d-block">Número de OT</small>
-                        <strong class="text-primary">{{ installation_order.order_number }}</strong>
-                    </div>
-
-                    <div class="col-md-4">
-                        <small class="text-muted d-block">Estado</small>
-                        <strong>{{ installation_order.get_status_display }}</strong>
-                    </div>
-
-                    <div class="col-md-4">
-                        <small class="text-muted d-block">Registrada</small>
-                        <strong>{{ installation_order.created_at }}</strong>
-                    </div>
-
-                </div>
-
-                {% if installation_order.status == "PENDING" %}
-                    <p class="text-muted small mb-3">
-                        La orden ya está disponible para tomar desde
-                        la app del técnico.
-                    </p>
-                {% endif %}
-
-                <div class="d-flex flex-wrap gap-2 mb-3">
-
-                    <a
-                        href="{% url 'contracts:installation_order_receipt' customer.pk contract.pk %}"
-                        class="btn btn-outline-primary btn-sm"
-                    >
-                        Ver orden de instalación
-                    </a>
-
-                    {# La ficha es donde se asigna técnico, se completan   #}
-                    {# NAP/borne/MAC/precinto y se adjuntan evidencias -el #}
-                    {# comprobante es de solo lectura y no ofrece nada de  #}
-                    {# eso-. Se ofrece con el mismo permiso que abre la    #}
-                    {# ficha desde cualquier otra pantalla del sistema.    #}
-                    {% if perms.work_orders.view_workorder %}
-                        <a
-                            href="{% url 'work_orders:detail' installation_order.pk %}"
-                            class="btn btn-primary btn-sm"
-                        >
-                            Ver / editar ficha de la orden
-                        </a>
-                    {% endif %}
-
-                </div>
-
-            {% else %}
-
-                <p class="text-muted small mb-3">
-                    Todavía no se generó ninguna Orden de Trabajo para
-                    esta suscripción.
-                </p>
-
-            {% endif %}
-
-            {% if can_generate_installation_order %}
-
-                {% if can_request_installation_order %}
-
-                    {# El botón navega (GET) al formulario de la orden -no #}
-                    {# crea nada en el clic-: InstallationWorkOrderCreateView #}
-                    {# ahora es un FormView que muestra la pantalla de       #}
-                    {# creación aquí y solo genera la orden al confirmar     #}
-                    {# ese formulario (POST).                                #}
-                    <a
-                        href="{% url 'contracts:generate_installation_order' customer.pk contract.pk %}"
-                        class="btn btn-primary"
-                    >
-                        Generar Orden de Instalación
-                    </a>
-
-                {% else %}
-
-                    <div class="alert alert-secondary mb-0">
-                        No tienes permiso para generar órdenes de
-                        trabajo. Solicita a un usuario autorizado que
-                        complete este paso.
-                    </div>
-
-                {% endif %}
-
-            {% else %}
-
-                <div class="alert alert-secondary mb-0">
-                    Ya existe una orden de instalación en curso para
-                    esta suscripción; no se puede generar otra
-                    mientras esa no llegue a un estado final.
-                </div>
-
-            {% endif %}
-
-        </div>
-
-    </div>
 
 </div>
 

@@ -160,23 +160,40 @@ comercial ni registrar direcciones, suscripciones o contratos.
                 <thead>
                     <tr>
                         <th>N.º Contrato</th>
-                        <th>Suscripción</th>
+                        <th>Servicio</th>
+                        <th>Plan</th>
+                        <th>Modalidad</th>
                         <th>Fecha inicio</th>
-                        <th>Fecha fin</th>
                         <th>Estado</th>
+                        <th>Documento</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for contract in contracts %}
                     <tr>
-                        <td><strong>{{ contract.contract_number }}</strong></td>
-                        <td>#{{ contract.subscription.id }}</td>
+                        <td>
+                            {# El número es el nombre del contrato: abrirlo desde ahí es lo que el operador intenta. #}
+                            <a href="{% url 'contracts:contract_summary' customer.pk contract.pk %}">
+                                <strong>{{ contract.contract_number }}</strong>
+                            </a>
+                        </td>
+                        <td>{{ contract.service_type.name }}</td>
+                        <td>{{ contract.plan.name }}</td>
+                        <td>{{ contract.get_modality_display|default:"-" }}</td>
                         <td>{{ contract.start_date|date:"d/m/Y" }}</td>
-                        <td>{% if contract.end_date %}{{ contract.end_date|date:"d/m/Y" }}{% else %}-{% endif %}</td>
                         <td>{% if contract.status == 'ACTIVE' %}<span class="status-success">{{ contract.get_status_display }}</span>{% else %}{{ contract.get_status_display }}{% endif %}</td>
+                        <td>
+                            {# El contrato de abonado, listo para firmar, en la pestaña de al lado. #}
+                            <a href="{% url 'contracts:contract_document' customer.pk contract.pk %}?ver=1"
+                               target="_blank" rel="noopener"
+                               class="tc-icon-btn"
+                               title="Imprimir contrato de abonado">
+                                <i class="bi bi-printer"></i>
+                            </a>
+                        </td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="5">Sin contratos registrados.</td></tr>
+                    <tr><td colspan="7">Sin contratos registrados.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -1,87 +1,97 @@
-﻿import calendar
-from datetime import date
-
 from django import forms
 
 from .models import Contract
+from .subscriptions import resolver_suscripcion
 from apps.accounts.models import User
-from apps.services.models import Subscription
+from apps.services.models import Plan, ServiceType
 from apps.work_orders.models import OrderReason, WorkOrder
 
 
-# Duración mínima del contrato, en meses (mejora solicitada 02/09).
-# Un contrato FTTH no puede cerrarse con una vigencia menor a medio año:
-# se valida aquí, en el formulario, y no en el modelo, porque end_date
-# sigue siendo opcional (null=True, blank=True) para los contratos sin
-# fecha de finalización definida -esos no entran a esta validación-.
-MINIMUM_CONTRACT_DURATION_MONTHS = 6
-
-
-def _add_months(source_date, months):
-    """
-    Suma meses calendario a una fecha, sin depender de python-dateutil
-    (no está en requirements.txt). Si el día de origen no existe en el
-    mes de destino (p. ej. 31 de enero + 1 mes) se ajusta al último día
-    de ese mes, igual que relativedelta.
-    """
-
-    month_index = source_date.month - 1 + months
-
-    year = source_date.year + month_index // 12
-    month = month_index % 12 + 1
-
-    day = min(
-        source_date.day,
-        calendar.monthrange(year, month)[1],
-    )
-
-    return date(year, month, day)
-
-
 class ContractCreateForm(forms.ModelForm):
+    """Alta del contrato de servicio.
+
+    Mantiene los campos y el orden del sistema anterior -servicio, plan,
+    suscripcion, estado, modalidad, cuotas, inicio- porque es la pantalla que
+    ATC tiene aprendida. Cuatro de ellos no se escriben: codigo y numero los
+    pone el sistema, la suscripcion la resuelven el servicio y el plan, y el
+    estado de un contrato nuevo es activo. La pantalla los muestra
+    bloqueados para que se reconozcan.
+
+    Servicio manda sobre plan, y los dos sobre la suscripcion que recibe el
+    contrato. El combo de planes se repinta en el navegador con el catalogo
+    que la vista deja en la pagina; aqui todo se vuelve a resolver y a
+    comprobar, porque un POST armado a mano no pasa por ese javascript.
+    """
 
     class Meta:
         model = Contract
 
         fields = [
-            "subscription",
+            "service_type",
+            "plan",
+            "modality",
+            "installments",
             "start_date",
-            "end_date",
-            "notes",
+            "playhub_email",
+            "playhub_phone",
         ]
 
         widgets = {
-            "subscription": forms.Select(
+            "service_type": forms.Select(
                 attrs={
                     "class": "form-select",
                 }
             ),
+            "plan": forms.Select(
+                attrs={
+                    "class": "form-select",
+                }
+            ),
+            "modality": forms.Select(
+                attrs={
+                    "class": "form-select",
+                }
+            ),
+            "installments": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "min": 1,
+                    "step": 1,
+                }
+            ),
+            # `<input type="date">` solo entiende el formato ISO. Sin
+            # decirselo, Django pinta el valor en el formato local -21/09/2026-
+            # y el navegador lo descarta: el campo salia vacio aunque el
+            # formulario llegara con la fecha de hoy puesta.
             "start_date": forms.DateInput(
+                format="%Y-%m-%d",
                 attrs={
                     "class": "form-control",
                     "type": "date",
                 }
             ),
-            "end_date": forms.DateInput(
+            "playhub_email": forms.EmailInput(
                 attrs={
                     "class": "form-control",
-                    "type": "date",
+                    "placeholder": "correo@dominio.com",
                 }
             ),
-            "notes": forms.Textarea(
+            "playhub_phone": forms.TextInput(
                 attrs={
                     "class": "form-control",
-                    "rows": 4,
-                    "placeholder": "Observaciones del contrato...",
+                    "placeholder": "9XXXXXXXX",
                 }
             ),
         }
 
         labels = {
-            "subscription": "Suscripción",
-            "start_date": "Fecha de inicio",
-            "end_date": "Fecha de finalización",
-            "notes": "Observaciones",
+            "service_type": "Servicio",
+            "plan": "Plan",
+            "modality": "Modalidad",
+            "installments": "Cuotas",
+            "start_date": "Inicio",
+            "playhub_email": "Correo PlayHub",
+            "playhub_phone": "Celular PlayHub",
         }
 
     def __init__(self, *args, **kwargs):
@@ -91,122 +101,75 @@ class ContractCreateForm(forms.ModelForm):
 
         self.customer = customer
 
-        self.fields["subscription"].queryset = (
-            Subscription.objects.none()
+        self.fields["service_type"].queryset = (
+            ServiceType.objects
+            .filter(is_active=True)
+            .order_by("name")
         )
+        self.fields["service_type"].empty_label = "Seleccione un servicio"
 
-        if customer is not None:
-            self.fields["subscription"].queryset = (
-                Subscription.objects
-                .filter(
-                    customer=customer,
-                    is_active=True,
-                    status=Subscription.Status.PRESALE,
-                )
-                .select_related(
-                    "customer",
-                    "service_type",
-                    "plan",
-                    "address",
-                )
-                .order_by(
-                    "service_type__name",
-                    "service_number",
-                )
-            )
+        # Todos los planes activos: cual corresponde lo decide el servicio, y
+        # eso se comprueba en el modelo. Limitar la lista aqui al servicio ya
+        # elegido obligaria a reconstruir el formulario en cada cambio del
+        # combo, que es justo lo que el catalogo en la pagina evita.
+        self.fields["plan"].queryset = (
+            Plan.objects
+            .filter(is_active=True)
+            .select_related("service_type")
+            .order_by("service_type__name", "name")
+        )
+        self.fields["plan"].empty_label = "Seleccione un plan"
+
+        # PlayHub solo se exige donde significa algo, y eso lo dice el
+        # servicio. El formulario los declara opcionales y el modelo decide:
+        # asi un servicio nuevo que manana se entregue por cuenta no
+        # necesita tocar esta pantalla.
+        self.fields["playhub_email"].required = False
+        self.fields["playhub_phone"].required = False
+
+        # La suscripción que recibe el contrato la resuelve `clean()` a
+        # partir del servicio y el plan: no es un campo que el operador
+        # llene. `subscription_resuelta` queda disponible para que la vista
+        # la pinte bloqueada y para las pruebas.
+        self.subscription_resuelta = None
 
     def clean(self):
         cleaned_data = super().clean()
 
-        subscription = cleaned_data.get("subscription")
-        start_date = cleaned_data.get("start_date")
-        end_date = cleaned_data.get("end_date")
+        service_type = cleaned_data.get("service_type")
+        plan = cleaned_data.get("plan")
 
         # ---------------------------------------------------------
-        # VALIDAR SUSCRIPCIÓN DEL CLIENTE
+        # RESOLVER LA SUSCRIPCIÓN
+        #
+        # No se elige: la determinan el cliente, el servicio y el plan. Si
+        # no hay ninguna disponible, el contrato no tiene sobre qué
+        # firmarse y lo que falta es registrar la suscripción, no corregir
+        # un campo de esta pantalla. Por eso el aviso va arriba y no
+        # colgando de un campo.
         # ---------------------------------------------------------
 
-        if self.customer and subscription:
+        if service_type and plan and self.customer:
 
-            if subscription.customer_id != self.customer.pk:
+            subscription = resolver_suscripcion(
+                self.customer,
+                service_type,
+                plan,
+            )
+
+            if subscription is None:
                 self.add_error(
-                    "subscription",
-                    "La suscripción seleccionada no pertenece al cliente.",
-                )
-
-        # ---------------------------------------------------------
-        # VALIDAR SUSCRIPCIÓN ACTIVA
-        # ---------------------------------------------------------
-
-        if subscription:
-
-            if not subscription.is_active:
-                self.add_error(
-                    "subscription",
-                    "La suscripción seleccionada no está activa.",
-                )
-
-            if subscription.status != Subscription.Status.PRESALE:
-                self.add_error(
-                    "subscription",
+                    None,
                     (
-                        "Solo se puede registrar un contrato para "
-                        "una suscripción en estado Preventa."
-                    ),
-                )
-
-        # ---------------------------------------------------------
-        # VALIDAR FECHAS
-        # ---------------------------------------------------------
-
-        if start_date and end_date:
-
-            if end_date < start_date:
-                self.add_error(
-                    "end_date",
-                    (
-                        "La fecha de finalización no puede "
-                        "ser anterior a la fecha de inicio."
+                        "Este cliente no tiene una suscripción en Preventa "
+                        "disponible para el servicio y plan elegidos. "
+                        "Regístrela antes de contratar."
                     ),
                 )
 
             else:
-                minimum_end_date = _add_months(
-                    start_date,
-                    MINIMUM_CONTRACT_DURATION_MONTHS,
-                )
-
-                if end_date < minimum_end_date:
-                    self.add_error(
-                        "end_date",
-                        (
-                            "El contrato debe tener una vigencia "
-                            f"mínima de {MINIMUM_CONTRACT_DURATION_MONTHS} "
-                            "meses. Con esta fecha de inicio, la fecha "
-                            "de finalización debe ser "
-                            f"{minimum_end_date:%d/%m/%Y} o posterior."
-                        ),
-                    )
-
-        # ---------------------------------------------------------
-        # EVITAR CONTRATO DUPLICADO
-        # ---------------------------------------------------------
-
-        if subscription:
-
-            exists = Contract.objects.filter(
-                subscription=subscription,
-                is_active=True,
-            ).exists()
-
-            if exists:
-                self.add_error(
-                    "subscription",
-                    (
-                        "La suscripción seleccionada ya tiene "
-                        "un contrato activo registrado."
-                    ),
-                )
+                self.subscription_resuelta = subscription
+                self.instance.subscription = subscription
 
         return cleaned_data
 

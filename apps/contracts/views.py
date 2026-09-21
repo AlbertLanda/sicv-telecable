@@ -4,12 +4,19 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
 from django.views.generic import CreateView, DetailView, FormView
 
 from .forms import ContractCreateForm, InstallationWorkOrderForm
+from .subscriptions import (
+    codigo_de_suscripcion,
+    resolver_suscripcion,
+    suscripciones_contratables,
+)
 from .models import Contract
 from apps.customers.models import Customer
-from apps.services.models import Subscription
+from apps.services.catalog import plans_by_service_type, service_type_config
+from apps.services.models import ServiceType, Subscription
 from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import create_installation_work_order
@@ -35,6 +42,13 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             **kwargs,
         )
 
+    # El alta arranca en DUO. Es el servicio que más se contrata, así que
+    # abrir la pantalla ya en él ahorra el paso que el operador daba
+    # siempre; y el plan queda en el primero de ese servicio, el mismo que
+    # encabeza el combo, para que la pantalla nazca entera en vez de a
+    # medio llenar. Ambos se cambian como cualquier otro campo.
+    SERVICIO_POR_DEFECTO = "DUO"
+
     def get_form_kwargs(self):
 
         kwargs = super().get_form_kwargs()
@@ -43,21 +57,65 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
 
         return kwargs
 
+    def catalogo_de_planes(self):
+        """Los planes por servicio, una sola vez por petición.
+
+        Lo leen el valor inicial del formulario y el javascript de la
+        pantalla, y los dos tienen que ver el mismo orden: el plan por
+        defecto es «el primero del combo», y eso solo se sostiene si la
+        lista es la misma.
+        """
+
+        if not hasattr(self, "_catalogo_de_planes"):
+            self._catalogo_de_planes = plans_by_service_type()
+
+        return self._catalogo_de_planes
+
+    def servicio_y_plan_por_defecto(self):
+        servicio = (
+            ServiceType.objects
+            .filter(code=self.SERVICIO_POR_DEFECTO, is_active=True)
+            .first()
+        )
+
+        if servicio is None:
+            return None, None
+
+        planes = self.catalogo_de_planes().get(servicio.pk) or []
+
+        return servicio.pk, (planes[0]["id"] if planes else None)
+
     def get_initial(self):
         """
-        Preselecciona la suscripción cuando se llega desde el resumen
-        previo a la contratación (services:subscription_summary),
-        que enlaza aquí con ?subscription=<id>. El campo sigue
-        siendo editable: esto solo evita que el operador tenga que
-        volver a buscar la suscripción que acaba de registrar.
+        Cuando se llega desde el resumen previo a la contratación
+        (services:subscription_summary, que enlaza aquí con
+        ?subscription=<id>), la pantalla abre con el servicio y el plan de
+        esa suscripción: son los que el contrato tiene que declarar para
+        que la suscripción que se resuelva sea justamente esa.
+
+        Llegando desde la ficha, sin suscripción a cuestas, abre en el
+        servicio por defecto.
         """
 
         initial = super().get_initial()
 
-        subscription_id = self.request.GET.get("subscription")
+        initial["start_date"] = timezone.localdate()
 
-        if subscription_id:
-            initial["subscription"] = subscription_id
+        subscription = self.get_preselected_subscription()
+
+        if subscription is not None:
+            initial["service_type"] = subscription.service_type_id
+            initial["plan"] = subscription.plan_id
+
+            return initial
+
+        servicio, plan = self.servicio_y_plan_por_defecto()
+
+        if servicio is not None:
+            initial["service_type"] = servicio
+
+        if plan is not None:
+            initial["plan"] = plan
 
         return initial
 
@@ -79,10 +137,12 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             .first()
         )
 
-    def generate_contract_number(self):
-        """
-        Genera un número único de contrato.
-        Formato: CONT-000001
+    def next_contract_sequence(self):
+        """Correlativo que le tocaria al proximo contrato.
+
+        Lo usan el número que se guarda y el código que la pantalla muestra
+        bloqueado, para que ATC vea de antemano el mismo valor que va a
+        quedar registrado.
         """
 
         last_contract = (
@@ -92,11 +152,38 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
         )
 
         if last_contract is None:
-            next_number = 1
-        else:
-            next_number = last_contract.id + 1
+            return 1
 
-        return f"CONT-{next_number:06d}"
+        return last_contract.id + 1
+
+    def generate_contract_number(self):
+        """
+        Genera un número único de contrato.
+        Formato: CONT-000001
+        """
+
+        return f"CONT-{self.next_contract_sequence():06d}"
+
+    def etiqueta_de_la_suscripcion(self, form):
+        """El código que se lee en el campo bloqueado de suscripción.
+
+        Con el formulario enviado, el de la que `clean()` ya resolvió. Sin
+        enviar, el de la que corresponde a los valores con los que abre la
+        pantalla. El javascript lo vuelve a calcular con cada cambio de
+        servicio o plan, leyendo el mismo catálogo y en el mismo orden.
+        """
+
+        if form.is_bound:
+            subscription = getattr(form, "subscription_resuelta", None)
+
+        else:
+            subscription = resolver_suscripcion(
+                self.customer,
+                form.initial.get("service_type"),
+                form.initial.get("plan"),
+            )
+
+        return codigo_de_suscripcion(subscription)
 
     def form_valid(self, form):
 
@@ -112,7 +199,10 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
                     self.generate_contract_number()
                 )
 
-                contract.status = Contract.Status.ACTIVE
+                # El estado no se toca: un contrato nuevo nace activo, y eso
+                # lo dice el valor por defecto del modelo. Forzarlo aqui
+                # tambien pondria la misma regla en dos sitios, y la pantalla
+                # -que muestra el estado bloqueado- lee el del modelo.
 
                 contract.save()
 
@@ -163,20 +253,55 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             self.get_preselected_subscription()
         )
 
+        # Servicio y plan son un solo dato en dos combos: el catálogo entero
+        # viaja con la página y el combo de planes se repinta sin recargar.
+        # Es el mismo mecanismo del alta de suscripción.
+        context["plans_by_service_type"] = plans_by_service_type()
+        context["service_type_config"] = service_type_config()
+
+        # Las suscripciones contratables del cliente, con el servicio y el
+        # plan de cada una: el contrato exige que coincidan, así que el combo
+        # solo ofrece las del plan elegido en vez de dejar que ATC descubra
+        # la incompatibilidad al guardar.
+        context["subscriptions_catalog"] = [
+            {
+                "id": subscription.pk,
+                "label": codigo_de_suscripcion(subscription),
+                "service_type": subscription.service_type_id,
+                "plan": subscription.plan_id,
+            }
+            for subscription in suscripciones_contratables(self.customer)
+        ]
+
+        # La suscripción que le tocaría al contrato con lo que la pantalla
+        # muestra ahora mismo. Va bloqueada: el operador la lee para saber
+        # qué se está contratando, no la elige.
+        context["resolved_subscription_label"] = (
+            self.etiqueta_de_la_suscripcion(context["form"])
+        )
+
+        # Código y número los pone el sistema. Se muestran bloqueados para
+        # que ATC reconozca la pantalla y sepa con qué número va a quedar el
+        # contrato, no para escribirlos.
+        context["next_contract_code"] = self.next_contract_sequence()
+        context["next_contract_number"] = self.generate_contract_number()
+
         return context
 
 
 class ContractSummaryView(LoginRequiredMixin, DetailView):
     """
-    Resumen de contratación (día 02/09 del sprint FTTH).
+El contrato registrado, de solo lectura.
 
-    Cierra, de solo lectura, el alta comercial FTTH del día:
-    cliente, domicilio, servicio/plan, suscripción y contrato ya
-    registrados. Desde aquí también se puede generar la Orden de
-    Trabajo de instalación (día 03/09), consumiendo
-    create_installation_work_order() a través de
-    InstallationWorkOrderCreateView: esta vista sigue siendo de solo
-    lectura, no crea ninguna orden por sí misma.
+    Muestra los mismos campos, en el mismo orden y con la misma
+    disposición que la pantalla donde se registró: es un solo documento
+    visto después, no otro.
+
+    No ofrece la orden de instalación. El contrato es el documento
+    comercial; la orden de trabajo es lo que se ejecuta en campo y se crea
+    desde «Nueva orden de trabajo», la puerta común a todas las órdenes.
+    `InstallationWorkOrderCreateView` sigue existiendo y sirviendo por su
+    URL, con sus reglas intactas.
     """
 
     model = Contract
@@ -194,6 +319,8 @@ class ContractSummaryView(LoginRequiredMixin, DetailView):
                 "subscription__address__zone",
                 "subscription__service_type",
                 "subscription__plan",
+                "service_type",
+                "plan",
             )
         )
 
@@ -205,35 +332,9 @@ class ContractSummaryView(LoginRequiredMixin, DetailView):
         context["customer"] = self.object.customer
         context["subscription"] = subscription
 
-        # -------------------------------------------------------------
-        # ORDEN DE INSTALACIÓN (día 03/09)
-        #
-        # Se muestra la instalación más reciente de la suscripción, si
-        # existe, en lugar de solo un booleano: así el resumen puede
-        # comunicar tanto "ya se generó, número X, estado Y" como
-        # "puede volver a intentarse" cuando la instalación anterior
-        # quedó en un estado final que create_installation_work_order()
-        # no bloquea (LIQUIDATED, REJECTED, NOT_FEASIBLE, CANCELLED).
-        # -------------------------------------------------------------
-
-        installation_order = (
-            subscription.work_orders
-            .filter(order_type__code="INSTALLATION")
-            .select_related("order_type")
-            .order_by("-created_at")
-            .first()
-        )
-
-        context["installation_order"] = installation_order
-
-        context["can_generate_installation_order"] = (
-            installation_order is None
-            or installation_order.status in WorkOrder.FINAL_STATUSES
-        )
-
-        context["can_request_installation_order"] = (
-            self.request.user.has_perm("work_orders.add_workorder")
-        )
+        # La suscripción se lee igual que en el alta: por su código. Es el
+        # mismo documento visto después, no otro.
+        context["subscription_label"] = codigo_de_suscripcion(subscription)
 
         return context
 
@@ -296,11 +397,13 @@ class InstallationWorkOrderCreateView(
 
     def _has_blocking_installation(self, subscription):
         """
-        Mismo criterio que ContractSummaryView.can_generate_installation_order:
-        una instalación que todavía no llegó a un estado final bloquea una
-        nueva. Se repite aquí -y no solo en el resumen- para que abrir esta
-        URL directamente, sin pasar por el botón, tampoco ofrezca un
-        formulario condenado a fallar.
+        Mismo criterio que `create_installation_work_order()`: una
+        instalación que todavía no llegó a un estado final bloquea una
+        nueva. Se comprueba aquí -y no solo en la fachada- para no ofrecer
+        un formulario condenado a fallar al guardar.
+
+        La pantalla del contrato ya no enlaza aquí, pero esta vista sigue
+        sirviendo por su URL, así que la comprobación sigue haciendo falta.
         """
         return (
             subscription.work_orders

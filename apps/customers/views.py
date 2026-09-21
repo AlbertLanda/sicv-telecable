@@ -814,6 +814,8 @@ class CustomerDetailView(LoginRequiredMixin, DetailView):
                 "subscription",
                 "subscription__service_type",
                 "subscription__plan",
+                "service_type",
+                "plan",
             )
             .order_by("-created_at")
         )

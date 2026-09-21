@@ -136,6 +136,9 @@ class CustomerUIConsultaTests(TestCase):
             contract_number="CTR-0001",
             customer=self.customer,
             subscription=self.subscription,
+            service_type=self.subscription.service_type,
+            plan=self.subscription.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 1, 15),
             status=Contract.Status.ACTIVE,
         )
@@ -1663,6 +1666,9 @@ class CustomerRecentActivityTests(TestCase):
             contract_number="CTR-HIST-01",
             customer=self.customer,
             subscription=subscription,
+            service_type=subscription.service_type,
+            plan=subscription.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 1, 1),
             status=Contract.Status.ACTIVE,
         )
@@ -1947,6 +1953,9 @@ class CustomerRecentActivityTests(TestCase):
                 contract_number=f"CTR-N1-{index:03d}",
                 customer=self.customer,
                 subscription=subscription,
+                service_type=subscription.service_type,
+                plan=subscription.plan,
+                modality=Contract.Modality.SALE,
                 start_date=date(2026, 1, 1),
                 status=Contract.Status.ACTIVE,
             )

@@ -108,7 +108,7 @@ class Command(BaseCommand):
     def _load_service_types(self):
         definitions = {
             "INTERNET": {
-                "name": "Internet",
+                "name": "INTERNET",
                 "description": "Servicio de Internet",
                 "supports_tv_annexes": False,
                 "annex_installation_price": Decimal("0.00"),
@@ -116,7 +116,10 @@ class Command(BaseCommand):
                 "is_active": True,
             },
             "CABLE": {
-                "name": "Cable",
+                # El nombre que el formulario de contrato de servicio ofrece
+                # en su combo. El codigo no cambia: lo referencian el
+                # catalogo de ordenes y las reglas de metraje.
+                "name": "TV CABLE",
                 "description": "Servicio de television por cable",
                 "supports_tv_annexes": True,
                 "annex_installation_price": Decimal("5.00"),
@@ -124,7 +127,7 @@ class Command(BaseCommand):
                 "is_active": True,
             },
             "DUO": {
-                "name": "Duo",
+                "name": "DUO",
                 "description": "Internet + television por cable",
                 "supports_tv_annexes": True,
                 "annex_installation_price": Decimal("5.00"),
@@ -271,6 +274,34 @@ class Command(BaseCommand):
         cable.full_clean()
         cable.save()
         stats["created" if created else "updated"] += 1
+
+        # Los dos planes de cable sobre FTTH que el contrato de servicio
+        # ofrece. Su mensualidad no esta confirmada todavia, asi que se
+        # siembran en cero y se configuran en Configurar > Planes: una cifra
+        # inventada aqui saldria en la cotizacion como si fuera la oficial.
+        for code, name in (
+            ("TVC-FTTH-40", "TV CABLE FTTH - 40"),
+            ("TVC-FTTH-50", "TV CABLE FTTH - 50"),
+        ):
+            plan_ftth, created = Plan.objects.get_or_create(
+                code=code,
+                defaults={
+                    "name": name,
+                    "service_type": services["CABLE"],
+                    "generation": None,
+                    "commercial_category": "",
+                    "billing_policy": None,
+                    "speed_mbps": None,
+                    "technology": "FTTH",
+                    "monthly_price": Decimal("0.00"),
+                    "included_tv_points": 0,
+                    "requires_geographic_tariff": False,
+                    "is_active": True,
+                },
+            )
+            plan_ftth.full_clean()
+            plan_ftth.save()
+            stats["created" if created else "updated"] += 1
 
         self.stdout.write(self.style.SUCCESS("✓ Planes 2025/2026 y Super Economico confirmados"))
         return stats

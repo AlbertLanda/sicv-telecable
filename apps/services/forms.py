@@ -200,6 +200,7 @@ class ServiceTypeForm(forms.ModelForm):
             "supports_tv_annexes",
             "annex_installation_price",
             "annex_monthly_price",
+            "requires_playhub_account",
             "is_active",
         ]
         widgets = {

@@ -1,18 +1,25 @@
+import io
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch, Zone
+from apps.payments.models import Issuer
 from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 
+from .document import datos_del_contrato
 from .forms import InstallationWorkOrderForm
+from .pdf import render_contract
 from .models import Contract
 
 
@@ -20,6 +27,28 @@ User = get_user_model()
 
 
 class ContractCreateTests(TestCase):
+    """Alta del contrato de servicio.
+
+    La pantalla declara lo que se firma -servicio, plan, modalidad, cuotas-
+    y no solo a qué suscripción se engancha. Lo que se prueba aquí es esa
+    cadena: que servicio manda sobre plan, que los dos tienen que coincidir
+    con la suscripción que se contrata, y que los datos de cuenta se piden
+    exactamente donde el servicio los necesita.
+    """
+
+    # Los diez campos de la pantalla, en el orden del sistema anterior.
+    # Se declara aquí y no dentro de una prueba porque dos pruebas lo
+    # necesitan: la que comprueba el formulario completo y la que comprueba
+    # que los campos retirados no volvieron.
+    CAMPOS_ESPERADOS = [
+        "service_type",
+        "plan",
+        "modality",
+        "installments",
+        "start_date",
+        "playhub_email",
+        "playhub_phone",
+    ]
 
     def setUp(self):
         self.branch = Branch.objects.create(
@@ -84,12 +113,56 @@ class ContractCreateTests(TestCase):
             service_number=1,
         )
 
+        # APPS y sus planes los siembra la migración de catálogo: son los que
+        # el contrato ofrece de verdad, así que las pruebas de cuenta PlayHub
+        # usan esos y no un servicio inventado para la ocasión.
+        self.apps_service_type = ServiceType.objects.get(code="APPS")
+        self.apps_plan = Plan.objects.get(code="APP-PREMIUM")
+
+        self.apps_subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.apps_service_type,
+            plan=self.apps_plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
         self.create_url = reverse(
             "contracts:contract_create",
             kwargs={
                 "customer_pk": self.customer.pk,
             },
         )
+
+    def datos_validos(self, **cambios):
+        """Un POST que la pantalla acepta, con lo que cada prueba cambie."""
+
+        datos = {
+            "service_type": self.service_type.pk,
+            "plan": self.plan.pk,
+            "modality": Contract.Modality.SALE,
+            "installments": 1,
+            "start_date": "2026-08-20",
+            "playhub_email": "",
+            "playhub_phone": "",
+        }
+
+        datos.update(cambios)
+
+        return datos
+
+    def datos_de_apps(self, **cambios):
+        """El mismo POST, pero sobre el servicio que se entrega por cuenta."""
+
+        datos = self.datos_validos(
+            service_type=self.apps_service_type.pk,
+            plan=self.apps_plan.pk,
+        )
+
+        datos.update(cambios)
+
+        return datos
 
     # -------------------------------------------------------------
     # ACCESO
@@ -108,24 +181,413 @@ class ContractCreateTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
     # -------------------------------------------------------------
-    # FORMULARIO
+    # CAMPOS DE LA PANTALLA
     # -------------------------------------------------------------
 
-    def test_formulario_solo_muestra_suscripciones_presale_del_cliente(self):
+    def test_formulario_pide_exactamente_los_campos_de_la_pantalla(self):
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(
+            list(response.context["form"].fields),
+            self.CAMPOS_ESPERADOS,
+        )
+
+    def test_formulario_no_pide_fin_medicion_equipo_ni_plantilla(self):
+        """Los cuatro campos retirados del formulario del sistema anterior.
+
+        Fin y ultimo corte los mueve la operacion del servicio, no el alta.
+        Equipo consta en la orden de instalacion. Medicion y plantilla no
+        describen nada que el SICV registre.
+        """
+
+        campos = self.client.get(self.create_url).context["form"].fields
+
+        for retirado in (
+            "end_date",
+            "measurement",
+            "equipment",
+            "template",
+            "notes",
+        ):
+            self.assertNotIn(retirado, campos)
+
+    def test_codigo_y_numero_no_son_campos_del_formulario(self):
         response = self.client.get(self.create_url)
 
         form = response.context["form"]
 
-        subscriptions = list(
-            form.fields["subscription"].queryset
+        self.assertNotIn("contract_number", form.fields)
+        self.assertNotIn("code", form.fields)
+
+    def test_codigo_y_numero_se_muestran_con_el_valor_que_les_toca(self):
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(response.context["next_contract_code"], 1)
+        self.assertEqual(response.context["next_contract_number"], "CONT-000001")
+
+        self.assertContains(response, "CONT-000001")
+
+    def test_estado_no_es_un_campo_del_formulario(self):
+        """Un contrato nuevo nace activo, y eso no se elige.
+
+        El estado cambia después -suspendido, cancelado, finalizado- por lo
+        que pasa con el servicio. Ofrecerlo al registrar permitía crear un
+        contrato ya cancelado, que no es un contrato sino un registro sin
+        uso.
+        """
+
+        response = self.client.get(self.create_url)
+
+        self.assertNotIn("status", response.context["form"].fields)
+        self.assertNotContains(response, '<select name="status"')
+
+    def test_estado_se_muestra_bloqueado_en_activo(self):
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(
+            response.context["form"].instance.get_status_display(),
+            "Activo",
         )
+
+        self.assertContains(response, 'value="Activo"')
+
+    def test_modalidad_llega_en_venta(self):
+        response = self.client.get(self.create_url)
+
+        form = response.context["form"]
+
+        self.assertEqual(form["modality"].value(), Contract.Modality.SALE)
+
+        # Y sin opción vacía: la modalidad de un contrato nuevo siempre es
+        # una de las cuatro, así que ofrecer «seleccione...» solo daba la
+        # opción de dejarla sin poner.
+        self.assertNotIn(
+            "",
+            [valor for valor, _ in form.fields["modality"].choices],
+        )
+
+    def test_inicio_llega_con_la_fecha_de_hoy(self):
+        response = self.client.get(self.create_url)
+
+        hoy = timezone.localdate()
+
+        self.assertEqual(
+            response.context["form"].initial["start_date"],
+            hoy,
+        )
+
+        # Y llega escrita como el navegador la entiende. En el formato local
+        # -21/09/2026- un `<input type="date">` descarta el valor y el campo
+        # se ve vacio aunque el formulario lo traiga puesto.
+        self.assertContains(response, f'value="{hoy:%Y-%m-%d}"')
+
+    # -------------------------------------------------------------
+    # CASCADA SERVICIO -> PLAN -> SUSCRIPCIÓN
+    # -------------------------------------------------------------
+
+    def test_catalogo_de_planes_por_servicio_viaja_a_la_pagina(self):
+        response = self.client.get(self.create_url)
+
+        catalogo = response.context["plans_by_service_type"]
 
         self.assertIn(
-            self.subscription,
-            subscriptions,
+            self.plan.pk,
+            [plan["id"] for plan in catalogo[self.service_type.pk]],
         )
 
-    def test_formulario_no_muestra_suscripcion_activa(self):
+        # Los siete planes de APPS que siembra la migración: el combo de
+        # plan tiene que poder ofrecerlos sin volver al servidor.
+        self.assertEqual(len(catalogo[self.apps_service_type.pk]), 7)
+
+    def test_catalogo_de_servicios_dice_cual_pide_cuenta_playhub(self):
+        response = self.client.get(self.create_url)
+
+        configuracion = response.context["service_type_config"]
+
+        self.assertTrue(
+            configuracion[self.apps_service_type.pk]["requires_playhub_account"]
+        )
+        self.assertFalse(
+            configuracion[self.service_type.pk]["requires_playhub_account"]
+        )
+
+    def test_catalogo_de_suscripciones_trae_su_servicio_y_su_plan(self):
+        response = self.client.get(self.create_url)
+
+        catalogo = {
+            item["id"]: item
+            for item in response.context["subscriptions_catalog"]
+        }
+
+        self.assertEqual(
+            catalogo[self.subscription.pk]["service_type"],
+            self.service_type.pk,
+        )
+        self.assertEqual(
+            catalogo[self.subscription.pk]["plan"],
+            self.plan.pk,
+        )
+        # La suscripción se identifica por su código, que es lo que el
+        # campo bloqueado muestra.
+        self.assertEqual(
+            catalogo[self.subscription.pk]["label"],
+            str(self.subscription.pk),
+        )
+
+    def test_la_pantalla_abre_en_duo_con_su_primer_plan(self):
+        """Sin suscripción a cuestas, el alta arranca en el servicio que más
+        se contrata, con el plan que encabeza su combo."""
+
+        duo = ServiceType.objects.create(code="DUO", name="DUO")
+
+        primero = Plan.objects.create(
+            service_type=duo,
+            code="DUO-2026-600",
+            name="PLAN DUO ESTANDAR 600MG - 2026",
+            generation=2026,
+            speed_mbps=600,
+        )
+
+        Plan.objects.create(
+            service_type=duo,
+            code="DUO-2025-300",
+            name="Duo 300 Mbps - 2025",
+            generation=2025,
+            speed_mbps=300,
+        )
+
+        response = self.client.get(self.create_url)
+
+        initial = response.context["form"].initial
+
+        self.assertEqual(initial["service_type"], duo.pk)
+        self.assertEqual(initial["plan"], primero.pk)
+
+        # Y es el primero del combo, no cualquiera de los dos.
+        self.assertEqual(
+            response.context["plans_by_service_type"][duo.pk][0]["id"],
+            primero.pk,
+        )
+
+    def test_la_suscripcion_que_llega_por_enlace_manda_sobre_el_defecto(self):
+        ServiceType.objects.create(code="DUO", name="DUO")
+
+        response = self.client.get(
+            f"{self.create_url}?subscription={self.subscription.pk}"
+        )
+
+        self.assertEqual(
+            response.context["form"].initial["service_type"],
+            self.service_type.pk,
+        )
+
+    def test_preselecciona_servicio_y_plan_de_la_suscripcion(self):
+        response = self.client.get(
+            f"{self.create_url}?subscription={self.subscription.pk}"
+        )
+
+        initial = response.context["form"].initial
+
+        self.assertEqual(initial["service_type"], self.service_type.pk)
+        self.assertEqual(initial["plan"], self.plan.pk)
+
+    def test_plan_de_otro_servicio_es_rechazado(self):
+        response = self.client.post(
+            self.create_url,
+            self.datos_validos(plan=self.apps_plan.pk),
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            "plan",
+            "El plan seleccionado no pertenece al servicio elegido.",
+        )
+
+        self.assertEqual(Contract.objects.count(), 0)
+
+    # -------------------------------------------------------------
+    # SUSCRIPCIÓN RESUELTA POR EL SISTEMA
+    # -------------------------------------------------------------
+
+    def test_la_suscripcion_no_es_un_campo_del_formulario(self):
+        response = self.client.get(self.create_url)
+
+        self.assertNotIn("subscription", response.context["form"].fields)
+        self.assertNotContains(response, '<select name="subscription"')
+
+    def test_la_suscripcion_se_muestra_bloqueada_al_abrir(self):
+        response = self.client.get(
+            f"{self.create_url}?subscription={self.subscription.pk}"
+        )
+
+        self.assertEqual(
+            response.context["resolved_subscription_label"],
+            str(self.subscription.pk),
+        )
+
+        self.assertContains(response, 'id="suscripcion-resuelta"')
+
+    def test_sin_suscripcion_el_campo_dice_ninguno(self):
+        """La palabra del sistema anterior: el campo está vacío porque no
+        hay nada que poner, no porque falte escribirlo."""
+
+        duo = ServiceType.objects.create(code="DUO", name="DUO")
+
+        Plan.objects.create(
+            service_type=duo,
+            code="DUO-600",
+            name="PLAN DUO ESTANDAR 600MG",
+            speed_mbps=600,
+        )
+
+        # La pantalla abre en DUO y este cliente solo tiene internet.
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(
+            response.context["resolved_subscription_label"],
+            "Ninguno",
+        )
+
+        self.assertContains(response, 'value="Ninguno"')
+
+    def test_el_contrato_se_engancha_a_la_suscripcion_del_plan_elegido(self):
+        otro_plan = Plan.objects.create(
+            service_type=self.service_type,
+            code="PLAN200",
+            name="Plan 200 Mbps",
+            speed_mbps=200,
+        )
+
+        otra_suscripcion = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=otro_plan,
+            status=Subscription.Status.PRESALE,
+            service_number=2,
+        )
+
+        self.client.post(
+            self.create_url,
+            self.datos_validos(plan=otro_plan.pk),
+        )
+
+        contrato = Contract.objects.get()
+
+        self.assertEqual(contrato.subscription, otra_suscripcion)
+        self.assertEqual(contrato.plan, otro_plan)
+
+    def test_sin_suscripcion_disponible_avisa_y_no_crea_contrato(self):
+        """APPS tiene suscripción; el plan que se elige aquí, no."""
+
+        otro_plan_apps = Plan.objects.get(code="APP-TELECABLE")
+
+        response = self.client.post(
+            self.create_url,
+            self.datos_de_apps(plan=otro_plan_apps.pk),
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertFormError(
+            response.context["form"],
+            None,
+            (
+                "Este cliente no tiene una suscripción en Preventa "
+                "disponible para el servicio y plan elegidos. "
+                "Regístrela antes de contratar."
+            ),
+        )
+
+        self.assertEqual(Contract.objects.count(), 0)
+
+    def test_la_resolucion_no_cruza_clientes(self):
+        """La suscripción de otro cliente no entra, aunque calce el plan."""
+
+        otro_cliente = Customer.objects.create(
+            code="CLI-0009",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="10101010",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Luis",
+            paternal_surname="Vargas",
+        )
+
+        otra_direccion = CustomerAddress.objects.create(
+            customer=otro_cliente,
+            zone=self.zone,
+            address="Jr. Ajeno 999",
+            district="Huancayo",
+            is_primary=True,
+        )
+
+        plan_sin_suscripcion_propia = Plan.objects.create(
+            service_type=self.service_type,
+            code="PLAN300",
+            name="Plan 300 Mbps",
+            speed_mbps=300,
+        )
+
+        suscripcion_ajena = Subscription.objects.create(
+            customer=otro_cliente,
+            address=otra_direccion,
+            service_type=self.service_type,
+            plan=plan_sin_suscripcion_propia,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        response = self.client.post(
+            self.create_url,
+            self.datos_validos(plan=plan_sin_suscripcion_propia.pk),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Contract.objects.count(), 0)
+        self.assertFalse(suscripcion_ajena.contracts.exists())
+
+    def test_el_modelo_sigue_exigiendo_que_los_tres_coincidan(self):
+        """La resolución hace imposible el desajuste desde la pantalla.
+
+        El invariante se prueba igual contra el modelo: es lo que protege al
+        contrato de un alta hecha por otra vía -el admin, un script- y lo
+        que sostiene que servicio y plan del contrato signifiquen algo.
+        """
+
+        contrato = Contract(
+            contract_number="CONT-000009",
+            customer=self.customer,
+            subscription=self.subscription,
+            service_type=self.apps_service_type,
+            plan=self.apps_plan,
+            modality=Contract.Modality.SALE,
+            start_date=date(2026, 8, 20),
+        )
+
+        with self.assertRaises(ValidationError):
+            contrato.full_clean()
+
+    # -------------------------------------------------------------
+    # SUSCRIPCIONES QUE SE OFRECEN
+    # -------------------------------------------------------------
+
+    def catalogo_de_suscripciones(self):
+        """Los identificadores que la pantalla considera contratables."""
+
+        response = self.client.get(self.create_url)
+
+        return [
+            item["id"]
+            for item in response.context["subscriptions_catalog"]
+        ]
+
+    def test_una_suscripcion_en_preventa_es_contratable(self):
+        self.assertIn(self.subscription.pk, self.catalogo_de_suscripciones())
+
+    def test_una_suscripcion_activa_no_es_contratable(self):
         active_subscription = Subscription.objects.create(
             customer=self.customer,
             address=self.address,
@@ -135,20 +597,36 @@ class ContractCreateTests(TestCase):
             service_number=2,
         )
 
-        response = self.client.get(self.create_url)
+        self.assertNotIn(
+            active_subscription.pk,
+            self.catalogo_de_suscripciones(),
+        )
 
-        subscriptions = list(
-            response.context["form"]
-            .fields["subscription"]
-            .queryset
+    def test_una_suscripcion_ya_contratada_no_es_contratable(self):
+        """Un contrato por suscripción.
+
+        Si siguiera en el grupo contratable, la resolución elegiría una que
+        el propio contrato rechaza después por duplicada.
+        """
+
+        Contract.objects.create(
+            contract_number="CONT-000001",
+            customer=self.customer,
+            subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
+            start_date=date(2026, 8, 1),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
         )
 
         self.assertNotIn(
-            active_subscription,
-            subscriptions,
+            self.subscription.pk,
+            self.catalogo_de_suscripciones(),
         )
 
-    def test_formulario_no_muestra_suscripcion_de_otro_cliente(self):
+    def test_la_suscripcion_de_otro_cliente_no_es_contratable(self):
         other_customer = Customer.objects.create(
             code="CLI-0002",
             branch=self.branch,
@@ -176,17 +654,9 @@ class ContractCreateTests(TestCase):
             service_number=1,
         )
 
-        response = self.client.get(self.create_url)
-
-        subscriptions = list(
-            response.context["form"]
-            .fields["subscription"]
-            .queryset
-        )
-
         self.assertNotIn(
-            other_subscription,
-            subscriptions,
+            other_subscription.pk,
+            self.catalogo_de_suscripciones(),
         )
 
     # -------------------------------------------------------------
@@ -196,12 +666,7 @@ class ContractCreateTests(TestCase):
     def test_crear_contrato_desde_suscripcion_presale(self):
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "Contrato de prueba",
-            },
+            self.datos_validos(),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -225,10 +690,39 @@ class ContractCreateTests(TestCase):
             date(2026, 8, 20),
         )
 
-        self.assertEqual(
-            contract.notes,
-            "Contrato de prueba",
+    def test_contrato_guarda_el_servicio_que_se_firmo(self):
+        self.client.post(self.create_url, self.datos_validos(installments=6))
+
+        contract = Contract.objects.get(subscription=self.subscription)
+
+        self.assertEqual(contract.service_type, self.service_type)
+        self.assertEqual(contract.plan, self.plan)
+        self.assertEqual(contract.modality, Contract.Modality.SALE)
+        self.assertEqual(contract.installments, 6)
+
+        # La última activación la estampa la activación del servicio, que no
+        # es esta pantalla.
+        self.assertIsNone(contract.last_activation_date)
+
+    def test_cuotas_menores_a_una_son_rechazadas(self):
+        response = self.client.post(
+            self.create_url,
+            self.datos_validos(installments=0),
         )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("installments", response.context["form"].errors)
+        self.assertEqual(Contract.objects.count(), 0)
+
+    def test_modalidad_es_obligatoria(self):
+        response = self.client.post(
+            self.create_url,
+            self.datos_validos(modality=""),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("modality", response.context["form"].errors)
+        self.assertEqual(Contract.objects.count(), 0)
 
     # -------------------------------------------------------------
     # NÚMERO AUTOMÁTICO
@@ -237,12 +731,7 @@ class ContractCreateTests(TestCase):
     def test_numero_de_contrato_se_genera_automaticamente(self):
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
+            self.datos_validos(),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -256,19 +745,28 @@ class ContractCreateTests(TestCase):
             "CONT-000001",
         )
 
+    def test_numero_enviado_a_mano_no_se_respeta(self):
+        """El número lo pone el sistema, aunque el POST traiga otro."""
+
+        self.client.post(
+            self.create_url,
+            self.datos_validos(contract_number="CONT-999999"),
+        )
+
+        contract = Contract.objects.get(subscription=self.subscription)
+
+        self.assertEqual(contract.contract_number, "CONT-000001")
+
     # -------------------------------------------------------------
-    # ESTADO INICIAL
+    # ESTADO
     # -------------------------------------------------------------
 
     def test_contrato_se_crea_activo(self):
+        """Y lo pone el sistema: el POST no trae estado."""
+
         self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
+            self.datos_validos(),
         )
 
         contract = Contract.objects.get(
@@ -283,95 +781,64 @@ class ContractCreateTests(TestCase):
         self.assertTrue(contract.is_active)
 
     # -------------------------------------------------------------
-    # VALIDACIÓN DE FECHAS
+    # CUENTA PLAYHUB
     # -------------------------------------------------------------
 
-    def test_fecha_final_no_puede_ser_anterior_a_fecha_inicio(self):
+    def test_apps_exige_correo_y_celular_playhub(self):
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "2026-08-19",
-                "notes": "",
-            },
+            self.datos_de_apps(),
         )
 
         self.assertEqual(response.status_code, 200)
 
         self.assertFormError(
             response.context["form"],
-            "end_date",
-            (
-                "La fecha de finalización no puede "
-                "ser anterior a la fecha de inicio."
+            "playhub_email",
+            "Indique el correo PlayHub del abonado.",
+        )
+        self.assertFormError(
+            response.context["form"],
+            "playhub_phone",
+            "Indique el celular PlayHub del abonado.",
+        )
+
+        self.assertEqual(Contract.objects.count(), 0)
+
+    def test_apps_guarda_la_cuenta_playhub(self):
+        response = self.client.post(
+            self.create_url,
+            self.datos_de_apps(
+                playhub_email="abonado@correo.com",
+                playhub_phone="987654321",
             ),
         )
 
-        self.assertFalse(
-            Contract.objects.filter(
-                subscription=self.subscription
-            ).exists()
-        )
+        self.assertEqual(response.status_code, 302)
 
-    def test_fecha_final_no_puede_ser_menor_a_6_meses_desde_el_inicio(self):
+        contract = Contract.objects.get(subscription=self.apps_subscription)
+
+        self.assertEqual(contract.playhub_email, "abonado@correo.com")
+        self.assertEqual(contract.playhub_phone, "987654321")
+
+    def test_servicio_sin_cuenta_no_acepta_datos_playhub(self):
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                # Poco más de 3 meses después del inicio: menos que el
-                # mínimo exigido de 6 meses.
-                "end_date": "2026-12-01",
-                "notes": "",
-            },
+            self.datos_validos(playhub_email="abonado@correo.com"),
         )
 
         self.assertEqual(response.status_code, 200)
 
         self.assertFormError(
             response.context["form"],
-            "end_date",
+            "playhub_email",
             (
-                "El contrato debe tener una vigencia mínima de 6 "
-                "meses. Con esta fecha de inicio, la fecha de "
-                "finalización debe ser 20/02/2027 o posterior."
+                "Los datos PlayHub solo corresponden a servicios "
+                "que se entregan a una cuenta."
             ),
         )
 
-        self.assertFalse(
-            Contract.objects.filter(
-                subscription=self.subscription
-            ).exists()
-        )
-
-    def test_fecha_final_con_exactamente_6_meses_es_valida(self):
-        response = self.client.post(
-            self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "2027-02-20",
-                "notes": "",
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse(
-                "contracts:contract_summary",
-                kwargs={
-                    "customer_pk": self.customer.pk,
-                    "pk": Contract.objects.get(
-                        subscription=self.subscription
-                    ).pk,
-                },
-            ),
-        )
-
-        contract = Contract.objects.get(subscription=self.subscription)
-
-        self.assertEqual(contract.end_date, date(2027, 2, 20))
+        self.assertEqual(Contract.objects.count(), 0)
 
     # -------------------------------------------------------------
     # CONTRATO DUPLICADO
@@ -382,6 +849,9 @@ class ContractCreateTests(TestCase):
             contract_number="CONT-000001",
             customer=self.customer,
             subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 8, 1),
             status=Contract.Status.ACTIVE,
             is_active=True,
@@ -389,22 +859,18 @@ class ContractCreateTests(TestCase):
 
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
+            self.datos_validos(),
         )
 
         self.assertEqual(response.status_code, 200)
 
         self.assertFormError(
             response.context["form"],
-            "subscription",
+            None,
             (
-                "La suscripción seleccionada ya tiene "
-                "un contrato activo registrado."
+                "Este cliente no tiene una suscripción en Preventa "
+                "disponible para el servicio y plan elegidos. "
+                "Regístrela antes de contratar."
             ),
         )
 
@@ -420,57 +886,6 @@ class ContractCreateTests(TestCase):
     # SUSCRIPCIÓN DE OTRO CLIENTE
     # -------------------------------------------------------------
 
-    def test_no_permite_suscripcion_de_otro_cliente(self):
-        other_customer = Customer.objects.create(
-            code="CLI-0002",
-            branch=self.branch,
-            document_type=Customer.DocumentType.DNI,
-            document_number="87654321",
-            person_type=Customer.PersonType.NATURAL,
-            first_name="Maria",
-            paternal_surname="Lopez",
-        )
-
-        other_address = CustomerAddress.objects.create(
-            customer=other_customer,
-            zone=self.zone,
-            address="Jr. Secundario 456",
-            district="Huancayo",
-            is_primary=True,
-        )
-
-        other_subscription = Subscription.objects.create(
-            customer=other_customer,
-            address=other_address,
-            service_type=self.service_type,
-            plan=self.plan,
-            status=Subscription.Status.PRESALE,
-            service_number=1,
-        )
-
-        response = self.client.post(
-            self.create_url,
-            {
-                "subscription": other_subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-
-        self.assertFormError(
-            response.context["form"],
-            "subscription",
-            "Escoja una opción válida. Esa opción no está entre las disponibles.",
-        )
-
-        self.assertEqual(
-            Contract.objects.count(),
-            0,
-        )
-
     # -------------------------------------------------------------
     # RESUMEN DE CONTRATACIÓN (día 02/09)
     # -------------------------------------------------------------
@@ -478,12 +893,7 @@ class ContractCreateTests(TestCase):
     def test_crear_contrato_redirige_al_resumen(self):
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
+            self.datos_validos(),
         )
 
         contract = Contract.objects.get(
@@ -506,6 +916,9 @@ class ContractCreateTests(TestCase):
             contract_number="CONT-000001",
             customer=self.customer,
             subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 8, 20),
             status=Contract.Status.ACTIVE,
             is_active=True,
@@ -526,6 +939,61 @@ class ContractCreateTests(TestCase):
         self.assertContains(response, self.plan.name)
         self.assertContains(response, self.service_type.name)
         self.assertContains(response, self.address.address)
+
+    def test_resumen_muestra_modalidad_y_cuotas_del_contrato(self):
+        contract = Contract.objects.create(
+            contract_number="CONT-000001",
+            customer=self.customer,
+            subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.RENTAL,
+            installments=6,
+            start_date=date(2026, 8, 20),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": contract.pk,
+                },
+            )
+        )
+
+        self.assertContains(response, "Alquiler")
+        self.assertContains(response, "Cuotas")
+
+    def test_resumen_muestra_la_cuenta_playhub_contratada(self):
+        contract = Contract.objects.create(
+            contract_number="CONT-000002",
+            customer=self.customer,
+            subscription=self.apps_subscription,
+            service_type=self.apps_service_type,
+            plan=self.apps_plan,
+            modality=Contract.Modality.SALE,
+            playhub_email="abonado@correo.com",
+            playhub_phone="987654321",
+            start_date=date(2026, 8, 20),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": contract.pk,
+                },
+            )
+        )
+
+        self.assertContains(response, "abonado@correo.com")
+        self.assertContains(response, "987654321")
 
     def test_resumen_no_accesible_con_contrato_de_otro_cliente(self):
         other_customer = Customer.objects.create(
@@ -559,6 +1027,9 @@ class ContractCreateTests(TestCase):
             contract_number="CONT-000002",
             customer=other_customer,
             subscription=other_subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 8, 20),
             status=Contract.Status.ACTIVE,
             is_active=True,
@@ -588,10 +1059,10 @@ class ContractCreateTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
 
-        self.assertEqual(
-            response.context["form"].initial.get("subscription"),
-            str(self.subscription.pk),
-        )
+        initial = response.context["form"].initial
+
+        self.assertEqual(initial["service_type"], self.service_type.pk)
+        self.assertEqual(initial["plan"], self.plan.pk)
 
         self.assertEqual(
             response.context["preselected_subscription"],
@@ -645,12 +1116,7 @@ class ContractCreateTests(TestCase):
 
         response = self.client.post(
             self.create_url,
-            {
-                "subscription": self.subscription.pk,
-                "start_date": "2026-08-20",
-                "end_date": "",
-                "notes": "",
-            },
+            self.datos_validos(),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -735,6 +1201,9 @@ class InstallationWorkOrderCreateTests(TestCase):
             contract_number="CONT-OT-000001",
             customer=self.customer,
             subscription=self.subscription,
+            service_type=self.subscription.service_type,
+            plan=self.subscription.plan,
+            modality=Contract.Modality.SALE,
             start_date=date(2026, 9, 3),
             status=Contract.Status.ACTIVE,
             is_active=True,
@@ -862,23 +1331,22 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertContains(response, "ya tiene una orden de instalación abierta")
         self.assertEqual(WorkOrder.objects.count(), 1)
 
-    def test_resumen_oculta_el_boton_sin_permiso(self):
-        self.login_user_without_workorder_permissions()
+    def test_el_contrato_no_ofrece_la_orden_de_instalacion(self):
+        """El contrato es el documento comercial, no el trabajo de campo.
 
-        response = self.client.get(self.summary_url)
+        La orden se crea desde «Nueva orden de trabajo», que es la puerta
+        común a todas. La vista de generación sigue existiendo y sirviendo
+        por su URL: lo que se retiró es su presencia en esta pantalla.
+        """
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.context["can_request_installation_order"])
-        self.assertNotContains(response, "Generar Orden de Instalación")
-
-    def test_resumen_muestra_el_boton_con_permiso(self):
         self.grant_add_workorder_permission()
 
         response = self.client.get(self.summary_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context["can_request_installation_order"])
-        self.assertContains(response, "Generar Orden de Instalación")
+        self.assertNotContains(response, "Generar Orden de Instalación")
+        self.assertNotContains(response, "Orden de instalación")
+        self.assertNotIn("installation_order", response.context)
 
     # -------------------------------------------------------------
     # GENERACIÓN CORRECTA
@@ -995,18 +1463,6 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertTrue(order.order_number)
 
-    def test_resumen_muestra_la_orden_generada(self):
-        self.grant_add_workorder_permission()
-
-        self.client.post(self.generate_url)
-
-        response = self.client.get(self.summary_url)
-
-        order = WorkOrder.objects.get(subscription=self.subscription)
-
-        self.assertContains(response, order.order_number)
-        self.assertContains(response, "Pendiente")
-
     def test_segunda_solicitud_no_duplica_la_orden(self):
         self.grant_add_workorder_permission()
 
@@ -1019,16 +1475,6 @@ class InstallationWorkOrderCreateTests(TestCase):
         )
 
         self.assertContains(response, "ya tiene una orden de instalación abierta")
-
-    def test_resumen_bloquea_boton_si_ya_hay_instalacion_abierta(self):
-        self.grant_add_workorder_permission()
-
-        self.client.post(self.generate_url)
-
-        response = self.client.get(self.summary_url)
-
-        self.assertFalse(response.context["can_generate_installation_order"])
-        self.assertNotContains(response, "Generar Orden de Instalación")
 
     # -------------------------------------------------------------
     # SUSCRIPCIÓN / CONTRATO DE OTRO CLIENTE
@@ -1059,38 +1505,6 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(WorkOrder.objects.count(), 0)
-
-    # -------------------------------------------------------------
-    # ENLACE A LA FICHA DE LA ORDEN
-    # -------------------------------------------------------------
-
-    def test_resumen_enlaza_a_la_ficha_de_la_orden_con_permiso(self):
-        self.grant_add_workorder_permission()
-        self.grant_view_workorder_permission()
-
-        self.client.post(self.generate_url)
-
-        order = WorkOrder.objects.get(subscription=self.subscription)
-
-        response = self.client.get(self.summary_url)
-
-        detail_url = reverse(
-            "work_orders:detail",
-            kwargs={"pk": order.pk},
-        )
-
-        self.assertContains(response, detail_url)
-        self.assertContains(response, "Ver / editar ficha de la orden")
-
-    def test_resumen_no_ofrece_el_enlace_sin_permiso(self):
-        self.client.post(self.generate_url)
-
-        self.login_user_without_workorder_permissions()
-
-        response = self.client.get(self.summary_url)
-
-        self.assertNotContains(response, "Ver / editar ficha de la orden")
-        self.assertContains(response, "Ver orden de instalación")
 
     # -------------------------------------------------------------
     # ORDEN CREADA: CANCELAR, IMPRIMIR Y VER ORDEN
@@ -1304,3 +1718,426 @@ class InstallationWorkOrderCreateTests(TestCase):
 
         self.assertContains(response, "GPS no disponible")
         self.assertNotContains(response, "Abrir en Google Maps")
+
+
+class ContractDocumentTests(TestCase):
+    """El contrato de abonado que se imprime y se firma.
+
+    Se reparte como en cobranza: aquí los datos del papel -que se comprueban
+    sin abrir un PDF-, el dibujo -que salga y que aguante lo que falte- y la
+    entrega -que el navegador reciba el archivo donde toca-.
+    """
+
+    def setUp(self):
+        # Jauja, porque es la sede del contrato firmado que sirve de
+        # referencia: sus oficinas y su jurisdicción están confirmadas. Las
+        # tres sedes las siembra una migración, así que aquí se toma la que
+        # ya existe en vez de crear una segunda con el mismo código.
+        self.branch, _ = Branch.objects.get_or_create(
+            code="JAUJA",
+            defaults={"name": "Jauja"},
+        )
+
+        self.zone, _ = Zone.objects.get_or_create(
+            branch=self.branch,
+            name="Sausa",
+        )
+
+        self.user = User.objects.create_user(
+            username="atc_documento",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.branch,
+        )
+
+        self.client.login(username="atc_documento", password="123")
+
+        # La empresa emisora también la siembra una migración de cobranza:
+        # es la misma razón social con la que se factura, y el contrato no
+        # puede decir otra.
+        self.issuer, _ = Issuer.objects.get_or_create(
+            code="INV",
+            defaults={
+                "business_name": (
+                    "INVERSIONES EN TELECOMUNICACIONES DIGITALES S.A.C."
+                ),
+                "ruc": "20603110456",
+            },
+        )
+
+        self.service_type = ServiceType.objects.create(
+            code="DUO-DOC",
+            name="DUO",
+            supports_tv_annexes=True,
+        )
+
+        self.plan = Plan.objects.create(
+            service_type=self.service_type,
+            code="DUO-DOC-600",
+            name="PLAN DUO ESTANDAR 600MG - 2026",
+            speed_mbps=600,
+            monthly_price=Decimal("99.00"),
+            included_tv_points=2,
+        )
+
+        self.customer = Customer.objects.create(
+            code="JA01-A0000001",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="71692678",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Kevin",
+            paternal_surname="Rivera",
+            maternal_surname="Ravichagua",
+        )
+
+        self.address = CustomerAddress.objects.create(
+            customer=self.customer,
+            zone=self.zone,
+            address="Jr. Abraham Valdelomar 235",
+            district="Sausa",
+            is_primary=True,
+        )
+
+        self.subscription = Subscription.objects.create(
+            customer=self.customer,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.ACTIVE,
+            service_number=1,
+            base_installation_fee=Decimal("150.00"),
+            base_monthly_fee=Decimal("99.00"),
+            installation_date=date(2026, 9, 15),
+        )
+
+        self.contract = Contract.objects.create(
+            contract_number="CONT-000001",
+            customer=self.customer,
+            subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
+            installments=1,
+            start_date=date(2026, 9, 14),
+            status=Contract.Status.ACTIVE,
+        )
+
+        self.document_url = reverse(
+            "contracts:contract_document",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+    def datos(self):
+        return datos_del_contrato(self.contract)
+
+    def dibujar(self):
+        buffer = BytesIO()
+        nombre = render_contract(self.contract, buffer)
+
+        return nombre, buffer.getvalue()
+
+    # -------------------------------------------------------------
+    # LO QUE DICE EL PAPEL
+    # -------------------------------------------------------------
+
+    def test_el_papel_trae_los_datos_del_abonado(self):
+        datos = self.datos()
+
+        self.assertEqual(datos["numero"], "CONT-000001")
+        self.assertEqual(datos["codigo_abonado"], "JA01-A0000001")
+        self.assertEqual(datos["cliente"], "Kevin Rivera Ravichagua")
+        self.assertEqual(datos["documento_tipo"], "DNI")
+        self.assertEqual(datos["documento_numero"], "71692678")
+        self.assertEqual(
+            datos["direccion"],
+            "Jr. Abraham Valdelomar 235, Sausa",
+        )
+
+    def test_el_papel_trae_el_servicio_y_el_plan_contratados(self):
+        datos = self.datos()
+
+        self.assertEqual(
+            datos["servicio"],
+            "DUO – PLAN DUO ESTANDAR 600MG - 2026",
+        )
+
+        # La velocidad la promete la cláusula de OSIPTEL: sin ella, el 70%
+        # garantizado no se puede medir contra nada.
+        self.assertEqual(datos["velocidad"], 600)
+
+    def test_el_papel_trae_las_tarifas_contratadas(self):
+        datos = self.datos()
+
+        self.assertEqual(datos["instalacion"], Decimal("150.00"))
+        self.assertEqual(datos["mensualidad"], Decimal("99.00"))
+
+    def test_el_papel_trae_la_fecha_de_suscripcion_en_palabras(self):
+        """El cierre del contrato se firma con la fecha escrita."""
+
+        datos = self.datos()
+
+        self.assertEqual(datos["fecha_suscripcion"], date(2026, 9, 14))
+        self.assertEqual(datos["dia"], 14)
+        self.assertEqual(datos["mes"], "setiembre")
+        self.assertEqual(datos["anio"], 2026)
+
+    def test_sin_pagos_la_ultima_fecha_de_pago_va_en_blanco(self):
+        self.assertIsNone(self.datos()["ultima_fecha_de_pago"])
+
+    def test_el_papel_trae_la_empresa_que_contrata(self):
+        datos = self.datos()
+
+        self.assertEqual(
+            datos["empresa"].business_name,
+            "INVERSIONES EN TELECOMUNICACIONES DIGITALES S.A.C.",
+        )
+        self.assertEqual(datos["empresa"].ruc, "20603110456")
+
+    def test_la_sede_del_abonado_decide_oficinas_y_jurisdiccion(self):
+        datos = self.datos()
+
+        self.assertIn("Jr. Huancayo 215", datos["oficinas"])
+        self.assertEqual(datos["telefono"], "064 466080")
+        self.assertEqual(datos["ciudad"], "Jauja")
+
+    def test_una_sede_sin_datos_no_inventa_oficinas_ni_jurisdiccion(self):
+        """Mejor un espacio en blanco que una jurisdicción equivocada."""
+
+        self.branch.code = "SEDE-NUEVA"
+        self.branch.save(update_fields=["code"])
+
+        datos = self.datos()
+
+        self.assertEqual(datos["oficinas"], "")
+        self.assertEqual(datos["telefono"], "")
+
+        # La ciudad cae al nombre de la sede: es lo único que se sabe.
+        self.assertEqual(datos["ciudad"], "Jauja")
+
+    def test_la_cuenta_playhub_solo_donde_el_servicio_la_pide(self):
+        self.assertIsNone(self.datos()["playhub"])
+
+        self.service_type.requires_playhub_account = True
+        self.service_type.save(update_fields=["requires_playhub_account"])
+
+        self.contract.playhub_email = "abonado@correo.com"
+        self.contract.playhub_phone = "987654321"
+        self.contract.save(update_fields=["playhub_email", "playhub_phone"])
+
+        self.assertEqual(
+            self.datos()["playhub"],
+            ("abonado@correo.com", "987654321"),
+        )
+
+    # -------------------------------------------------------------
+    # EL PAPEL SE DIBUJA
+    # -------------------------------------------------------------
+
+    def test_dibuja_el_contrato(self):
+        nombre, contenido = self.dibujar()
+
+        self.assertEqual(nombre, "CONT-000001.pdf")
+        self.assertTrue(contenido.startswith(b"%PDF-"))
+        self.assertGreater(len(contenido), 5000)
+
+    def test_sin_empresa_emisora_el_contrato_igual_sale(self):
+        """Un despliegue a medio configurar no deja la oficina parada.
+
+        Sale con el hueco de la razón social a la vista, que es lo que hay
+        que completar, en vez de reventar al imprimir.
+        """
+
+        # No se borra: los talonarios de cobranza la protegen. Se le cambia
+        # el código, que es lo que el documento usa para encontrarla.
+        self.issuer.code = "OTRA"
+        self.issuer.save(update_fields=["code"])
+
+        _, contenido = self.dibujar()
+
+        self.assertTrue(contenido.startswith(b"%PDF-"))
+
+    def test_un_plan_sin_velocidad_igual_sale(self):
+        """Telefonía y fibra oscura no tienen Mbps que prometer."""
+
+        self.plan.speed_mbps = None
+        self.plan.save(update_fields=["speed_mbps"])
+
+        _, contenido = self.dibujar()
+
+        self.assertTrue(contenido.startswith(b"%PDF-"))
+
+    def test_con_cuenta_playhub_igual_sale(self):
+        self.service_type.requires_playhub_account = True
+        self.service_type.save(update_fields=["requires_playhub_account"])
+
+        self.contract.playhub_email = "abonado@correo.com"
+        self.contract.playhub_phone = "987654321"
+        self.contract.save(update_fields=["playhub_email", "playhub_phone"])
+
+        _, contenido = self.dibujar()
+
+        self.assertTrue(contenido.startswith(b"%PDF-"))
+
+    # -------------------------------------------------------------
+    # LA ENTREGA
+    # -------------------------------------------------------------
+
+    def test_usuario_anonimo_no_puede_imprimir_el_contrato(self):
+        self.client.logout()
+
+        response = self.client.get(self.document_url)
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_no_entrega_el_contrato_de_otro_cliente(self):
+        otro = Customer.objects.create(
+            code="JA01-A0000002",
+            branch=self.branch,
+            document_type=Customer.DocumentType.DNI,
+            document_number="10101010",
+            person_type=Customer.PersonType.NATURAL,
+            first_name="Otro",
+            paternal_surname="Cliente",
+        )
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_document",
+                kwargs={
+                    # El contrato no es de este cliente.
+                    "customer_pk": otro.pk,
+                    "pk": self.contract.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_con_ver_llega_al_visor_del_navegador(self):
+        """`?ver=1` es lo que hace que se vea en la pestaña de al lado."""
+
+        response = self.client.get(f"{self.document_url}?ver=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("inline", response["Content-Disposition"])
+        self.assertIn("CONT-000001.pdf", response["Content-Disposition"])
+
+    def test_sin_ver_se_descarga(self):
+        response = self.client.get(self.document_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+
+    # -------------------------------------------------------------
+    # DESDE DÓNDE SE IMPRIME
+    # -------------------------------------------------------------
+
+    def test_la_vista_del_contrato_ofrece_imprimirlo(self):
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": self.contract.pk,
+                },
+            )
+        )
+
+        self.assertContains(response, f"{self.document_url}?ver=1")
+        self.assertContains(response, "Imprimir contrato")
+        self.assertContains(response, 'target="_blank"')
+
+    def test_la_ficha_del_abonado_ofrece_imprimirlo(self):
+        response = self.client.get(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertContains(response, f"{self.document_url}?ver=1")
+
+    def test_el_numero_de_contrato_abre_el_contrato(self):
+        """Hacer clic en el nombre de un registro tiene que abrirlo."""
+
+        resumen = reverse(
+            "contracts:contract_summary",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "pk": self.contract.pk,
+            },
+        )
+
+        ficha = self.client.get(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertContains(ficha, resumen)
+
+    def test_lo_que_no_va_en_papel_queda_fuera_de_la_impresion(self):
+        """Imprimir la vista deja la hoja del contrato y nada más.
+
+        Las pestañas del abonado, la barra de acciones y los propios botones
+        son formas de moverse por el sistema: en una hoja impresa no
+        significan nada.
+        """
+
+        response = self.client.get(
+            reverse(
+                "contracts:contract_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": self.contract.pk,
+                },
+            )
+        )
+
+        contenido = response.content.decode("utf-8")
+
+        for escondido in (
+            ".tc-toolbar,",
+            ".tc-tabs,",
+            ".no-print {",
+        ):
+            self.assertIn(escondido, contenido)
+
+        self.assertIn("tc-card-footer border-top no-print", contenido)
+
+
+class TemplateCommentTests(TestCase):
+    """Ningún comentario de plantilla se imprime en la pantalla.
+
+    `{# ... #}` solo funciona dentro de una línea. Partido en dos, lo que
+    sigue deja de ser un comentario y sale impreso: la plantilla no falla,
+    simplemente le dice al operador cosas que nadie escribió para él. Ya pasó
+    dos veces en esta jornada, así que se comprueba en vez de recordarlo.
+
+    Vive en contracts por ser donde apareció, pero recorre las plantillas de
+    todo el proyecto: el error no es de un módulo, es de la sintaxis.
+    """
+
+    def test_ninguna_plantilla_deja_un_comentario_abierto(self):
+        raiz = Path(__file__).resolve().parent.parent.parent
+
+        abiertos = []
+
+        for plantilla in raiz.glob("**/*.html"):
+            if "venv" in plantilla.parts:
+                continue
+
+            contenido = io.open(plantilla, encoding="utf-8").read()
+
+            for numero, linea in enumerate(contenido.splitlines(), 1):
+                if "{#" in linea and "#}" not in linea:
+                    abiertos.append(
+                        f"{plantilla.relative_to(raiz)}:{numero}"
+                    )
+
+        self.assertEqual(
+            abiertos,
+            [],
+            "Comentarios `{# #}` sin cerrar en su línea: se imprimen en la "
+            "pantalla. Use {% comment %} para varias líneas.",
+        )

@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import ValidationError
@@ -11,45 +9,10 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from apps.customers.models import Customer
 
+from .catalog import plans_by_service_type, service_type_config
 from .commercial import build_commercial_quote
 from .forms import PlanForm, ServiceTypeForm, SubscriptionCreateForm
 from .models import Plan, ServiceType, Subscription
-
-
-def _plans_by_service_type():
-    grouped = defaultdict(list)
-    plans = (
-        Plan.objects
-        .filter(is_active=True)
-        .select_related("billing_policy")
-        .order_by("service_type_id", "-generation", "commercial_category", "speed_mbps", "name")
-    )
-
-    for plan in plans:
-        grouped[plan.service_type_id].append(
-            {
-                "id": plan.pk,
-                "label": str(plan),
-                "generation": plan.generation,
-                "category": plan.get_commercial_category_display() if plan.commercial_category else "",
-                "initial_tv_courtesy_limit": plan.initial_tv_courtesy_limit,
-                "monthly_price": str(plan.monthly_price),
-                "requires_geographic_tariff": plan.requires_geographic_tariff,
-                "billing_policy": str(plan.billing_policy) if plan.billing_policy_id else "",
-            }
-        )
-    return dict(grouped)
-
-
-def _service_type_config():
-    return {
-        service_type.pk: {
-            "supports_tv_annexes": service_type.supports_tv_annexes,
-            "annex_installation_price": str(service_type.annex_installation_price),
-            "annex_monthly_price": str(service_type.annex_monthly_price),
-        }
-        for service_type in ServiceType.objects.filter(is_active=True)
-    }
 
 
 def _commercial_quotes_for_customer(customer):
@@ -166,8 +129,8 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["customer"] = self.customer
-        context["plans_by_service_type"] = _plans_by_service_type()
-        context["service_type_config"] = _service_type_config()
+        context["plans_by_service_type"] = plans_by_service_type()
+        context["service_type_config"] = service_type_config()
         context["commercial_quotes"] = _commercial_quotes_for_customer(self.customer)
         return context
 

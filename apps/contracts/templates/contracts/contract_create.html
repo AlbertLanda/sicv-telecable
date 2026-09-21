@@ -1,245 +1,378 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Nuevo contrato de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* Mismo aire que las fichas de cobranza: el margen lateral lo pone
+       `.tc-sheet` y aquí quedan solo las separaciones verticales y el gap de
+       columna, el más ancho, para que la etiqueta de la segunda columna no se
+       lea como parte del campo que termina justo antes. */
+    .tc-sheet .tc-form.cols-2 { gap:18px 28px; }
+    .tc-sheet .tc-card-footer { padding:14px var(--tc-pad-x); }
+
+    /* Cada campo ocupa su celda. Son diez campos del mismo formulario, y con
+       un ancho máximo propio cada uno -uno de 9rem, el siguiente de 22rem- las
+       dos columnas dejaban de alinearse: la rejilla se leía como una lista de
+       cajas sueltas. El ancho lo decide la rejilla, que es la que sabe cuánto
+       espacio hay. */
+    .tc-sheet .tc-form-field > .form-control,
+    .tc-sheet .tc-form-field > .form-select,
+    .tc-sheet .tc-form-field > .tc-input { width:100%; }
+
+
+
+    /* Los datos de cuenta cuelgan del servicio: aparecen solo cuando lo que
+       se contrata se entrega a una cuenta, y se distinguen con su propio
+       fondo para que se lea que son de otra naturaleza que el resto de la
+       ficha. */
+    /* Banda y no recuadro. Un recuadro con relleno propio corre sus dos
+       columnas 16px respecto a las del formulario, y las etiquetas de dentro
+       dejan de alinearse con las de fuera: justo lo que la rejilla existe
+       para evitar. Sin relleno lateral, las cuatro columnas son las mismas y
+       el fondo basta para leer que estos dos campos son de otra naturaleza. */
+    .tc-playhub { grid-column:1/-1; padding:15px 0 17px; border-top:1px solid var(--tc-border); border-bottom:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-playhub[hidden] { display:none; }
+    .tc-playhub-title { font-size:.75rem; font-weight:800; color:#1b3f6b; margin-bottom:13px; display:flex; align-items:center; gap:8px; }
+    .tc-playhub .tc-form { grid-template-columns:150px minmax(0,1fr) 150px minmax(0,1fr); gap:12px 28px; }
+
+    @media (max-width: 1100px) {
+        .tc-playhub .tc-form { grid-template-columns:150px minmax(0,1fr); }
+    }
+    @media (max-width: 700px) {
+        .tc-playhub .tc-form { grid-template-columns:1fr; }
+    }
+</style>
+{% endblock %}
+
+{% comment %}
+Alta del contrato de servicio.
+
+Mantiene los campos y el orden del sistema anterior -código, número,
+servicio, plan, suscripción, estado, modalidad, cuotas, inicio- porque es la
+pantalla que ATC tiene aprendida. Lo que cambia es cómo se llena: la
+pantalla abre en el servicio que más se contrata, con su primer plan puesto,
+y de ahí sale la suscripción que recibe el contrato.
+
+Cuatro campos van bloqueados. Código y número los pone el sistema, y se
+muestran porque son los datos con los que el contrato se busca después. La
+suscripción tampoco se elige: la determinan el cliente, el servicio y el
+plan. Y el estado de un contrato nuevo es activo: cambia después por lo que
+pasa con el servicio, no por lo que se elija al registrarlo.
+
+Observaciones tampoco está: el contrato de servicio es un documento de
+datos, y lo que haya que contar de una atención se cuenta en la orden de
+trabajo, que es donde se lee.
+
+Fin y último corte no están. En el sistema anterior son casillas que el
+operador tampoco llena -las mueve la operación del servicio, no el alta-, y
+aquí habrían sido dos campos en blanco que nadie sabe qué hacer con ellos.
+Equipo y plantilla tampoco: el equipo se registra en la orden de instalación,
+que es donde consta cuál se instaló.
+{% endcomment %}
 
 {% block content %}
 
-<div class="container py-4">
+<div class="tc-content">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    {% include "_customer_record_header.html" with active_tab="info" record_title="Nuevo contrato de servicio" %}
 
-        <div>
-            <h2 class="fw-bold mb-1">
-                Nuevo contrato
-            </h2>
+    <form method="post" novalidate>
 
-            <p class="text-muted mb-0">
-                Registrar contrato para el cliente
-            </p>
-        </div>
+        {% csrf_token %}
 
-        <button
-            type="button"
-            class="btn btn-outline-secondary"
-            onclick="history.back()"
-        >
-            ← Volver
-        </button>
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
 
-    </div>
+        <section class="tc-card tc-section tc-full tc-sheet">
 
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-file-earmark-text"></i>Nuevo contrato de servicio
+                </h2>
+            </div>
 
-    <div class="card shadow-sm border-0">
+            <div class="tc-section-body">
 
-        <div class="card-header bg-light">
-            <strong>
-                Datos del contrato
-            </strong>
-        </div>
+                <div class="tc-form cols-2">
 
+                    {% comment %}
+                    Código y número los pone el sistema al guardar. Se
+                    muestran con el valor que les va a tocar, bloqueados: el
+                    operador los reconoce y sabe con qué número queda el
+                    contrato, pero no los escribe.
+                    {% endcomment %}
+                    <div class="tc-form-label">Código</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly"
+                               value="{{ next_contract_code }}" disabled>
+                    </div>
 
-        <div class="card-body">
+                    <div class="tc-form-label">Número</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly"
+                               value="{{ next_contract_number }}" disabled>
+                    </div>
 
-            <div class="alert alert-info">
+                    <label class="tc-form-label" for="{{ form.service_type.id_for_label }}">
+                        {{ form.service_type.label }}
+                    </label>
+                    <div class="tc-form-field">
+                        {{ form.service_type }}
+                        {% for error in form.service_type.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
 
-                <strong>Cliente:</strong>
+                    <label class="tc-form-label" for="{{ form.plan.id_for_label }}">
+                        {{ form.plan.label }}
+                    </label>
+                    <div class="tc-form-field">
+                        {{ form.plan }}
+                        {% for error in form.plan.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
 
-                {{ customer }}
+                    {% comment %}
+                    La suscripción no se elige: la determinan el cliente, el
+                    servicio y el plan. Se muestra bloqueada y por su código,
+                    que es lo que el sistema le asigna, en un campo del mismo
+                    tamaño que los demás.
+                    {% endcomment %}
+                    <div class="tc-form-label">Suscripción</div>
+                    <div class="tc-form-field">
+                        <input type="text" id="suscripcion-resuelta"
+                               class="tc-input tc-readonly"
+                               value="{{ resolved_subscription_label }}" disabled>
+                    </div>
 
-                {% if customer.document_number %}
-                    <span class="ms-2">
-                        {{ customer.document_type }}
-                        {{ customer.document_number }}
-                    </span>
-                {% endif %}
+                    {% comment %}
+                    Un contrato nuevo nace activo. El estado cambia después
+                    -suspendido, cancelado, finalizado- por lo que pasa con
+                    el servicio, no por lo que se elija al registrarlo, así
+                    que aquí va bloqueado con el valor que le toca.
+                    {% endcomment %}
+                    <div class="tc-form-label">Estado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly"
+                               value="{{ form.instance.get_status_display }}" disabled>
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.modality.id_for_label }}">
+                        {{ form.modality.label }}
+                    </label>
+                    <div class="tc-form-field">
+                        {{ form.modality }}
+                        {% for error in form.modality.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.installments.id_for_label }}">
+                        {{ form.installments.label }}
+                    </label>
+                    <div class="tc-form-field">
+                        {{ form.installments }}
+                        {% for error in form.installments.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.start_date.id_for_label }}">
+                        {{ form.start_date.label }}
+                    </label>
+                    <div class="tc-form-field">
+                        {{ form.start_date }}
+                        {% for error in form.start_date.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    {% comment %}
+                    La última activación la estampa el sistema cuando el
+                    servicio queda activo, así que en un contrato nuevo está
+                    vacía. Se muestra porque el operador la busca en esta
+                    pantalla, no porque haya algo que escribir.
+                    {% endcomment %}
+                    <div class="tc-form-label">Última activación</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly"
+                               value="—" disabled>
+                    </div>
+
+                    <div class="tc-playhub" id="playhub" hidden>
+                        <div class="tc-playhub-title">
+                            <i class="bi bi-person-badge"></i>Cuenta PlayHub
+                        </div>
+
+                        <div class="tc-form">
+                            <label class="tc-form-label" for="{{ form.playhub_email.id_for_label }}">
+                                {{ form.playhub_email.label }}
+                            </label>
+                            <div class="tc-form-field">
+                                {{ form.playhub_email }}
+                                {% for error in form.playhub_email.errors %}
+                                    <div class="tc-form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <label class="tc-form-label" for="{{ form.playhub_phone.id_for_label }}">
+                                {{ form.playhub_phone.label }}
+                            </label>
+                            <div class="tc-form-field">
+                                {{ form.playhub_phone }}
+                                {% for error in form.playhub_phone.errors %}
+                                    <div class="tc-form-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
 
             </div>
 
-
-            {% if preselected_subscription %}
-
-                <!-- ================================================= -->
-                <!-- RESUMEN PREVIO A LA CONTRATACIÓN
-
-                     Se muestra cuando se llega desde el resumen de
-                     suscripción (services:subscription_summary), que
-                     enlaza aquí con ?subscription=<id>. Confirma
-                     domicilio, servicio y plan antes de generar el
-                     contrato.
-                -->
-                <!-- ================================================= -->
-
-                <div class="alert alert-secondary">
-
-                    <strong class="d-block mb-2">
-                        Resumen de la suscripción seleccionada
-                    </strong>
-
-                    <div class="row g-2 small">
-
-                        <div class="col-md-6">
-                            <span class="text-muted">Domicilio:</span>
-                            {{ preselected_subscription.address.address }}
-                            ({{ preselected_subscription.address.district }})
-                        </div>
-
-                        <div class="col-md-3">
-                            <span class="text-muted">Servicio:</span>
-                            {{ preselected_subscription.service_type }}
-                        </div>
-
-                        <div class="col-md-3">
-                            <span class="text-muted">Plan:</span>
-                            {{ preselected_subscription.plan }}
-                        </div>
-
-                    </div>
-
-                </div>
-
-            {% endif %}
-
-
-            <form method="post">
-
-                {% csrf_token %}
-
-
-                {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
-                        {{ form.non_field_errors }}
-                    </div>
-                {% endif %}
-
-
-                <div class="row g-3">
-
-                    <!-- SUSCRIPCIÓN -->
-
-                    <div class="col-12">
-
-                        <label
-                            for="{{ form.subscription.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.subscription.label }}
-                        </label>
-
-                        {{ form.subscription }}
-
-                        {% for error in form.subscription.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            Solo se muestran suscripciones en estado
-                            <strong>Preventa</strong>, pertenecientes a
-                            este cliente y disponibles para contrato.
-                        </div>
-
-                    </div>
-
-
-                    <!-- FECHA DE INICIO -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.start_date.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.start_date.label }}
-                        </label>
-
-                        {{ form.start_date }}
-
-                        {% for error in form.start_date.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-
-                    <!-- FECHA DE FINALIZACIÓN -->
-
-                    <div class="col-md-6">
-
-                        <label
-                            for="{{ form.end_date.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.end_date.label }}
-                        </label>
-
-                        {{ form.end_date }}
-
-                        {% for error in form.end_date.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                        <div class="form-text">
-                            Si se indica, debe ser al menos 6 meses
-                            posterior a la fecha de inicio.
-                        </div>
-
-                    </div>
-
-
-                    <!-- OBSERVACIONES -->
-
-                    <div class="col-12">
-
-                        <label
-                            for="{{ form.notes.id_for_label }}"
-                            class="form-label"
-                        >
-                            {{ form.notes.label }}
-                        </label>
-
-                        {{ form.notes }}
-
-                        {% for error in form.notes.errors %}
-                            <div class="text-danger small mt-1">
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
-                    </div>
-
-                </div>
-
-
-                <hr class="my-4">
-
-
-                <div class="d-flex justify-content-end gap-2">
-
-                    <a
-                        href="{% url 'customers:detail' customer.pk %}#bloque-a"
-                        class="btn btn-outline-secondary"
-                    >
+            <div class="tc-section-body tc-card-footer border-top">
+                <div class="tc-actions" style="margin-top:0;">
+                    <button type="submit" class="tc-btn primary">
+                        <i class="bi bi-check2"></i>Registrar contrato
+                    </button>
+                    <a href="{% url 'customers:detail' customer.pk %}" class="tc-btn muted">
                         Cancelar
                     </a>
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
-                        Registrar contrato
-                    </button>
-
                 </div>
+            </div>
 
-            </form>
+        </section>
 
-        </div>
-
-    </div>
+    </form>
 
 </div>
+
+{{ plans_by_service_type|json_script:"plans-by-service-type" }}
+{{ service_type_config|json_script:"service-type-config" }}
+{{ subscriptions_catalog|json_script:"subscriptions-catalog" }}
+
+<script>
+(function () {
+    "use strict";
+
+    // Servicio manda sobre plan, y los dos sobre suscripción. El catálogo
+    // entero viaja con la página -es el mismo mecanismo del alta de
+    // suscripción- para que los combos se repinten sin ir y volver al
+    // servidor. Nada de esto sustituye la validación: el modelo vuelve a
+    // comprobar que plan y suscripción correspondan al servicio, porque un
+    // POST armado a mano no pasa por aquí.
+    var planesPorServicio = JSON.parse(
+        document.getElementById("plans-by-service-type").textContent);
+    var configuracionServicio = JSON.parse(
+        document.getElementById("service-type-config").textContent);
+    var suscripciones = JSON.parse(
+        document.getElementById("subscriptions-catalog").textContent);
+
+    var servicio = document.getElementById("{{ form.service_type.id_for_label }}");
+    var plan = document.getElementById("{{ form.plan.id_for_label }}");
+    var suscripcion = document.getElementById("suscripcion-resuelta");
+
+    var playhub = document.getElementById("playhub");
+    var playhubCorreo = document.getElementById("{{ form.playhub_email.id_for_label }}");
+    var playhubCelular = document.getElementById("{{ form.playhub_phone.id_for_label }}");
+
+    var planElegido = "{{ form.plan.value|default_if_none:'' }}";
+
+    function pintar(campo, opciones, elegido, vacio) {
+        campo.innerHTML = "";
+
+        var vacia = document.createElement("option");
+        vacia.value = "";
+        vacia.textContent = vacio;
+        campo.appendChild(vacia);
+
+        opciones.forEach(function (opcion) {
+            var option = document.createElement("option");
+            option.value = opcion.id;
+            option.textContent = opcion.label;
+            if (elegido && String(opcion.id) === String(elegido)) {
+                option.selected = true;
+            }
+            campo.appendChild(option);
+        });
+    }
+
+    function planesDelServicio() {
+        return planesPorServicio[servicio.value] || [];
+    }
+
+    // Mientras no haya servicio, el combo de planes se queda en blanco: un
+    // texto que explica que falta elegir servicio se lee como si fuera el
+    // valor ya seleccionado.
+    function pintarPlanes(elegido) {
+        var planes = planesDelServicio();
+
+        pintar(
+            plan,
+            planes,
+            // Cambiar de servicio deja el plan en el primero del nuevo, que
+            // es el que encabeza el combo. Es lo mismo que hace el servidor
+            // al abrir la pantalla, y evita que la fila de al lado quede a
+            // medio llenar despues de cada cambio.
+            elegido || (planes.length ? planes[0].id : null),
+            servicio.value ? "Seleccione un plan" : ""
+        );
+    }
+
+    // La misma regla que el servidor: la primera suscripción en Preventa
+    // del cliente que corresponda al servicio y plan elegidos. El catálogo
+    // llega ordenado por número de servicio, así que «la primera» significa
+    // lo mismo en los dos lados.
+    function mostrarSuscripcion() {
+        var elegida = null;
+
+        if (servicio.value && plan.value) {
+            elegida = suscripciones.filter(function (item) {
+                return String(item.service_type) === String(servicio.value)
+                    && String(item.plan) === String(plan.value);
+            })[0] || null;
+        }
+
+        // El mismo texto que pone el servidor cuando no hay ninguna, para
+        // que el campo no cambie de discurso al tocar un combo.
+        suscripcion.value = elegida ? elegida.label : "Ninguno";
+    }
+
+    function alternarPlayhub() {
+        var configuracion = configuracionServicio[servicio.value] || {};
+        var requiere = Boolean(configuracion.requires_playhub_account);
+
+        playhub.hidden = !requiere;
+
+        // Un correo escrito y luego escondido al cambiar de servicio se
+        // enviaría igual, y el contrato lo rechazaría por no corresponder.
+        if (!requiere) {
+            if (playhubCorreo) { playhubCorreo.value = ""; }
+            if (playhubCelular) { playhubCelular.value = ""; }
+        }
+    }
+
+    pintarPlanes(planElegido);
+    mostrarSuscripcion();
+    alternarPlayhub();
+
+    servicio.addEventListener("change", function () {
+        pintarPlanes(null);
+        mostrarSuscripcion();
+        alternarPlayhub();
+    });
+
+    plan.addEventListener("change", mostrarSuscripcion);
+})();
+</script>
 
 {% endblock %}

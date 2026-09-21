@@ -91,6 +91,12 @@ SICV - {% if object %}Editar servicio{% else %}Nuevo servicio{% endif %}
                             </label>
                         </div>
                         <div class="form-check">
+                            {{ form.requires_playhub_account }}
+                            <label class="form-check-label" for="{{ form.requires_playhub_account.id_for_label }}">
+                                Requiere cuenta PlayHub
+                            </label>
+                        </div>
+                        <div class="form-check">
                             {{ form.is_active }}
                             <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
                                 Activo
@@ -98,7 +104,9 @@ SICV - {% if object %}Editar servicio{% else %}Nuevo servicio{% endif %}
                         </div>
                         <div class="form-text">
                             Active los anexos solo para servicios con señal de
-                            cable, como CABLE o DUO.
+                            cable, como CABLE o DUO. La cuenta PlayHub solo
+                            para servicios que se entregan a una cuenta, como
+                            APPS: el contrato pedirá correo y celular.
                         </div>
                     </div>
 
