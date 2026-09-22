@@ -1,4 +1,10 @@
-from django.test import TestCase
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from django.test import TestCase, override_settings
+
+from apps.organization import branding
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -286,3 +292,135 @@ class ActiveBranchTests(TestCase):
 
         response = self.client.get(reverse("customers:search"))
         self.assertIn(unrestricted, response.context["available_offices"])
+
+
+class LogotipoDeLaMarcaTests(TestCase):
+    """El dibujo que llevan impreso los papeles de la empresa.
+
+    Lo comparten el comprobante de cobranza y el contrato de abonado. Se
+    prueba aquí, y no en cada uno, porque el punto de tenerlo en un módulo
+    propio es justamente que sea la misma respuesta para los dos.
+    """
+
+    def dibujo_con_margen(self, carpeta, margen, nombre=None):
+        """Un logotipo de 100x100 con `margen` píxeles de blanco alrededor."""
+
+        from PIL import Image, ImageDraw
+
+        lienzo = Image.new("RGB", (100, 100), (255, 255, 255))
+
+        # Con un margen que no deja hueco, el archivo queda todo blanco: es
+        # el caso del logotipo que no se puede recortar.
+        if margen < 50:
+            ImageDraw.Draw(lienzo).rectangle(
+                [margen, margen, 99 - margen, 99 - margen],
+                fill=(10, 60, 120),
+            )
+
+        destino = Path(carpeta) / (nombre or f"{branding.STEM}.png")
+        lienzo.save(destino)
+
+        return destino
+
+    def test_sin_archivo_no_hay_logotipo(self):
+        """El papel sale igual: la ventanilla no se para por un dibujo."""
+
+        with TemporaryDirectory() as carpeta:
+            self.assertIsNone(branding.buscar_logo(carpeta))
+
+    def test_lo_encuentra_aunque_el_nombre_venga_sucio(self):
+        """«telecable-logo.jpg.jpeg» es lo que salió de la descarga real."""
+
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_margen(
+                carpeta,
+                margen=10,
+                nombre="telecable-logo.jpg.jpeg",
+            )
+
+            self.assertEqual(branding.buscar_logo(carpeta), archivo)
+
+    def test_entre_varios_gana_el_de_nombre_limpio(self):
+        with TemporaryDirectory() as carpeta:
+            limpio = self.dibujo_con_margen(carpeta, margen=10)
+            self.dibujo_con_margen(
+                carpeta,
+                margen=10,
+                nombre="telecable-logo (1).png",
+            )
+
+            self.assertEqual(branding.buscar_logo(carpeta), limpio)
+
+    def test_el_aire_en_blanco_se_recorta_al_dibujar(self):
+        """Ese margen es parte de la imagen y deja el logotipo caído."""
+
+        from PIL import Image
+
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_margen(carpeta, margen=20)
+
+            recortado = branding.logo_sin_margen(archivo)
+
+            self.assertEqual(Image.open(recortado).size, (60, 60))
+
+    def test_un_dibujo_todo_blanco_se_deja_como_esta(self):
+        """Recortarlo lo dejaría en nada, y eso sí rompería el papel."""
+
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_margen(carpeta, margen=50)
+
+            self.assertEqual(branding.logo_sin_margen(archivo), str(archivo))
+
+    def test_cada_papel_pide_su_dibujo(self):
+        """El isotipo y el apaisado no son intercambiables.
+
+        El comprobante tiene una columna estrecha y alta; la cabecera del
+        contrato, una franja ancha y baja. Estirar uno al hueco del otro lo
+        deja diminuto o desbordado, así que cada uno pide el suyo por su
+        nombre y la búsqueda es la misma para los dos.
+        """
+
+        with TemporaryDirectory() as carpeta:
+            isotipo = self.dibujo_con_margen(carpeta, margen=10)
+            apaisado = self.dibujo_con_margen(
+                carpeta,
+                margen=10,
+                nombre=f"{branding.STEM_APAISADO}.png",
+            )
+
+            self.assertEqual(branding.buscar_logo(carpeta), isotipo)
+            self.assertEqual(
+                branding.buscar_logo(carpeta, stem=branding.STEM_APAISADO),
+                apaisado,
+            )
+
+    def test_la_busqueda_del_comprobante_sigue_siendo_la_comun(self):
+        """Cobranza delega aquí: un cambio en la búsqueda le llega solo."""
+
+        from apps.payments import pdf as comprobante
+
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_margen(carpeta, margen=10)
+
+            with patch.object(comprobante, "LOGO_DIR", Path(carpeta)):
+                self.assertEqual(comprobante.find_logo(), archivo)
+
+    def test_el_nombre_del_archivo_no_distingue_mayusculas(self):
+        """Windows no las distingue y el servidor sí.
+
+        Un archivo guardado como «Logo-...» dejaría el papel bien en el
+        portátil de quien lo prueba y sin logotipo en producción, que es el
+        peor sitio donde descubrirlo.
+        """
+
+        with TemporaryDirectory() as carpeta:
+            archivo = self.dibujo_con_margen(
+                carpeta,
+                margen=10,
+                nombre="LOGO-TELECABLE-2.PNG",
+            )
+
+            self.assertEqual(
+                branding.buscar_logo(carpeta, stem=branding.STEM_APAISADO),
+                archivo,
+            )

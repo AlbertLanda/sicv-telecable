@@ -178,6 +178,18 @@ que es la puerta común a todas.
                            disabled>
                 </div>
 
+                {% comment %}
+                La firma del abonado, recogida en el domicilio durante la
+                instalación. Aquí solo consta que está -y de qué orden vino-;
+                el trazo se ve en el contrato impreso, que es donde firma.
+                {% endcomment %}
+                <div class="tc-form-label">Firma del abonado</div>
+                <div class="tc-form-field">
+                    <input type="text" class="tc-input tc-readonly"
+                           value="{% if signature %}Firmada el {{ signature.signed_at|date:'d/m/Y H:i' }}{% if signature.work_order %} en {{ signature.work_order.order_number }}{% endif %}{% else %}Pendiente de firma{% endif %}"
+                           disabled>
+                </div>
+
                 {% if contract.service_type.requires_playhub_account %}
                     <div class="tc-playhub">
                         <div class="tc-playhub-title">

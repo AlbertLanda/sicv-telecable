@@ -1,4 +1,5 @@
 import io
+import tempfile
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
@@ -7,20 +8,39 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
+from apps.organization import branding
 from apps.organization.models import Branch, Zone
 from apps.payments.models import Issuer
 from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 
+from PIL import Image as PILImage, ImageDraw
+from reportlab.platypus import KeepTogether, Table
+
+from .clausulas import titulo_del_contrato
 from .document import datos_del_contrato
 from .forms import InstallationWorkOrderForm
-from .pdf import render_contract
-from .models import Contract
+from .pdf import (
+    SEPARACION_DEL_SELLO,
+    _cuerpo_del_contrato,
+    _estilos,
+    _firmas,
+    render_contract,
+)
+from .models import Contract, ContractSignature
+from .signatures import (
+    borrar_firma,
+    contrato_de_la_orden,
+    firma_del_contrato,
+    firmar_contrato,
+)
 
 
 User = get_user_model()
@@ -1720,12 +1740,13 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertNotContains(response, "Abrir en Google Maps")
 
 
-class ContractDocumentTests(TestCase):
-    """El contrato de abonado que se imprime y se firma.
+class ContratoDeReferenciaMixin:
+    """El contrato de Jauja sobre el que se prueba todo lo que es papel.
 
-    Se reparte como en cobranza: aquí los datos del papel -que se comprueban
-    sin abrir un PDF-, el dibujo -que salga y que aguante lo que falte- y la
-    entrega -que el navegador reciba el archivo donde toca-.
+    Es el escenario del contrato firmado que ATC entregó como referencia, y
+    lo comparten las pruebas del documento y las de su firma: son el mismo
+    contrato visto en dos momentos -antes de firmarlo y después-, así que
+    montarlo dos veces sería tener dos contratos que pueden separarse.
     """
 
     def setUp(self):
@@ -1831,6 +1852,15 @@ class ContractDocumentTests(TestCase):
             },
         )
 
+
+class ContractDocumentTests(ContratoDeReferenciaMixin, TestCase):
+    """El contrato de abonado que se imprime y se firma.
+
+    Se reparte como en cobranza: aquí los datos del papel -que se comprueban
+    sin abrir un PDF-, el dibujo -que salga y que aguante lo que falte- y la
+    entrega -que el navegador reciba el archivo donde toca-.
+    """
+
     def datos(self):
         return datos_del_contrato(self.contract)
 
@@ -1904,6 +1934,62 @@ class ContractDocumentTests(TestCase):
         self.assertEqual(datos["telefono"], "064 466080")
         self.assertEqual(datos["ciudad"], "Jauja")
 
+    def mudar_a(self, codigo):
+        """Pone al abonado en otra sede, la que ya existe con ese código.
+
+        Se cambia el abonado de sede y no el código de la suya: las tres las
+        siembra una migración, y renombrar una chocaría con la que ya está.
+        """
+
+        self.customer.branch = Branch.objects.get(code=codigo)
+        self.customer.save(update_fields=["branch"])
+
+    def test_huancayo_imprime_sus_oficinas_y_su_jurisdiccion(self):
+        """Cada sede tiene su contrato oficial y no se parecen en esto."""
+
+        self.mudar_a("HUANCAYO")
+
+        datos = self.datos()
+
+        self.assertIn("Jr. Huaytapallana 214", datos["oficinas"])
+        self.assertIn("Calle Real 1147", datos["oficinas"])
+        self.assertEqual(datos["telefono"], "064 466080")
+        self.assertEqual(datos["ciudad"], "Huancayo")
+
+        _, subtitulo = titulo_del_contrato(datos)
+        self.assertIn("HUANCAYO", subtitulo)
+
+    def test_la_oroya_contrata_y_litiga_como_yauli(self):
+        """El papel de esa sede dice «Yauli – La Oroya», no «La Oroya».
+
+        La ciudad manda en tres sitios -el subtítulo, los tribunales de la
+        cláusula undécima y dónde se suscribe-, así que el nombre de la sede
+        en el sistema no sirve para esto.
+        """
+
+        self.mudar_a("OROYA")
+
+        datos = self.datos()
+
+        self.assertIn("AV. Miguel Grau 1025", datos["oficinas"])
+        self.assertIn("Santa Rosa de Saccos", datos["oficinas"])
+        self.assertEqual(datos["telefono"], "064 466080")
+        self.assertEqual(datos["ciudad"], "Yauli – La Oroya")
+
+        _, subtitulo = titulo_del_contrato(datos)
+        self.assertIn("YAULI – LA OROYA", subtitulo)
+
+    def test_las_tres_sedes_dibujan_su_contrato(self):
+        """El documento de cada sede sale entero, no solo el de referencia."""
+
+        for codigo in ("JAUJA", "HUANCAYO", "OROYA"):
+            with self.subTest(sede=codigo):
+                self.mudar_a(codigo)
+
+                _, contenido = self.dibujar()
+
+                self.assertTrue(contenido.startswith(b"%PDF-"))
+
     def test_una_sede_sin_datos_no_inventa_oficinas_ni_jurisdiccion(self):
         """Mejor un espacio en blanco que una jurisdicción equivocada."""
 
@@ -1934,6 +2020,71 @@ class ContractDocumentTests(TestCase):
         )
 
     # -------------------------------------------------------------
+    # LA FIRMA DE LA EMPRESA
+    # -------------------------------------------------------------
+
+    def test_el_papel_trae_el_sello_de_quien_contrata(self):
+        """La empresa no firma en el móvil: su firma va impresa siempre."""
+
+        sello = self.datos()["firma_empresa"]
+
+        self.assertIsNotNone(sello)
+        self.assertTrue(sello.startswith(CABECERA_PNG))
+
+    def test_una_razon_social_sin_sello_deja_su_espacio_en_blanco(self):
+        """Lo que no se tiene se deja para firmar a mano, no se inventa."""
+
+        self.issuer.code = "OTRA"
+        self.issuer.save(update_fields=["code"])
+
+        self.assertIsNone(self.datos()["firma_empresa"])
+
+        _, contenido = self.dibujar()
+        self.assertTrue(contenido.startswith(b"%PDF-"))
+
+    def test_bajo_la_linea_sigue_leyendose_quien_contrata(self):
+        """El sello es un escaneo; el pie de firma es el dato.
+
+        Los dos dicen la razón social, y es a propósito: una fotocopia del
+        contrato puede dejar el sello ilegible, y el nombre de quien contrata
+        no puede depender de cómo salga una imagen.
+        """
+
+        tabla = _firmas(self.datos(), _estilos())
+
+        bajo_la_linea = tabla._cellvalues[1][0]
+
+        self.assertEqual(
+            [parrafo.text for parrafo in bajo_la_linea],
+            [
+                "<b>LA EMPRESA</b>",
+                "INVERSIONES EN TELECOMUNICACIONES DIGITALES S.A.C.",
+            ],
+        )
+
+    def test_el_sello_no_se_apoya_en_la_linea_sino_encima(self):
+        """Un tampón se estampa despegado; el trazo a mano sí toca la línea."""
+
+        tabla = _firmas(self.datos(), _estilos())
+        hueco_empresa = tabla._cellvalues[0][0]
+
+        _, y, _, alto = hueco_empresa._medidas_del_trazo()
+
+        self.assertEqual(y, SEPARACION_DEL_SELLO)
+        # Sube sin crecer: el bloque de firmas ocupa lo mismo que siempre.
+        self.assertLessEqual(y + alto, hueco_empresa.height + 0.01)
+
+    def test_el_sello_se_apoya_en_la_linea_de_la_empresa(self):
+        """En su columna, no en la del abonado: cada parte firma en su sitio."""
+
+        tabla = _firmas(self.datos(), _estilos())
+
+        sobre_la_linea = tabla._cellvalues[0]
+
+        self.assertIsNotNone(sobre_la_linea[0]._firma)   # la empresa
+        self.assertIsNone(sobre_la_linea[2]._firma)      # el abonado, sin firmar
+
+    # -------------------------------------------------------------
     # EL PAPEL SE DIBUJA
     # -------------------------------------------------------------
 
@@ -1943,6 +2094,49 @@ class ContractDocumentTests(TestCase):
         self.assertEqual(nombre, "CONT-000001.pdf")
         self.assertTrue(contenido.startswith(b"%PDF-"))
         self.assertGreater(len(contenido), 5000)
+
+    def test_el_contrato_lleva_el_logotipo_de_la_marca(self):
+        """La cabecera es la marca, no su nombre escrito a mano."""
+
+        _, con_logo = self.dibujar()
+
+        with tempfile.TemporaryDirectory() as vacio:
+            with override_settings(MEDIA_ROOT=vacio):
+                _, sin_logo = self.dibujar()
+
+        self.assertGreater(len(con_logo), len(sin_logo))
+
+    def test_la_cabecera_usa_el_logotipo_apaisado(self):
+        """La franja de la cabecera es ancha y baja: el isotipo cuadrado ahí
+        sale como un sello suelto."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            from PIL import Image as PilImage
+
+            solo_isotipo = Path(carpeta) / f"{branding.STEM}.png"
+            PilImage.new("RGB", (80, 80), (10, 60, 120)).save(solo_isotipo)
+
+            with override_settings(MEDIA_ROOT=carpeta):
+                _, sin_apaisado = self.dibujar()
+
+            apaisado = Path(carpeta) / f"{branding.STEM_APAISADO}.png"
+            PilImage.new("RGB", (200, 50), (10, 60, 120)).save(apaisado)
+
+            with override_settings(MEDIA_ROOT=carpeta):
+                _, con_apaisado = self.dibujar()
+
+        # Con el isotipo a solas la cabecera va sin dibujo; solo aparece
+        # cuando está el apaisado, que es el que pide el contrato.
+        self.assertGreater(len(con_apaisado), len(sin_apaisado))
+
+    def test_sin_el_archivo_del_logotipo_el_contrato_igual_sale(self):
+        """Nadie se queda sin su contrato porque falte un dibujo."""
+
+        with tempfile.TemporaryDirectory() as vacio:
+            with override_settings(MEDIA_ROOT=vacio):
+                _, contenido = self.dibujar()
+
+        self.assertTrue(contenido.startswith(b"%PDF-"))
 
     def test_sin_empresa_emisora_el_contrato_igual_sale(self):
         """Un despliegue a medio configurar no deja la oficina parada.
@@ -2104,6 +2298,345 @@ class ContractDocumentTests(TestCase):
             self.assertIn(escondido, contenido)
 
         self.assertIn("tc-card-footer border-top no-print", contenido)
+
+
+# Los cuatro primeros bytes de un PNG. Se comprueban para afirmar que lo
+# guardado es el dibujo y no el nombre del archivo que lo trajo.
+CABECERA_PNG = bytes.fromhex("89504e47")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="sicv-firmas-"))
+class ContractSignatureTests(ContratoDeReferenciaMixin, TestCase):
+    """La firma que el abonado dibuja en campo, sobre su contrato.
+
+    Se prueba lo mismo que del resto del papel y en el mismo orden: qué dato
+    queda guardado, qué sale impreso con él y qué pasa cuando no hay firma,
+    que es el estado en que nace todo contrato.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.tecnico = User.objects.create_user(
+            username="tecnico_firma",
+            password="123",
+            role=User.Role.TECHNICIAN,
+            branch=self.branch,
+        )
+
+    def trazo(self, ancho=600, alto=200):
+        """Un PNG con fondo transparente, como el que sale del lienzo."""
+
+        lienzo = PILImage.new("RGBA", (ancho, alto), (255, 255, 255, 0))
+        ImageDraw.Draw(lienzo).line(
+            [(20, alto - 40), (ancho // 3, 30), (ancho // 2, alto - 30), (ancho - 20, 40)],
+            fill=(16, 24, 64, 255),
+            width=6,
+        )
+
+        archivo = BytesIO()
+        lienzo.save(archivo, format="PNG")
+
+        return SimpleUploadedFile(
+            "firma.png",
+            archivo.getvalue(),
+            content_type="image/png",
+        )
+
+    def firmar(self):
+        return firmar_contrato(
+            self.contract,
+            self.trazo(),
+            usuario=self.tecnico,
+            orden=None,
+        )
+
+    # -------------------------------------------------------------
+    # LO QUE QUEDA GUARDADO
+    # -------------------------------------------------------------
+
+    def test_un_contrato_nuevo_nace_sin_firma(self):
+        self.assertIsNone(firma_del_contrato(self.contract))
+        self.assertIsNone(datos_del_contrato(self.contract)["firma_abonado"])
+
+    def test_la_firma_guarda_quien_firmo_y_cuando(self):
+        firma = self.firmar()
+
+        self.assertEqual(firma.contract, self.contract)
+        self.assertEqual(firma.signer_name, "Kevin Rivera Ravichagua")
+        self.assertEqual(firma.captured_by, self.tecnico)
+        self.assertIsNotNone(firma.signed_at)
+
+    def test_el_nombre_del_firmante_queda_congelado(self):
+        """El papel dice quién firmó ese día, no cómo se llama hoy.
+
+        Si mañana ATC corrige el nombre del abonado, el contrato que ya se
+        firmó no puede reescribir hacia atrás quién estuvo delante.
+        """
+
+        self.firmar()
+
+        self.customer.first_name = "Kevin Junior"
+        self.customer.save(update_fields=["first_name"])
+
+        self.assertEqual(
+            firma_del_contrato(self.contract).signer_name,
+            "Kevin Rivera Ravichagua",
+        )
+
+    def test_volver_a_firmar_reemplaza_el_trazo_anterior(self):
+        """El abonado firma una vez: lo que vale es el trazo que aceptó."""
+
+        primera = self.firmar()
+        ruta_anterior = primera.image.name
+
+        segunda = firmar_contrato(
+            self.contract,
+            self.trazo(ancho=500, alto=180),
+            usuario=self.tecnico,
+        )
+
+        self.assertEqual(ContractSignature.objects.count(), 1)
+        self.assertEqual(segunda.pk, primera.pk)
+        self.assertFalse(default_storage.exists(ruta_anterior))
+
+    def test_rechazar_la_firma_devuelve_el_contrato_a_sin_firmar(self):
+        firma = self.firmar()
+        ruta = firma.image.name
+
+        self.assertTrue(borrar_firma(self.contract))
+
+        self.assertIsNone(firma_del_contrato(self.contract))
+        self.assertFalse(default_storage.exists(ruta))
+
+    def test_borrar_lo_que_no_esta_firmado_no_es_un_error(self):
+        self.assertFalse(borrar_firma(self.contract))
+
+    def test_sin_dibujo_no_hay_firma_que_registrar(self):
+        with self.assertRaises(ValidationError):
+            firmar_contrato(self.contract, None, usuario=self.tecnico)
+
+    def test_la_firma_es_del_contrato_y_no_de_la_orden(self):
+        """Se llega a ella desde la orden, pero pertenece al contrato.
+
+        La orden es dónde y cuándo se recogió; el documento firmado es el
+        contrato, y así sigue siendo el mismo se mire desde campo o desde
+        SICV.
+        """
+
+        orden_tipo, _ = OrderType.objects.get_or_create(
+            code="INSTALLATION",
+            defaults={"name": "Instalación"},
+        )
+        orden = WorkOrder.objects.create(
+            order_number="OT-FIRMA-1",
+            subscription=self.subscription,
+            order_type=orden_tipo,
+            branch=self.branch,
+            zone=self.zone,
+            created_by=self.user,
+        )
+
+        firma = firmar_contrato(
+            self.contract,
+            self.trazo(),
+            usuario=self.tecnico,
+            orden=orden,
+        )
+
+        self.assertEqual(firma.work_order, orden)
+        self.assertEqual(contrato_de_la_orden(orden), self.contract)
+
+    # -------------------------------------------------------------
+    # LO QUE SALE IMPRESO
+    # -------------------------------------------------------------
+
+    def test_el_papel_lleva_el_trazo_cuando_esta_firmado(self):
+        self.firmar()
+
+        firma = datos_del_contrato(self.contract)["firma_abonado"]
+
+        self.assertIsNotNone(firma)
+        self.assertTrue(firma["imagen"].startswith(CABECERA_PNG))
+        self.assertEqual(firma["firmante"], "Kevin Rivera Ravichagua")
+
+    def test_el_contrato_firmado_se_dibuja(self):
+        self.firmar()
+
+        buffer = BytesIO()
+        render_contract(self.contract, buffer)
+        firmado = buffer.getvalue()
+
+        self.assertTrue(firmado.startswith(b"%PDF-"))
+
+        # El trazo es una imagen incrustada: el documento firmado pesa más
+        # que el mismo contrato en blanco.
+        borrar_firma(self.contract)
+        en_blanco = BytesIO()
+        render_contract(self.contract, en_blanco)
+
+        self.assertGreater(len(firmado), len(en_blanco.getvalue()))
+
+    # -------------------------------------------------------------
+    # LO QUE VE ATC
+    # -------------------------------------------------------------
+
+    def test_la_vista_del_contrato_dice_si_esta_firmado(self):
+        """ATC tiene que saberlo sin abrir el PDF para comprobarlo."""
+
+        resumen = reverse(
+            "contracts:contract_summary",
+            kwargs={"customer_pk": self.customer.pk, "pk": self.contract.pk},
+        )
+
+        self.assertContains(self.client.get(resumen), "Pendiente de firma")
+
+        self.firmar()
+
+        self.assertContains(self.client.get(resumen), "Firmada el")
+
+    def test_la_ficha_del_abonado_marca_los_contratos_firmados(self):
+        ficha = reverse("customers:detail", kwargs={"pk": self.customer.pk})
+
+        self.assertNotContains(self.client.get(ficha), "Firmado</span>")
+
+        self.firmar()
+
+        self.assertContains(self.client.get(ficha), "Firmado")
+
+    def test_el_contrato_impreso_desde_sicv_es_el_firmado_en_campo(self):
+        """El mismo documento por los dos canales: no hay copia de oficina."""
+
+        self.firmar()
+
+        response = self.client.get(f"{self.document_url}?ver=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            b"".join(response.streaming_content).startswith(b"%PDF-")
+        )
+
+    def test_el_papel_dice_donde_esta_el_hueco_de_la_firma(self):
+        """El visor del técnico coloca la firma donde lo diga el documento.
+
+        El sitio se decide una sola vez, al dibujar el contrato. Si el
+        navegador lo calculara por su cuenta, dos fórmulas distintas podrían
+        dejar el trazo donde el papel no lo espera.
+        """
+
+        hueco = {}
+        render_contract(self.contract, BytesIO(), ancla=hueco)
+
+        self.assertEqual(hueco["pagina"], 4)
+        self.assertGreater(hueco["ancho"], 0)
+        self.assertGreater(hueco["alto"], 0)
+
+        # Está en la mitad derecha de la hoja, que es la del abonado.
+        self.assertGreater(hueco["x"], hueco["pagina_ancho"] / 2 - hueco["ancho"])
+
+    def test_el_hueco_se_publica_aunque_nadie_haya_firmado(self):
+        """Es el espacio, no la firma: existe antes de que haya trazo."""
+
+        hueco = {}
+        render_contract(self.contract, BytesIO(), ancla=hueco)
+
+        self.assertIn("pagina", hueco)
+        self.assertIsNone(firma_del_contrato(self.contract))
+
+    def test_la_firma_se_guarda_donde_el_tecnico_la_dejo(self):
+        firmar_contrato(
+            self.contract,
+            self.trazo(),
+            usuario=self.tecnico,
+            colocacion={"x": 12.5, "y": 4.0, "ancho": 90.0},
+        )
+
+        firma = firma_del_contrato(self.contract)
+
+        self.assertEqual(firma.offset_x, 12.5)
+        self.assertEqual(firma.offset_y, 4.0)
+        self.assertEqual(firma.width, 90.0)
+        self.assertEqual(
+            datos_del_contrato(self.contract)["firma_abonado"]["colocacion"],
+            {"x": 12.5, "y": 4.0, "ancho": 90.0},
+        )
+
+    def test_una_firma_sin_ajustar_no_guarda_colocacion(self):
+        """Sin ajuste, el papel la centra sobre la línea por su cuenta."""
+
+        self.firmar()
+
+        self.assertIsNone(firma_del_contrato(self.contract).colocacion)
+        self.assertIsNone(
+            datos_del_contrato(self.contract)["firma_abonado"]["colocacion"]
+        )
+
+    def test_rehacer_la_firma_olvida_la_colocacion_anterior(self):
+        """Un trazo nuevo empieza centrado, como el primero."""
+
+        firmar_contrato(
+            self.contract,
+            self.trazo(),
+            usuario=self.tecnico,
+            colocacion={"x": 30.0, "y": 10.0, "ancho": 120.0},
+        )
+
+        self.firmar()
+
+        self.assertIsNone(firma_del_contrato(self.contract).colocacion)
+
+    def test_el_contrato_con_la_firma_movida_se_dibuja(self):
+        firmar_contrato(
+            self.contract,
+            self.trazo(),
+            usuario=self.tecnico,
+            colocacion={"x": -20.0, "y": 25.0, "ancho": 150.0},
+        )
+
+        buffer = BytesIO()
+        render_contract(self.contract, buffer)
+
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF-"))
+
+    def test_el_trazo_no_se_separa_de_la_linea_que_firma(self):
+        """Una firma sola al pie de una hoja no es la firma de nada.
+
+        ReportLab parte las tablas por filas, y el bloque de firmas son dos:
+        el trazo arriba y la línea con el nombre debajo. Partido, el contrato
+        salía con la firma del abonado al final de una página y con a quién
+        pertenece al principio de la siguiente. Va entero o pasa de página
+        entero.
+        """
+
+        self.firmar()
+
+        bloques = [
+            flowable
+            for flowable in _cuerpo_del_contrato(
+                datos_del_contrato(self.contract),
+                _estilos(),
+            )
+            if isinstance(flowable, KeepTogether)
+        ]
+
+        self.assertEqual(len(bloques), 1)
+        self.assertTrue(
+            any(isinstance(pieza, Table) for pieza in bloques[0]._content)
+        )
+
+    def test_una_firma_muy_ancha_no_se_sale_de_su_columna(self):
+        """Cada quien firma como firma; la hoja tiene un ancho fijo."""
+
+        firmar_contrato(
+            self.contract,
+            self.trazo(ancho=2000, alto=120),
+            usuario=self.tecnico,
+        )
+
+        buffer = BytesIO()
+        render_contract(self.contract, buffer)
+
+        self.assertTrue(buffer.getvalue().startswith(b"%PDF-"))
 
 
 class TemplateCommentTests(TestCase):

@@ -392,3 +392,238 @@ h2 { margin-bottom: 0; font-size: 1.05rem; }
     }
     .app-shell { padding-bottom: 100px; }
 }
+
+/* ------------------------------------------------------------------ *
+ * La contrata del abonado
+ *
+ * El contrato se abre a pantalla completa y por encima de todo: lo que el
+ * abonado tiene delante cuando firma es su contrato, no la ficha de la
+ * orden con un documento asomando dentro.
+ * ------------------------------------------------------------------ */
+
+#contract-panel .btn + .btn { margin-top: 10px; }
+
+body.signer-open { overflow: hidden; }
+
+.signer {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    background: #0e1a26;
+}
+.signer-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    color: #fff;
+    background: var(--navy-strong);
+}
+.signer-bar .icon-button { color: #fff; }
+.signer-title { flex: 1; min-width: 0; }
+.signer-title strong {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: .98rem;
+}
+.signer-title small { color: rgba(255,255,255,.72); font-size: .76rem; }
+.signer-zoom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.12);
+}
+.signer-zoom span {
+    min-width: 46px;
+    color: #fff;
+    font-size: .78rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.signer-doc {
+    flex: 1;
+    overflow: auto;
+    padding: 12px;
+    /* El zoom lo lleva el visor: el del navegador dejaría el documento y la
+       hoja de firma a escalas distintas. */
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+.signer-loading {
+    margin: 32px auto;
+    max-width: 280px;
+    color: rgba(255,255,255,.82);
+    text-align: center;
+}
+.signer-canvases {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: fit-content;
+    min-width: 100%;
+}
+.signer-page {
+    display: block;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+
+.signer-actions {
+    padding: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: #0e1a26;
+    border-top: 1px solid rgba(255,255,255,.10);
+}
+
+.signer-sheet {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 16px 14px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-radius: 20px 20px 0 0;
+    background: var(--surface);
+    box-shadow: 0 -14px 40px rgba(0,0,0,.35);
+}
+.signer-sheet-head { margin-bottom: 10px; }
+.signer-sheet-head strong { display: block; }
+.signer-sheet-head small { color: var(--muted); }
+
+.signature-pad {
+    position: relative;
+    height: 40vh;
+    min-height: 180px;
+    border: 1px dashed #c9dff2;
+    border-radius: 14px;
+    background: #fbfdff;
+}
+.signature-pad canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Sin esto, el dedo desplaza la pantalla en vez de dibujar. */
+    touch-action: none;
+}
+.signature-baseline {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    bottom: 34px;
+    border-bottom: 1px solid var(--line);
+}
+
+.signer-sheet-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+/* La firma colocándose sobre la hoja ------------------------------------ */
+
+.signer-page-wrap {
+    position: relative;
+    flex: none;
+}
+
+.signer-place {
+    position: absolute;
+    z-index: 2;
+    touch-action: none;
+    border-radius: 4px;
+}
+/* Firma ya registrada: se ve la del propio documento, así que aquí no se
+   pinta nada encima. Solo una insinuación de que se puede coger. */
+.signer-place.is-touchable {
+    cursor: pointer;
+    border: 1px solid rgba(31,111,178,.35);
+    background: rgba(31,111,178,.04);
+}
+/* Firma despegada del papel: ahora sí es un objeto que se mueve. */
+.signer-place.is-editable {
+    cursor: grab;
+    border: 1px solid rgba(31,111,178,.9);
+    background: rgba(31,111,178,.08);
+}
+.signer-place.is-editable.is-active {
+    cursor: grabbing;
+    border-color: var(--navy);
+    background: rgba(31,111,178,.14);
+}
+/* El asa solo existe cuando hay algo que redimensionar. */
+.signer-place:not(.is-editable) .signer-place-handle { display: none; }
+.signer-place img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+/* El asa se coge con el dedo, así que es más grande que el cuadradito que
+   se ve: el recuadro azul marca la esquina y la zona sensible la rodea. */
+.signer-place-handle {
+    position: absolute;
+    right: -16px;
+    bottom: -16px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 50%, var(--navy) 0 9px, transparent 10px),
+        rgba(255,255,255,.55);
+    box-shadow: 0 2px 8px rgba(0,0,0,.35);
+    cursor: nwse-resize;
+}
+
+.signer-place-bar { display: grid; gap: 10px; }
+.signer-hint {
+    margin: 0;
+    color: rgba(255,255,255,.78);
+    font-size: .82rem;
+    text-align: center;
+}
+.signer-place-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+.signer-place-buttons .btn { min-height: 44px; font-size: .88rem; }
+
+/* Pluma: color y grosor -------------------------------------------------- */
+
+.signature-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.signature-choice {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--blue-soft);
+}
+.signature-choice button {
+    border: 0;
+    border-radius: 999px;
+    padding: 7px 12px;
+    color: var(--navy);
+    background: transparent;
+    font-size: .8rem;
+    font-weight: 700;
+}
+.signature-choice button.is-active {
+    color: #fff;
+    background: var(--navy);
+}
+.ink-button[data-ink="#12408f"].is-active { background: #12408f; }

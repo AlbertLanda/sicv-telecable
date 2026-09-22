@@ -210,9 +210,21 @@ Ese reparto nació para que un segundo formato no pudiera decir algo distinto
 mantiene porque vale por sí solo: el día que ese formato vuelva, solo hay que
 añadir un renderizador que recorra los mismos bloques.
 
-El PDF lleva **cabecera con el código del contrato y del abonado, y pie con
-las oficinas y «Página N de M»** en todas las hojas: una hoja suelta de un
-contrato tiene que poder identificarse sola.
+El PDF lleva **cabecera con el logotipo, el código del contrato y el del
+abonado, y pie con las oficinas y «Página N de M»** en todas las hojas: una
+hoja suelta de un contrato tiene que poder identificarse sola.
+
+El logotipo lo resuelve `apps/organization/branding.py`, el mismo módulo
+que usa el comprobante de cobranza: dónde viven los archivos y cómo se
+recortan se decide una sola vez para toda la empresa.
+
+Lo que cambia entre los dos papeles es **qué dibujo pide cada uno**. El
+comprobante usa el isotipo casi cuadrado, que le cabe en su columna estrecha;
+el contrato usa el apaisado —marca y lema en una línea—, porque su cabecera es
+una franja ancha y baja donde el isotipo saldría como un sello suelto.
+
+Si el archivo falta, el contrato sale igual y la cabecera se queda con los
+códigos, que es lo que identifica la hoja.
 
 **Las cláusulas van palabra por palabra.** Es un documento con efectos
 legales, no un resumen de lo que dice, así que la plantilla no reformula nada.
@@ -233,7 +245,12 @@ dejaba un corchete para llenar a mano:
 | Cuenta PlayHub | solo si el servicio la requiere |
 
 **Lo que el sistema no sabe se imprime como la línea en blanco que era.** La
-elección de recibir promociones y las dos firmas se completan en el papel.
+elección de recibir promociones y la firma de la empresa se completan en el
+papel.
+
+La del abonado ya no: se recoge en su domicilio, en el móvil del técnico,
+durante la instalación, y sale impresa sobre su línea. Ver
+[contrata_firma_campo.md](contrata_firma_campo.md).
 
 ### Los datos de la empresa
 
@@ -243,12 +260,24 @@ sitios que puedan dejar de coincidir. Si ese registro no está cargado, la
 pantalla lo avisa en vez de imprimir un contrato sin quién lo firma.
 
 Las oficinas comerciales, el teléfono y la ciudad cuyos tribunales resuelven
-cambian por sede y están en `apps/contracts/document.py`. **Solo Jauja está
-confirmado**, porque es el contrato firmado que sirvió de referencia; La Oroya
-lleva la oficina que ya figura en su empresa emisora. Una sede sin datos
-imprime esos espacios en blanco a propósito: en un documento que se firma, un
-espacio para completar a mano es preferible a una dirección o una jurisdicción
-inventadas.
+cambian por sede y están en `apps/contracts/document.py`. **Las tres sedes
+salen de su contrato oficial**, entregados por administración; no hay nada
+deducido.
+
+| Sede | Ciudad del contrato |
+|---|---|
+| JAUJA | Jauja |
+| HUANCAYO | Huancayo |
+| OROYA | **Yauli – La Oroya** |
+
+La ciudad no siempre es el nombre de la sede, y por eso es un dato aparte:
+gobierna el subtítulo del título, los tribunales de la cláusula undécima y la
+ciudad donde se suscribe, y La Oroya contrata y litiga como «Yauli – La
+Oroya».
+
+Una sede que no esté declarada imprime esos espacios en blanco a propósito: en
+un documento que se firma, un espacio para completar a mano es preferible a
+una dirección o una jurisdicción inventadas.
 
 ### Tres cosas que el documento dice y el sistema todavía no
 
@@ -271,6 +300,10 @@ Salieron al comparar cláusula por cláusula y conviene resolverlas con negocio:
 - **Última activación** no la estampa todavía ningún proceso: el campo existe
   y se muestra, pero hasta que la activación del servicio lo escriba, sale
   vacío en todos los contratos.
+- **El cierre de la orden no exige la firma del abonado.** Se puede liquidar
+  una instalación sin que nadie haya firmado, porque hoy hay altas donde el
+  abonado no está presente. Si negocio decide que no debe haberlas, se exige
+  en el resumen de cierre de la orden.
 - **No hay edición de contrato.** El módulo sigue teniendo alta, resumen y
   generación de la orden de instalación. Corregir un contrato ya registrado
   —o cambiarle el estado a suspendido, cancelado o finalizado— no tiene

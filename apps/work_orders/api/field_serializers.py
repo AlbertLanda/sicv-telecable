@@ -215,6 +215,57 @@ class WorkOrderEvidenceSerializer(serializers.ModelSerializer):
         return {"id": evidence.uploaded_by_id, "display_name": str(evidence.uploaded_by)}
 
 
+class ContractSignaturePlacementSerializer(serializers.Serializer):
+    """Dónde va el trazo, sin tocar el trazo.
+
+    Es lo que llega cuando el técnico coge la firma ya registrada y la
+    arrastra: mover una firma no es firmarla otra vez, así que no se pide la
+    imagen ni se vuelve a molestar al abonado.
+    """
+
+    offset_x = serializers.FloatField(required=False, allow_null=True)
+    offset_y = serializers.FloatField(required=False, allow_null=True)
+    width = serializers.FloatField(required=False, allow_null=True, min_value=1)
+
+
+class ContractSignatureUploadSerializer(serializers.Serializer):
+    """El trazo que el abonado dibujó en la pantalla del móvil.
+
+    Solo PNG: el lienzo entrega el trazo con el fondo transparente, y ese
+    fondo es lo que permite apoyarlo sobre la línea del contrato sin tapar
+    con un recuadro blanco lo que hay debajo. Un JPG llegaría con fondo, así
+    que no se acepta aunque el dibujo fuera el mismo.
+
+    El límite de tamaño lo pone `contracts`, que es de quien es la firma; el
+    canal solo comprueba que lo que llega sea un dibujo.
+    """
+
+    image = serializers.ImageField()
+
+    # Dónde dejó el trazo quien firmó, dentro del hueco de firma y en las
+    # unidades del PDF. Son opcionales: una firma que nadie movió va donde
+    # el papel la pone, centrada sobre la línea.
+    offset_x = serializers.FloatField(required=False, allow_null=True)
+    offset_y = serializers.FloatField(required=False, allow_null=True)
+    width = serializers.FloatField(required=False, allow_null=True, min_value=1)
+
+    def validate_image(self, image):
+        extension = Path(image.name or "").suffix.lower()
+        content_type = getattr(image, "content_type", "")
+
+        if extension and extension != ".png":
+            raise serializers.ValidationError(
+                "La firma se guarda en PNG, con el fondo transparente."
+            )
+
+        if content_type and content_type != "image/png":
+            raise serializers.ValidationError(
+                "La firma se guarda en PNG, con el fondo transparente."
+            )
+
+        return image
+
+
 class WorkOrderEvidenceUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
     description = serializers.CharField(

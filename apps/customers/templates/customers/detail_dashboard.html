@@ -183,13 +183,21 @@ comercial ni registrar direcciones, suscripciones o contratos.
                         <td>{{ contract.start_date|date:"d/m/Y" }}</td>
                         <td>{% if contract.status == 'ACTIVE' %}<span class="status-success">{{ contract.get_status_display }}</span>{% else %}{{ contract.get_status_display }}{% endif %}</td>
                         <td>
-                            {# El contrato de abonado, listo para firmar, en la pestaña de al lado. #}
+                            {% comment %}
+                            El contrato de abonado en la pestaña de al lado. Sale con la
+                            firma dentro si el abonado ya firmó en campo: es un solo
+                            documento, dibujado con lo que hay registrado al pedirlo.
+                            {% endcomment %}
                             <a href="{% url 'contracts:contract_document' customer.pk contract.pk %}?ver=1"
                                target="_blank" rel="noopener"
                                class="tc-icon-btn"
-                               title="Imprimir contrato de abonado">
+                               title="{% if contract.signature %}Imprimir contrato firmado por el abonado{% else %}Imprimir contrato de abonado{% endif %}">
                                 <i class="bi bi-printer"></i>
                             </a>
+                            {% if contract.signature %}
+                                <span class="status-success"
+                                      title="Firmado el {{ contract.signature.signed_at|date:'d/m/Y H:i' }}">Firmado</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}

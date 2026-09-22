@@ -1,6 +1,8 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.customers.models import Customer
 from apps.services.models import Plan, ServiceType, Subscription
@@ -220,3 +222,121 @@ class Contract(models.Model):
 
     def __str__(self):
         return f"{self.contract_number} - {self.customer}"
+
+def contract_signature_path(instance, filename):
+    """Ruta de la firma, agrupada por contrato.
+
+    Depende solo de la API de storage de Django -igual que las evidencias de
+    la orden de trabajo-, para que cambiar el backend en produccion no
+    obligue a tocar el modelo.
+    """
+    return f"contracts/{instance.contract.contract_number}/firma/{filename}"
+
+
+class ContractSignature(models.Model):
+    """La firma del abonado, capturada en campo sobre el contrato.
+
+    El abonado firma una vez, en el domicilio, mientras el tecnico atiende la
+    orden de instalacion. Por eso la firma cuelga del contrato -es el
+    documento que se firma- y guarda ademas en que orden se recogio: es el
+    unico rastro de donde estuvo el abonado con el movil delante.
+
+    Se guarda el **trazo**, no el PDF firmado. El contrato se dibuja siempre
+    desde sus datos (`document.py` decide que dice, `pdf.py` como se ve), asi
+    que un PDF archivado seria una segunda version del mismo documento que
+    podria dejar de coincidir con la primera. Con el trazo guardado, el
+    contrato firmado es el mismo documento de siempre con un dato mas.
+
+    Es uno por contrato: rehacer una firma reemplaza la anterior mientras la
+    orden siga abierta, y al cerrarla queda la que el abonado acepto.
+    """
+
+    contract = models.OneToOneField(
+        Contract,
+        on_delete=models.CASCADE,
+        related_name="signature",
+        verbose_name="Contrato"
+    )
+
+    image = models.ImageField(
+        upload_to=contract_signature_path,
+        verbose_name="Firma del abonado",
+        help_text="Trazo capturado en el movil del tecnico, con fondo transparente."
+    )
+
+    signer_name = models.CharField(
+        max_length=200,
+        verbose_name="Firmante",
+        help_text=(
+            "Nombre del abonado tal como estaba registrado al firmar. "
+            "Se copia y no se enlaza: el papel dice quien firmo ese dia."
+        )
+    )
+
+    work_order = models.ForeignKey(
+        "work_orders.WorkOrder",
+        on_delete=models.SET_NULL,
+        related_name="contract_signatures",
+        null=True,
+        blank=True,
+        verbose_name="Orden de instalación",
+        help_text="Orden durante la cual se recogió la firma."
+    )
+
+    captured_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="contract_signatures",
+        null=True,
+        blank=True,
+        verbose_name="Capturada por"
+    )
+
+    signed_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Fecha de firma"
+    )
+
+    # Dónde quedó el trazo dentro del hueco de firma, en puntos y medido
+    # desde su esquina inferior izquierda. Vacío significa «como el sistema
+    # la pone»: centrada sobre la línea. Se guarda relativo al hueco y no a
+    # la página para que la firma siga a su línea si el documento cambia de
+    # paginación, en vez de quedarse flotando donde estaba.
+    offset_x = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name="Desplazamiento horizontal"
+    )
+
+    offset_y = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name="Desplazamiento vertical"
+    )
+
+    width = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name="Ancho del trazo",
+        help_text="En puntos. Vacío deja el tamaño que el sistema calcula."
+    )
+
+    @property
+    def colocacion(self):
+        """El ajuste que hizo el técnico, o `None` si no tocó nada."""
+
+        if self.offset_x is None and self.offset_y is None and self.width is None:
+            return None
+
+        return {
+            "x": self.offset_x,
+            "y": self.offset_y,
+            "ancho": self.width,
+        }
+
+    class Meta:
+        verbose_name = "Firma de contrato"
+        verbose_name_plural = "Firmas de contrato"
+
+    def __str__(self):
+        return f"Firma de {self.contract.contract_number}"

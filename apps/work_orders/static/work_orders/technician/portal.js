@@ -11,6 +11,8 @@
         detailBackScreen: "mine",
         detailEditable: false,
         currentOrder: null,
+        contractOrderId: null,
+        contractCanSign: false,
         toastTimer: null,
     };
 
@@ -669,6 +671,7 @@
                 loadFieldMaterials(id),
                 loadMaterials(id),
                 loadEvidences(id),
+                loadContract(id),
                 loadCompletion(id, order),
             ]);
             content.hidden = false;
@@ -949,6 +952,86 @@
         }
     }
 
+    // ------------------------------------------------------------------
+    // La contrata del abonado
+    //
+    // Solo las instalaciones traen contrato que firmar, y quien lo sabe es el
+    // servidor: el portal pregunta siempre y pinta el apartado si la orden
+    // tiene contrata. Así no hay una segunda lista de tipos de orden en el
+    // navegador que pueda decir algo distinto del catálogo.
+    // ------------------------------------------------------------------
+
+    function contractUrl(id, suffix = "") {
+        return `${config.workOrdersUrl}${id}/contract/${suffix}`;
+    }
+
+    function renderContract(payload, id) {
+        const panel = $("#contract-panel");
+        panel.hidden = !payload?.available;
+
+        if (!payload?.available) {
+            // Se olvida la contrata anterior: sin esto, abrir una avería
+            // después de una instalación dejaría apuntando al contrato de
+            // la orden anterior.
+            state.contractOrderId = null;
+            state.contractCanSign = false;
+            return;
+        }
+
+        const contract = payload.contract;
+        const signature = payload.signature;
+
+        $("#contract-number").textContent = text(contract.number);
+        $("#contract-customer").textContent = text(contract.customer);
+        $("#contract-service").textContent = text(contract.service);
+        $("#contract-state").textContent = signature ? "Firmado" : "Sin firmar";
+        $("#contract-signed-at").textContent = signature
+            ? formatDate(signature.signed_at)
+            : "Pendiente";
+
+        $("#contract-help").textContent = payload.can_sign
+            ? "El abonado firma aquí el mismo contrato que se registró en oficina. Puede leerlo completo antes de firmar."
+            : text(payload.detail, "El contrato se consulta; ya no admite firma desde campo.");
+
+        const sign = $("#contract-sign");
+        sign.hidden = !payload.can_sign;
+        sign.textContent = signature ? "Rehacer firma" : "Dibujar firma";
+
+        state.contractOrderId = id;
+        state.contractCanSign = Boolean(payload.can_sign);
+    }
+
+    async function loadContract(id) {
+        try {
+            renderContract(await api(contractUrl(id)), id);
+        } catch (error) {
+            $("#contract-panel").hidden = true;
+        }
+    }
+
+    function openContract(canSign) {
+        const id = state.contractOrderId;
+        const signer = window.SICV_CONTRACT_SIGNER;
+
+        if (!id) return;
+        if (!signer) {
+            showToast("El visor del contrato todavía se está cargando.", "error");
+            return;
+        }
+
+        signer.abrir({
+            title: $("#contract-number").textContent,
+            token: state.token,
+            documentUrl: contractUrl(id, "document/"),
+            signatureUrl: contractUrl(id, "signature/"),
+            canSign: canSign && state.contractCanSign,
+            onMessage: showToast,
+            // Firmado el contrato, la ficha tiene que decirlo sin que el
+            // técnico cierre el visor para enterarse.
+            onSigned: () => loadContract(id),
+        });
+    }
+
     async function uploadEvidence(event) {
         event.preventDefault();
         if (!state.detailId) return;
@@ -1107,6 +1190,8 @@
         $("#removed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "REMOVED"));
         $("#materials-form").addEventListener("submit", saveMaterial);
         $("#evidence-form").addEventListener("submit", uploadEvidence);
+        $("#contract-open").addEventListener("click", () => openContract(false));
+        $("#contract-sign").addEventListener("click", () => openContract(true));
         $("#complete-order-form").addEventListener("submit", finalizeAttention);
         $("#liquidate-order-form").addEventListener("submit", finalizeLiquidation);
         $$('[data-nav]').forEach((button) => {

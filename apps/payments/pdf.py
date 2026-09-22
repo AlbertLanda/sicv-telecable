@@ -38,6 +38,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from apps.organization import branding
 from .invoicing import (
     IGV_RATE,
     amount_in_words,
@@ -55,33 +56,18 @@ from .models import ReceiptSequence, format_receipt_number
 # cambiar esto no rompe nada, solo cambia dónde corta.
 PAGE_SIZE = landscape(A5)
 
-# Dónde se busca el logotipo.
+# Dónde se busca el logotipo y cómo se prepara: lo decide `organization`, que
+# es de quien es la marca. El comprobante y el contrato imprimen el mismo
+# dibujo, y buscarlo cada uno por su cuenta significaría que cambiarlo un día
+# deje a uno de los dos con el anterior.
 #
-# En MEDIA_ROOT: hoy es un archivo que se deja en su sitio, no algo que venga
-# con el código. Provisional a propósito -está pendiente decidir si cada razón
-# social lleva el suyo, y entonces será un campo del emisor y no una ruta
-# fija-, así que se deja en una sola constante y nada más del módulo sabe
-# dónde está.
+# Las constantes se conservan con sus nombres porque este módulo las expone a
+# sus pruebas, que mueven `LOGO_DIR` para comprobar qué pasa sin archivo.
 LOGO_DIR = Path(settings.MEDIA_ROOT)
-LOGO_STEM = "telecable-logo"
-
-# Cualquier extensión, y cualquier cosa pegada detrás del nombre. El archivo
-# llega descargado de un navegador o de un chat, que le añaden lo suyo -
-# «telecable-logo.jpg.jpeg» es lo que salió la primera vez-, y el fallo es
-# mudo: el papel se imprime igual y sin logo. Exigir el nombre exacto costaba
-# una vuelta entera para descubrir que sobraba una extensión.
-LOGO_PATTERN = f"{LOGO_STEM}*"
-
-# Con varios candidatos gana el primero de esta lista. Un PNG antes que un
-# JPG porque conserva la transparencia, que en una cabecera se nota.
-LOGO_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp")
-
-# Cuanto se puede apartar un pixel del blanco para seguir siendo margen.
-#
-# Un umbral y no igualdad exacta: el archivo de hoy es un JPEG, y un JPEG no
-# guarda el blanco exacto -lo deja en 250 y pico-, asi que comparar a pelo no
-# recortaria nada. Bajo, para no comerse un trazo claro del dibujo.
-UMBRAL_BLANCO = 18
+LOGO_STEM = branding.STEM
+LOGO_PATTERN = branding.PATRON
+LOGO_SUFFIXES = branding.SUFIJOS
+UMBRAL_BLANCO = branding.UMBRAL_BLANCO
 
 NEGRO = colors.black
 LINEA = colors.HexColor("#000000")
@@ -517,78 +503,20 @@ def _estilos():
 def find_logo():
     """El archivo del logotipo, o None si no hay ninguno.
 
-    Con varios candidatos gana el de mejor extensión y, a igualdad, el de
-    nombre más corto: entre «telecable-logo.png» y «telecable-logo (1).png»
-    se queda con el limpio, que es el que alguien puso a propósito.
+    Delega en `organization.branding`, que es donde se decide dónde vive y
+    cómo se elige entre varios candidatos. Aquí se conserva la función -en
+    vez de importar la de allí tal cual- porque `LOGO_DIR` es de este módulo:
+    así sus pruebas pueden seguir apuntando el comprobante a otra carpeta sin
+    tocar la marca de toda la empresa.
     """
-    if not LOGO_DIR.exists():
-        return None
 
-    candidatos = [
-        ruta for ruta in LOGO_DIR.glob(LOGO_PATTERN) if ruta.is_file()
-    ]
-
-    if not candidatos:
-        return None
-
-    def preferencia(ruta):
-        suffix = ruta.suffix.lower()
-        puesto = (
-            LOGO_SUFFIXES.index(suffix)
-            if suffix in LOGO_SUFFIXES
-            else len(LOGO_SUFFIXES)
-        )
-
-        return (puesto, len(ruta.name), ruta.name)
-
-    return sorted(candidatos, key=preferencia)[0]
+    return branding.buscar_logo(LOGO_DIR)
 
 
 def _sin_margen_blanco(ruta):
-    """El archivo sin el aire en blanco que lo rodea, o el archivo tal cual.
+    """El archivo sin el aire en blanco que lo rodea, o el archivo tal cual."""
 
-    El logotipo que se deja en MEDIA_ROOT viene con margen dentro de la propia
-    imagen -el de hoy, un 13% arriba y un 19% abajo-, y ese margen es parte del
-    dibujo: al colocarlo alineado con la parte de arriba de su celda, lo que se
-    ve arranca tres milímetros por debajo de la razón social que tiene al lado
-    y el logotipo parece caído.
-
-    Se recorta al dibujar y no en el archivo. El logotipo lo deja alguien en su
-    sitio, no viene con el código, así que no es nuestro para reescribirlo; y un
-    recorte al vuelo sigue valiendo cuando lo cambien por otro con distinto
-    aire, que es lo que va a pasar.
-
-    Si no se puede recortar se devuelve el archivo sin tocar: un logotipo un
-    poco caído es mejor que una ventanilla que no puede entregar el papel.
-    """
-    try:
-        from PIL import Image as PilImage, ImageChops
-    except Exception:
-        return str(ruta)
-
-    try:
-        original = PilImage.open(ruta).convert("RGB")
-        blanco = PilImage.new("RGB", original.size, (255, 255, 255))
-        mascara = (
-            ImageChops.difference(original, blanco)
-            .convert("L")
-            .point(lambda valor: 255 if valor > UMBRAL_BLANCO else 0)
-        )
-        caja = mascara.getbbox()
-    except Exception:
-        return str(ruta)
-
-    # Sin caja el dibujo es todo blanco; recortarlo lo dejaría en nada.
-    if caja is None:
-        return str(ruta)
-
-    # Como archivo en memoria y no como imagen de PIL: `platypus.Image` espera
-    # una ruta o algo que se pueda abrir, y una imagen de PIL la rechaza.
-    recortado = BytesIO()
-    original.crop(caja).save(recortado, format="PNG")
-    recortado.seek(0)
-
-    return recortado
+    return branding.logo_sin_margen(ruta, umbral=UMBRAL_BLANCO)
 
 
 def _logo(alto):

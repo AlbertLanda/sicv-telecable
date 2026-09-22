@@ -20,8 +20,10 @@ PDF y mirarlo, igual que cobranza comprueba su aritmética aparte del dibujo
 del comprobante.
 """
 
+from apps.organization import branding
 from apps.payments.models import Issuer, Payment
 
+from .signatures import firma_del_contrato
 from .subscriptions import codigo_de_suscripcion
 
 
@@ -34,11 +36,19 @@ ISSUER_CODE = "INV"
 DOMICILIO_LEGAL = "Jr. Carlos Arrieta 1443 Dpto. 502, Urb. Santa Beatriz, Lima"
 
 
-# Lo que cambia por sede. Solo JAUJA está confirmado: sale del contrato
-# firmado. La oficina de La Oroya es la que ya figura en la empresa emisora
-# cargada en el sistema. Lo que no se sabe se deja vacío a propósito: en el
-# papel queda un espacio para completar a mano, que es preferible a imprimir
-# una dirección o una jurisdicción inventadas en un documento que se firma.
+# Lo que cambia por sede. Las tres salen de los contratos oficiales que
+# entregó administración -uno por sede-, así que aquí no hay nada deducido:
+# las oficinas comerciales son las que el papel lista, y la ciudad es la de
+# la jurisdicción que ese mismo papel declara.
+#
+# `city` gobierna tres sitios del documento -el subtítulo del título, los
+# tribunales de la cláusula undécima y la ciudad donde se suscribe-, y por eso
+# no siempre coincide con el nombre de la sede: La Oroya contrata y litiga
+# como «Yauli – La Oroya».
+#
+# Una sede que no esté aquí imprime esos espacios en blanco a propósito: en un
+# documento que se firma, un hueco para completar a mano es preferible a una
+# dirección o una jurisdicción inventadas.
 SEDES = {
     "JAUJA": {
         "offices": (
@@ -48,15 +58,21 @@ SEDES = {
         "phone": "064 466080",
         "city": "Jauja",
     },
-    "OROYA": {
-        "offices": "Av. Miguel Grau 127 – La Oroya",
-        "phone": "",
-        "city": "La Oroya",
-    },
     "HUANCAYO": {
-        "offices": "",
-        "phone": "",
+        "offices": (
+            "Jr. Huaytapallana 214 – El Tambo, Huancayo / "
+            "Calle Real 1147 Stand N° 6 – Sicaya, Huancayo"
+        ),
+        "phone": "064 466080",
         "city": "Huancayo",
+    },
+    "OROYA": {
+        "offices": (
+            "AV. Miguel Grau 1025 – Marcavalle - Santa Rosa de Saccos, "
+            "Yauli – La Oroya"
+        ),
+        "phone": "064 466080",
+        "city": "Yauli – La Oroya",
     },
 }
 
@@ -97,6 +113,34 @@ def empresa_que_contrata():
     return Issuer.objects.filter(code=ISSUER_CODE).first()
 
 
+def sello_de_la_empresa(empresa):
+    """La firma de quien contrata, ya estampada en el documento.
+
+    El abonado firma en el móvil del técnico; la empresa no: su firma es
+    siempre la misma y va impresa, como en los contratos que se entregaban
+    en papel con el sello puesto.
+
+    El archivo lo deja administración en MEDIA_ROOT, uno por código de
+    empresa emisora (`firma_INV.png`), y tiene que ser un **PNG recortado y
+    con fondo transparente**: el sello se apoya sobre la línea de firma, y un
+    fondo blanco la taparía dejando el recuadro a la vista.
+
+    Una razón social sin firma cargada devuelve `None`, y el contrato sale
+    con su espacio en blanco para firmarlo a mano. Es la misma regla que el
+    resto del documento: lo que no se sabe se deja en blanco, no se inventa.
+    """
+
+    if empresa is None:
+        return None
+
+    archivo = branding.buscar_imagen(branding.stem_de_la_firma(empresa.code))
+
+    if archivo is None:
+        return None
+
+    return archivo.read_bytes()
+
+
 def datos_de_la_sede(branch):
     """Oficinas, teléfono y ciudad de la jurisdicción de una sede.
 
@@ -132,6 +176,31 @@ def ultima_fecha_de_pago(customer):
     )
 
 
+def firma_del_abonado(contract):
+    """El trazo que el abonado firmó en campo, listo para dibujarlo.
+
+    Se devuelven los **bytes** y no el archivo: el dibujo no tiene por qué
+    saber en qué storage vive la firma, igual que no sabe de dónde sale la
+    razón social. Un contrato sin firmar devuelve `None` y el papel imprime
+    la línea en blanco de siempre, que es lo que hay que llevar a firmar.
+    """
+
+    firma = firma_del_contrato(contract)
+
+    if firma is None or not firma.image:
+        return None
+
+    with firma.image.open("rb") as archivo:
+        contenido = archivo.read()
+
+    return {
+        "imagen": contenido,
+        "firmante": firma.signer_name,
+        "fecha": firma.signed_at,
+        "colocacion": firma.colocacion,
+    }
+
+
 def datos_del_contrato(contract):
     """Todo lo que el papel del contrato necesita, ya resuelto.
 
@@ -147,6 +216,7 @@ def datos_del_contrato(contract):
     plan = contract.plan
 
     sede = datos_de_la_sede(customer.branch)
+    empresa = empresa_que_contrata()
 
     distrito = (address.district or "").strip()
 
@@ -157,7 +227,7 @@ def datos_del_contrato(contract):
         "codigo_abonado": customer.code,
 
         # La empresa que contrata
-        "empresa": empresa_que_contrata(),
+        "empresa": empresa,
         "domicilio_legal": DOMICILIO_LEGAL,
         "oficinas": sede["offices"],
         "telefono": sede["phone"],
@@ -184,6 +254,11 @@ def datos_del_contrato(contract):
         "dia": contract.start_date.day if contract.start_date else "",
         "mes": mes_en_palabras(contract.start_date),
         "anio": contract.start_date.year if contract.start_date else "",
+
+        # Las dos firmas: la del abonado se recoge en campo, la de la
+        # empresa va impresa siempre.
+        "firma_abonado": firma_del_abonado(contract),
+        "firma_empresa": sello_de_la_empresa(empresa),
 
         # Cuenta de las aplicaciones, solo donde el servicio la pide
         "playhub": (

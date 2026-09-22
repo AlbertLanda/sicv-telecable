@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import field_views, nap_views, views
+from . import contract_views, field_views, nap_views, views
 
 
 app_name = "work_orders_api"
@@ -33,6 +33,23 @@ urlpatterns = [
         "<int:pk>/materials/",
         field_views.InstallationMaterialUsageListCreateView.as_view(),
         name="materials",
+    ),
+    # La contrata del abonado: el mismo contrato que imprime SICV, con la
+    # firma que se recoge en el domicilio. Ver docs/contrata_firma_campo.md.
+    path(
+        "<int:pk>/contract/",
+        contract_views.WorkOrderContractView.as_view(),
+        name="contract",
+    ),
+    path(
+        "<int:pk>/contract/document/",
+        contract_views.WorkOrderContractDocumentView.as_view(),
+        name="contract_document",
+    ),
+    path(
+        "<int:pk>/contract/signature/",
+        contract_views.WorkOrderContractSignatureView.as_view(),
+        name="contract_signature",
     ),
     path(
         "<int:pk>/evidences/",

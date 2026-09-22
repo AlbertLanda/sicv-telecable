@@ -816,6 +816,11 @@ class CustomerDetailView(LoginRequiredMixin, DetailView):
                 "subscription__plan",
                 "service_type",
                 "plan",
+                # Reverso uno-a-uno de la firma recogida en campo: la tabla
+                # marca los contratos ya firmados, y sin esto cada fila
+                # gastaría una consulta en descubrir que la mayoría no lo
+                # están todavía.
+                "signature",
             )
             .order_by("-created_at")
         )

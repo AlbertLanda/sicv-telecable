@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.views.generic import CreateView, DetailView, FormView
 
 from .forms import ContractCreateForm, InstallationWorkOrderForm
+from .signatures import firma_del_contrato
 from .subscriptions import (
     codigo_de_suscripcion,
     resolver_suscripcion,
@@ -335,6 +336,12 @@ El contrato registrado, de solo lectura.
         # La suscripción se lee igual que en el alta: por su código. Es el
         # mismo documento visto después, no otro.
         context["subscription_label"] = codigo_de_suscripcion(subscription)
+
+        # La firma que el abonado dibujó en campo. No se muestra el trazo
+        # -para verlo está el documento, que es donde significa algo-, sino
+        # si el contrato está firmado y desde qué orden se recogió: es lo que
+        # ATC necesita saber sin abrir el PDF.
+        context["signature"] = firma_del_contrato(self.object)
 
         return context
 

@@ -321,6 +321,25 @@
                         <div id="materials-empty" class="empty-state compact" hidden>No hay cables instalados con una regla de exceso aplicable.</div>
                     </section>
 
+                    <section id="contract-panel" class="panel" hidden>
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Contrata</p>
+                                <h2>Contrato del abonado</h2>
+                            </div>
+                            <span id="contract-state" class="mini-badge">Sin firmar</span>
+                        </div>
+                        <p id="contract-help" class="helper">El abonado firma en esta pantalla el mismo contrato que se registró en oficina.</p>
+                        <dl class="data-list two-column">
+                            <div><dt>Contrato</dt><dd id="contract-number">—</dd></div>
+                            <div><dt>Abonado</dt><dd id="contract-customer">—</dd></div>
+                            <div><dt>Servicio</dt><dd id="contract-service">—</dd></div>
+                            <div><dt>Firma</dt><dd id="contract-signed-at">Pendiente</dd></div>
+                        </dl>
+                        <button id="contract-open" class="btn btn-secondary btn-block" type="button">Ver contrato</button>
+                        <button id="contract-sign" class="btn btn-primary btn-block" type="button">Dibujar firma</button>
+                    </section>
+
                     <section class="panel">
                         <div class="panel-heading">
                             <div>
@@ -357,6 +376,80 @@
         </nav>
     </div>
 
+    <div id="signer" class="signer" hidden>
+        <header class="signer-bar">
+            <button id="signer-close" class="icon-button" type="button" aria-label="Cerrar contrato">✕</button>
+            <div class="signer-title">
+                <strong id="signer-name">Contrato</strong>
+                <small id="signer-pages">—</small>
+            </div>
+            <div class="signer-zoom">
+                <button id="signer-zoom-out" class="icon-button" type="button" aria-label="Alejar">−</button>
+                <span id="signer-zoom-level">100%</span>
+                <button id="signer-zoom-in" class="icon-button" type="button" aria-label="Acercar">+</button>
+            </div>
+        </header>
+
+        <div id="signer-doc" class="signer-doc">
+            <p id="signer-loading" class="signer-loading">Abriendo el contrato…</p>
+            <div id="signer-canvases" class="signer-canvases"></div>
+        </div>
+
+        {% comment %}
+        La firma recién dibujada, superpuesta sobre la hoja: se arrastra a su
+        sitio y se estira desde la esquina antes de aceptarla. Nace sobre la
+        línea de EL ABONADO, que es donde el contrato la espera.
+        {% endcomment %}
+        <div id="signer-place" class="signer-place" hidden>
+            <img id="signer-place-image" alt="Firma del abonado">
+            <span class="signer-place-handle" id="signer-place-handle" aria-hidden="true"></span>
+        </div>
+
+        <footer id="signer-actions" class="signer-actions">
+            <p id="signer-signed-hint" class="signer-hint" hidden>Toca la firma del contrato para moverla, cambiar su tamaño o eliminarla.</p>
+            <button id="signer-draw" class="btn btn-primary btn-block" type="button">Dibujar firma</button>
+
+            <div id="signer-place-bar" class="signer-place-bar" hidden>
+                <p class="signer-hint">Arrastra la firma a su sitio. Estira desde la esquina para cambiar el tamaño.</p>
+                <div class="signer-place-buttons">
+                    <button id="signer-place-delete" class="btn btn-danger" type="button" hidden>Eliminar firma</button>
+                    <button id="signer-place-redraw" class="btn btn-secondary" type="button">Volver a dibujar</button>
+                    <button id="signer-place-cancel" class="btn btn-secondary" type="button" hidden>Cancelar</button>
+                    <button id="signer-place-accept" class="btn btn-primary" type="button">Aceptar y guardar</button>
+                </div>
+            </div>
+        </footer>
+
+        <section id="signer-sheet" class="signer-sheet" hidden aria-label="Firma del abonado">
+            <div class="signer-sheet-head">
+                <strong>Firma del abonado</strong>
+                <small>Firme con el dedo dentro del recuadro.</small>
+            </div>
+
+            <div class="signature-tools">
+                <div class="signature-choice" role="group" aria-label="Color de la tinta">
+                    <button class="ink-button is-active" type="button" data-ink="#12161f">Negro</button>
+                    <button class="ink-button" type="button" data-ink="#12408f">Azul</button>
+                </div>
+                <div class="signature-choice" role="group" aria-label="Grosor del trazo">
+                    <button class="stroke-button" type="button" data-stroke="0.004">Fino</button>
+                    <button class="stroke-button is-active" type="button" data-stroke="0.006">Medio</button>
+                    <button class="stroke-button" type="button" data-stroke="0.009">Grueso</button>
+                </div>
+            </div>
+
+            <div class="signature-pad">
+                <canvas id="signature-canvas"></canvas>
+                <span class="signature-baseline" aria-hidden="true"></span>
+            </div>
+            <div class="signer-sheet-actions">
+                <button id="signature-clear" class="btn btn-secondary" type="button">Borrar</button>
+                <button id="signature-cancel" class="btn btn-secondary" type="button">Rechazar</button>
+                <button id="signature-accept" class="btn btn-primary" type="button">Colocar firma</button>
+            </div>
+        </section>
+    </div>
+
     <script>
         window.SICV_TECHNICIAN_CONFIG = {
             loginUrl: "/api/technicians/login/",
@@ -364,6 +457,7 @@
             workOrdersUrl: "/api/technicians/work-orders/"
         };
     </script>
+    <script src="{% static 'work_orders/technician/contract_signer.js' %}" type="module"></script>
     <script src="{% static 'work_orders/technician/portal.js' %}" defer></script>
     <script src="{% static 'work_orders/technician/material_excess_sync.js' %}" defer></script>
 </body>
