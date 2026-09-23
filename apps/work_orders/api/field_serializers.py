@@ -35,17 +35,6 @@ class WorkOrderStartSerializer(serializers.Serializer):
         default="",
         max_length=1000,
     )
-    participant_ids = serializers.PrimaryKeyRelatedField(
-        source="participant_users",
-        queryset=User.objects.filter(
-            role=User.Role.TECHNICIAN,
-            is_active=True,
-        ),
-        many=True,
-        required=False,
-        default=list,
-    )
-
 
 class WorkOrderFieldSheetSerializer(serializers.ModelSerializer):
     updated_by = serializers.SerializerMethodField()
@@ -210,6 +199,16 @@ class WorkOrderLiquidationInputSerializer(serializers.Serializer):
         allow_blank=True,
         default="",
         max_length=1000,
+    )
+    participant_ids = serializers.PrimaryKeyRelatedField(
+        source="participant_users",
+        queryset=User.objects.filter(
+            role=User.Role.TECHNICIAN,
+            is_active=True,
+        ),
+        many=True,
+        required=False,
+        default=list,
     )
 
 
