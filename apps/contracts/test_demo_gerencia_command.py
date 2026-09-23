@@ -55,8 +55,14 @@ class DemoGerenciaCommandTests(TestCase):
             contract_number="CONT-DEMO-000002"
         )
 
-        signed_order = WorkOrder.objects.get(order_number="OT-2026-000001")
-        pending_order = WorkOrder.objects.get(order_number="OT-2026-000002")
+        signed_order = WorkOrder.objects.get(
+            subscription=signed_contract.subscription,
+            order_type__code="INSTALLATION",
+        )
+        pending_order = WorkOrder.objects.get(
+            subscription=pending_contract.subscription,
+            order_type__code="INSTALLATION",
+        )
 
         self.assertEqual(signed_order.status, WorkOrder.Status.LIQUIDATED)
         self.assertEqual(pending_order.status, WorkOrder.Status.IN_PROGRESS)
