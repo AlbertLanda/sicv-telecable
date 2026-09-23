@@ -329,6 +329,7 @@ class AvailableWorkOrdersContentTests(AvailableWorkOrdersAPITestCase):
                 "customer",
                 "service_type",
                 "plan",
+                "is_outside_plant",
                 "order_type",
                 "subtype",
                 "status",

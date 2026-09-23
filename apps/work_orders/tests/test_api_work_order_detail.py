@@ -103,6 +103,7 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "customer",
                 "service_type",
                 "plan",
+                "is_outside_plant",
                 "order_type",
                 "subtype",
                 "status",
@@ -124,6 +125,7 @@ class WorkOrderDetailContentTests(WorkOrderDetailAPITestCase):
                 "attended_at",
                 "can_start_attention",
                 "technical_data",
+                "participants",
             },
         )
 
