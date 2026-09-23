@@ -309,15 +309,83 @@ class WorkOrderTestCase(TestCase):
 
         return order
 
+    def ensure_signed_installation_contract(self, order):
+        """Deja una instalación de prueba en el mismo estado válido que producción."""
+
+        from datetime import date
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image as PILImage, ImageDraw
+
+        from apps.contracts.models import Contract
+        from apps.contracts.signatures import firma_del_contrato, firmar_contrato
+
+        contract = (
+            Contract.objects
+            .filter(subscription=order.subscription, is_active=True)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if contract is None:
+            contract = Contract.objects.create(
+                contract_number=f"CONT-TEST-{order.subscription_id}",
+                customer=order.subscription.customer,
+                subscription=order.subscription,
+                service_type=order.subscription.service_type,
+                plan=order.subscription.plan,
+                modality=Contract.Modality.SALE,
+                installments=1,
+                start_date=date(2026, 9, 23),
+                status=Contract.Status.ACTIVE,
+                is_active=True,
+            )
+
+        if firma_del_contrato(contract) is None:
+            canvas = PILImage.new(
+                "RGBA",
+                (320, 110),
+                (255, 255, 255, 0),
+            )
+            ImageDraw.Draw(canvas).line(
+                [(10, 85), (140, 20), (305, 80)],
+                fill=(0, 0, 0, 255),
+                width=4,
+            )
+            output = BytesIO()
+            canvas.save(output, format="PNG")
+            image = SimpleUploadedFile(
+                "firma.png",
+                output.getvalue(),
+                content_type="image/png",
+            )
+            firmar_contrato(
+                contract,
+                image,
+                usuario=self.technician,
+                orden=order,
+            )
+
+        return contract
+
     def create_attended_order(self, order_type=None, result=None, **kwargs):
         """Crea una orden ya atendida, lista para liquidarse."""
         from apps.work_orders.services import attend_order
 
         order = self.create_order_in_progress(order_type=order_type, **kwargs)
 
+        selected_result = result or self.installation_success
+
+        if (
+            order.order_type.code == "INSTALLATION"
+            and selected_result.code == "SUCCESSFUL"
+        ):
+            self.ensure_signed_installation_contract(order)
+
         attend_order(
             order,
-            result=result or self.installation_success,
+            result=selected_result,
             user=self.technician,
         )
 

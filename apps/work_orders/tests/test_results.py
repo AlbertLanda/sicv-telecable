@@ -28,6 +28,7 @@ class OrderResultTests(WorkOrderTestCase):
         order = self.create_order_in_progress(
             order_type=self.installation_type,
         )
+        contract = self.ensure_signed_installation_contract(order)
 
         attend_order(order, result=self.installation_success, user=self.technician)
 
@@ -40,6 +41,52 @@ class OrderResultTests(WorkOrderTestCase):
             timezone.localdate(),
         )
         self.assertEqual(order.status, WorkOrder.Status.ATTENDED)
+
+        contract.refresh_from_db()
+        self.assertEqual(
+            contract.last_activation_date,
+            timezone.localdate(),
+        )
+
+    def test_successful_installation_without_signature_is_rejected(self):
+        """Una instalación no activa servicio sin conformidad del abonado."""
+        from datetime import date
+
+        from apps.contracts.models import Contract
+
+        order = self.create_order_in_progress(
+            order_type=self.installation_type,
+        )
+        Contract.objects.create(
+            contract_number="CONT-UNSIGNED",
+            customer=self.customer,
+            subscription=self.subscription,
+            service_type=self.service_type,
+            plan=self.plan,
+            modality=Contract.Modality.SALE,
+            installments=1,
+            start_date=date(2026, 9, 23),
+            status=Contract.Status.ACTIVE,
+            is_active=True,
+        )
+
+        with self.assertRaisesMessage(
+            ValidationError,
+            "firme su contrato",
+        ):
+            attend_order(
+                order,
+                result=self.installation_success,
+                user=self.technician,
+            )
+
+        order.refresh_from_db()
+        self.subscription.refresh_from_db()
+        self.assertEqual(order.status, WorkOrder.Status.IN_PROGRESS)
+        self.assertEqual(
+            self.subscription.status,
+            Subscription.Status.INSTALLATION,
+        )
 
     def test_successful_temporary_cut_suspends_subscription(self):
         """20. Corte temporal exitoso suspende la suscripción."""

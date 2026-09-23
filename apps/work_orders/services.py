@@ -849,6 +849,37 @@ def start_order_attention(order: WorkOrder, user=None, remarks=""):
 
     return order
 
+def _require_signed_contract_for_successful_installation(order, result):
+    """Una instalación exitosa solo existe si el abonado aceptó su contrato."""
+
+    if (
+        order.order_type.code != INSTALLATION_ORDER_TYPE_CODE
+        or result.code != "SUCCESSFUL"
+    ):
+        return
+
+    from apps.contracts.signatures import (
+        contrato_de_la_orden,
+        firma_del_contrato,
+    )
+
+    contract = contrato_de_la_orden(order)
+
+    if contract is None:
+        raise ValidationError(
+            "No se puede finalizar la instalación: la suscripción no tiene "
+            "un contrato activo asociado."
+        )
+
+    signature = firma_del_contrato(contract)
+
+    if signature is None or not signature.signed_pdf:
+        raise ValidationError(
+            "No se puede finalizar la instalación hasta que el abonado "
+            "firme su contrato."
+        )
+
+
 @transaction.atomic
 def attend_order(order: WorkOrder, result, user=None, remarks=""):
     """
@@ -879,6 +910,8 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
         raise ValidationError(
             "El resultado seleccionado no corresponde al tipo de orden."
         )
+
+    _require_signed_contract_for_successful_installation(order, result)
 
     order.result = result
     order.save(update_fields=["result", "updated_at"])
@@ -1427,6 +1460,20 @@ def _apply_installation_result(order, result_code):
                 "updated_at",
             ]
         )
+
+        # El contrato refleja cuándo ese servicio quedó efectivamente activo.
+        # Se estampa al instalar con éxito, nunca al registrarlo en oficina.
+        from apps.contracts.signatures import contrato_de_la_orden
+
+        contract = contrato_de_la_orden(order)
+        if contract is not None:
+            contract.last_activation_date = timezone.localdate()
+            contract.save(
+                update_fields=[
+                    "last_activation_date",
+                    "updated_at",
+                ]
+            )
 
 def _apply_cut_result(order, result_code):
     if result_code != "SUCCESSFUL":
