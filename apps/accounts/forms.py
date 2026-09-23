@@ -4,6 +4,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 
 from apps.accounts.models import User
 from apps.organization.models import Office
+from apps.technicians.models import TechnicianProfile
 
 
 class StyledPasswordChangeForm(PasswordChangeForm):
@@ -73,6 +74,13 @@ class OfficeCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
 
 
 class PersonnelForm(forms.ModelForm):
+    technician_area = forms.ChoiceField(
+        choices=TechnicianProfile.Area.choices,
+        required=False,
+        label="Cuadrilla técnica",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
     """Datos operativos que Administración necesita manejar en el SICV.
 
     No expone grupos, permisos individuales, staff ni superusuario. Esa capa
@@ -137,6 +145,16 @@ class PersonnelForm(forms.ModelForm):
         self.fields["email"].required = False
         self.fields["phone"].required = False
 
+        if self.instance.pk and self.instance.role == User.Role.TECHNICIAN:
+            try:
+                self.fields["technician_area"].initial = (
+                    self.instance.technician_profile.area
+                )
+            except TechnicianProfile.DoesNotExist:
+                self.fields["technician_area"].initial = (
+                    TechnicianProfile.Area.INTERNAL_NETWORK
+                )
+
         # Un administrador operativo puede gestionar personal, pero crear o
         # asignar nuevas cuentas ADMIN queda reservado al superusuario. Así
         # podemos tener un administrador del SICV y, por encima, una cuenta
@@ -159,6 +177,13 @@ class PersonnelForm(forms.ModelForm):
         office = cleaned.get("office")
         allowed = cleaned.get("allowed_offices")
         role = cleaned.get("role")
+        technician_area = cleaned.get("technician_area")
+
+        if role == User.Role.TECHNICIAN and not technician_area:
+            self.add_error(
+                "technician_area",
+                "Debe indicar la cuadrilla del técnico.",
+            )
 
         if self.actor is not None and not self.actor.is_superuser and role == User.Role.ADMIN:
             self.add_error("role", "Solo un superusuario puede asignar el rol Administrador.")
@@ -179,10 +204,21 @@ class PersonnelForm(forms.ModelForm):
 
         return cleaned
 
+    def save_technician_profile(self, user):
+        if user.role != User.Role.TECHNICIAN:
+            return
+
+        profile, _ = TechnicianProfile.objects.get_or_create(user=user)
+        profile.area = self.cleaned_data["technician_area"]
+        profile.full_clean()
+        profile.save(update_fields=["area", "updated_at"])
+
     def save(self, commit=True):
         user = super().save(commit=commit)
-        if commit and user.role != User.Role.ATC:
-            user.allowed_offices.clear()
+        if commit:
+            if user.role != User.Role.ATC:
+                user.allowed_offices.clear()
+            self.save_technician_profile(user)
         return user
 
 
@@ -219,5 +255,6 @@ class PersonnelCreateForm(PersonnelForm):
             self.save_m2m()
             if user.role != User.Role.ATC:
                 user.allowed_offices.clear()
+            self.save_technician_profile(user)
 
         return user

@@ -177,7 +177,9 @@ class WorkOrderCreateForm(forms.ModelForm):
         # cliente realmente tiene. Ofrecer "AVERÍA CABLE" a un abonado
         # solo-internet no es una opción: es una orden imposible que
         # alguien acabaría creando.
-        order_types = OrderType.objects.filter(is_active=True)
+        order_types = OrderType.objects.filter(
+            is_active=True,
+        ).exclude(code="OUTSIDE_PLANT")
 
         if customer is not None:
             service_type_ids = list(

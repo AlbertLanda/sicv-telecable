@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Planta Externa{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-1">Órdenes de Planta Externa</h1>
+            <p class="text-muted mb-0">Intervenciones sobre red e infraestructura.</p>
+        </div>
+        {% if can_create %}
+        <a href="{% url 'work_orders:outside_plant_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Nueva PEX
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Pendientes</div><div class="h3 mb-0">{{ pending_count }}</div></div></div></div>
+        <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">En atención</div><div class="h3 mb-0">{{ in_progress_count }}</div></div></div></div>
+    </div>
+
+    <div class="card card-custom shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>OT</th><th>Vía / tramo</th><th>Motivo</th><th>Origen</th>
+                            <th>Sede</th><th>Estado</th><th>Responsable</th><th>Participantes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for order in orders %}
+                        <tr>
+                            <td><a href="{% url 'work_orders:outside_plant_detail' order.pk %}" class="fw-semibold">{{ order.order_number }}</a></td>
+                            <td>{{ order.outside_plant_detail.route }}</td>
+                            <td>{{ order.reason.name|default:"—" }}</td>
+                            <td>{{ order.outside_plant_detail.get_origin_display }}</td>
+                            <td>{{ order.branch }}</td>
+                            <td>{{ order.get_status_display }}</td>
+                            <td>{{ order.assigned_technician|default:"Sin tomar" }}</td>
+                            <td>{{ order.participant_count }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="8" class="text-center text-muted py-5">No hay órdenes PEX registradas.</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -4,6 +4,7 @@ from . import (
     incident_derivation,
     incident_noc,
     legacy_views,
+    outside_plant,
     print_views,
     scheduling_views,
     views,
@@ -14,6 +15,23 @@ app_name = "work_orders"
 
 
 urlpatterns = [
+
+    # Planta Externa es operación de red y no cuelga de un abonado.
+    path(
+        "outside-plant/",
+        outside_plant.OutsidePlantQueueView.as_view(),
+        name="outside_plant_queue",
+    ),
+    path(
+        "outside-plant/create/",
+        outside_plant.OutsidePlantCreateView.as_view(),
+        name="outside_plant_create",
+    ),
+    path(
+        "outside-plant/<int:pk>/",
+        outside_plant.OutsidePlantDetailView.as_view(),
+        name="outside_plant_detail",
+    ),
 
     # Bandeja colaborativa de NOC. Todos los operadores autorizados ven la
     # misma cola; tomar/retomar una incidencia se resuelve de forma exclusiva
