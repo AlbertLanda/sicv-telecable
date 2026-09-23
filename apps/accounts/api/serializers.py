@@ -38,9 +38,23 @@ class TechnicianIdentitySerializer(serializers.Serializer):
     role = serializers.CharField(read_only=True)
     branch_id = serializers.IntegerField(read_only=True, allow_null=True)
     branch_name = serializers.SerializerMethodField()
+    technician_area = serializers.SerializerMethodField()
+    technician_area_display = serializers.SerializerMethodField()
 
     def get_full_name(self, user):
         return user.get_full_name()
 
     def get_branch_name(self, user):
         return user.branch.name if user.branch_id else None
+
+    def get_technician_area(self, user):
+        try:
+            return user.technician_profile.area
+        except Exception:
+            return "INTERNAL_NETWORK"
+
+    def get_technician_area_display(self, user):
+        try:
+            return user.technician_profile.get_area_display()
+        except Exception:
+            return "Red interna"

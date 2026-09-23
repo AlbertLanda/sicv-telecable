@@ -161,6 +161,14 @@
                     <span>Observaciones técnicas adicionales</span>
                     <textarea id="liquidation-notes" rows="3" maxlength="4000" placeholder="Opcional"></textarea>
                 </label>
+                <div class="field field-full">
+                    <span>Participantes de la atención</span>
+                    <div id="liquidation-participants" class="material-list"></div>
+                    <small class="helper">
+                        El responsable que tomó la OT ya queda trazado automáticamente.
+                        Marca a los demás técnicos que también participaron en campo.
+                    </small>
+                </div>
                 <div class="field-full">
                     <button id="liquidate-order-submit" class="btn btn-primary btn-block" type="submit">Finalizar orden técnica</button>
                 </div>
@@ -342,12 +350,22 @@
         const scheduled = order.scheduled_at
             ? formatDate(order.scheduled_at)
             : text(order.scheduled_date, "Sin programación");
-        const service = `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`;
+        const service = order.is_outside_plant
+            ? "Trabajo de red · sin abonado"
+            : `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`;
 
         const details = element("dl", "data-list");
         details.append(
-            quickInfoRow("Cliente", order.customer?.display_name, "Cliente"),
-            quickInfoRow("Código", order.customer?.code, "Sin código"),
+            quickInfoRow(
+                order.is_outside_plant ? "Ámbito" : "Cliente",
+                order.is_outside_plant ? "Planta Externa" : order.customer?.display_name,
+                order.is_outside_plant ? "Planta Externa" : "Cliente",
+            ),
+            quickInfoRow(
+                order.is_outside_plant ? "Tramo" : "Código",
+                order.is_outside_plant ? order.district : order.customer?.code,
+                order.is_outside_plant ? "Ubicación por confirmar" : "Sin código",
+            ),
             quickInfoRow("Motivo", order.reason, "Sin motivo registrado"),
             quickInfoRow("Servicio", service),
             quickInfoRow("Ubicación", location, "Ubicación por confirmar"),
@@ -381,8 +399,20 @@
         );
         titleWrap.append(
             identity,
-            element("h3", "", text(order.customer?.display_name, "Cliente")),
-            element("p", "", `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`),
+            element(
+                "h3",
+                "",
+                order.is_outside_plant
+                    ? "Planta Externa"
+                    : text(order.customer?.display_name, "Cliente"),
+            ),
+            element(
+                "p",
+                "",
+                order.is_outside_plant
+                    ? text(order.district, "Trabajo de red")
+                    : `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`,
+            ),
         );
         top.append(titleWrap, statusBadge(order));
 
@@ -528,9 +558,22 @@
     function renderDetail(order) {
         state.currentOrder = order;
         setDetailText("#detail-number", order.order_number, "OT");
-        setDetailText("#detail-customer", order.customer?.display_name, "Cliente");
-        setDetailText("#detail-service", `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`);
+        setDetailText(
+            "#detail-customer",
+            order.is_outside_plant ? "Planta Externa" : order.customer?.display_name,
+            order.is_outside_plant ? "Planta Externa" : "Cliente",
+        );
+        setDetailText(
+            "#detail-service",
+            order.is_outside_plant
+                ? "Trabajo operativo de red · sin abonado"
+                : `${text(order.service_type, "Servicio")} · ${text(order.plan, "Sin plan")}`,
+        );
         setDetailText("#detail-status", order.status_display || order.status, "Estado");
+
+        $("#detail-location-title").textContent = order.is_outside_plant
+            ? "Ubicación / tramo de red"
+            : "Domicilio del servicio";
 
         const address = order.address || {};
         setDetailText("#detail-address", address.address);
@@ -546,7 +589,17 @@
             ? "Ubicación GPS validada. La dirección textual se mantiene como referencia."
             : "GPS no disponible o inválido. El mapa buscará usando la dirección registrada.";
 
-        renderPlan(order.plan_details);
+        $("#detail-plan-panel").hidden = Boolean(order.is_outside_plant);
+        if (!order.is_outside_plant) {
+            renderPlan(order.plan_details);
+        }
+
+        $("#materials-panel").hidden = Boolean(order.is_outside_plant);
+        if (order.is_outside_plant) {
+            $("#contract-panel").hidden = true;
+            state.contractOrderId = null;
+            state.contractCanSign = false;
+        }
 
         setDetailText("#detail-type", order.order_type);
         setDetailText("#detail-priority", order.priority_display || order.priority);
@@ -666,14 +719,18 @@
         try {
             const order = await api(`${config.workOrdersUrl}${id}/`);
             renderDetail(order);
-            await Promise.all([
+            const tasks = [
                 loadFieldSheet(id),
                 loadFieldMaterials(id),
-                loadMaterials(id),
                 loadEvidences(id),
-                loadContract(id),
                 loadCompletion(id, order),
-            ]);
+            ];
+
+            if (!order.is_outside_plant) {
+                tasks.push(loadMaterials(id), loadContract(id));
+            }
+
+            await Promise.all(tasks);
             content.hidden = false;
             loading.hidden = true;
         } catch (error) {
@@ -1072,6 +1129,37 @@
         $("#completion-evidences").textContent = String(summary.evidences || 0);
         $("#completion-selected-result").textContent = payload?.selected_result?.name || "Sin registrar";
 
+        const participantBox = $("#liquidation-participants");
+        if (participantBox) {
+            participantBox.replaceChildren();
+            const previousParticipants = new Set(
+                (payload?.participants || []).map((item) => Number(item.id))
+            );
+
+            (payload?.participant_options || []).forEach((participant) => {
+                const label = element("label", "material-item");
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.value = participant.id;
+                checkbox.dataset.participantId = String(participant.id);
+                checkbox.checked = previousParticipants.has(Number(participant.id));
+
+                const copy = element(
+                    "span",
+                    "",
+                    participant.display_name || `Técnico #${participant.id}`,
+                );
+                label.append(checkbox, copy);
+                participantBox.append(label);
+            });
+
+            if (!(payload?.participant_options || []).length) {
+                participantBox.append(
+                    element("p", "helper", "No hay otros técnicos de esta cuadrilla disponibles."),
+                );
+            }
+        }
+
         const resultSelect = $("#completion-result");
         const selected = resultSelect.value;
         resultSelect.replaceChildren();
@@ -1163,6 +1251,11 @@
                 body: JSON.stringify({
                     resolution_detail: resolution,
                     technical_notes: $("#liquidation-notes").value.trim(),
+                    participant_ids: Array.from(
+                        document.querySelectorAll(
+                            "#liquidation-participants input[data-participant-id]:checked"
+                        )
+                    ).map((input) => Number(input.value)),
                     remarks: "Liquidación técnica finalizada desde el portal de campo.",
                 }),
             });
