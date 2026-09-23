@@ -44,6 +44,7 @@ class Migration(migrations.Migration):
             model_name="subscription",
             name="service_code",
             field=models.CharField(
+                blank=True,
                 editable=False,
                 help_text=(
                     "Identifica de forma estable esta suscripción/domicilio. "

@@ -484,6 +484,7 @@ class Subscription(models.Model):
     service_code = models.CharField(
         max_length=80,
         unique=True,
+        blank=True,
         editable=False,
         verbose_name="Código de servicio",
         help_text=(

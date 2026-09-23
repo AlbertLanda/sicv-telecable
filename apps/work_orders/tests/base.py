@@ -310,16 +310,11 @@ class WorkOrderTestCase(TestCase):
         return order
 
     def ensure_signed_installation_contract(self, order):
-        """Deja una instalación de prueba en el mismo estado válido que producción."""
+        """Fixture liviano: contrato y firma válidos sin renderizar un PDF real."""
 
         from datetime import date
-        from io import BytesIO
 
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        from PIL import Image as PILImage, ImageDraw
-
-        from apps.contracts.models import Contract
-        from apps.contracts.signatures import firma_del_contrato, firmar_contrato
+        from apps.contracts.models import Contract, ContractSignature
 
         contract = (
             Contract.objects
@@ -342,30 +337,16 @@ class WorkOrderTestCase(TestCase):
                 is_active=True,
             )
 
-        if firma_del_contrato(contract) is None:
-            canvas = PILImage.new(
-                "RGBA",
-                (320, 110),
-                (255, 255, 255, 0),
-            )
-            ImageDraw.Draw(canvas).line(
-                [(10, 85), (140, 20), (305, 80)],
-                fill=(0, 0, 0, 255),
-                width=4,
-            )
-            output = BytesIO()
-            canvas.save(output, format="PNG")
-            image = SimpleUploadedFile(
-                "firma.png",
-                output.getvalue(),
-                content_type="image/png",
-            )
-            firmar_contrato(
-                contract,
-                image,
-                usuario=self.technician,
-                orden=order,
-            )
+        ContractSignature.objects.get_or_create(
+            contract=contract,
+            defaults={
+                "image": "tests/firma.png",
+                "signed_pdf": "tests/contrato-firmado.pdf",
+                "signer_name": str(order.subscription.customer),
+                "work_order": order,
+                "captured_by": self.technician,
+            },
+        )
 
         return contract
 

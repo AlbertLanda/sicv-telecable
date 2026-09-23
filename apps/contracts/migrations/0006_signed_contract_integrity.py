@@ -55,7 +55,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="contract",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("is_active", True)),
+                condition=models.Q(is_active=True),
                 fields=("subscription",),
                 name="unique_active_contract_per_subscription",
             ),
