@@ -10,3 +10,5 @@ def ensure_technician_profile(sender, instance, **kwargs):
     """Todo técnico operativo obtiene perfil de Red Interna por defecto."""
     if instance.role == User.Role.TECHNICIAN:
         TechnicianProfile.objects.get_or_create(user=instance)
+    else:
+        TechnicianProfile.objects.filter(user=instance).delete()

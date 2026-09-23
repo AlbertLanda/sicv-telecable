@@ -206,6 +206,7 @@ class PersonnelForm(forms.ModelForm):
 
     def save_technician_profile(self, user):
         if user.role != User.Role.TECHNICIAN:
+            TechnicianProfile.objects.filter(user=user).delete()
             return
 
         profile, _ = TechnicianProfile.objects.get_or_create(user=user)
