@@ -283,7 +283,7 @@ class Command(BaseCommand):
             ("TVC-FTTH-40", "TV CABLE FTTH - 40"),
             ("TVC-FTTH-50", "TV CABLE FTTH - 50"),
         ):
-            plan_ftth, created = Plan.objects.get_or_create(
+            plan_ftth, created = Plan.objects.update_or_create(
                 code=code,
                 defaults={
                     "name": name,
@@ -294,7 +294,7 @@ class Command(BaseCommand):
                     "speed_mbps": None,
                     "technology": "FTTH",
                     "monthly_price": Decimal("0.00"),
-                    "included_tv_points": 0,
+                    "included_tv_points": 2,
                     "requires_geographic_tariff": False,
                     "is_active": True,
                 },
