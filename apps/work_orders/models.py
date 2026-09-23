@@ -540,6 +540,8 @@ class WorkOrder(models.Model):
         Subscription,
         on_delete=models.PROTECT,
         related_name="work_orders",
+        null=True,
+        blank=True,
         verbose_name="Suscripción"
     )
 
@@ -752,10 +754,31 @@ class WorkOrder(models.Model):
                 "close_incident",
                 "Puede finalizar incidencias NOC",
             ),
+            (
+                "create_outsideplant",
+                "Puede registrar órdenes de Planta Externa",
+            ),
+            (
+                "view_outsideplant",
+                "Puede consultar órdenes de Planta Externa",
+            ),
         ]
 
     def clean(self):
         super().clean()
+
+        is_outside_plant = (
+            self.order_type_id
+            and self.order_type.code == "OUTSIDE_PLANT"
+        )
+
+        if not is_outside_plant and self.subscription_id is None:
+            raise ValidationError({
+                "subscription": (
+                    "La suscripción es obligatoria para las órdenes "
+                    "vinculadas a un abonado."
+                )
+            })
 
         if self.order_type_id and self.order_type.code == "INCIDENT":
             if self.attention_type != self.AttentionType.SYSTEM:
@@ -911,6 +934,14 @@ class WorkOrder(models.Model):
         return (
             self.order_type_id is not None
             and self.order_type.code == "INCIDENT"
+        )
+
+    @property
+    def is_outside_plant(self):
+        """Orden operativa de red que puede existir sin abonado."""
+        return (
+            self.order_type_id is not None
+            and self.order_type.code == "OUTSIDE_PLANT"
         )
 
     @property
@@ -1261,6 +1292,171 @@ class WorkOrder(models.Model):
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
+
+class OutsidePlantDetail(models.Model):
+    """Datos propios de una intervención de Planta Externa.
+
+    PEX trabaja sobre red e infraestructura, no necesariamente sobre un
+    abonado. Por eso la ubicación vive aquí y no en CustomerAddress.
+    """
+
+    class Origin(models.TextChoices):
+        ATC = "ATC", "ATC"
+        NOC = "NOC", "NOC"
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="outside_plant_detail",
+        verbose_name="Orden de Planta Externa",
+    )
+    origin = models.CharField(
+        max_length=10,
+        choices=Origin.choices,
+        verbose_name="Origen",
+    )
+    route = models.CharField(
+        max_length=220,
+        verbose_name="Vía / tramo",
+    )
+    reference = models.CharField(
+        max_length=220,
+        blank=True,
+        verbose_name="Referencia",
+    )
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud",
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Detalle de Planta Externa"
+        verbose_name_plural = "Detalles de Planta Externa"
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.work_order_id
+            and self.work_order.order_type.code != "OUTSIDE_PLANT"
+        ):
+            raise ValidationError({
+                "work_order": (
+                    "El detalle PEX solo puede asociarse a una orden "
+                    "de Planta Externa."
+                )
+            })
+
+        if not (self.route or "").strip():
+            raise ValidationError({
+                "route": "Debe indicar la vía, tramo o ubicación de trabajo."
+            })
+
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValidationError(
+                "Latitud y longitud deben registrarse juntas."
+            )
+
+    def __str__(self):
+        return f"PEX - {self.work_order.order_number}"
+
+
+class WorkOrderParticipation(models.Model):
+    """Cada intervención humana que aportó a resolver una orden.
+
+    La asignación vigente sigue viviendo en WorkOrderAssignment. Este modelo
+    responde una pregunta distinta: quiénes participaron realmente, incluso
+    si la orden cambió de turno o una cuadrilla trabajó en conjunto.
+    """
+
+    class Source(models.TextChoices):
+        FIELD = "FIELD", "Atención de campo"
+        NOC = "NOC", "Atención NOC"
+        LIQUIDATION = "LIQUIDATION", "Declarado en liquidación"
+
+    work_order = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="participations",
+        verbose_name="Orden",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_participations",
+        verbose_name="Participante",
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        verbose_name="Origen de participación",
+    )
+    started_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Inicio de participación",
+    )
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fin de participación",
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="Aporte / observación",
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="recorded_work_order_participations",
+        null=True,
+        blank=True,
+        verbose_name="Registrado por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Participación en orden"
+        verbose_name_plural = "Participaciones en órdenes"
+        ordering = ["started_at", "pk"]
+        indexes = [
+            models.Index(
+                fields=["work_order", "user"],
+                name="wo_part_order_user_idx",
+            ),
+            models.Index(
+                fields=["work_order", "ended_at"],
+                name="wo_part_active_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.ended_at and self.ended_at < self.started_at:
+            raise ValidationError({
+                "ended_at": (
+                    "El fin de participación no puede ser anterior al inicio."
+                )
+            })
+
+    @property
+    def is_active(self):
+        return self.ended_at is None
+
+    def __str__(self):
+        return f"{self.work_order.order_number} - {self.user}"
+
 
 class IncidentDetail(models.Model):
     """
