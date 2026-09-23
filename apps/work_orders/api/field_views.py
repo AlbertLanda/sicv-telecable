@@ -176,6 +176,9 @@ class LiquidateWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
                 technical_notes=technical_notes,
                 items=liquidation_items_from_field(order),
                 remarks=serializer.validated_data["remarks"],
+                participant_users=serializer.validated_data[
+                    "participant_users"
+                ],
                 **technical_data,
             )
         except DjangoValidationError as exc:

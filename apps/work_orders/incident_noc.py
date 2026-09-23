@@ -22,12 +22,15 @@ from django.views.generic import FormView, TemplateView
 from apps.work_orders.forms import IncidentCloseForm
 from apps.work_orders.models import (
     WorkOrder,
+    WorkOrderParticipation,
     WorkOrderReprogramming,
     WorkOrderStatusHistory,
 )
 from apps.work_orders.services import (
     close_incident_attention,
+    close_work_order_participation,
     get_subscription_technical_context,
+    open_work_order_participation,
 )
 
 
@@ -306,6 +309,13 @@ def take_incident(order, user, remarks=""):
         user=user,
         remarks=(remarks or "Incidencia tomada por NOC.").strip(),
     )
+    open_work_order_participation(
+        order,
+        user,
+        source=WorkOrderParticipation.Source.NOC,
+        remarks="Incidencia tomada por NOC.",
+        recorded_by=user,
+    )
 
     return order
 
@@ -321,12 +331,18 @@ def release_incident(order, user, reason):
     if len(reason) < 5:
         raise ValidationError("Debe indicar el motivo de liberación con al menos 5 caracteres.")
 
-    return _extended_incident_transition(
+    order = _extended_incident_transition(
         order,
         WorkOrder.Status.PENDING,
         user,
         remarks=f"Incidencia liberada por NOC. Motivo: {reason}",
     )
+    close_work_order_participation(
+        order,
+        user,
+        source=WorkOrderParticipation.Source.NOC,
+    )
+    return order
 
 
 @transaction.atomic
@@ -365,6 +381,11 @@ def reschedule_incident(order, user, scheduled_for, reason, notes=""):
         user,
         remarks=remarks,
     )
+    close_work_order_participation(
+        order,
+        user,
+        source=WorkOrderParticipation.Source.NOC,
+    )
 
     return order, reprogramming
 
@@ -381,12 +402,20 @@ def resume_incident(order, user, remarks=""):
             f"Estado actual: {order.get_status_display()}."
         )
 
-    return _extended_incident_transition(
+    order = _extended_incident_transition(
         order,
         WorkOrder.Status.IN_PROGRESS,
         user,
         remarks=(remarks or "Contacto reprogramado retomado por NOC.").strip(),
     )
+    open_work_order_participation(
+        order,
+        user,
+        source=WorkOrderParticipation.Source.NOC,
+        remarks="Incidencia retomada por NOC.",
+        recorded_by=user,
+    )
+    return order
 
 
 @transaction.atomic
@@ -396,13 +425,19 @@ def close_owned_incident(order, user, attention_detail, observations="", remarks
     order = _lock_incident(order)
     _require_current_handler(order, user, "finalizarse")
 
-    return close_incident_attention(
+    order = close_incident_attention(
         order,
         user=user,
         attention_detail=attention_detail,
         observations=observations,
         remarks=remarks,
     )
+    close_work_order_participation(
+        order,
+        user,
+        source=WorkOrderParticipation.Source.NOC,
+    )
+    return order
 
 
 @transaction.atomic
@@ -423,12 +458,20 @@ def cancel_incident(order, user, reason):
         WorkOrder.Status.IN_PROGRESS,
         WorkOrder.Status.REPROGRAMMED,
     ):
-        return _extended_incident_transition(
+        previous_status = order.status
+        order = _extended_incident_transition(
             order,
             WorkOrder.Status.CANCELLED,
             user,
             remarks=reason,
         )
+        if previous_status == WorkOrder.Status.IN_PROGRESS:
+            close_work_order_participation(
+                order,
+                user,
+                source=WorkOrderParticipation.Source.NOC,
+            )
+        return order
 
     raise ValidationError(
         "No se puede anular una incidencia en estado "

@@ -1036,6 +1036,13 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
         remarks=remarks,
     )
 
+    if order.assigned_technician_id:
+        close_work_order_participation(
+            order,
+            order.assigned_technician,
+            source=WorkOrderParticipation.Source.FIELD,
+        )
+
     apply_order_result(order)
 
     return order
@@ -1153,6 +1160,89 @@ def add_work_order_evidence(order: WorkOrder, user, file, description=""):
     return evidence
 
 
+def open_work_order_participation(
+    order,
+    user,
+    *,
+    source,
+    remarks="",
+    recorded_by=None,
+):
+    """Abre una intervención trazable si no existe una vigente equivalente."""
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError("El participante debe ser un usuario activo.")
+
+    existing = (
+        WorkOrderParticipation.objects
+        .filter(
+            work_order=order,
+            user=user,
+            source=source,
+            ended_at__isnull=True,
+        )
+        .order_by("-started_at", "-pk")
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    participation = WorkOrderParticipation(
+        work_order=order,
+        user=user,
+        source=source,
+        remarks=(remarks or "").strip(),
+        recorded_by=recorded_by,
+    )
+    participation.full_clean(
+        exclude=["work_order", "user", "recorded_by"]
+    )
+    participation.save()
+    return participation
+
+
+def close_work_order_participation(order, user, *, source=None):
+    """Cierra las intervenciones activas del usuario en esa orden."""
+    queryset = WorkOrderParticipation.objects.filter(
+        work_order=order,
+        user=user,
+        ended_at__isnull=True,
+    )
+    if source is not None:
+        queryset = queryset.filter(source=source)
+
+    now = timezone.now()
+    queryset.update(ended_at=now)
+    return now
+
+
+def _validate_declared_field_participant(order, participant):
+    from apps.technicians.models import TechnicianProfile
+
+    if participant is None or participant.pk is None or not participant.is_active:
+        raise ValidationError("Todos los participantes deben estar activos.")
+
+    if participant.role != User.Role.TECHNICIAN:
+        raise ValidationError(
+            "Los participantes declarados en una liquidación deben ser técnicos."
+        )
+
+    try:
+        area = participant.technician_profile.area
+    except TechnicianProfile.DoesNotExist:
+        area = TechnicianProfile.Area.INTERNAL_NETWORK
+
+    expected = (
+        TechnicianProfile.Area.PEX
+        if order.is_outside_plant
+        else TechnicianProfile.Area.INTERNAL_NETWORK
+    )
+    if area != expected:
+        raise ValidationError(
+            "Uno de los participantes no pertenece a la cuadrilla "
+            f"{TechnicianProfile.Area(expected).label}."
+        )
+
+
 # Campos técnicos opcionales que liquidate_order() acepta y traslada tal cual
 # a WorkOrderLiquidation. Se declaran aquí para rechazar cualquier clave
 # desconocida antes de tocar la base de datos.
@@ -1174,6 +1264,7 @@ def liquidate_order(
     resolution_detail="",
     items=None,
     remarks="",
+    participant_users=None,
     **technical_data,
 ):
     """
@@ -1240,6 +1331,27 @@ def liquidate_order(
         item = WorkOrderLiquidationItem(liquidation=liquidation, **item_data)
         item.full_clean(exclude=["liquidation"])
         item.save()
+
+    participation_time = timezone.now()
+    for participant in participant_users or []:
+        _validate_declared_field_participant(order, participant)
+
+        if order.participations.filter(user=participant).exists():
+            continue
+
+        participation = WorkOrderParticipation(
+            work_order=order,
+            user=participant,
+            source=WorkOrderParticipation.Source.LIQUIDATION,
+            started_at=participation_time,
+            ended_at=participation_time,
+            remarks="Participante declarado al liquidar la orden.",
+            recorded_by=user,
+        )
+        participation.full_clean(
+            exclude=["work_order", "user", "recorded_by"]
+        )
+        participation.save()
 
     order.change_status(
         WorkOrder.Status.LIQUIDATED,
