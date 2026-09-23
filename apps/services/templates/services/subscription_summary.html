@@ -16,7 +16,8 @@
         <div class="card-header bg-light"><strong>Suscripción registrada — {{ subscription.get_status_display }}</strong></div>
         <div class="card-body">
             <div class="row g-4">
-                <div class="col-md-6"><small class="text-muted d-block">Cliente</small><strong>{{ customer }}</strong></div>
+                <div class="col-md-4"><small class="text-muted d-block">Cliente</small><strong>{{ customer }}</strong></div>
+                <div class="col-md-2"><small class="text-muted d-block">Código de servicio</small><strong>{{ subscription.service_code }}</strong></div>
                 <div class="col-md-6">
                     <small class="text-muted d-block">Domicilio</small>
                     <strong>{{ subscription.address.address }}</strong>

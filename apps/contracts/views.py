@@ -178,11 +178,14 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             subscription = getattr(form, "subscription_resuelta", None)
 
         else:
-            subscription = resolver_suscripcion(
-                self.customer,
-                form.initial.get("service_type"),
-                form.initial.get("plan"),
-            )
+            subscription = self.get_preselected_subscription()
+
+            if subscription is None:
+                subscription = resolver_suscripcion(
+                    self.customer,
+                    form.initial.get("service_type"),
+                    form.initial.get("plan"),
+                )
 
         return codigo_de_suscripcion(subscription)
 
@@ -252,6 +255,15 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
         context["customer"] = self.customer
         context["preselected_subscription"] = (
             self.get_preselected_subscription()
+        )
+        context["selected_subscription_id"] = (
+            (self.request.POST.get("subscription_id") or "").strip()
+            if self.request.method == "POST"
+            else (
+                context["preselected_subscription"].pk
+                if context["preselected_subscription"] is not None
+                else ""
+            )
         )
 
         # Servicio y plan son un solo dato en dos combos: el catálogo entero
