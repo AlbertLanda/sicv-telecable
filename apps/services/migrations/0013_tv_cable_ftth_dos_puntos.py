@@ -25,4 +25,3 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(aplicar_dos_puntos, volver_a_cero),
     ]
-}
