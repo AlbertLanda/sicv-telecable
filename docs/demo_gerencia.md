@@ -37,6 +37,7 @@ Usuarios:
 
 - `gerencia_demo` — administrador.
 - `atc_demo` — Atención al Cliente.
+- `ventas_demo` — vendedor asociado a las instalaciones.
 - `tecnico_demo` — técnico.
 
 Estas credenciales son exclusivamente para una base local de demostración.
@@ -50,14 +51,21 @@ Un primer domicilio queda con:
 
 - suscripción DUO 600;
 - código de servicio propio;
+- GPS ficticio válido y suministro eléctrico de prueba;
 - contrato activo;
 - OT de instalación;
+- vendedor y técnico demo;
+- ficha técnica: NAP, borne, ONU/equipo y precinto;
+- materiales instalados (Drop, UTP, RG-6, conectores y splitter);
+- tres evidencias PNG generadas con la marca visible «DEMO GERENCIA»;
 - firma ficticia;
 - PDF firmado archivado;
 - SHA-256 del PDF;
-- instalación atendida y liquidada.
+- instalación atendida y liquidada;
+- nivel de señal, metraje, referencia Krill y detalle de resolución ficticios.
 
-Sirve para mostrar el documento final y la trazabilidad.
+Sirve para mostrar el documento final, la trazabilidad técnica y la
+liquidación completa.
 
 ### Firma en vivo
 
@@ -72,7 +80,8 @@ El mismo abonado tiene una segunda vivienda con:
 - estado **En atención**;
 - contrato todavía sin firmar.
 
-Este segundo escenario permite entrar al portal técnico y dibujar la firma
+Este segundo escenario ya trae GPS, ficha técnica, materiales y una evidencia
+de inspección ficticia. Permite entrar al portal técnico y dibujar la firma
 durante la presentación. Hasta que se firme, la instalación no puede cerrarse
 como exitosa.
 
