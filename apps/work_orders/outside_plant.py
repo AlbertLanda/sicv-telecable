@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views.generic import FormView, ListView, TemplateView
+from django.views.generic import FormView, ListView, TemplateView, View
 
 from apps.organization.models import Branch, Zone
 from apps.work_orders.models import OrderReason, WorkOrder
@@ -261,3 +261,68 @@ class OutsidePlantDetailView(
             ),
         })
         return context
+
+
+
+class OutsidePlantPrintView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    View,
+):
+    """Impresión PEX alimentada por el mismo WorkOrder y su liquidación."""
+
+    permission_required = "work_orders.view_outsideplant"
+    raise_exception = True
+    template_name = "work_orders/outside_plant_print.html"
+
+    def get(self, request, *args, **kwargs):
+        order = get_object_or_404(
+            WorkOrder.objects.select_related(
+                "branch",
+                "zone",
+                "reason",
+                "result",
+                "created_by",
+                "assigned_technician",
+                "outside_plant_detail",
+                "liquidation",
+                "liquidation__liquidated_by",
+            ),
+            pk=self.kwargs["pk"],
+            order_type__code="OUTSIDE_PLANT",
+        )
+
+        participants = []
+        seen = set()
+        for participation in (
+            order.participations
+            .select_related("user")
+            .order_by("started_at", "pk")
+        ):
+            if participation.user_id in seen:
+                continue
+            seen.add(participation.user_id)
+            participants.append(participation.user)
+
+        materials = (
+            order.field_material_movements
+            .select_related("material")
+            .order_by("material__name")
+        )
+
+        return render(
+            request,
+            self.template_name,
+            {
+                "order": order,
+                "pex": order.outside_plant_detail,
+                "participants": participants,
+                "materials_used": materials.filter(
+                    movement_type="INSTALLED"
+                ),
+                "materials_removed": materials.filter(
+                    movement_type="REMOVED"
+                ),
+                "auto_print": request.GET.get("print") == "1",
+            },
+        )

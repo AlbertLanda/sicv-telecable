@@ -10,7 +10,12 @@
             <h1 class="h3 mb-1">{{ order.order_number }}</h1>
             <span class="badge text-bg-primary">{{ order.get_status_display }}</span>
         </div>
-        <a href="{% url 'work_orders:outside_plant_queue' %}" class="btn btn-outline-secondary">← Volver</a>
+        <div class="d-flex gap-2">
+            <a href="{% url 'work_orders:outside_plant_print' order.pk %}" class="btn btn-outline-primary">
+                <i class="bi bi-printer"></i> Imprimir
+            </a>
+            <a href="{% url 'work_orders:outside_plant_queue' %}" class="btn btn-outline-secondary">← Volver</a>
+        </div>
     </div>
 
     <div class="row g-3">

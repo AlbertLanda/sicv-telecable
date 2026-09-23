@@ -32,6 +32,11 @@ urlpatterns = [
         outside_plant.OutsidePlantDetailView.as_view(),
         name="outside_plant_detail",
     ),
+    path(
+        "outside-plant/<int:pk>/print/",
+        outside_plant.OutsidePlantPrintView.as_view(),
+        name="outside_plant_print",
+    ),
 
     # Bandeja colaborativa de NOC. Todos los operadores autorizados ven la
     # misma cola; tomar/retomar una incidencia se resuelve de forma exclusiva
