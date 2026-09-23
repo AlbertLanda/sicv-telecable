@@ -30,6 +30,7 @@ from apps.organization.models import Branch, Zone
 from apps.payments.models import Issuer
 from apps.services.commercial import build_commercial_quote
 from apps.services.models import Plan, Subscription
+from apps.technicians.models import TechnicianProfile
 from apps.work_orders.api.field_completion import (
     liquidation_items_from_field,
     liquidation_technical_data_from_field,
@@ -39,6 +40,7 @@ from apps.work_orders.services import (
     add_work_order_evidence,
     attend_order,
     create_installation_work_order,
+    create_outside_plant_order,
     liquidate_order,
     start_order_attention,
     update_field_sheet,
@@ -52,6 +54,8 @@ DEMO_USERNAMES = (
     "atc_demo",
     "ventas_demo",
     "tecnico_demo",
+    "tecnico_pex_demo",
+    "tecnico_pex_apoyo_demo",
 )
 
 
@@ -97,7 +101,9 @@ class Command(BaseCommand):
         self.stdout.write(f"  Administrador: gerencia_demo / {DEMO_PASSWORD}")
         self.stdout.write(f"  ATC:           atc_demo / {DEMO_PASSWORD}")
         self.stdout.write(f"  Ventas:        ventas_demo / {DEMO_PASSWORD}")
-        self.stdout.write(f"  Técnico:       tecnico_demo / {DEMO_PASSWORD}")
+        self.stdout.write(f"  Técnico red:   tecnico_demo / {DEMO_PASSWORD}")
+        self.stdout.write(f"  Técnico PEX:   tecnico_pex_demo / {DEMO_PASSWORD}")
+        self.stdout.write(f"  Apoyo PEX:     tecnico_pex_apoyo_demo / {DEMO_PASSWORD}")
         self.stdout.write("")
         self.stdout.write("Escenario firmado")
         self.stdout.write(
@@ -130,6 +136,18 @@ class Command(BaseCommand):
         )
         self.stdout.write("  Ficha:    NAP-DEMO-JAUJA-02 / borne 12 / PRE-DEMO-0002")
         self.stdout.write("  GPS:      -11.7761500, -75.4956000")
+        self.stdout.write("")
+        self.stdout.write("Escenario Planta Externa")
+        self.stdout.write(
+            f"  OT:       {contexto['pex']['order'].order_number}"
+        )
+        self.stdout.write("  Motivo:   CAÍDA DE POSTE")
+        self.stdout.write("  Tramo:    Av. Demo PEX - Jr. Red Principal")
+        self.stdout.write(
+            "  Estado:   Pendiente, disponible solo para cuadrilla PEX"
+        )
+        self.stdout.write("  Técnico:  tecnico_pex_demo")
+        self.stdout.write("  Apoyo:    tecnico_pex_apoyo_demo")
         self.stdout.write("")
         self.stdout.write(
             self.style.WARNING(
@@ -190,6 +208,32 @@ class Command(BaseCommand):
             last_name="Demo",
             role=User.Role.TECHNICIAN,
             branch=branch,
+        )
+
+        technician_pex = User.objects.create_user(
+            username="tecnico_pex_demo",
+            password=DEMO_PASSWORD,
+            first_name="Técnico",
+            last_name="PEX Demo",
+            role=User.Role.TECHNICIAN,
+            branch=branch,
+        )
+        technician_pex.technician_profile.area = TechnicianProfile.Area.PEX
+        technician_pex.technician_profile.save(
+            update_fields=["area", "updated_at"]
+        )
+
+        technician_pex_support = User.objects.create_user(
+            username="tecnico_pex_apoyo_demo",
+            password=DEMO_PASSWORD,
+            first_name="Apoyo",
+            last_name="PEX Demo",
+            role=User.Role.TECHNICIAN,
+            branch=branch,
+        )
+        technician_pex_support.technician_profile.area = TechnicianProfile.Area.PEX
+        technician_pex_support.technician_profile.save(
+            update_fields=["area", "updated_at"]
         )
 
         # Evita que linters marquen el usuario administrador como no usado:
@@ -268,9 +312,34 @@ class Command(BaseCommand):
             signed=False,
         )
 
+        pex_reason = OrderReason.objects.get(
+            order_type__code="OUTSIDE_PLANT",
+            code="FALLEN_POLE",
+        )
+        pex_order = create_outside_plant_order(
+            created_by=atc,
+            branch=branch,
+            zone=zone,
+            route="Av. Demo PEX - Jr. Red Principal",
+            reference="Poste ficticio frente al parque de demostración",
+            latitude=Decimal("-11.7748000"),
+            longitude=Decimal("-75.4970000"),
+            reason=pex_reason,
+            detail=(
+                "Caída de poste ficticia con afectación de red. "
+                "Orden preparada para demostrar el flujo de Planta Externa."
+            ),
+            priority=WorkOrder.Priority.HIGH,
+        )
+
         return {
             "firmada": signed,
             "pendiente": pending,
+            "pex": {
+                "order": pex_order,
+                "technician": technician_pex,
+                "support": technician_pex_support,
+            },
         }
 
     def _crear_servicio(
