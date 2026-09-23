@@ -185,18 +185,10 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     portal administrativo, nunca un PATCH desde el canal técnico.
     """
 
-    customer = WorkOrderCustomerSerializer(
-        source="subscription.customer",
-        read_only=True,
-    )
-    service_type = serializers.CharField(
-        source="subscription.service_type.name",
-        read_only=True,
-    )
-    plan = serializers.CharField(
-        source="subscription.plan.name",
-        read_only=True,
-    )
+    customer = serializers.SerializerMethodField()
+    service_type = serializers.SerializerMethodField()
+    plan = serializers.SerializerMethodField()
+    is_outside_plant = serializers.BooleanField(read_only=True)
     order_type = serializers.CharField(
         source="order_type.name",
         read_only=True,
@@ -216,6 +208,21 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
     )
     agenda_date = serializers.DateField(read_only=True, allow_null=True)
 
+    def get_customer(self, order):
+        if order.subscription_id is None:
+            return None
+        return WorkOrderCustomerSerializer(order.subscription.customer).data
+
+    def get_service_type(self, order):
+        if order.subscription_id is None:
+            return "PLANTA EXTERNA" if order.is_outside_plant else None
+        return order.subscription.service_type.name
+
+    def get_plan(self, order):
+        if order.subscription_id is None:
+            return None
+        return order.subscription.plan.name
+
     class Meta:
         model = WorkOrder
         fields = [
@@ -224,6 +231,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             "customer",
             "service_type",
             "plan",
+            "is_outside_plant",
             "order_type",
             "subtype",
             "status",
@@ -241,10 +249,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
 class AvailableWorkOrderSerializer(WorkOrderListSerializer):
     """Fila de la bandeja de órdenes disponibles, antes de ser tomada."""
 
-    customer = AvailableWorkOrderCustomerSerializer(
-        source="subscription.customer",
-        read_only=True,
-    )
+    customer = serializers.SerializerMethodField()
     branch = serializers.CharField(
         source="branch.name",
         read_only=True,
@@ -254,15 +259,30 @@ class AvailableWorkOrderSerializer(WorkOrderListSerializer):
         read_only=True,
         allow_null=True,
     )
-    district = serializers.CharField(
-        source="subscription.address.district",
-        read_only=True,
-    )
+    district = serializers.SerializerMethodField()
     reason = serializers.CharField(
         source="reason.name",
         read_only=True,
         allow_null=True,
     )
+
+    def get_customer(self, order):
+        if order.subscription_id is None:
+            return None
+        return AvailableWorkOrderCustomerSerializer(
+            order.subscription.customer
+        ).data
+
+    def get_district(self, order):
+        if order.subscription_id is not None:
+            return order.subscription.address.district
+
+        if order.is_outside_plant:
+            try:
+                return order.outside_plant_detail.route
+            except WorkOrder.outside_plant_detail.RelatedObjectDoesNotExist:
+                return None
+        return None
 
     class Meta(WorkOrderListSerializer.Meta):
         fields = WorkOrderListSerializer.Meta.fields + [
@@ -317,10 +337,7 @@ class WorkOrderClaimSerializer(serializers.Serializer):
 class WorkOrderDetailSerializer(WorkOrderListSerializer):
     """Ficha de una orden concreta, siempre de solo lectura."""
 
-    address = WorkOrderAddressSerializer(
-        source="subscription.address",
-        read_only=True,
-    )
+    address = serializers.SerializerMethodField()
     branch = serializers.CharField(
         source="branch.name",
         read_only=True,
@@ -338,11 +355,68 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
     started_at = serializers.DateTimeField(read_only=True)
     attended_at = serializers.DateTimeField(read_only=True)
     can_start_attention = serializers.BooleanField(read_only=True)
-    plan_details = WorkOrderPlanSerializer(
-        source="subscription",
-        read_only=True,
-    )
+    plan_details = serializers.SerializerMethodField()
+    participants = serializers.SerializerMethodField()
     technical_data = serializers.SerializerMethodField()
+
+    def get_address(self, order):
+        if order.subscription_id is not None:
+            return WorkOrderAddressSerializer(order.subscription.address).data
+
+        if not order.is_outside_plant:
+            return None
+
+        try:
+            pex = order.outside_plant_detail
+        except WorkOrder.outside_plant_detail.RelatedObjectDoesNotExist:
+            return None
+
+        gps_link = ""
+        if pex.latitude is not None and pex.longitude is not None:
+            gps_link = (
+                "https://www.google.com/maps/search/?api=1&query="
+                f"{pex.latitude},{pex.longitude}"
+            )
+
+        return {
+            "address": pex.route,
+            "reference": pex.reference,
+            "district": (
+                order.zone.name if order.zone_id else order.branch.name
+            ),
+            "latitude": (
+                str(pex.latitude) if pex.latitude is not None else None
+            ),
+            "longitude": (
+                str(pex.longitude) if pex.longitude is not None else None
+            ),
+            "gps_link": gps_link,
+        }
+
+    def get_plan_details(self, order):
+        if order.subscription_id is None:
+            return None
+        return WorkOrderPlanSerializer(order.subscription).data
+
+    def get_participants(self, order):
+        seen = set()
+        result = []
+
+        for participation in (
+            order.participations
+            .select_related("user")
+            .order_by("started_at", "pk")
+        ):
+            if participation.user_id in seen:
+                continue
+
+            seen.add(participation.user_id)
+            result.append({
+                "id": participation.user_id,
+                "display_name": str(participation.user),
+            })
+
+        return result
 
     class Meta(WorkOrderListSerializer.Meta):
         fields = WorkOrderListSerializer.Meta.fields + [
@@ -356,6 +430,7 @@ class WorkOrderDetailSerializer(WorkOrderListSerializer):
             "attended_at",
             "can_start_attention",
             "technical_data",
+            "participants",
         ]
         read_only_fields = fields
 
