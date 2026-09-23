@@ -148,6 +148,13 @@ class Contract(models.Model):
         verbose_name = "Contrato"
         verbose_name_plural = "Contratos"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subscription"],
+                condition=models.Q(is_active=True),
+                name="unique_active_contract_per_subscription",
+            )
+        ]
 
     def clean(self):
         super().clean()
@@ -164,6 +171,19 @@ class Contract(models.Model):
 
         if self.subscription_id:
             subscription = self.subscription
+
+            if self.is_active and (
+                Contract.objects
+                .filter(subscription_id=self.subscription_id, is_active=True)
+                .exclude(pk=self.pk)
+                .exists()
+            ):
+                raise ValidationError({
+                    "subscription": (
+                        "La suscripción ya tiene un contrato activo. "
+                        "Finalice o reemplace el vigente antes de registrar otro."
+                    )
+                })
 
             if self.customer_id and subscription.customer_id != self.customer_id:
                 raise ValidationError({
@@ -222,6 +242,14 @@ class Contract(models.Model):
 
     def __str__(self):
         return f"{self.contract_number} - {self.customer}"
+
+def signed_contract_pdf_path(instance, filename):
+    """Ruta del PDF firmado definitivo del contrato."""
+    return (
+        f"contracts/{instance.contract.contract_number}/"
+        f"firmado/{filename}"
+    )
+
 
 def contract_signature_path(instance, filename):
     """Ruta de la firma, agrupada por contrato.
@@ -295,6 +323,37 @@ class ContractSignature(models.Model):
     signed_at = models.DateTimeField(
         default=timezone.now,
         verbose_name="Fecha de firma"
+    )
+
+    signed_pdf = models.FileField(
+        upload_to=signed_contract_pdf_path,
+        blank=True,
+        verbose_name="PDF firmado definitivo",
+        help_text=(
+            "Copia inmutable del documento aceptado por el abonado. "
+            "Una vez firmado, las descargas oficiales leen este archivo."
+        ),
+    )
+
+    signed_pdf_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        editable=False,
+        verbose_name="SHA-256 del PDF firmado",
+    )
+
+    signed_pdf_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name="PDF firmado archivado el",
+    )
+
+    document_anchor = models.JSONField(
+        default=dict,
+        blank=True,
+        editable=False,
+        verbose_name="Ancla de firma del documento",
     )
 
     # Dónde quedó el trazo dentro del hueco de firma, en puntos y medido
