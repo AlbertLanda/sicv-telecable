@@ -1057,6 +1057,27 @@ class WorkOrder(models.Model):
                 )
             })
 
+        from apps.technicians.models import TechnicianProfile
+
+        try:
+            technician_area = technician.technician_profile.area
+        except TechnicianProfile.DoesNotExist:
+            technician_area = TechnicianProfile.Area.INTERNAL_NETWORK
+
+        expected_area = (
+            TechnicianProfile.Area.PEX
+            if self.is_outside_plant
+            else TechnicianProfile.Area.INTERNAL_NETWORK
+        )
+
+        if technician_area != expected_area:
+            expected_label = TechnicianProfile.Area(expected_area).label
+            raise ValidationError({
+                "assigned_technician": (
+                    f"Esta orden corresponde a la cuadrilla {expected_label}."
+                )
+            })
+
         if self.status not in self.ASSIGNABLE_STATUSES:
             raise ValidationError({
                 "status": (
@@ -1130,6 +1151,17 @@ class WorkOrder(models.Model):
             remarks=remarks,
         )
 
+        participant = self.assigned_technician
+        if participant is not None:
+            WorkOrderParticipation.objects.create(
+                work_order=self,
+                user=participant,
+                source=WorkOrderParticipation.Source.FIELD,
+                started_at=self.started_at,
+                remarks=(remarks or "").strip(),
+                recorded_by=user,
+            )
+
         return self.started_at
 
     @transaction.atomic
@@ -1174,6 +1206,7 @@ class WorkOrder(models.Model):
 
         previous_schedule = self.scheduled_at
         previous_schedule_date = self.scheduled_date
+        previous_status = self.status
 
         if (
             new_schedule is not None
@@ -1233,6 +1266,12 @@ class WorkOrder(models.Model):
             remarks=reason,
         )
 
+        if previous_status == self.Status.IN_PROGRESS:
+            WorkOrderParticipation.objects.filter(
+                work_order=self,
+                ended_at__isnull=True,
+            ).update(ended_at=timezone.now())
+
         return reprogramming
 
     @transaction.atomic
@@ -1272,6 +1311,10 @@ class WorkOrder(models.Model):
         ).update(
             unassigned_at=now
         )
+        WorkOrderParticipation.objects.filter(
+            work_order=self,
+            ended_at__isnull=True,
+        ).update(ended_at=now)
 
         if self.assigned_technician_id is not None:
             self.assigned_technician = None

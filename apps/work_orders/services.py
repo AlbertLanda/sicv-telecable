@@ -9,7 +9,9 @@ from apps.work_orders.models import (
     TEMPORARY_CUT_REASONS,
     IncidentDetail,
     OrderType,
+    OutsidePlantDetail,
     WorkOrder,
+    WorkOrderParticipation,
     WorkOrderEvidence,
     WorkOrderFieldSheet,
     WorkOrderLiquidation,
@@ -41,6 +43,7 @@ ORDER_NUMBER_PADDING = 6
 # datos de prueba.
 INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
 INCIDENT_ORDER_TYPE_CODE = "INCIDENT"
+OUTSIDE_PLANT_ORDER_TYPE_CODE = "OUTSIDE_PLANT"
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -98,12 +101,14 @@ def generate_order_number(year=None):
 
 
 def _resolve_branch(subscription, branch):
-    """
-    La sede de la orden es la del cliente de la suscripción.
+    """Resuelve la sede tanto para órdenes de abonado como para PEX."""
+    if subscription is None:
+        if branch is None or branch.pk is None:
+            raise ValidationError(
+                "Las órdenes sin abonado deben indicar una sede."
+            )
+        return branch
 
-    Si el llamador la envía explícitamente debe coincidir: no se registra
-    trabajo de un cliente bajo la sede de otro.
-    """
     customer_branch = subscription.customer.branch
 
     if branch is None:
@@ -119,13 +124,11 @@ def _resolve_branch(subscription, branch):
 
 
 def _resolve_zone(subscription, zone, branch):
-    """
-    La zona de la orden debe ser coherente con la sede de la orden.
+    """La zona puede venir de la dirección del abonado o directamente en PEX."""
+    resolved_zone = zone
 
-    Si no se envía una zona explícita, se toma la zona de la dirección
-    de la suscripción, pero también se valida su coherencia.
-    """
-    resolved_zone = zone or subscription.address.zone
+    if subscription is not None and resolved_zone is None:
+        resolved_zone = subscription.address.zone
 
     if resolved_zone is None:
         return None
@@ -149,10 +152,18 @@ def _validate_creation_catalogs(subscription, order_type, subtype, reason, cause
             "El tipo de orden seleccionado no está activo."
         )
 
-    if not order_type.applies_to_service_type(subscription.service_type_id):
+    if (
+        subscription is not None
+        and not order_type.applies_to_service_type(subscription.service_type_id)
+    ):
         raise ValidationError({
             "order_type": f"«{order_type.name}» no se emite sobre una suscripción {subscription.service_type}."
         })
+
+    if subscription is None and order_type.code != OUTSIDE_PLANT_ORDER_TYPE_CODE:
+        raise ValidationError(
+            "Solo Planta Externa puede registrarse sin una suscripción."
+        )
 
     if subtype is not None and not subtype.is_active:
         raise ValidationError(
@@ -207,8 +218,19 @@ def _validate_seller(seller):
         )
 
 
-def _validate_creation_subscription(subscription, customer):
-    if subscription is None or subscription.pk is None:
+def _validate_creation_subscription(subscription, customer, order_type=None):
+    if subscription is None:
+        if (
+            order_type is not None
+            and order_type.code == OUTSIDE_PLANT_ORDER_TYPE_CODE
+        ):
+            return
+
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
+    if subscription.pk is None:
         raise ValidationError(
             "Debe indicar una suscripción registrada."
         )
@@ -280,7 +302,7 @@ def create_work_order(
             "El usuario que registra la orden debe estar activo."
         )
 
-    _validate_creation_subscription(subscription, customer)
+    _validate_creation_subscription(subscription, customer, order_type)
     _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
 
@@ -314,6 +336,98 @@ def create_work_order(
     order.save()
 
     return order
+
+@transaction.atomic
+def create_outside_plant_order(
+    *,
+    created_by,
+    branch,
+    route,
+    reason,
+    detail,
+    zone=None,
+    reference="",
+    latitude=None,
+    longitude=None,
+    priority=None,
+    scheduled_at=None,
+):
+    """Registra una OT PEX independiente de abonados."""
+
+    if created_by is None or created_by.pk is None or not created_by.is_active:
+        raise ValidationError(
+            "Debe indicar un usuario activo que registre la orden PEX."
+        )
+
+    if created_by.role not in (User.Role.ATC, User.Role.NOC):
+        raise ValidationError(
+            "Las órdenes de Planta Externa solo pueden ser creadas por ATC o NOC."
+        )
+
+    if not created_by.has_perm("work_orders.create_outsideplant"):
+        raise ValidationError(
+            "El usuario no está autorizado para registrar Planta Externa."
+        )
+
+    route = (route or "").strip()
+    detail = (detail or "").strip()
+    reference = (reference or "").strip()
+
+    if len(route) < 3:
+        raise ValidationError({"route": "Debe indicar la vía o tramo de trabajo."})
+
+    if len(detail) < 5:
+        raise ValidationError({
+            "detail": "Debe describir el trabajo o afectación de Planta Externa."
+        })
+
+    try:
+        order_type = OrderType.objects.get(
+            code=OUTSIDE_PLANT_ORDER_TYPE_CODE,
+            is_active=True,
+        )
+    except OrderType.DoesNotExist:
+        raise ValidationError(
+            "No existe el tipo de orden PLANTA EXTERNA activo."
+        )
+
+    if reason is None or reason.pk is None or reason.order_type_id != order_type.pk:
+        raise ValidationError(
+            "Debe indicar un motivo válido de Planta Externa."
+        )
+
+    origin = (
+        OutsidePlantDetail.Origin.NOC
+        if created_by.role == User.Role.NOC
+        else OutsidePlantDetail.Origin.ATC
+    )
+
+    order = create_work_order(
+        subscription=None,
+        order_type=order_type,
+        created_by=created_by,
+        branch=branch,
+        zone=zone,
+        reason=reason,
+        attention_type=WorkOrder.AttentionType.FIELD,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
+
+    pex = OutsidePlantDetail(
+        work_order=order,
+        origin=origin,
+        route=route,
+        reference=reference,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    pex.full_clean(exclude=["work_order"])
+    pex.save()
+
+    return order
+
 
 @transaction.atomic
 def create_incident_work_order(
