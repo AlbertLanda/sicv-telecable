@@ -66,4 +66,3 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(backfill_profiles, migrations.RunPython.noop),
     ]
-}
