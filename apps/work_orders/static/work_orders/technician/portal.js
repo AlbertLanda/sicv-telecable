@@ -681,14 +681,44 @@
 
     function configureTechnicalMode(order) {
         const editable = order.status === "IN_PROGRESS";
+        const isPex = Boolean(order.is_outside_plant);
         state.detailEditable = editable;
+
         $("#field-sheet-mode").textContent = editable ? "Editable" : "Solo lectura";
+        $("#field-nap-label").textContent = isPex ? "Caja NAP (si aplica)" : "Caja NAP";
+        $("#field-terminal-label").textContent = isPex ? "Borne (si aplica)" : "Borne";
+        $("#installed-materials-title").textContent = isPex
+            ? "Material utilizado en campo"
+            : "Material utilizado en domicilio";
+        $("#removed-materials-title").textContent = isPex
+            ? "Material retirado en campo"
+            : "Material retirado de domicilio";
+        $("#installed-material-label").textContent = isPex
+            ? "Material utilizado"
+            : "Material instalado";
+        $("#installed-material-submit").textContent = isPex
+            ? "Agregar material utilizado"
+            : "Agregar material instalado";
+
         $("#field-sheet-help").textContent = editable
-            ? "Registra la información real encontrada durante la atención."
+            ? (
+                isPex
+                    ? "Registra únicamente los datos técnicos que apliquen a esta intervención. NAP, borne, MAC/equipo y precinto son opcionales."
+                    : "Registra la información real encontrada durante la atención."
+            )
             : "La toma de la OT no habilita datos técnicos. Primero debes iniciar la atención.";
+
         $("#field-materials-help").textContent = editable
-            ? "Declara por separado lo que queda instalado y lo que se retira del domicilio."
-            : "Inicia la atención para declarar los materiales realmente instalados o retirados.";
+            ? (
+                isPex
+                    ? "Declara por separado el material utilizado y el material retirado durante la intervención de red."
+                    : "Declara por separado lo que queda instalado y lo que se retira del domicilio."
+            )
+            : (
+                isPex
+                    ? "Inicia la atención para declarar los materiales utilizados o retirados en campo."
+                    : "Inicia la atención para declarar los materiales realmente instalados o retirados."
+            );
         $("#materials-help").textContent = editable
             ? "Registra únicamente el metraje real usado. El SICV calcula los excesos."
             : "Inicia la atención para registrar los metrajes de instalación.";
@@ -900,7 +930,13 @@
             $(`#${prefix}-material-remarks`).value = "";
             renderFieldMaterials(payload);
             showToast(
-                installed ? "Material instalado registrado." : "Material retirado registrado.",
+                installed
+                    ? (
+                        state.currentOrder?.is_outside_plant
+                            ? "Material utilizado registrado."
+                            : "Material instalado registrado."
+                    )
+                    : "Material retirado registrado.",
                 "success",
             );
             await loadCompletion(state.detailId, state.currentOrder);
