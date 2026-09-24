@@ -240,6 +240,19 @@ class OutsidePlantWorkOrderTests(WorkOrderTestCase):
         )
         self.assertIsNotNone(support.ended_at)
 
+    def test_print_view_renders_pex_operational_document(self):
+        order = self.create_pex(route="Av. PEX de prueba")
+
+        self.client.force_login(self.atc_user)
+        response = self.client.get(
+            reverse("work_orders:outside_plant_print", args=[order.pk])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertContains(response, order.order_number)
+        self.assertContains(response, "Av. PEX de prueba")
+        self.assertContains(response, "ORDEN DE PLANTA EXTERNA")
+
     def test_completion_only_offers_participants_from_same_crew(self):
         order = self.create_pex()
         order.assign_technician(
