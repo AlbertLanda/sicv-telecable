@@ -1,0 +1,24 @@
+{% comment %}
+El interior de la tarjeta de una deuda de traslado sin resolver.
+
+Vive aparte porque lo piden dos sitios -la tarjeta que enlaza y la que no,
+según el permiso del operador- y tienen que decir lo mismo. Copiado, el primer
+cambio se quedaría en una de las dos.
+
+Espera `proposal`.
+{% endcomment %}
+
+<div class="tc-pendiente-cab">
+    <span class="tc-pendiente-rotulo">
+        Deuda pendiente
+    </span>
+    <span class="tc-pendiente-icono">
+        <i class="bi bi-box-arrow-right"></i>
+    </span>
+</div>
+<div class="tc-pendiente-dato">
+    Deuda traslado
+</div>
+<div class="tc-pendiente-pie">
+    <i class="bi bi-clipboard-check"></i>{{ proposal.work_order.order_number }}
+</div>

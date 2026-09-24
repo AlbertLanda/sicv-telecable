@@ -27,8 +27,34 @@
     cuándo tengo?»-; el número y el monto quedan al pie, que es lo que se mira
     después. Toda la tarjeta enlaza al compromiso.
     {% endcomment %}
-    {% if active_commitments %}
+    {% if pending_proposals or active_commitments %}
         <div class="tc-pendientes">
+
+            {% comment %}
+            Primero lo que espera una decisión y después lo ya decidido. Una
+            deuda de traslado sin resolver no es deuda todavía: no suma al
+            saldo, no se puede cobrar y no sale en la tabla. Está aquí porque
+            alguien tiene que ponerle monto y aceptarla, o descartarla diciendo
+            por qué, y hasta entonces el traslado se queda sin cobrar sin que
+            nadie se entere.
+
+            Sin permiso para resolverla se ve igual pero no enlaza: que el
+            traslado está sin cobrar es información que el operador de
+            ventanilla necesita aunque la decisión no sea suya.
+            {% endcomment %}
+            {% for proposal in pending_proposals %}
+                {% if can_resolve_proposal %}
+                    <a class="tc-pendiente"
+                       href="{% url 'payments:proposal_resolve' pk=customer.pk proposal_pk=proposal.pk %}">
+                        {% include "payments/_proposal_card.html" %}
+                    </a>
+                {% else %}
+                    <div class="tc-pendiente">
+                        {% include "payments/_proposal_card.html" %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+
             {% for commitment in active_commitments %}
                 <a class="tc-pendiente"
                    href="{% url 'payments:commitment_detail' pk=customer.pk commitment_pk=commitment.pk %}">
@@ -49,6 +75,7 @@
                     </div>
                 </a>
             {% endfor %}
+
         </div>
     {% endif %}
 

@@ -313,7 +313,19 @@ def create_work_order(
     order.full_clean()
     order.save()
 
+    # Un traslado deja una deuda propuesta sobre el abonado: volver a tender
+    # el cable se cobra cuando pasa del metraje incluido. Se propone, no se
+    # emite: aquí todavía no se sabe cuántos metros va a llevar.
+    #
+    # La importación es local a propósito. `payments` apunta a `work_orders`
+    # -la propuesta cuelga de la orden que la origina-, y subirla al módulo
+    # cerraría el ciclo entre las dos apps al arrancar Django.
+    from apps.payments.proposals import propose_transfer_charge
+
+    propose_transfer_charge(work_order=order)
+
     return order
+
 
 @transaction.atomic
 def create_incident_work_order(
