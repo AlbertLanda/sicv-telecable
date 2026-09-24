@@ -269,9 +269,9 @@ class NocParticipationHandoffTests(WorkOrderTestCase):
     def setUp(self):
         super().setUp()
 
-        self.incident_type = OrderType.objects.create(
+        self.incident_type, _ = OrderType.objects.get_or_create(
             code="INCIDENT",
-            name="INCIDENCIA NOC",
+            defaults={"name": "INCIDENCIA NOC"},
         )
 
         self.noc_one = User.objects.create_user(
