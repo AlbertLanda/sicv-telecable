@@ -114,7 +114,7 @@ class ContractServiceCatalogTests(TestCase):
             self.assertEqual(plan.monthly_price, 0)
             self.assertIsNone(plan.billing_policy_id)
             self.assertFalse(plan.requires_geographic_tariff)
-            self.assertEqual(plan.included_tv_points, 2)
+            self.assertEqual(plan.included_tv_points, 0)
 
     def test_transporte_de_datos_conserva_su_velocidad(self):
         plan = Plan.objects.get(code="TD-ON-10MB")

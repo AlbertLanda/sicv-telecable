@@ -149,6 +149,7 @@ class ScheduleInputSafetyTests(ScheduleBoardTestCase):
     def test_stale_endpoint_read_is_rejected_without_changing_attended_order(self):
         order = self.create_order_in_progress()
         stale = WorkOrder.objects.get(pk=order.pk)
+        self.ensure_signed_installation_contract(order)
         attend_order(order, self.installation_success, user=self.technician)
         self.login(self.dispatcher)
         with patch("apps.work_orders.views.get_object_or_404", return_value=stale):
@@ -192,6 +193,7 @@ class ScheduleConcurrentStateTests(WorkOrderTestCase):
     def test_stale_reprogramming_cannot_reopen_an_attended_order(self):
         order = self.create_order_in_progress()
         stale = WorkOrder.objects.get(pk=order.pk)
+        self.ensure_signed_installation_contract(order)
         attend_order(order, self.installation_success, user=self.technician)
         before = order.status_history.count()
         with self.assertRaises(ValidationError):

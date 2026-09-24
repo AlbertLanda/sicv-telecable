@@ -557,6 +557,7 @@ class WorkOrderDetailTechnicalDataTests(WorkOrderDetailAPITestCase):
             assigned_by=self.supervisor,
         )
         foreign_order.start_attention(user=self.other_technician)
+        self.ensure_signed_installation_contract(foreign_order)
 
         attend_order(
             foreign_order,

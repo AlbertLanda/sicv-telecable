@@ -54,8 +54,12 @@ class OrderResultTests(WorkOrderTestCase):
 
         from apps.contracts.models import Contract
 
-        order = self.create_order_in_progress(
+        order = self.create_assigned_order(
             order_type=self.installation_type,
+        )
+        start_order_attention(
+            order,
+            user=self.technician,
         )
         Contract.objects.create(
             contract_number="CONT-UNSIGNED",
@@ -342,6 +346,8 @@ class OrderResultTests(WorkOrderTestCase):
             self.subscription.status,
             Subscription.Status.INSTALLATION,
         )
+
+        self.ensure_signed_installation_contract(order)
 
         attend_order(
             order,

@@ -290,6 +290,7 @@ class TechnicianFieldWorkflowAPITests(WorkOrderTestCase):
 
     def test_technician_can_finish_attention_with_order_result(self):
         order = self.create_order_in_progress()
+        self.ensure_signed_installation_contract(order)
 
         response = self.api.post(
             self.url("complete", order),
@@ -369,6 +370,7 @@ class TechnicianFieldWorkflowAPITests(WorkOrderTestCase):
             },
             format="json",
         )
+        self.ensure_signed_installation_contract(order)
         self.api.post(
             self.url("complete", order),
             {"result_id": self.installation_success.pk},
