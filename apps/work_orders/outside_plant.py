@@ -7,9 +7,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic import FormView, ListView, TemplateView, View
 
+from apps.organization.context_processors import get_active_branch
 from apps.organization.models import Branch, Zone
 from apps.work_orders.models import OrderReason, WorkOrder
 from apps.work_orders.services import create_outside_plant_order
+
+
+class ZoneNameChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return obj.name
 
 
 class OutsidePlantCreateForm(forms.Form):
@@ -18,7 +24,7 @@ class OutsidePlantCreateForm(forms.Form):
         label="Sede",
         widget=forms.Select(attrs={"class": "form-select"}),
     )
-    zone = forms.ModelChoiceField(
+    zone = ZoneNameChoiceField(
         queryset=Zone.objects.none(),
         required=False,
         label="Zona",
@@ -93,7 +99,7 @@ class OutsidePlantCreateForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, active_branch=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
         self.fields["reason"].queryset = (
@@ -114,6 +120,9 @@ class OutsidePlantCreateForm(forms.Form):
                 branch_id = int(raw_branch) if raw_branch else None
             except (TypeError, ValueError):
                 branch_id = None
+        elif active_branch is not None:
+            branch_id = active_branch.pk
+            self.fields["branch"].initial = branch_id
         elif user is not None and user.branch_id:
             branch_id = user.branch_id
             self.fields["branch"].initial = branch_id
@@ -207,7 +216,18 @@ class OutsidePlantCreateView(
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
+        kwargs["active_branch"] = get_active_branch(self.request)
         return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["zone_catalog"] = list(
+            Zone.objects
+            .filter(is_active=True, branch__is_active=True)
+            .order_by("branch_id", "name")
+            .values("id", "branch_id", "name")
+        )
+        return context
 
     def form_valid(self, form):
         try:
