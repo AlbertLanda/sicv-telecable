@@ -36,6 +36,7 @@ from apps.work_orders.api.field_completion import (
     liquidation_technical_data_from_field,
 )
 from apps.work_orders.models import OrderReason, OrderResult, WorkOrder
+from apps.work_orders.nap_catalog import NetworkAccessPoint
 from apps.work_orders.services import (
     add_work_order_evidence,
     attend_order,
@@ -90,6 +91,7 @@ class Command(BaseCommand):
         # de demostración; no duplica definiciones comerciales ni de órdenes.
         call_command("cargar_catalogo_comercial")
         call_command("cargar_catalogo_ordenes")
+        call_command("cargar_catalogos_operativos")
 
         with transaction.atomic():
             contexto = self._crear_datos_demo()
@@ -164,6 +166,22 @@ class Command(BaseCommand):
             name="DEMO GERENCIA",
             defaults={"is_active": True},
         )
+
+        # Las NAP reales ya forman parte del catálogo operativo. Estas dos
+        # entradas existen solo en la base de demostración para que las OTs
+        # ficticias nunca apunten a infraestructura real de Telecable.
+        for code, name in (
+            ("DEMO-JAUJA-01", "NAP-DEMO-JAUJA-01"),
+            ("DEMO-JAUJA-02", "NAP-DEMO-JAUJA-02"),
+        ):
+            NetworkAccessPoint.objects.update_or_create(
+                branch=branch,
+                code=code,
+                defaults={
+                    "name": name,
+                    "is_active": True,
+                },
+            )
 
         Issuer.objects.get_or_create(
             code="INV",
