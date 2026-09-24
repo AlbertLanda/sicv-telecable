@@ -1,18 +1,21 @@
+from io import StringIO
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 
 from apps.organization import branding
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.customers.forms import CustomerAddressForm
 from apps.organization.context_processors import (
     ACTIVE_BRANCH_SESSION_KEY,
     ACTIVE_OFFICE_SESSION_KEY,
 )
-from apps.organization.models import Branch, Office
+from apps.organization.models import Branch, Office, Zone
 
 
 class ActiveBranchTests(TestCase):
@@ -424,3 +427,75 @@ class LogotipoDeLaMarcaTests(TestCase):
                 branding.buscar_logo(carpeta, stem=branding.STEM_APAISADO),
                 archivo,
             )
+
+
+
+class ZoneCatalogTests(TestCase):
+    def setUp(self):
+        self.jauja = Branch.objects.get(code="JAUJA")
+        self.huancayo = Branch.objects.get(code="HUANCAYO")
+
+    def _zone_file(self, content):
+        temp = NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".txt",
+            delete=False,
+        )
+        temp.write(content)
+        temp.close()
+        self.addCleanup(lambda: Path(temp.name).unlink(missing_ok=True))
+        return temp.name
+
+    def test_importar_zonas_is_scoped_to_selected_branch(self):
+        file_path = self._zone_file("Centro\nSausa\nCentro\n\n")
+
+        call_command(
+            "importar_zonas",
+            file_path,
+            sede="Jauja",
+            stdout=StringIO(),
+        )
+
+        self.assertTrue(
+            Zone.objects.filter(branch=self.jauja, name="Centro").exists()
+        )
+        self.assertTrue(
+            Zone.objects.filter(branch=self.jauja, name="Sausa").exists()
+        )
+        self.assertFalse(
+            Zone.objects.filter(branch=self.huancayo, name="Centro").exists()
+        )
+        self.assertEqual(
+            Zone.objects.filter(branch=self.jauja, name="Centro").count(),
+            1,
+        )
+
+    def test_importar_zonas_dry_run_does_not_persist(self):
+        file_path = self._zone_file("Zona temporal\n")
+
+        call_command(
+            "importar_zonas",
+            file_path,
+            sede="Jauja",
+            dry_run=True,
+            stdout=StringIO(),
+        )
+
+        self.assertFalse(
+            Zone.objects.filter(
+                branch=self.jauja,
+                name="Zona temporal",
+            ).exists()
+        )
+
+    def test_customer_address_form_only_offers_its_branch_zones(self):
+        own = Zone.objects.create(branch=self.jauja, name="Zona Jauja")
+        Zone.objects.create(branch=self.huancayo, name="Zona Huancayo")
+
+        form = CustomerAddressForm(branch=self.jauja)
+
+        self.assertEqual(
+            list(form.fields["zone"].queryset),
+            [own],
+        )
