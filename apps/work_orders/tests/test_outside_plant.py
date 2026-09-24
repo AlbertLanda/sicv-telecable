@@ -5,6 +5,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from apps.accounts.models import User
+from apps.organization.models import Branch, Zone
 from apps.technicians.models import TechnicianProfile
 from apps.work_orders.api.queries import available_work_orders
 from apps.work_orders.forms import WorkOrderCreateForm
@@ -13,6 +14,7 @@ from apps.work_orders.incident_noc import (
     release_incident,
     take_incident,
 )
+from apps.work_orders.outside_plant import OutsidePlantCreateForm
 from apps.work_orders.models import (
     OrderReason,
     OrderResult,
@@ -132,6 +134,32 @@ class OutsidePlantWorkOrderTests(WorkOrderTestCase):
         self.assertNotIn(
             self.pex_type.pk,
             form.fields["order_type"].queryset.values_list("pk", flat=True),
+        )
+
+
+    def test_pex_form_prefers_active_branch_and_scopes_zone_options(self):
+        other_branch = Branch.objects.create(
+            code="SED02",
+            name="Sede Alterna",
+        )
+        other_zone = Zone.objects.create(
+            branch=other_branch,
+            name="Zona Alterna",
+        )
+
+        form = OutsidePlantCreateForm(
+            user=self.atc_user,
+            active_branch=other_branch,
+        )
+
+        self.assertEqual(form.fields["branch"].initial, other_branch.pk)
+        self.assertEqual(
+            list(form.fields["zone"].queryset),
+            [other_zone],
+        )
+        self.assertEqual(
+            form.fields["zone"].label_from_instance(other_zone),
+            "Zona Alterna",
         )
 
     def test_available_pool_is_split_by_technical_area(self):
