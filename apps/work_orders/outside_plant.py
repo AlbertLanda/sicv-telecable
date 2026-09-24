@@ -19,7 +19,7 @@ class OutsidePlantCreateForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     zone = forms.ModelChoiceField(
-        queryset=Zone.objects.filter(is_active=True).select_related("branch"),
+        queryset=Zone.objects.none(),
         required=False,
         label="Zona",
         widget=forms.Select(attrs={"class": "form-select"}),
@@ -106,8 +106,26 @@ class OutsidePlantCreateForm(forms.Form):
             .order_by("name")
         )
 
-        if not self.is_bound and user is not None and user.branch_id:
-            self.fields["branch"].initial = user.branch_id
+        branch_id = None
+
+        if self.is_bound:
+            raw_branch = self.data.get("branch")
+            try:
+                branch_id = int(raw_branch) if raw_branch else None
+            except (TypeError, ValueError):
+                branch_id = None
+        elif user is not None and user.branch_id:
+            branch_id = user.branch_id
+            self.fields["branch"].initial = branch_id
+
+        if branch_id:
+            self.fields["zone"].queryset = (
+                Zone.objects
+                .filter(branch_id=branch_id, is_active=True)
+                .order_by("name")
+            )
+
+        self.fields["zone"].empty_label = "Seleccione una zona"
 
     def clean(self):
         cleaned = super().clean()
