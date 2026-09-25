@@ -27,6 +27,8 @@
                 <div class="col-md-3"><small class="text-muted d-block">Plan</small><strong>{{ subscription.plan }}</strong></div>
                 <div class="col-md-3"><small class="text-muted d-block">Generación</small><strong>{{ subscription.plan.generation|default:"—" }}</strong></div>
                 <div class="col-md-3"><small class="text-muted d-block">Categoría</small><strong>{% if subscription.plan.commercial_category %}{{ subscription.plan.get_commercial_category_display }}{% else %}—{% endif %}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Vendedor</small><strong>{{ subscription.seller|default:"—" }}</strong></div>
+                <div class="col-md-3"><small class="text-muted d-block">Registrado por</small><strong>{{ subscription.registered_by|default:"—" }}</strong></div>
             </div>
 
             <hr class="my-4">
@@ -39,6 +41,18 @@
                 <div class="col-md-6"><small class="text-muted d-block">Política de cobro</small><strong>{{ subscription.billing_policy|default:"Sin política asignada" }}</strong></div>
                 <div class="col-md-6"><small class="text-muted d-block">Tarifa geográfica aplicada</small><strong>{{ subscription.tariff|default:"Precio referencial del plan" }}</strong></div>
             </div>
+
+            {% if subscription.included_app_plan %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <strong>APP incluida:</strong> {{ subscription.included_app_plan }}.
+                    Dentro de la mensualidad base de
+                    <strong>S/ {{ subscription.base_monthly_fee|floatformat:2 }}</strong>,
+                    S/ {{ subscription.included_app_component_amount|floatformat:2 }}
+                    corresponde al componente APP y
+                    S/ {{ subscription.main_service_monthly_component|floatformat:2 }}
+                    al servicio principal/anexos. El total no aumenta.
+                </div>
+            {% endif %}
 
             {% if subscription.billing_policy %}
                 <div class="alert alert-light border mt-3 mb-0 small">
