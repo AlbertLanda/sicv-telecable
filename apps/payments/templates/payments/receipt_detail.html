@@ -137,7 +137,16 @@ aspecto de editable, que invita a intentarlo.
                                     <tr>
                                         <td class="num">{{ allocation.charge.quantity|floatformat:0 }}</td>
                                         <td>{{ customer.code }}</td>
-                                        <td>{{ allocation.charge.description }}</td>
+                                        <td>
+                                            {{ allocation.charge.description }}
+                                            {% for component in allocation.charge.components.all %}
+                                                <div class="small text-muted">
+                                                    {{ component.get_kind_display }}:
+                                                    {{ component.description }}
+                                                    · S/ {{ component.amount|floatformat:2 }}
+                                                </div>
+                                            {% endfor %}
+                                        </td>
                                         <td>{{ allocation.charge.currency }}</td>
                                         <td class="num">S/ {{ allocation.gross_amount|floatformat:2 }}</td>
                                         <td class="num">S/ {{ allocation.discount|floatformat:2 }}</td>
