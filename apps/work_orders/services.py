@@ -2211,6 +2211,19 @@ def resolve_transfer_reconciliation(*, transfer, user, action, note=""):
     if action not in valid_actions:
         raise ValidationError("La decisión de regularización no es válida.")
 
+    difference = locked.reconciliation_difference
+    if (
+        difference is not None
+        and difference <= 0
+        and action in {
+            TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
+            TransferDetail.ReconciliationAction.NEXT_INVOICE,
+        }
+    ):
+        raise ValidationError(
+            "No existe una diferencia positiva que pueda cobrarse al abonado."
+        )
+
     note = (note or "").strip()
     if not note:
         raise ValidationError(
