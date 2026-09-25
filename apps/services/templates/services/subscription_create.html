@@ -7,13 +7,18 @@
             <h2 class="fw-bold mb-1">Nueva suscripción</h2>
             <p class="text-muted mb-0">Seleccione domicilio, servicio y plan. El SICV resolverá la tarifa y política vigentes.</p>
         </div>
-        <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">← Volver a la ficha</a>
+        <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-outline-secondary">← Continuar después</a>
     </div>
 
     <div class="card shadow-sm border-0">
         <div class="card-header bg-light"><strong>Datos de la suscripción</strong></div>
         <div class="card-body">
             <div class="alert alert-info"><strong>Cliente:</strong> {{ customer }}</div>
+            <div class="alert alert-warning small">
+                Si sale de esta pantalla, el alta no se pierde: la ficha quedará
+                marcada como <strong>Alta incompleta</strong> y podrá reanudarse
+                exactamente desde este paso.
+            </div>
 
             <form method="post" novalidate>
                 {% csrf_token %}
@@ -103,7 +108,7 @@
                 {{ form.billing_cycle.as_hidden }}
                 <hr class="my-4">
                 <div class="d-flex justify-content-end gap-2">
-                    <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-outline-secondary">Continuar después</a>
                     <button type="submit" class="btn btn-primary">Registrar suscripción</button>
                 </div>
             </form>
