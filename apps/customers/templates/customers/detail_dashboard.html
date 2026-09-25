@@ -24,6 +24,45 @@ comercial ni registrar direcciones, suscripciones o contratos.
 
     {% include "_customer_record_header.html" with active_tab="info" record_title="Información" %}
 
+    {% if onboarding.incomplete %}
+        <section class="tc-card tc-section tc-full" style="border-left:4px solid #f0ad4e;">
+            <div class="tc-section-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-bold">
+                        <i class="bi bi-hourglass-split me-1"></i>
+                        {{ onboarding.label }}
+                    </div>
+                    <div class="text-muted small mt-1">{{ onboarding.detail }}</div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ onboarding.next_url }}" class="tc-btn primary">
+                        <i class="bi bi-arrow-right-circle"></i>{{ onboarding.next_label }}
+                    </a>
+                    {% if onboarding.can_discard %}
+                        <a href="{% url 'customers:discard_incomplete' customer.pk %}"
+                           class="tc-btn">
+                            <i class="bi bi-trash3"></i>Descartar alta
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    {% elif onboarding.stage == "PENDING_INSTALLATION" %}
+        <section class="tc-card tc-section tc-full" style="border-left:4px solid #3b82f6;">
+            <div class="tc-section-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-bold">
+                        <i class="bi bi-tools me-1"></i>{{ onboarding.label }}
+                    </div>
+                    <div class="text-muted small mt-1">{{ onboarding.detail }}</div>
+                </div>
+                <a href="{{ onboarding.next_url }}" class="tc-btn">
+                    {{ onboarding.next_label }}
+                </a>
+            </div>
+        </section>
+    {% endif %}
+
     <section class="tc-grid">
 
         <article class="tc-card tc-section">
@@ -125,6 +164,8 @@ comercial ni registrar direcciones, suscripciones o contratos.
                         <th>Dirección</th>
                         <th>Velocidad</th>
                         <th>Tecnología</th>
+                        <th>Vendedor</th>
+                        <th>Registrado por</th>
                         <th>Instalación</th>
                         <th>Estado</th>
                     </tr>
@@ -137,11 +178,13 @@ comercial ni registrar direcciones, suscripciones o contratos.
                         <td>{{ sub.address.address }}</td>
                         <td>{% if sub.plan.speed_mbps %}{{ sub.plan.speed_mbps }} Mbps{% else %}-{% endif %}</td>
                         <td>{{ sub.plan.technology|default:"-" }}</td>
+                        <td>{{ sub.seller|default:"-" }}</td>
+                        <td>{{ sub.registered_by|default:"-" }}</td>
                         <td>{% if sub.installation_date %}{{ sub.installation_date|date:"d/m/Y" }}{% else %}-{% endif %}</td>
                         <td>{% if sub.status == 'ACTIVE' %}<span class="status-success">{{ sub.get_status_display }}</span>{% else %}{{ sub.get_status_display }}{% endif %}</td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="7">Sin suscripciones registradas.</td></tr>
+                    <tr><td colspan="9">Sin suscripciones registradas.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
