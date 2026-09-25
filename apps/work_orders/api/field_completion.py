@@ -65,6 +65,8 @@ def liquidation_items_from_field(order: WorkOrder):
                 "material_name": movement.material.name,
                 "quantity": movement.quantity,
                 "unit_of_measure": movement.material.unit_of_measure,
+                "is_billable": movement.is_billable,
+                "unit_price": movement.unit_price,
                 "remarks": movement.remarks,
             }
         )
