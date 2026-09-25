@@ -48,7 +48,7 @@ from apps.customers.services.distriluz_gps import (
 from urllib.parse import quote
 
 from apps.organization.context_processors import get_active_branch
-from apps.organization.models import Zone
+from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.contracts.models import Contract
 
@@ -601,9 +601,14 @@ class CustomerGeneralDataView(LoginRequiredMixin, FormView):
                 # Ver Customer.generate_code().
                 # -----------------------------------------
 
-                customer.code = Customer.generate_code(
-                    customer.branch
+                # Serializa la reserva del correlativo por sede. Dos altas
+                # concurrentes en Jauja/Huancayo no pueden elegir el mismo
+                # primer hueco libre antes de que una de ellas confirme.
+                locked_branch = Branch.objects.select_for_update().get(
+                    pk=customer.branch_id
                 )
+                customer.branch = locked_branch
+                customer.code = Customer.generate_code(locked_branch)
 
                 customer.save()
 
