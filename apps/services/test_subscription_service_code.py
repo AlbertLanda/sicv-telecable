@@ -58,3 +58,21 @@ class SubscriptionServiceCodeTests(TestCase):
             "SC01-A0000001-INTERNET-CODE-02",
         )
         self.assertNotEqual(primero.service_code, segundo.service_code)
+
+    def test_codigo_para_otra_sede_usa_prefijo_destino_sin_duplicar_cliente(self):
+        subscription = self.crear(1, "Jr. Uno 100")
+        destination = Branch.objects.create(
+            code="JAUJA",
+            name="Jauja",
+        )
+        original_customer_code = self.customer.code
+
+        relocated_code = subscription.build_service_code_for_branch(
+            destination
+        )
+
+        self.assertTrue(relocated_code.startswith("JA01-A"))
+        self.assertTrue(relocated_code.endswith("-INTERNET-CODE-01"))
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.code, original_customer_code)
+
