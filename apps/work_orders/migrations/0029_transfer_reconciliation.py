@@ -2,6 +2,7 @@
 
 import django.core.validators
 import django.db.models.deletion
+from decimal import Decimal
 from django.conf import settings
 from django.db import migrations, models
 
@@ -100,7 +101,7 @@ class Migration(migrations.Migration):
                 decimal_places=2,
                 max_digits=10,
                 null=True,
-                validators=[django.core.validators.MinValueValidator("0.01")],
+                validators=[django.core.validators.MinValueValidator(Decimal("0.01"))],
                 verbose_name="Precio unitario facturable",
             ),
         ),
