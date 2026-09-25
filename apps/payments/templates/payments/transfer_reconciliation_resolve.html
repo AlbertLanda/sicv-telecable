@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Regularización de traslado - {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% block content %}
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Regularización de traslado" %}
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="tc-card tc-section tc-full tc-sheet">
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-calculator"></i>Conciliación económica
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+                <div class="tc-form">
+                    <div class="tc-form-label">Orden</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ transfer.work_order.order_number }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Tipo</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ transfer.work_order.subtype.name }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Tarifa base</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.base_fee_snapshot|floatformat:2 }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Adicional estimado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.estimated_extra_amount|floatformat:2 }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Total estimado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.estimated_total|floatformat:2 }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Monto acordado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{% if transfer.customer_agreed_amount != None %}S/ {{ transfer.customer_agreed_amount|floatformat:2 }}{% else %}No definido previamente{% endif %}"
+                               disabled>
+                    </div>
+
+                    <div class="tc-form-label">Monto ya emitido</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.initially_charged_amount|floatformat:2 }}" disabled>
+                        <div class="tc-form-hint">
+                            Cargo que ya fue emitido desde la propuesta del traslado, si existió.
+                        </div>
+                    </div>
+
+                    <div class="tc-form-label">Adicional técnico real</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.actual_extra_amount|floatformat:2 }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Costo técnico real</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.actual_total|floatformat:2 }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Diferencia</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer.reconciliation_difference|floatformat:2 }}" disabled>
+                        <div class="tc-form-hint">
+                            Costo técnico real menos monto informado/acordado.
+                            Una diferencia positiva no genera deuda automáticamente.
+                        </div>
+                    </div>
+
+                    <div class="tc-form-label">Liquidación</div>
+                    <div class="tc-form-field">
+                        {% if liquidation %}
+                            <div class="tc-form-hint">
+                                {{ liquidation.get_review_status_display }}
+                                {% if liquidation.validated_at %}
+                                    · validada {{ liquidation.validated_at|date:"d/m/Y H:i" }}
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="tc-form-error">No existe liquidación técnica.</div>
+                        {% endif %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.action.id_for_label }}">
+                        Decisión
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-xl">{{ form.action }}</div>
+                        {% for error in form.action.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label top" for="{{ form.note.id_for_label }}">
+                        Sustento
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-xl">{{ form.note }}</div>
+                        <div class="tc-form-hint">
+                            La decisión queda registrada con usuario y fecha.
+                            Elegir “Cobrar diferencia” o “Próxima mensualidad” deja
+                            la instrucción auditada; no crea un cargo por sí sola.
+                        </div>
+                        {% for error in form.note.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="tc-actions">
+            <button type="submit" class="tc-btn primary">
+                <i class="bi bi-check-lg"></i>Registrar decisión
+            </button>
+            <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                Volver
+            </a>
+        </div>
+    </form>
+
+</div>
+{% endblock %}
