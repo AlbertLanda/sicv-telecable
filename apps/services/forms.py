@@ -295,6 +295,8 @@ class PlanForm(forms.ModelForm):
             "technology",
             "monthly_price",
             "included_tv_points",
+            "included_app_plan",
+            "included_app_component_amount",
             "requires_geographic_tariff",
             "is_active",
         ]
@@ -316,10 +318,29 @@ class PlanForm(forms.ModelForm):
         self.fields["billing_policy"].queryset = BillingPolicy.objects.filter(
             is_active=True
         )
+        self.fields["included_app_plan"].queryset = (
+            Plan.objects
+            .filter(
+                is_active=True,
+                service_type__code="APPS",
+            )
+            .select_related("service_type")
+            .order_by("name")
+        )
+        self.fields["included_app_plan"].required = False
+        self.fields["included_app_component_amount"].required = False
         self.fields["monthly_price"].label = "Mensualidad normal (S/)"
         self.fields["billing_policy"].help_text = (
             "Define el vencimiento, el descuento por pronto pago y el corte. "
             "El precio de pronto pago se calcula con su descuento."
+        )
+        self.fields["included_app_plan"].help_text = (
+            "Solo planes 2026. Seleccione el derecho APPS que forma parte "
+            "del paquete; no se cobrará encima de la mensualidad."
+        )
+        self.fields["included_app_component_amount"].help_text = (
+            "Importe interno de la mensualidad que corresponde a APPS. "
+            "La suma total que paga el abonado no cambia."
         )
 
         if self.instance.pk:
