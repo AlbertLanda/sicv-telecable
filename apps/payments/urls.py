@@ -68,6 +68,15 @@ urlpatterns = [
         name="commitment_cancel",
     ),
 
+    # La deuda que una orden propuso y todavia nadie resolvio. Cuelga del
+    # abonado igual que el compromiso: se llega desde su tablero de deuda, que
+    # es donde la propuesta se ve.
+    path(
+        "clientes/<int:pk>/propuestas/<int:proposal_pk>/",
+        views.ProposedChargeResolveView.as_view(),
+        name="proposal_resolve",
+    ),
+
     # --------------------------------------------------------------
     # Comprobante y anulación.
     # --------------------------------------------------------------

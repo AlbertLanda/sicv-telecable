@@ -5,6 +5,7 @@ from .models import (
     ChargeConcept,
     Payment,
     PaymentAllocation,
+    ProposedCharge,
     Receipt,
     OfficeSequence,
     ReceiptSequence,
@@ -57,6 +58,42 @@ class ChargeAdmin(admin.ModelAdmin):
     ]
     date_hierarchy = "due_date"
     raw_id_fields = ["customer", "subscription", "concept_item"]
+
+
+@admin.register(ProposedCharge)
+class ProposedChargeAdmin(admin.ModelAdmin):
+    list_display = [
+        "description",
+        "customer",
+        "work_order",
+        "status",
+        "created_at",
+    ]
+    list_filter = ["status", "created_at"]
+    search_fields = [
+        "description",
+        "customer__document_number",
+        "customer__code",
+        "work_order__order_number",
+    ]
+    raw_id_fields = [
+        "customer",
+        "subscription",
+        "work_order",
+        "concept_item",
+        "charge",
+        "resolved_by",
+    ]
+    # El resultado se mira, no se teclea: el cargo lo emite aceptar la
+    # propuesta. Cambiarlo a mano aqui dejaria un cargo diciendo una cifra y la
+    # propuesta otra.
+    readonly_fields = [
+        "charge",
+        "resolved_by",
+        "resolved_at",
+        "created_at",
+        "updated_at",
+    ]
 
 
 @admin.register(Payment)

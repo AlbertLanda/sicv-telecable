@@ -32,17 +32,24 @@ from .forms import (
     PaymentCommitmentForm,
     PaymentRegisterForm,
     PaymentVoidForm,
+    ProposedChargeResolveForm,
 )
 from .models import (
     Charge,
     ChargeConcept,
     Payment,
     PaymentCommitment,
+    ProposedCharge,
     Receipt,
     ZERO,
     format_receipt_number,
 )
 from .pdf import render_receipt
+from .proposals import (
+    accept_proposed_charge,
+    discard_proposed_charge,
+    pending_proposals,
+)
 from .services import (
     BILLING_MONTH_DAYS,
     DEFAULT_RECEIPT_SERIES,
@@ -163,6 +170,14 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
             for commitment in customer_commitments(self.customer)
             if commitment.status == PaymentCommitment.Status.ACTIVE
         ]
+
+        # Deuda que una orden propuso y nadie ha resuelto. Va con los
+        # compromisos, encima de la tabla y fuera de ella: todavia no es un
+        # cargo, no suma al saldo y no se puede cobrar.
+        context["pending_proposals"] = list(pending_proposals(self.customer))
+        context["can_resolve_proposal"] = user.has_perm(
+            "payments.resolve_proposedcharge"
+        )
 
         return context
 
@@ -889,3 +904,80 @@ class PaymentCommitmentCancelView(LoginRequiredMixin, PermissionRequiredMixin, V
         messages.success(request, "Compromiso anulado.")
 
         return redirect("payments:debt", pk=commitment.customer_id)
+
+
+class ProposedChargeResolveView(
+    PermissionRequiredMixin, CustomerScopedMixin, TemplateView
+):
+    """
+    La deuda que una orden dejó propuesta, para aceptarla o descartarla.
+
+    La propuesta se busca siempre dentro del abonado de la URL. Filtrar por
+    abonado y no solo por id no es cosmetico: sin ello, cambiar el numero en la
+    barra de direcciones emitiria el cargo de otro cliente desde la ficha del
+    que se tiene abierto.
+    """
+
+    template_name = "payments/proposed_charge_resolve.html"
+    permission_required = "payments.resolve_proposedcharge"
+
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.proposal = None
+
+    def get_proposal(self):
+        if self.proposal is None:
+            self.proposal = get_object_or_404(
+                ProposedCharge.objects.select_related(
+                    "customer", "subscription", "work_order"
+                ),
+                pk=self.kwargs["proposal_pk"],
+                customer=self.customer,
+            )
+
+        return self.proposal
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["proposal"] = self.get_proposal()
+        context["now"] = timezone.localtime()
+        context.setdefault("form", ProposedChargeResolveForm())
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        proposal = self.get_proposal()
+        action = request.POST.get("accion")
+        form = ProposedChargeResolveForm(request.POST, action=action)
+
+        if not form.is_valid():
+            return self.render_to_response(self.get_context_data(form=form))
+
+        try:
+            if form.is_discarding:
+                discard_proposed_charge(
+                    proposal=proposal,
+                    user=request.user,
+                    reason=form.cleaned_data["note"],
+                )
+                aviso = "Deuda de traslado descartada."
+            else:
+                accept_proposed_charge(
+                    proposal=proposal,
+                    user=request.user,
+                    amount=form.cleaned_data["amount"],
+                    due_date=form.cleaned_data["due_date"],
+                    note=form.cleaned_data.get("note", ""),
+                )
+                aviso = (
+                    f"Deuda emitida: {proposal.description} "
+                    f"por S/ {proposal.charge.amount}."
+                )
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(self.get_context_data(form=form))
+
+        messages.success(request, aviso)
+
+        return redirect("payments:debt", pk=self.customer.pk)

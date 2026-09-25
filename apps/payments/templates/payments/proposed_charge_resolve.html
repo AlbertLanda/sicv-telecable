@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Deuda traslado de {{ customer }} - SICV{% endblock %}
+
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+
+{% comment %}
+La deuda que una orden dejó propuesta, con el reparto del compromiso de pago:
+código, fecha y hora del sistema, la deuda, el total y las observaciones. Es la
+pantalla que el operador ya tiene aprendida, y esto se decide igual.
+
+Un solo formulario con dos botones. Aceptar emite el cargo y lo manda a la
+tabla de deuda; descartar renuncia a cobrarlo diciendo por qué.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Deuda traslado" %}
+
+    <form method="post" novalidate>
+
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger tc-full">
+                {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="tc-card tc-section tc-full tc-sheet">
+
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-box-arrow-right"></i>Deuda traslado
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+                <div class="tc-form">
+
+                    {% comment %}
+                    Código, fecha y hora los pone el sistema. Se muestran para
+                    que el operador reconozca la pantalla, no para editarlos.
+                    {% endcomment %}
+                    <div class="tc-form-label">Código</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{{ proposal.pk }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Fecha</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ now|date:'d/m/Y' }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Hora</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{{ now|date:'H:i:s' }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Orden</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ proposal.work_order.order_number }}" disabled>
+                    </div>
+
+                    {% comment %}
+                    La deuda se marca aquí. Es una sola línea y podría darse
+                    por marcada, pero entonces aceptar sería un botón que emite
+                    deuda sin que nadie haya dicho sobre qué: la casilla es lo
+                    que convierte el clic en una decisión.
+                    {% endcomment %}
+                    <div class="tc-form-label top">Deuda</div>
+                    <div class="tc-form-field">
+                        <div class="tc-debt-list">
+                            <label class="tc-debt-line editable">
+                                <span>
+                                    {{ form.selected }}
+                                    {{ proposal.description }}
+                                </span>
+                                <span class="tc-debt-line-monto">
+                                    {{ form.amount }}
+                                </span>
+                            </label>
+                        </div>
+                        {% for error in form.selected.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                        {% for error in form.amount.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.due_date.id_for_label }}">
+                        Paga hasta
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-md">{{ form.due_date }}</div>
+                        {% for error in form.due_date.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label top" for="{{ form.note.id_for_label }}">
+                        Observaciones
+                    </label>
+                    <div class="tc-form-field">
+                        <div class="tc-w-xl">{{ form.note }}</div>
+                        <div class="tc-form-hint">
+                            Obligatorias si descarta la deuda.
+                        </div>
+                        {% for error in form.note.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        <div class="tc-actions">
+            <button type="submit" name="accion" value="aceptar"
+                    class="tc-btn primary">
+                <i class="bi bi-check-lg"></i>Aceptar
+            </button>
+            <button type="submit" name="accion" value="descartar"
+                    class="tc-btn muted">
+                <i class="bi bi-x-lg"></i>Descartar
+            </button>
+            <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                Volver
+            </a>
+        </div>
+
+    </form>
+
+</div>
+
+{% endblock %}

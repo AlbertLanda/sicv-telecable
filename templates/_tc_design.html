@@ -309,6 +309,14 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-debt-line > span:first-child { min-width:0; }
     .tc-debt-line-monto { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
 
+    /* La linea que ademas se decide: lleva casilla y el monto se escribe.
+       Centrada y no por linea base, que es lo que alinea texto con texto pero
+       deja la casilla y el campo montados a distinta altura. */
+    .tc-debt-line.editable { align-items:center; gap:8px; padding:8px 11px; }
+    .tc-debt-line.editable > span:first-child { display:inline-flex; align-items:center; gap:8px; }
+    .tc-debt-line.editable .form-check-input { margin:0; flex:0 0 auto; }
+    .tc-debt-line.editable .form-control { width:7.5rem; text-align:right; padding:5px 9px; }
+
     /* Lo que esta pendiente sobre este registro, justo encima de su tabla.
 
        Una tarjeta por aviso, en rejilla: aqui se van acumulando cosas -hoy los
@@ -350,6 +358,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-pendiente-dato { margin-top:7px; font-size:1.16rem; font-weight:800; letter-spacing:-.01em; color:var(--tc-text); line-height:1.25; }
     .tc-pendiente-pie { margin-top:8px; display:flex; align-items:center; gap:6px; font-size:.73rem; font-weight:700; color:#5f7893; }
     .tc-pendiente-pie .bi { color:#e0890c; font-size:.8rem; }
+
 
     /* Pie de tarjeta: donde se confirma o se abandona. Mismo trazo que el pie
        de las tablas, para que la pantalla tenga un solo lenguaje. */

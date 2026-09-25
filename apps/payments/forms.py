@@ -541,3 +541,86 @@ class PaymentCommitmentForm(forms.Form):
             )
             for numero in self.installment_numbers()
         ]
+
+
+class ProposedChargeResolveForm(forms.Form):
+    """Lo que la ventanilla decide sobre una deuda propuesta.
+
+    Un solo formulario para los dos caminos, con dos botones. Aceptar pide la
+    deuda marcada, su monto y hasta cuándo paga; descartar pide el motivo. Lo
+    que no corresponde al botón pulsado no se exige: obligar a poner monto
+    para renunciar a cobrarlo sería pedir la cifra que justamente no se va a
+    cobrar.
+
+    El monto lo escribe el operador. Cuánto se le cobra a un abonado por
+    mudarse depende del caso, y el sistema no lo sabe.
+    """
+
+    ACCEPT = "aceptar"
+    DISCARD = "descartar"
+
+    selected = forms.BooleanField(
+        label="",
+        required=False,
+    )
+
+    amount = forms.DecimalField(
+        label="Monto",
+        min_value=Decimal("0.01"),
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        widget=forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
+    )
+
+    due_date = forms.DateField(
+        label="Paga hasta",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
+
+    note = forms.CharField(
+        label="Observaciones",
+        max_length=200,
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def __init__(self, *args, action=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.action = action or self.ACCEPT
+
+        # Paga hasta arranca hoy, como en el cargo manual: una fecha que el
+        # operador mueve, no una que tenga que escribir desde cero.
+        self.fields["due_date"].initial = timezone.localdate()
+
+        _style_widgets(self)
+
+    @property
+    def is_discarding(self):
+        return self.action == self.DISCARD
+
+    def clean(self):
+        cleaned = super().clean()
+
+        if self.is_discarding:
+            if not (cleaned.get("note") or "").strip():
+                self.add_error(
+                    "note", "Descartar una deuda de traslado exige un motivo."
+                )
+
+            return cleaned
+
+        if not cleaned.get("selected"):
+            self.add_error(
+                "selected", "Marque la deuda para aceptarla."
+            )
+
+        if cleaned.get("amount") is None:
+            self.add_error("amount", "Indique el monto que se le cobra.")
+
+        if cleaned.get("due_date") is None:
+            self.add_error("due_date", "Indique hasta cuándo paga.")
+
+        return cleaned

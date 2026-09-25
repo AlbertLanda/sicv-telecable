@@ -1394,3 +1394,171 @@ class PaymentCommitment(models.Model):
         self.save(update_fields=["status", "closed_at", "reason", "updated_at"])
 
         return self
+
+
+class ProposedCharge(models.Model):
+    """
+    Deuda que una orden deja propuesta, antes de que nadie la acepte.
+
+    Hoy la deja el traslado. Registrar la orden no le puede mover el saldo al
+    abonado: cuánto se le cobra por mudarse lo decide quien atiende, no el
+    sistema. Pero que hay algo por cobrar sí lo sabe el sistema, y callarlo
+    hasta que alguien se acuerde es como se pierde el cobro.
+
+    Por eso la propuesta no es un `Charge`. Vive aparte, se pinta encima de la
+    tabla de deuda y no suma al saldo. Hasta que alguien la acepta poniéndole
+    monto, el abonado no debe nada por ella.
+
+    Aceptarla emite el cargo y lo deja apuntado en `charge`; descartarla exige
+    decir por qué. En los dos casos la propuesta se conserva: la pregunta
+    «¿por qué este traslado no se cobró?» tiene que poder responderse.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pendiente"
+        ACCEPTED = "ACCEPTED", "Aceptada"
+        DISCARDED = "DISCARDED", "Descartada"
+
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.PROTECT,
+        related_name="proposed_charges",
+        verbose_name="Abonado",
+    )
+
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.PROTECT,
+        related_name="proposed_charges",
+        verbose_name="Suscripción",
+    )
+
+    # De dónde nace la propuesta. Es lo que la distingue de un cargo manual:
+    # hay una orden de trabajo detrás que la explica.
+    work_order = models.ForeignKey(
+        "work_orders.WorkOrder",
+        on_delete=models.PROTECT,
+        related_name="proposed_charges",
+        verbose_name="Orden que la origina",
+    )
+
+    concept = models.CharField(
+        max_length=20,
+        choices=Charge.Concept.choices,
+        verbose_name="Concepto",
+    )
+
+    concept_item = models.ForeignKey(
+        ChargeConcept,
+        on_delete=models.PROTECT,
+        related_name="proposed_charges",
+        verbose_name="Concepto del catálogo",
+    )
+
+    description = models.CharField(
+        max_length=160,
+        verbose_name="Detalle",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name="Estado",
+    )
+
+    # El cargo que la propuesta terminó emitiendo. Vacío mientras no se
+    # acepte, y vacío para siempre si se descarta.
+    charge = models.OneToOneField(
+        Charge,
+        on_delete=models.PROTECT,
+        related_name="proposal",
+        null=True,
+        blank=True,
+        verbose_name="Cargo emitido",
+    )
+
+    # Lo que el operador quiera dejar dicho, en los dos caminos. Al descartar
+    # deja de ser opcional: no cobrar lo que una orden dejó por cobrar es una
+    # decisión de alguien, y sin motivo no queda a quién preguntarle.
+    note = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Observaciones",
+    )
+
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="proposed_charges_resolved",
+        null=True,
+        blank=True,
+        verbose_name="Resuelta por",
+    )
+
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Resuelta el",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Deuda propuesta"
+        verbose_name_plural = "Deudas propuestas"
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            # Una orden propone su deuda una sola vez. Repetir la creación de
+            # la OT -o reintentar la misma petición- no debe dejar al abonado
+            # con dos traslados por cobrar.
+            models.UniqueConstraint(
+                fields=["work_order", "concept_item"],
+                name="payments_unique_proposal_per_order_concept",
+            ),
+        ]
+        permissions = [
+            # Aceptar una propuesta emite deuda sobre el abonado; descartarla
+            # renuncia a cobrarla. Es la misma decisión mirada por sus dos
+            # caras, así que va en un solo permiso y no en el de emitir cargos
+            # a mano: quien resuelve traslados no tiene por qué poder inventar
+            # cualquier cargo.
+            (
+                "resolve_proposedcharge",
+                "Puede aceptar o descartar deudas propuestas",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.description} - {self.get_status_display()}"
+
+    def clean(self):
+        super().clean()
+
+        if self.subscription_id and self.customer_id:
+            if self.subscription.customer_id != self.customer_id:
+                raise ValidationError({
+                    "subscription": (
+                        "La suscripción no corresponde al abonado de la "
+                        "propuesta."
+                    ),
+                })
+
+        if self.work_order_id and self.subscription_id:
+            if self.work_order.subscription_id != self.subscription_id:
+                raise ValidationError({
+                    "work_order": (
+                        "La orden no corresponde a la suscripción de la "
+                        "propuesta."
+                    ),
+                })
+
+        if self.status == self.Status.DISCARDED and not self.note.strip():
+            raise ValidationError({
+                "note": "Descartar una deuda de traslado exige un motivo.",
+            })
+
+    @property
+    def is_pending(self):
+        return self.status == self.Status.PENDING
