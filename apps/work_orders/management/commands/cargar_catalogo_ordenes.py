@@ -20,7 +20,7 @@ from django.db import transaction
 from django.db.models import ProtectedError
 
 from apps.services.models import ServiceType
-from apps.work_orders.models import OrderReason, OrderResult, OrderType
+from apps.work_orders.models import OrderReason, OrderResult, OrderSubtype, OrderType
 
 TECHNICAL = OrderReason.Classification.TECHNICAL
 ADMINISTRATIVE = OrderReason.Classification.ADMINISTRATIVE
@@ -86,6 +86,13 @@ ORDER_CATALOG = [
         ],
     ),
     (
+        "TRANSFER",
+        "TRASLADO",
+        "Cambio de ubicación del servicio solicitado por el abonado.",
+        EVERY_SERVICE,
+        [],
+    ),
+    (
         "REQUIREMENT",
         "REQUERIMIENTO",
         "Solicitud del abonado que no es avería ni alta ni baja.",
@@ -94,7 +101,6 @@ ORDER_CATALOG = [
             ("WIFI_PASSWORD", "CLAVE DE WIFI", TECHNICAL),
             ("TECH_CHANGE", "CAMBIO DE TECNOLOGÍA", TECHNICAL),
             ("DROP_REVIEW", "REVISIÓN DROP", TECHNICAL),
-            ("TRANSFER", "TRASLADO", TECHNICAL),
             ("FTTH_MIGRATION", "MIGRACIÓN A FTTH", TECHNICAL),
             ("EQUIPMENT_CHANGE", "CAMBIO DE EQUIPO", TECHNICAL),
             ("REPEATER", "INSTALACIÓN DE REPETIDOR", TECHNICAL),
@@ -212,6 +218,16 @@ RETIRED_ORDER_TYPES = [
     "TAC_INCIDENT",
 ]
 
+TRANSFER_SUBTYPES = (
+    ("INTERNAL", "TRASLADO INTERNO"),
+    ("EXTERNAL", "TRASLADO EXTERNO"),
+)
+
+TRANSFER_RESULTS = (
+    ("SUCCESSFUL", "TRASLADO EJECUTADO", True),
+    ("NOT_COMPLETED", "TRASLADO NO EJECUTADO", False),
+)
+
 
 class Command(BaseCommand):
     help = (
@@ -239,6 +255,8 @@ class Command(BaseCommand):
 
         services = self._load_service_types()
         stats = self._load_order_catalog(services)
+        self._load_transfer_catalog()
+        self._retire_legacy_transfer_reason()
         self._apply_legacy_scopes(services)
         self._load_outside_plant_results()
         self._retire_order_types()
@@ -342,6 +360,53 @@ class Command(BaseCommand):
             )
 
         return stats
+
+    def _load_transfer_catalog(self):
+        """Subtipos y resultados propios del tipo TRASLADO."""
+        order_type = OrderType.objects.get(code="TRANSFER")
+
+        for code, name in TRANSFER_SUBTYPES:
+            OrderSubtype.objects.update_or_create(
+                order_type=order_type,
+                code=code,
+                defaults={
+                    "name": name,
+                    "is_active": True,
+                },
+            )
+
+        for code, name, is_success in TRANSFER_RESULTS:
+            OrderResult.objects.update_or_create(
+                order_type=order_type,
+                code=code,
+                defaults={
+                    "name": name,
+                    "is_success": is_success,
+                    "is_active": True,
+                },
+            )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "  OK TRASLADO: INTERNO / EXTERNO · resultados operativos"
+            )
+        )
+
+    def _retire_legacy_transfer_reason(self):
+        """Deja de ofrecer REQUERIMIENTO > TRASLADO sin borrar historial."""
+        updated = OrderReason.objects.filter(
+            order_type__code="REQUIREMENT",
+            code="TRANSFER",
+            is_active=True,
+        ).update(is_active=False)
+
+        if updated:
+            self.stdout.write(
+                self.style.WARNING(
+                    "  OK REQUERIMIENTO > TRASLADO: desactivado; "
+                    "el traslado ahora es un tipo de OT propio"
+                )
+            )
 
     def _load_outside_plant_results(self):
         order_type = OrderType.objects.get(code="OUTSIDE_PLANT")

@@ -1836,6 +1836,31 @@ class CutDetail(models.Model):
         return f"Detalle corte - {self.work_order.order_number}"
 
 class TransferDetail(models.Model):
+    """Solicitud y constatación técnica de un traslado.
+
+    El destino solicitado por ATC no modifica el domicilio oficial. En un
+    traslado externo el técnico confirma el punto real en campo y recién la
+    liquidación exitosa mueve la suscripción a esa nueva dirección.
+    """
+
+    class ChargeMode(models.TextChoices):
+        UPFRONT_FULL = (
+            "UPFRONT_FULL",
+            "Cobrar monto informado al solicitar",
+        )
+        UPFRONT_BASE = (
+            "UPFRONT_BASE",
+            "Cobrar solo tarifa base al solicitar",
+        )
+        AFTER_TECHNICAL = (
+            "AFTER_TECHNICAL",
+            "Definir cobro después de constatación técnica",
+        )
+
+    class CollectionMode(models.TextChoices):
+        IMMEDIATE = "IMMEDIATE", "Cobrar el mismo día"
+        NEXT_INVOICE = "NEXT_INVOICE", "Cargar a la próxima mensualidad"
+
     work_order = models.OneToOneField(
         WorkOrder,
         on_delete=models.CASCADE,
@@ -1852,13 +1877,15 @@ class TransferDetail(models.Model):
         verbose_name="Dirección anterior"
     )
 
+    # Dirección REAL confirmada en campo. Puede estar vacía mientras la OT
+    # externa sigue pendiente o en atención.
     new_address = models.ForeignKey(
         CustomerAddress,
         on_delete=models.PROTECT,
         related_name="transfer_destinations",
         null=True,
         blank=True,
-        verbose_name="Nueva dirección"
+        verbose_name="Nueva dirección confirmada"
     )
 
     previous_location = models.CharField(
@@ -1871,6 +1898,107 @@ class TransferDetail(models.Model):
         max_length=200,
         blank=True,
         verbose_name="Nueva ubicación interna"
+    )
+
+    # Lo que ATC registra al recibir la solicitud. Es una referencia operativa,
+    # no el domicilio oficial de la suscripción.
+    requested_address_text = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Destino solicitado",
+    )
+    requested_reference = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Referencia del destino solicitado",
+    )
+    requested_supply_code = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Suministro informado",
+    )
+    requested_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud solicitada",
+    )
+    requested_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud solicitada",
+    )
+
+    # Constatación del técnico. El suministro/GPS pueden venir de consulta
+    # externa o de la ubicación del teléfono en campo.
+    confirmed_supply_code = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Suministro confirmado",
+    )
+    confirmed_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud confirmada",
+    )
+    confirmed_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud confirmada",
+    )
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="confirmed_transfer_destinations",
+        null=True,
+        blank=True,
+        verbose_name="Destino confirmado por",
+    )
+    confirmed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Destino confirmado el",
+    )
+
+    # Snapshot comercial. Si las tarifas cambian mañana, una OT antigua debe
+    # seguir explicando qué precio base se informó cuando fue registrada.
+    base_fee_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Tarifa base del traslado",
+    )
+    estimated_extra_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Adicional estimado",
+    )
+    customer_agreed_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Monto informado/aceptado por el abonado",
+    )
+    charge_mode = models.CharField(
+        max_length=30,
+        choices=ChargeMode.choices,
+        default=ChargeMode.UPFRONT_BASE,
+        verbose_name="Momento de definición del cobro",
+    )
+    collection_mode = models.CharField(
+        max_length=20,
+        choices=CollectionMode.choices,
+        default=CollectionMode.IMMEDIATE,
+        verbose_name="Forma prevista de cobro",
     )
 
     requires_additional_cabling = models.BooleanField(
@@ -1909,6 +2037,33 @@ class TransferDetail(models.Model):
         customer = self.work_order.subscription.customer
         current_address = self.work_order.subscription.address
 
+        if self.base_fee_snapshot < 0 or self.estimated_extra_amount < 0:
+            raise ValidationError(
+                "Los importes estimados del traslado no pueden ser negativos."
+            )
+
+        if (
+            self.requested_latitude is None
+        ) != (
+            self.requested_longitude is None
+        ):
+            raise ValidationError({
+                "requested_latitude": (
+                    "La ubicación solicitada debe incluir latitud y longitud."
+                )
+            })
+
+        if (
+            self.confirmed_latitude is None
+        ) != (
+            self.confirmed_longitude is None
+        ):
+            raise ValidationError({
+                "confirmed_latitude": (
+                    "La ubicación confirmada debe incluir latitud y longitud."
+                )
+            })
+
         if self.previous_address:
             if self.previous_address.customer_id != customer.id:
                 raise ValidationError({
@@ -1924,6 +2079,18 @@ class TransferDetail(models.Model):
                     "new_address": (
                         "La nueva dirección debe pertenecer "
                         "al cliente de la suscripción."
+                    )
+                })
+
+            if (
+                self.new_address.zone_id
+                and self.work_order.branch_id
+                and self.new_address.zone.branch_id != self.work_order.branch_id
+            ):
+                raise ValidationError({
+                    "new_address": (
+                        "La dirección confirmada debe pertenecer a la sede "
+                        "destino de la orden."
                     )
                 })
 
@@ -1959,11 +2126,11 @@ class TransferDetail(models.Model):
                     )
                 })
 
-            if not self.new_address:
+            if not self.new_address and not self.requested_address_text.strip():
                 raise ValidationError({
-                    "new_address": (
-                        "Un traslado externo requiere "
-                        "una nueva dirección."
+                    "requested_address_text": (
+                        "Un traslado externo debe registrar el destino "
+                        "solicitado por el abonado."
                     )
                 })
 
@@ -1994,6 +2161,10 @@ class TransferDetail(models.Model):
             raise ValidationError({
                 "work_order": "El subtipo de traslado no es válido."
             })
+
+    @property
+    def estimated_total(self):
+        return self.base_fee_snapshot + self.estimated_extra_amount
 
     def __str__(self):
         return f"Detalle traslado - {self.work_order.order_number}"

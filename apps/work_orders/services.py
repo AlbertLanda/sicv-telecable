@@ -1,8 +1,11 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.customers.models import CustomerAddress
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     DEFINITIVE_CUT_REASONS,
@@ -10,6 +13,7 @@ from apps.work_orders.models import (
     IncidentDetail,
     OrderType,
     OutsidePlantDetail,
+    TransferDetail,
     WorkOrder,
     WorkOrderParticipation,
     WorkOrderEvidence,
@@ -44,6 +48,12 @@ ORDER_NUMBER_PADDING = 6
 INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
 INCIDENT_ORDER_TYPE_CODE = "INCIDENT"
 OUTSIDE_PLANT_ORDER_TYPE_CODE = "OUTSIDE_PLANT"
+TRANSFER_ORDER_TYPE_CODE = "TRANSFER"
+
+TRANSFER_BASE_FEES = {
+    "INTERNAL": Decimal("20.00"),
+    "EXTERNAL": Decimal("30.00"),
+}
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -100,8 +110,18 @@ def generate_order_number(year=None):
     return format_order_number(year, sequence.last_number)
 
 
-def _resolve_branch(subscription, branch):
-    """Resuelve la sede tanto para órdenes de abonado como para PEX."""
+def _resolve_branch(
+    subscription,
+    branch,
+    order_type=None,
+    subtype=None,
+):
+    """Resuelve la sede operativa de la OT.
+
+    Un traslado externo es la excepción deliberada: puede salir de Jauja y
+    atenderse en La Oroya/Huancayo, así que su sede de trabajo es la del
+    destino, no necesariamente la sede histórica del abonado.
+    """
     if subscription is None:
         if branch is None or branch.pk is None:
             raise ValidationError(
@@ -114,7 +134,14 @@ def _resolve_branch(subscription, branch):
     if branch is None:
         return customer_branch
 
-    if branch.pk != customer_branch.pk:
+    is_external_transfer = (
+        order_type is not None
+        and order_type.code == TRANSFER_ORDER_TYPE_CODE
+        and subtype is not None
+        and subtype.code == "EXTERNAL"
+    )
+
+    if branch.pk != customer_branch.pk and not is_external_transfer:
         raise ValidationError(
             "La sede indicada no corresponde a la sede del cliente "
             "de la suscripción."
@@ -306,7 +333,12 @@ def create_work_order(
     _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
 
-    branch = _resolve_branch(subscription, branch)
+    branch = _resolve_branch(
+        subscription,
+        branch,
+        order_type=order_type,
+        subtype=subtype,
+    )
     zone = _resolve_zone(subscription, zone, branch)
 
     order = WorkOrder(
@@ -336,6 +368,259 @@ def create_work_order(
     order.save()
 
     return order
+
+@transaction.atomic
+def create_transfer_work_order(
+    *,
+    subscription,
+    created_by,
+    subtype,
+    customer=None,
+    destination_branch=None,
+    destination_zone=None,
+    previous_location="",
+    new_location="",
+    requested_address_text="",
+    requested_reference="",
+    requested_supply_code="",
+    requested_latitude=None,
+    requested_longitude=None,
+    estimated_extra_amount=Decimal("0.00"),
+    customer_agreed_amount=None,
+    charge_mode=TransferDetail.ChargeMode.UPFRONT_BASE,
+    collection_mode=TransferDetail.CollectionMode.IMMEDIATE,
+    attention_type=None,
+    priority=None,
+    detail="",
+    scheduled_at=None,
+):
+    """Registra un TRASLADO con su estimación y propuesta de cobro.
+
+    La propuesta no es deuda todavía. ATC puede resolverla el mismo día o
+    dejarla pendiente según la modalidad elegida. En externo, la sede/zona
+    de la OT representan el destino operativo para que llegue a la cuadrilla
+    que realmente la atenderá.
+    """
+    try:
+        order_type = OrderType.objects.get(
+            code=TRANSFER_ORDER_TYPE_CODE,
+            is_active=True,
+        )
+    except OrderType.DoesNotExist as exc:
+        raise ValidationError(
+            "El catálogo no contiene un tipo de orden TRASLADO activo."
+        ) from exc
+
+    if subtype is None or subtype.order_type_id != order_type.pk:
+        raise ValidationError(
+            "Debe indicar si el traslado es interno o externo."
+        )
+
+    if subtype.code not in TRANSFER_BASE_FEES:
+        raise ValidationError("El subtipo de traslado no es válido.")
+
+    try:
+        estimated_extra_amount = Decimal(estimated_extra_amount or 0)
+    except Exception as exc:
+        raise ValidationError("El adicional estimado no es válido.") from exc
+
+    if estimated_extra_amount < 0:
+        raise ValidationError("El adicional estimado no puede ser negativo.")
+
+    base_fee = TRANSFER_BASE_FEES[subtype.code]
+
+    valid_charge_modes = {
+        value for value, _label in TransferDetail.ChargeMode.choices
+    }
+    if charge_mode not in valid_charge_modes:
+        raise ValidationError("La modalidad de definición del cobro no es válida.")
+
+    valid_collection_modes = {
+        value for value, _label in TransferDetail.CollectionMode.choices
+    }
+    if collection_mode not in valid_collection_modes:
+        raise ValidationError("La modalidad de cobro no es válida.")
+
+    if customer_agreed_amount in ("", None):
+        if charge_mode == TransferDetail.ChargeMode.UPFRONT_BASE:
+            customer_agreed_amount = base_fee
+        elif charge_mode == TransferDetail.ChargeMode.UPFRONT_FULL:
+            customer_agreed_amount = base_fee + estimated_extra_amount
+        else:
+            customer_agreed_amount = None
+    else:
+        try:
+            customer_agreed_amount = Decimal(customer_agreed_amount)
+        except Exception as exc:
+            raise ValidationError(
+                "El monto informado al abonado no es válido."
+            ) from exc
+
+        if customer_agreed_amount < 0:
+            raise ValidationError(
+                "El monto informado al abonado no puede ser negativo."
+            )
+
+    if subtype.code == "INTERNAL":
+        destination_branch = subscription.customer.branch
+        destination_zone = subscription.address.zone
+    else:
+        if destination_branch is None or destination_branch.pk is None:
+            raise ValidationError(
+                "Un traslado externo debe indicar la sede destino."
+            )
+        if destination_zone is None or destination_zone.pk is None:
+            raise ValidationError(
+                "Un traslado externo debe indicar la zona destino."
+            )
+        if destination_zone.branch_id != destination_branch.pk:
+            raise ValidationError(
+                "La zona destino no pertenece a la sede destino."
+            )
+        if not (requested_address_text or "").strip():
+            raise ValidationError(
+                "Un traslado externo debe registrar el destino solicitado."
+            )
+
+    order = create_work_order(
+        subscription=subscription,
+        order_type=order_type,
+        created_by=created_by,
+        customer=customer,
+        branch=destination_branch,
+        zone=destination_zone,
+        subtype=subtype,
+        attention_type=attention_type,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
+
+    transfer = TransferDetail(
+        work_order=order,
+        previous_address=(
+            subscription.address if subtype.code == "EXTERNAL" else None
+        ),
+        previous_location=(previous_location or "").strip(),
+        new_location=(new_location or "").strip(),
+        requested_address_text=(requested_address_text or "").strip(),
+        requested_reference=(requested_reference or "").strip(),
+        requested_supply_code=(requested_supply_code or "").strip(),
+        requested_latitude=requested_latitude,
+        requested_longitude=requested_longitude,
+        base_fee_snapshot=base_fee,
+        estimated_extra_amount=estimated_extra_amount,
+        customer_agreed_amount=customer_agreed_amount,
+        charge_mode=charge_mode,
+        collection_mode=collection_mode,
+        requires_additional_cabling=estimated_extra_amount > 0,
+    )
+    transfer.full_clean()
+    transfer.save()
+
+    from apps.payments.proposals import propose_transfer_charge
+    propose_transfer_charge(work_order=order)
+
+    return order
+
+
+@transaction.atomic
+def confirm_external_transfer_destination(
+    *,
+    order,
+    user,
+    address,
+    district,
+    zone,
+    reference="",
+    supply_code="",
+    latitude=None,
+    longitude=None,
+):
+    """El técnico confirma/corrige el domicilio real de un traslado externo."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+        or order.subtype_id is None
+        or order.subtype.code != "EXTERNAL"
+    ):
+        raise ValidationError(
+            "Solo un traslado externo admite confirmación de nuevo domicilio."
+        )
+
+    if order.status not in {
+        WorkOrder.Status.IN_PROGRESS,
+        WorkOrder.Status.ATTENDED,
+    }:
+        raise ValidationError(
+            "El destino solo puede confirmarse durante o al finalizar la atención."
+        )
+
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError(
+            "Debe indicar un técnico activo que confirma el domicilio."
+        )
+
+    if order.assigned_technician_id != user.pk:
+        raise ValidationError(
+            "Solo el técnico que atiende la orden puede confirmar el domicilio."
+        )
+
+    if zone is None or zone.pk is None or zone.branch_id != order.branch_id:
+        raise ValidationError(
+            "La zona confirmada debe pertenecer a la sede destino de la orden."
+        )
+
+    address = (address or "").strip()
+    district = (district or "").strip()
+    if not address or not district:
+        raise ValidationError(
+            "Debe indicar dirección y distrito del domicilio confirmado."
+        )
+
+    if (latitude is None) != (longitude is None):
+        raise ValidationError(
+            "La ubicación confirmada debe incluir latitud y longitud."
+        )
+
+    transfer = TransferDetail.objects.select_for_update().get(work_order=order)
+
+    if transfer.new_address_id:
+        destination = transfer.new_address
+        destination.zone = zone
+        destination.address = address
+        destination.reference = (reference or "").strip()
+        destination.district = district
+        destination.electrical_supply_code = (supply_code or "").strip()
+        destination.latitude = latitude
+        destination.longitude = longitude
+        destination.is_active = True
+        destination.save()
+    else:
+        destination = CustomerAddress.objects.create(
+            customer=order.subscription.customer,
+            zone=zone,
+            address=address,
+            reference=(reference or "").strip(),
+            district=district,
+            electrical_supply_code=(supply_code or "").strip(),
+            latitude=latitude,
+            longitude=longitude,
+            is_primary=False,
+            is_active=True,
+        )
+
+    transfer.new_address = destination
+    transfer.confirmed_supply_code = (supply_code or "").strip()
+    transfer.confirmed_latitude = latitude
+    transfer.confirmed_longitude = longitude
+    transfer.confirmed_by = user
+    transfer.confirmed_at = timezone.now()
+    transfer.full_clean()
+    transfer.save()
+
+    return transfer
+
 
 @transaction.atomic
 def create_outside_plant_order(
@@ -1353,6 +1638,8 @@ def liquidate_order(
         )
         participation.save()
 
+    _finalize_transfer_on_liquidation(order, user)
+
     order.change_status(
         WorkOrder.Status.LIQUIDATED,
         user=user,
@@ -1765,6 +2052,7 @@ def _apply_reconnection_result(order, result_code):
     )
 
 def _apply_transfer_result(order, result_code):
+    """Atender un traslado no cambia todavía el domicilio oficial."""
     if result_code != "SUCCESSFUL":
         return
 
@@ -1782,25 +2070,42 @@ def _apply_transfer_result(order, result_code):
 
     transfer_detail.full_clean()
 
-    subtype_code = order.subtype.code
-    subscription = order.subscription
-
-    if subtype_code == "INTERNAL":
-        # En un traslado interno la dirección del servicio NO cambia.
-        return
-
-    if subtype_code == "EXTERNAL":
-        subscription.address = transfer_detail.new_address
-
-        subscription.save(
-            update_fields=[
-                "address",
-                "updated_at",
-            ]
+    if order.subtype.code not in {"INTERNAL", "EXTERNAL"}:
+        raise ValidationError(
+            "El subtipo de traslado no es válido."
         )
 
+
+def _finalize_transfer_on_liquidation(order, user):
+    """Aplica el domicilio real solo al liquidar un traslado exitoso."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+        or order.result_id is None
+        or not order.result.is_success
+    ):
         return
 
-    raise ValidationError(
-        "El subtipo de traslado no es válido."
-    )
+    transfer = order.transfer_detail
+
+    if order.subtype.code == "INTERNAL":
+        return
+
+    if order.subtype.code != "EXTERNAL":
+        raise ValidationError("El subtipo de traslado no es válido.")
+
+    if transfer.new_address_id is None:
+        raise ValidationError(
+            "Antes de liquidar un traslado externo el técnico debe confirmar "
+            "el nuevo domicilio."
+        )
+
+    if transfer.confirmed_by_id != getattr(user, "pk", None):
+        raise ValidationError(
+            "El domicilio debe haber sido confirmado por el técnico que "
+            "liquida la orden."
+        )
+
+    subscription = order.subscription
+    subscription.address = transfer.new_address
+    subscription.save(update_fields=["address", "updated_at"])
