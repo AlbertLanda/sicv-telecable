@@ -217,7 +217,7 @@ class SubscriptionCreateTests(TestCase):
         self.assertFormError(
             response.context["form"],
             "seller",
-            "Este campo es obligatorio.",
+            "Seleccione quién realizó la venta.",
         )
         self.assertFalse(
             Subscription.objects.filter(customer=self.customer).exists()
