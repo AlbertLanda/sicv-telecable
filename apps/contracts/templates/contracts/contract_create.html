@@ -370,7 +370,11 @@ que es donde consta cuál se instaló.
 
     function alternarPlayhub() {
         var configuracion = configuracionServicio[servicio.value] || {};
-        var requiere = Boolean(configuracion.requires_playhub_account);
+        var planActual = planesDelServicio().filter(function (item) {
+            return String(item.id) === String(plan.value);
+        })[0] || null;
+        var requiere = Boolean(configuracion.requires_playhub_account)
+            || Boolean(planActual && planActual.included_app_plan_id);
 
         playhub.hidden = !requiere;
 
@@ -394,6 +398,7 @@ que es donde consta cuál se instaló.
 
     plan.addEventListener("change", function () {
         mostrarSuscripcion(false);
+        alternarPlayhub();
     });
 })();
 </script>
