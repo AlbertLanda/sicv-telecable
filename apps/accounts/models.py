@@ -45,6 +45,7 @@ class User(AbstractUser):
                 "accounts.add_user",
                 "accounts.change_user",
                 "customers.discard_incomplete_registration",
+                "services.view_subscription",
             }
         ),
         Role.ATC: frozenset(
