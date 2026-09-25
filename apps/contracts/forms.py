@@ -320,6 +320,7 @@ class InstallationWorkOrderForm(forms.Form):
             .filter(is_active=True)
             .filter(
                 models.Q(is_salesperson=True)
+                | models.Q(role=User.Role.SALES)
                 | models.Q(role=User.Role.ADMIN)
             )
             .order_by("first_name", "last_name", "username")
