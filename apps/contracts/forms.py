@@ -4,7 +4,7 @@ from django.db import models
 from .models import Contract
 from .subscriptions import resolver_suscripcion, suscripciones_contratables
 from apps.accounts.models import User
-from apps.services.models import Plan, ServiceType
+from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.models import OrderReason, WorkOrder
 
 
@@ -182,9 +182,32 @@ class ContractCreateForm(forms.ModelForm):
                 )
 
             elif subscription is None:
+                missing_seller = (
+                    Subscription.objects
+                    .filter(
+                        customer=self.customer,
+                        is_active=True,
+                        status=Subscription.Status.PRESALE,
+                        service_type=service_type,
+                        plan=plan,
+                        seller__isnull=True,
+                    )
+                    .exclude(contracts__is_active=True)
+                    .exists()
+                )
+
                 cantidad = candidatas.count()
 
-                if cantidad > 1:
+                if missing_seller:
+                    self.add_error(
+                        None,
+                        (
+                            "Existe una suscripción en Preventa para este "
+                            "servicio y plan, pero falta identificar al vendedor. "
+                            "Complete la atribución comercial antes del contrato."
+                        ),
+                    )
+                elif cantidad > 1:
                     self.add_error(
                         None,
                         (
