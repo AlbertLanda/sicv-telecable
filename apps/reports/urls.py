@@ -8,6 +8,11 @@ app_name = "reports"
 
 urlpatterns = [
     path(
+        "ventas/",
+        views.SalesReportView.as_view(),
+        name="sales",
+    ),
+    path(
         "materiales/",
         views.MaterialReportView.as_view(),
         name="materials",
