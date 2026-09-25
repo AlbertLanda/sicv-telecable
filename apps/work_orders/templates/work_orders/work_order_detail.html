@@ -768,6 +768,83 @@
 
             </div>
             {% endif %}
+
+            {% if order.order_type.code == "TRANSFER" %}
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header panel-head">
+                    Conciliación del traslado
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Monto acordado</div>
+                            <div class="ot-field-value">
+                                {% if order.transfer_detail.customer_agreed_amount != None %}
+                                    S/ {{ order.transfer_detail.customer_agreed_amount|floatformat:2 }}
+                                {% else %}
+                                    Pendiente
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Monto ya emitido</div>
+                            <div class="ot-field-value">
+                                S/ {{ order.transfer_detail.initially_charged_amount|floatformat:2 }}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Costo técnico real</div>
+                            <div class="ot-field-value">
+                                {% if order.transfer_detail.actual_total != None %}
+                                    S/ {{ order.transfer_detail.actual_total|floatformat:2 }}
+                                {% else %}
+                                    Pendiente de liquidación
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Diferencia</div>
+                            <div class="ot-field-value">
+                                {% if order.transfer_detail.reconciliation_difference != None %}
+                                    S/ {{ order.transfer_detail.reconciliation_difference|floatformat:2 }}
+                                {% else %}
+                                    Pendiente
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Estado</div>
+                            <div class="ot-field-value">
+                                {{ order.transfer_detail.get_reconciliation_status_display }}
+                            </div>
+                        </div>
+                        {% if order.transfer_detail.reconciliation_status == "RESOLVED" %}
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Decisión</div>
+                            <div class="ot-field-value">
+                                {{ order.transfer_detail.get_reconciliation_action_display }}
+                            </div>
+                        </div>
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Sustento</div>
+                            <div class="ot-field-value">
+                                {{ order.transfer_detail.reconciliation_note|linebreaksbr }}
+                            </div>
+                        </div>
+                        <div class="col-12 text-muted small">
+                            Resuelta
+                            {% if order.transfer_detail.reconciled_at %}
+                                el {{ order.transfer_detail.reconciled_at|date:"d/m/Y H:i" }}
+                            {% endif %}
+                            {% if order.transfer_detail.reconciled_by %}
+                                por {{ order.transfer_detail.reconciled_by }}
+                            {% endif %}.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
 
