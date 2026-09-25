@@ -105,6 +105,14 @@ def receipt_lines(receipt):
 
         descripcion = f"COD {customer.code} {charge.description}"
 
+        componentes = list(charge.components.all())
+        if len(componentes) > 1:
+            detalle_componentes = " + ".join(
+                f"{component.description} S/{component.amount:.2f}"
+                for component in componentes
+            )
+            descripcion = f"{descripcion} [{detalle_componentes}]"
+
         if charge.period_label:
             descripcion = f"{descripcion} PERIODO {charge.period_label}"
 
