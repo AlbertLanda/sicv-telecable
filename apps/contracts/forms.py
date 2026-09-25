@@ -1,4 +1,5 @@
 from django import forms
+from django.db import models
 
 from .models import Contract
 from .subscriptions import resolver_suscripcion, suscripciones_contratables
@@ -295,7 +296,10 @@ class InstallationWorkOrderForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        subscription = kwargs.pop("subscription", None)
         super().__init__(*args, **kwargs)
+
+        self.subscription = subscription
 
         # Solo motivos activos del catálogo de INSTALACIÓN: el mismo
         # criterio de alcance que ya aplica WorkOrderCreateForm para el
@@ -309,14 +313,22 @@ class InstallationWorkOrderForm(forms.Form):
             .order_by("name")
         )
 
-        # Solo usuarios activos con rol Ventas: el mismo criterio que
-        # _validate_seller exige en el servicio, para que el formulario
-        # nunca ofrezca una opción que el servicio vaya a rechazar.
+        # Las altas nuevas ya llegan con vendedor en la suscripción.
+        # El selector permanece para contratos históricos que no lo tengan.
         self.fields["seller"].queryset = (
             User.objects
+            .filter(is_active=True)
             .filter(
-                role=User.Role.SALES,
-                is_active=True,
+                models.Q(is_salesperson=True)
+                | models.Q(role=User.Role.ADMIN)
             )
             .order_by("first_name", "last_name", "username")
         )
+
+        if subscription is not None and subscription.seller_id:
+            self.fields["seller"].initial = subscription.seller_id
+            self.fields["seller"].disabled = True
+            self.fields["seller"].required = False
+            self.fields["seller"].help_text = (
+                "Se heredó de la venta registrada en la suscripción."
+            )
