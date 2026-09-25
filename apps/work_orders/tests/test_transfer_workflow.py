@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import Permission
@@ -7,7 +8,7 @@ from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.payments.models import Charge, ChargeConcept, ProposedCharge
-from apps.payments.proposals import suggested_proposed_charge_amount
+from apps.payments.proposals import accept_proposed_charge, suggested_proposed_charge_amount
 from apps.services.models import Subscription
 from apps.work_orders.models import TransferDetail, WorkOrder, WorkOrderLiquidation
 from apps.work_orders.services import (
@@ -508,4 +509,52 @@ class TransferWorkflowTests(WorkOrderTestCase):
             Decimal("28.00"),
         )
         self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+
+    def test_after_technical_accepting_real_cost_closes_reconciliation(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+            charge_mode=TransferDetail.ChargeMode.AFTER_TECHNICAL,
+        )
+        proposal = ProposedCharge.objects.get(work_order=order)
+
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+            ],
+        )
+
+        accept_proposed_charge(
+            proposal=proposal,
+            user=self.atc_user,
+            amount=Decimal("28.00"),
+            due_date=date(2026, 9, 30),
+        )
+
+        detail = TransferDetail.objects.get(work_order=order)
+        proposal.refresh_from_db()
+
+        self.assertEqual(detail.customer_agreed_amount, Decimal("28.00"))
+        self.assertEqual(detail.reconciliation_difference, Decimal("0.00"))
+        self.assertEqual(
+            detail.reconciliation_status,
+            TransferDetail.ReconciliationStatus.MATCHED,
+        )
+        self.assertEqual(proposal.charge.amount, Decimal("28.00"))
 
