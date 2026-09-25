@@ -182,6 +182,9 @@ class PersonnelForm(forms.ModelForm):
         role = cleaned.get("role")
         technician_area = cleaned.get("technician_area")
 
+        if role == User.Role.SALES:
+            cleaned["is_salesperson"] = True
+
         if role == User.Role.TECHNICIAN and not technician_area:
             self.add_error(
                 "technician_area",
