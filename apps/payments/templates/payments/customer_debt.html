@@ -27,8 +27,21 @@
     cuándo tengo?»-; el número y el monto quedan al pie, que es lo que se mira
     después. Toda la tarjeta enlaza al compromiso.
     {% endcomment %}
-    {% if pending_proposals or active_commitments %}
+    {% if pending_transfer_reconciliations or pending_proposals or active_commitments %}
         <div class="tc-pendientes">
+
+            {% for transfer in pending_transfer_reconciliations %}
+                {% if can_resolve_transfer_reconciliation %}
+                    <a class="tc-pendiente"
+                       href="{% url 'payments:transfer_reconciliation_resolve' pk=customer.pk transfer_pk=transfer.pk %}">
+                        {% include "payments/_transfer_reconciliation_card.html" %}
+                    </a>
+                {% else %}
+                    <div class="tc-pendiente">
+                        {% include "payments/_transfer_reconciliation_card.html" %}
+                    </div>
+                {% endif %}
+            {% endfor %}
 
             {% comment %}
             Primero lo que espera una decisión y después lo ya decidido. Una
