@@ -33,18 +33,20 @@ class TransferProposalTestCase(PaymentsTestCase):
     def setUp(self):
         super().setUp()
 
-        self.transfer_type = OrderType.objects.create(
+        # TRASLADO y sus subtipos ya vienen sembrados por la migración
+        # 0030_seed_transfer_catalog; se reutilizan en vez de crearlos.
+        self.transfer_type, _ = OrderType.objects.update_or_create(
             code="TRANSFER",
-            name="TRASLADO",
+            defaults={"name": "TRASLADO", "is_active": True},
         )
-        self.internal = OrderSubtype.objects.create(
+        self.internal, _ = OrderSubtype.objects.update_or_create(
             order_type=self.transfer_type,
             code="INTERNAL",
-            name="TRASLADO INTERNO",
+            defaults={"name": "TRASLADO INTERNO", "is_active": True},
         )
-        self.requirement = OrderType.objects.create(
+        self.requirement, _ = OrderType.objects.update_or_create(
             code="REQUIREMENT",
-            name="REQUERIMIENTO",
+            defaults={"name": "REQUERIMIENTO", "is_active": True},
         )
 
         self.concept, _ = ChargeConcept.objects.update_or_create(
