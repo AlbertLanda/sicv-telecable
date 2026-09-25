@@ -392,6 +392,56 @@ class Charge(models.Model):
         return self.status
 
 
+class ChargeComponent(models.Model):
+    """Desglose interno de un cargo sin convertirlo en deudas adicionales."""
+
+    class Kind(models.TextChoices):
+        MAIN = "MAIN", "Servicio principal"
+        INCLUDED_APP = "INCLUDED_APP", "APP incluida"
+
+    charge = models.ForeignKey(
+        Charge,
+        on_delete=models.CASCADE,
+        related_name="components",
+        verbose_name="Cargo",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=Kind.choices,
+        verbose_name="Componente",
+    )
+    code = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Código",
+    )
+    description = models.CharField(
+        max_length=160,
+        verbose_name="Detalle",
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Monto incluido",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Componente de cargo"
+        verbose_name_plural = "Componentes de cargos"
+        ordering = ["charge", "kind", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["charge", "kind"],
+                name="payments_unique_charge_component_kind",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.charge} · {self.description}"
+
+
 class PaymentCommitmentInstallment(models.Model):
     """Una de las cuotas en que el abonado promete pagar lo comprometido.
 
