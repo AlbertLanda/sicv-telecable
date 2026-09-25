@@ -88,7 +88,16 @@
         </div>
     </div>
 
-    {% if existing_contract %}
+    {% if not subscription.seller %}
+        <div class="alert alert-warning">
+            <strong>Falta identificar al vendedor.</strong>
+            Este paso es obligatorio antes de generar el contrato.
+        </div>
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-outline-secondary">Continuar después</a>
+            <a href="{% url 'services:subscription_seller' customer.pk subscription.pk %}" class="btn btn-primary">Completar vendedor</a>
+        </div>
+    {% elif existing_contract %}
         <div class="alert alert-info">Esta suscripción ya tiene contrato <strong>{{ existing_contract.contract_number }}</strong>. <a href="{% url 'contracts:contract_summary' customer.pk existing_contract.pk %}" class="alert-link">Ver contrato</a></div>
     {% else %}
         <div class="alert alert-secondary">La Orden de Instalación se generará después del contrato. Los excesos de UTP, RG6 y Drop se calcularán con el metraje real registrado por el técnico y la regla vigente de sede/servicio.</div>
