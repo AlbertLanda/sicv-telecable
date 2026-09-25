@@ -1861,6 +1861,18 @@ class TransferDetail(models.Model):
         IMMEDIATE = "IMMEDIATE", "Cobrar el mismo día"
         NEXT_INVOICE = "NEXT_INVOICE", "Cargar a la próxima mensualidad"
 
+    class ReconciliationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pendiente de costo real"
+        MATCHED = "MATCHED", "Sin diferencia"
+        REQUIRES_DECISION = "REQUIRES_DECISION", "Requiere regularización"
+        RESOLVED = "RESOLVED", "Regularización resuelta"
+
+    class ReconciliationAction(models.TextChoices):
+        CHARGE_DIFFERENCE = "CHARGE_DIFFERENCE", "Cobrar diferencia"
+        NEXT_INVOICE = "NEXT_INVOICE", "Cargar diferencia a próxima mensualidad"
+        KEEP_AGREED = "KEEP_AGREED", "Mantener monto acordado"
+        ABSORB = "ABSORB", "Absorber diferencia / cortesía"
+
     work_order = models.OneToOneField(
         WorkOrder,
         on_delete=models.CASCADE,
@@ -2001,6 +2013,46 @@ class TransferDetail(models.Model):
         verbose_name="Forma prevista de cobro",
     )
 
+    # Resultado económico real de la atención. El adicional real se calcula
+    # desde los materiales utilizados y marcados como facturables en la
+    # liquidación. Nunca genera deuda por sí solo.
+    actual_extra_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Adicional técnico real",
+    )
+    reconciliation_status = models.CharField(
+        max_length=30,
+        choices=ReconciliationStatus.choices,
+        default=ReconciliationStatus.PENDING,
+        verbose_name="Estado de conciliación",
+    )
+    reconciliation_action = models.CharField(
+        max_length=30,
+        choices=ReconciliationAction.choices,
+        blank=True,
+        verbose_name="Decisión de regularización",
+    )
+    reconciliation_note = models.TextField(
+        blank=True,
+        verbose_name="Sustento de regularización",
+    )
+    reconciled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reconciled_transfers",
+        null=True,
+        blank=True,
+        verbose_name="Regularización resuelta por",
+    )
+    reconciled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Regularización resuelta el",
+    )
+
     requires_additional_cabling = models.BooleanField(
         default=False,
         verbose_name="Requiere cableado adicional"
@@ -2012,6 +2064,12 @@ class TransferDetail(models.Model):
     class Meta:
         verbose_name = "Detalle de traslado"
         verbose_name_plural = "Detalles de traslado"
+        permissions = [
+            (
+                "resolve_transfer_reconciliation",
+                "Puede resolver regularizaciones económicas de traslados",
+            ),
+        ]
 
     def clean(self):
         super().clean()
@@ -2165,6 +2223,35 @@ class TransferDetail(models.Model):
     @property
     def estimated_total(self):
         return self.base_fee_snapshot + self.estimated_extra_amount
+
+    @property
+    def actual_total(self):
+        if self.actual_extra_amount is None:
+            return None
+        return self.base_fee_snapshot + self.actual_extra_amount
+
+    @property
+    def reconciliation_difference(self):
+        """Diferencia técnica contra lo informado/acordado al abonado.
+
+        En modalidad posterior no existe monto acordado previo; en ese caso
+        todo el costo real queda pendiente de una decisión comercial.
+        """
+        actual = self.actual_total
+        if actual is None:
+            return None
+        agreed = self.customer_agreed_amount or Decimal("0.00")
+        return actual - agreed
+
+    @property
+    def initially_charged_amount(self):
+        proposal = (
+            self.work_order.proposed_charges
+            .filter(status="ACCEPTED", charge__isnull=False)
+            .select_related("charge")
+            .first()
+        )
+        return proposal.charge.amount if proposal is not None else Decimal("0.00")
 
     def __str__(self):
         return f"Detalle traslado - {self.work_order.order_number}"
@@ -2577,6 +2664,20 @@ class WorkOrderLiquidationItem(models.Model):
         verbose_name="Unidad de medida"
     )
 
+    is_billable = models.BooleanField(
+        default=False,
+        verbose_name="Facturable al abonado",
+    )
+
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio unitario facturable",
+    )
+
     remarks = models.TextField(
         blank=True,
         verbose_name="Observación"
@@ -2605,6 +2706,26 @@ class WorkOrderLiquidationItem(models.Model):
             raise ValidationError({
                 "quantity": "La cantidad declarada debe ser mayor que cero."
             })
+
+        if self.is_billable:
+            if self.movement_type != self.MovementType.USED:
+                raise ValidationError({
+                    "is_billable": (
+                        "Solo un material utilizado puede marcarse como facturable."
+                    )
+                })
+            if self.unit_price is None or self.unit_price <= 0:
+                raise ValidationError({
+                    "unit_price": (
+                        "Un material facturable debe indicar un precio unitario mayor que cero."
+                    )
+                })
+
+    @property
+    def billable_amount(self):
+        if not self.is_billable or self.movement_type != self.MovementType.USED:
+            return Decimal("0.00")
+        return self.quantity * self.unit_price
 
     def __str__(self):
         return f"{self.get_movement_type_display()}: {self.material_name} x {self.quantity}"
