@@ -24,8 +24,9 @@ from django.views.generic import FormView, TemplateView
 from apps.organization.context_processors import get_active_branch
 
 from .exporters import CONTENT_TYPES, render
-from .forms import VIEWED_FORMATS, MaterialReportForm
+from .forms import VIEWED_FORMATS, MaterialReportForm, SalesReportForm
 from .materials import build_report
+from .sales import build_sales_report
 
 
 class MaterialReportPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
@@ -110,3 +111,34 @@ class MaterialReportListView(MaterialReportPermissionMixin, TemplateView):
             filename=nombre,
             content_type=CONTENT_TYPES[export_format],
         )
+
+class SalesReportView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """Ventas del día agrupadas por vendedor y su detalle de auditoría."""
+
+    template_name = "reports/sales_report.html"
+    permission_required = "services.view_subscription"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        branch = get_active_branch(self.request)
+
+        data = self.request.GET.copy()
+        if not data:
+            from django.utils import timezone
+            data = {"day": timezone.localdate().isoformat()}
+
+        form = SalesReportForm(data)
+
+        context["form"] = form
+        context["branch"] = branch
+        context["report"] = None
+
+        if form.is_valid():
+            context["report"] = build_sales_report(
+                day=form.cleaned_data["day"],
+                branch=branch,
+                seller=form.cleaned_data.get("seller"),
+            )
+
+        return context
+
