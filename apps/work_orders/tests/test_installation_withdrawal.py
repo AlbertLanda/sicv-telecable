@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from apps.contracts.models import Contract
 from apps.customers.models import Customer, CustomerAddress
-from apps.payments.models import Charge
+from apps.payments.models import Charge, Payment
 from apps.services.models import Subscription
 from apps.work_orders.installation_withdrawal import (
     withdraw_pending_installation,
@@ -158,6 +158,34 @@ class InstallationWithdrawalTests(WorkOrderTestCase):
             "cargos/deuda",
             " ".join(context.exception.messages).lower(),
         )
+        self.assertTrue(
+            Subscription.objects.filter(pk=self.subscription.pk).exists()
+        )
+        self.assertTrue(WorkOrder.objects.filter(pk=order.pk).exists())
+
+    def test_registered_payment_blocks_full_new_customer_withdrawal(self):
+        order = self.create_order(reason=self.installation_reason)
+        Payment.objects.create(
+            customer=self.customer,
+            amount=Decimal("30.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            received_by=self.atc_user,
+            status=Payment.Status.REGISTERED,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            withdraw_pending_installation(
+                order=order,
+                user=self.atc_user,
+                reason="El abonado pidió retirar el alta.",
+            )
+
+        self.assertIn(
+            "pago/comprobante",
+            " ".join(context.exception.messages).lower(),
+        )
+        self.assertTrue(Customer.objects.filter(pk=self.customer.pk).exists())
         self.assertTrue(
             Subscription.objects.filter(pk=self.subscription.pk).exists()
         )
