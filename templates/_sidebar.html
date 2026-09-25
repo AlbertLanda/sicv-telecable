@@ -117,6 +117,9 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             </button>
             <div class="collapse show" id="sidebarReportes">
                 <div class="sidebar-links">
+                    {% if perms.services.view_subscription %}
+                        <a class="sidebar-link" href="{% url 'reports:sales' %}"><i class="bi bi-graph-up-arrow"></i>Ventas por vendedor</a>
+                    {% endif %}
                     {% if perms.inventory.view_workordermaterialmovement %}
                         <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam"></i>Materiales</a>
                     {% endif %}
