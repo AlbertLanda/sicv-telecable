@@ -90,17 +90,12 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
                 subscription.base_installation_fee = quote["installation_fee"]
                 subscription.base_monthly_fee = quote["monthly_fee"]
 
-                last_service_number = (
-                    Subscription.objects
-                    .filter(
-                        customer=locked_customer,
-                        service_type=subscription.service_type,
+                subscription.service_number = (
+                    Subscription.next_service_number(
+                        locked_customer,
+                        subscription.service_type,
                     )
-                    .aggregate(max_number=Max("service_number"))
-                    .get("max_number")
-                    or 0
                 )
-                subscription.service_number = last_service_number + 1
                 subscription.full_clean()
                 subscription.save()
                 self.object = subscription
