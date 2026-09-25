@@ -134,3 +134,13 @@ class TransferCreateWebTests(WorkOrderTestCase):
         self.assertFalse(
             WorkOrder.objects.filter(order_type=self.transfer_type).exists()
         )
+
+    def test_customer_orders_menu_exposes_transfer_entry(self):
+        response = self.client.get(
+            reverse("customers:orders", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Traslado")
+        self.assertContains(response, self.url)
+
