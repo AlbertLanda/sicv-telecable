@@ -2,6 +2,9 @@
 
 from django import forms
 from django.utils import timezone
+from django.db.models import Q
+
+from apps.accounts.models import User
 
 from .materials import DEFAULT_SCOPE, SCOPE_CHOICES
 
@@ -93,3 +96,37 @@ class MaterialReportForm(forms.Form):
             )
 
         return cleaned
+
+class SalesReportForm(forms.Form):
+    """Día y vendedor opcional para el control comercial."""
+
+    day = forms.DateField(
+        label="Fecha",
+        widget=forms.DateInput(
+            attrs={"type": "date", "class": "form-control"},
+            format="%Y-%m-%d",
+        ),
+    )
+    seller = forms.ModelChoiceField(
+        label="Vendedor",
+        queryset=User.objects.none(),
+        required=False,
+        empty_label="Todos los vendedores",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields["day"].initial = timezone.localdate()
+        self.fields["seller"].queryset = (
+            User.objects
+            .filter(
+                Q(is_salesperson=True)
+                | Q(role=User.Role.ADMIN)
+                | Q(sold_subscriptions__isnull=False)
+            )
+            .distinct()
+            .order_by("first_name", "last_name", "username")
+        )
+
