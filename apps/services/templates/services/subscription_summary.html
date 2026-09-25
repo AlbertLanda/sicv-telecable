@@ -100,7 +100,7 @@
             </div>
         </div>
         <div class="d-flex justify-content-end gap-2">
-            <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Cancelar</a>
+            <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Continuar después</a>
             <a href="{% url 'contracts:contract_create' customer.pk %}?subscription={{ subscription.pk }}" class="btn btn-primary">Generar contrato</a>
         </div>
     {% endif %}
