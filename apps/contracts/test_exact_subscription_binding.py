@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from apps.contracts.forms import ContractCreateForm
@@ -7,10 +8,19 @@ from apps.organization.models import Branch, Zone
 from apps.services.models import Plan, ServiceType, Subscription
 
 
+User = get_user_model()
+
+
 class ExactSubscriptionBindingTests(TestCase):
     def setUp(self):
         branch = Branch.objects.create(code="CBIND", name="Sede Binding")
         zone = Zone.objects.create(branch=branch, name="Zona Binding")
+        self.seller = User.objects.create_user(
+            username="seller_binding",
+            password="123",
+            role=User.Role.SALES,
+            branch=branch,
+        )
         self.customer = Customer.objects.create(
             code="CB01-A0000001",
             branch=branch,
@@ -40,6 +50,7 @@ class ExactSubscriptionBindingTests(TestCase):
             )
             return Subscription.objects.create(
                 customer=self.customer,
+                seller=self.seller,
                 address=address,
                 service_type=self.service,
                 plan=self.plan,
