@@ -27,6 +27,22 @@ class Material(models.Model):
         default=Unit.UNIT,
         verbose_name="Unidad de medida",
     )
+    # Lo que se cobra al abonado por cada unidad de medida cuando la avería
+    # es responsabilidad suya. Vacío significa que no se cobra: no todo lo
+    # que el técnico instala es cobrable, y un precio puesto de oficio saldría
+    # en la deuda del abonado como si fuera el oficial.
+    customer_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio al abonado",
+        help_text=(
+            "Se cobra por unidad de medida cuando la avería es "
+            "responsabilidad del cliente. Vacío: no se cobra."
+        ),
+    )
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

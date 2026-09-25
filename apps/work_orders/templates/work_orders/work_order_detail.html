@@ -857,6 +857,93 @@
                 </div>
             </div>
             {% endif %}
+
+            {% if fault_detail %}
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header panel-head">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Responsabilidad de la avería
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Responsable</div>
+                            <div class="ot-field-value">
+                                {{ fault_detail.get_responsibility_display }}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Registrada por</div>
+                            <div class="ot-field-value {% if not fault_detail.pk %}text-muted-value{% endif %}">
+                                {% if fault_detail.pk %}
+                                    {{ fault_detail.get_responsibility_source_display }}{% if fault_detail.responsibility_set_by %} · {{ fault_detail.responsibility_set_by }}{% endif %}
+                                {% else %}
+                                    Sin registrar (por defecto)
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if fault_detail.is_customer_responsibility %}
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Sustento</div>
+                            <div class="ot-field-value">
+                                {{ fault_detail.responsibility_note|linebreaksbr }}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if fault_evidences %}
+                        <div class="col-12 ot-field">
+                            <div class="ot-field-label">Evidencias</div>
+                            <div class="ot-field-value">
+                                {% for evidence in fault_evidences %}
+                                    <div>
+                                        <a href="{{ evidence.file.url }}" target="_blank" rel="noopener">
+                                            <i class="bi bi-paperclip"></i>
+                                            {{ evidence.get_source_display }}{% if evidence.uploaded_by %} · {{ evidence.uploaded_by }}{% endif %}
+                                        </a>
+                                        <span class="text-muted small">
+                                            {{ evidence.created_at|date:"d/m/Y H:i" }}
+                                        </span>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if fault_breakdown %}
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">
+                                {% if fault_breakdown.is_final %}Cobro propuesto{% else %}Cobro estimado{% endif %}
+                            </div>
+                            <div class="ot-field-value">
+                                S/ {{ fault_breakdown.total }}
+                                <span class="text-muted small">
+                                    (atención S/ {{ fault_breakdown.fee }} + materiales S/ {{ fault_breakdown.materials_total }})
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Deuda</div>
+                            <div class="ot-field-value">
+                                {% if fault_proposal %}
+                                    {{ fault_proposal.get_status_display }}{% if fault_proposal.charge %} · S/ {{ fault_proposal.charge.amount }}{% endif %}
+                                {% else %}
+                                    Se propone al finalizar la atención
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if fault_detail.responsibility_set_at %}
+                        <div class="col-12 text-muted small">
+                            Registrada el {{ fault_detail.responsibility_set_at|date:"d/m/Y H:i" }}.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
 

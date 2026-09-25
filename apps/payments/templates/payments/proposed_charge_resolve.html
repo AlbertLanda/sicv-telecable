@@ -1,8 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Deuda traslado de {{ customer }} - SICV{% endblock %}
+{% block title %}{{ proposal.display_title }} de {{ customer }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    .tc-desglose > summary { cursor:pointer; font-size:.76rem; font-weight:700; color:#2e4763; margin-bottom:6px; }
+    .tc-desglose .tc-debt-list { max-height:none; }
+    .tc-debt-line.total { font-weight:700; }
+    .tc-evidencias { display:flex; flex-direction:column; gap:4px; font-size:.76rem; }
+</style>
+{% endblock %}
 
 {% comment %}
 La deuda que una orden dejó propuesta, con el reparto del compromiso de pago:
@@ -17,7 +25,7 @@ tabla de deuda; descartar renuncia a cobrarlo diciendo por qué.
 
 <div class="tc-content">
 
-    {% include "_customer_record_header.html" with active_tab="debt" record_title="Deuda traslado" %}
+    {% include "_customer_record_header.html" with active_tab="debt" record_title=proposal.display_title %}
 
     <form method="post" novalidate>
 
@@ -35,7 +43,7 @@ tabla de deuda; descartar renuncia a cobrarlo diciendo por qué.
 
             <div class="tc-section-head banner">
                 <h2 class="tc-section-title">
-                    <i class="bi bi-box-arrow-right"></i>Deuda traslado
+                    <i class="bi {{ proposal.display_icon }}"></i>{{ proposal.display_title }}
                 </h2>
             </div>
 
@@ -112,6 +120,88 @@ tabla de deuda; descartar renuncia a cobrarlo diciendo por qué.
                                 al abonado, el ajuste exige observación.
                             </div>
                         {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if fault_detail %}
+                    {% comment %}
+                    Una avería se cobra porque alguien dijo que fue culpa del
+                    abonado. Antes de emitir, la ventanilla ve quién lo dijo,
+                    con qué sustento y qué se instaló a qué precio.
+                    {% endcomment %}
+                    <div class="tc-form-label">Tipo</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ proposal.work_order.order_type.name }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Responsabilidad</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{{ fault_detail.get_responsibility_display }}" disabled>
+                        <div class="tc-form-hint">
+                            Registrada por el {{ fault_detail.get_responsibility_source_display|lower }}{% if fault_detail.responsibility_set_by %} {{ fault_detail.responsibility_set_by }}{% endif %}{% if fault_detail.responsibility_set_at %} el {{ fault_detail.responsibility_set_at|date:"d/m/Y H:i" }}{% endif %}.
+                        </div>
+                    </div>
+
+                    <div class="tc-form-label top">Sustento</div>
+                    <div class="tc-form-field">
+                        <div class="tc-w-xl tc-form-hint">
+                            {{ fault_detail.responsibility_note|linebreaksbr|default:"Sin sustento registrado." }}
+                        </div>
+                    </div>
+
+                    <div class="tc-form-label top">Evidencias</div>
+                    <div class="tc-form-field">
+                        {% if fault_evidences %}
+                            <div class="tc-evidencias">
+                                {% for evidence in fault_evidences %}
+                                    <a href="{{ evidence.file.url }}" target="_blank" rel="noopener">
+                                        <i class="bi bi-paperclip"></i>
+                                        {{ evidence.get_source_display }}{% if evidence.uploaded_by %} · {{ evidence.uploaded_by }}{% endif %} · {{ evidence.created_at|date:"d/m/Y H:i" }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="tc-form-hint">Sin evidencias adjuntas.</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="tc-form-label top">Detalle del cobro</div>
+                    <div class="tc-form-field">
+                        <details class="tc-desglose tc-w-xl" open>
+                            <summary>
+                                Atención de la avería y materiales · S/ {{ fault_breakdown.total }}
+                            </summary>
+                            <div class="tc-debt-list">
+                                <div class="tc-debt-line">
+                                    <span>Atención de la avería</span>
+                                    <span class="tc-debt-line-monto">S/ {{ fault_breakdown.fee }}</span>
+                                </div>
+                                {% for line in fault_breakdown.lines %}
+                                    <div class="tc-debt-line">
+                                        <span>
+                                            {{ line.name }} ·
+                                            {{ line.quantity|floatformat:"-2" }} {{ line.unit|lower }}
+                                            × S/ {{ line.unit_price }}
+                                        </span>
+                                        <span class="tc-debt-line-monto">S/ {{ line.amount }}</span>
+                                    </div>
+                                {% empty %}
+                                    <div class="tc-debt-line">
+                                        <span>Sin material cobrable instalado.</span>
+                                    </div>
+                                {% endfor %}
+                                <div class="tc-debt-line total">
+                                    <span>Total calculado</span>
+                                    <span class="tc-debt-line-monto">S/ {{ fault_breakdown.total }}</span>
+                                </div>
+                            </div>
+                        </details>
+                        <div class="tc-form-hint">
+                            Precios del catálogo de materiales al terminar la atención.
+                            Si emite un monto distinto, el ajuste exige observación.
+                        </div>
                     </div>
                     {% endif %}
 

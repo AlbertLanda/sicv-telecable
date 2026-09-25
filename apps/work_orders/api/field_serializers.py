@@ -15,17 +15,14 @@ from decimal import Decimal
 
 from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.services.models import InstallationMaterialRule, InstallationMaterialUsage
-from apps.work_orders.models import OrderResult, WorkOrderEvidence, WorkOrderFieldSheet
-
-
-MAX_EVIDENCE_SIZE = 10 * 1024 * 1024
-ALLOWED_EVIDENCE_CONTENT_TYPES = {
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "application/pdf",
-}
-ALLOWED_EVIDENCE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+from apps.work_orders.evidence_files import validate_evidence_file
+from apps.work_orders.models import (
+    FaultDetail,
+    FaultResponsibilityEvidence,
+    OrderResult,
+    WorkOrderEvidence,
+    WorkOrderFieldSheet,
+)
 
 
 class WorkOrderStartSerializer(serializers.Serializer):
@@ -322,16 +319,53 @@ class WorkOrderEvidenceUploadSerializer(serializers.Serializer):
     )
 
     def validate_file(self, file):
-        if file.size > MAX_EVIDENCE_SIZE:
-            raise serializers.ValidationError("La evidencia no puede superar 10 MB.")
+        return validate_evidence_file(file)
 
-        extension = Path(file.name or "").suffix.lower()
-        content_type = getattr(file, "content_type", "")
 
-        if extension not in ALLOWED_EVIDENCE_EXTENSIONS:
-            raise serializers.ValidationError(
-                "Formato no permitido. Use JPG, PNG, WEBP o PDF."
-            )
-        if content_type and content_type not in ALLOWED_EVIDENCE_CONTENT_TYPES:
-            raise serializers.ValidationError("El tipo de archivo no está permitido.")
-        return file
+class FaultResponsibilityEvidenceSerializer(serializers.ModelSerializer):
+    source_display = serializers.CharField(
+        source="get_source_display",
+        read_only=True,
+    )
+    uploaded_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FaultResponsibilityEvidence
+        fields = [
+            "id",
+            "file",
+            "source",
+            "source_display",
+            "uploaded_by",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_uploaded_by(self, evidence):
+        if evidence.uploaded_by_id is None:
+            return None
+        return {
+            "id": evidence.uploaded_by_id,
+            "display_name": str(evidence.uploaded_by),
+        }
+
+
+class FaultResponsibilityInputSerializer(serializers.Serializer):
+    responsibility = serializers.ChoiceField(
+        choices=FaultDetail.Responsibility.choices,
+    )
+    note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    files = serializers.ListField(
+        child=serializers.FileField(),
+        required=False,
+        default=list,
+    )
+
+    def validate_files(self, files):
+        for file in files:
+            validate_evidence_file(file)
+        return files

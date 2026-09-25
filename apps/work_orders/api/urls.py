@@ -56,4 +56,9 @@ urlpatterns = [
         field_views.WorkOrderEvidenceListCreateView.as_view(),
         name="evidences",
     ),
+    path(
+        "<int:pk>/fault-responsibility/",
+        field_views.FaultResponsibilityView.as_view(),
+        name="fault_responsibility",
+    ),
 ]

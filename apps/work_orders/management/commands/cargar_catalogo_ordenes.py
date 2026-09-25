@@ -228,6 +228,13 @@ TRANSFER_RESULTS = (
     ("NOT_COMPLETED", "TRASLADO NO EJECUTADO", False),
 )
 
+# Sin resultado el técnico no puede finalizar la atención de una avería.
+FAULT_ORDER_TYPE_CODES = ("INTERNET_FAULT", "CABLE_FAULT")
+FAULT_RESULTS = (
+    ("SUCCESSFUL", "AVERÍA SOLUCIONADA", True),
+    ("NOT_COMPLETED", "AVERÍA NO SOLUCIONADA", False),
+)
+
 
 class Command(BaseCommand):
     help = (
@@ -259,6 +266,7 @@ class Command(BaseCommand):
         self._retire_legacy_transfer_reason()
         self._apply_legacy_scopes(services)
         self._load_outside_plant_results()
+        self._load_fault_results()
         self._retire_order_types()
 
         self.stdout.write("")
@@ -428,6 +436,26 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
+
+    def _load_fault_results(self):
+        """Resultados con los que el técnico finaliza una avería."""
+        for order_type in OrderType.objects.filter(code__in=FAULT_ORDER_TYPE_CODES):
+            for code, name, is_success in FAULT_RESULTS:
+                OrderResult.objects.update_or_create(
+                    order_type=order_type,
+                    code=code,
+                    defaults={
+                        "name": name,
+                        "is_success": is_success,
+                        "is_active": True,
+                    },
+                )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "  OK AVERÍAS: resultados SOLUCIONADA / NO SOLUCIONADA"
+            )
+        )
 
     def _retire_order_types(self):
         """

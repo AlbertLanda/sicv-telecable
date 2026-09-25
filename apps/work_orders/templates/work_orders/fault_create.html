@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% load customer_ui %}
+
+{% block title %}Nueva avería - {{ customer }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-1">Nueva avería</h1>
+            <p class="text-muted mb-0">
+                Registre la avería que reporta el abonado. Si es responsabilidad
+                del cliente, cuando el técnico finaliza la atención se le propone
+                cobrar el material instalado más la atención de la avería.
+            </p>
+        </div>
+        <a href="{% url 'customers:detail' customer.pk %}"
+           class="btn btn-outline-secondary">← Volver a la ficha</a>
+    </div>
+
+    <div class="mb-4">{% customer_hero customer %}</div>
+
+    <div class="card card-custom shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            Solicitud de avería
+        </div>
+        <div class="card-body">
+
+            {% if not has_subscriptions %}
+                <div class="alert alert-warning mb-0">
+                    Este abonado no tiene suscripciones activas.
+                </div>
+            {% else %}
+            <form method="post" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.subscription.id_for_label }}">
+                            {{ form.subscription.label }} <span class="text-danger">*</span>
+                        </label>
+                        {{ form.subscription }}
+                        {% for error in form.subscription.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.order_type.id_for_label }}">
+                            {{ form.order_type.label }} <span class="text-danger">*</span>
+                        </label>
+                        {{ form.order_type }}
+                        {% for error in form.order_type.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                        <div class="form-text">
+                            Las opciones dependen del servicio de la suscripción elegida.
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.reason.id_for_label }}">
+                            {{ form.reason.label }} <span class="text-danger">*</span>
+                        </label>
+                        {{ form.reason }}
+                        {% for error in form.reason.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <div class="border rounded p-3 bg-light">
+                            <div class="fw-semibold mb-1">Responsabilidad</div>
+                            <div class="small text-muted mb-3">
+                                Quién causó la avería. El técnico la confirmará o
+                                corregirá en campo. Solo la responsabilidad del
+                                cliente genera una deuda, y se propone al finalizar la atención.
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label"
+                                           for="{{ form.responsibility.id_for_label }}">
+                                        {{ form.responsibility.label }}
+                                    </label>
+                                    {{ form.responsibility }}
+                                    {% for error in form.responsibility.errors %}
+                                        <div class="text-danger small">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+
+                                <div id="fault-customer-fields" class="col-12 d-none">
+                                    <div class="row g-3">
+                                        <div class="col-md-7">
+                                            <label class="form-label"
+                                                   for="{{ form.responsibility_note.id_for_label }}">
+                                                {{ form.responsibility_note.label }}
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            {{ form.responsibility_note }}
+                                            {% for error in form.responsibility_note.errors %}
+                                                <div class="text-danger small">{{ error }}</div>
+                                            {% endfor %}
+                                        </div>
+
+                                        <div class="col-md-5">
+                                            <label class="form-label"
+                                                   for="{{ form.responsibility_evidence.id_for_label }}">
+                                                {{ form.responsibility_evidence.label }}
+                                            </label>
+                                            {{ form.responsibility_evidence }}
+                                            <div class="form-text">
+                                                {{ form.responsibility_evidence.help_text }}
+                                                Puede adjuntar varios archivos.
+                                            </div>
+                                            {% for error in form.responsibility_evidence.errors %}
+                                                <div class="text-danger small">{{ error }}</div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.scheduled_at.id_for_label }}">
+                            {{ form.scheduled_at.label }}
+                        </label>
+                        {{ form.scheduled_at }}
+                        {% for error in form.scheduled_at.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.priority.id_for_label }}">
+                            {{ form.priority.label }}
+                        </label>
+                        {{ form.priority }}
+                        {% for error in form.priority.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold"
+                               for="{{ form.detail.id_for_label }}">
+                            {{ form.detail.label }}
+                        </label>
+                        {{ form.detail }}
+                        {% for error in form.detail.errors %}
+                            <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{% url 'customers:detail' customer.pk %}"
+                       class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">
+                        Registrar avería
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ form.cascade_data|json_script:"fault-catalog" }}
+<script>
+(function () {
+    "use strict";
+
+    var payload = document.getElementById("fault-catalog");
+    var subscription = document.getElementById("id_subscription");
+    var orderType = document.getElementById("id_order_type");
+    var reason = document.getElementById("id_reason");
+    var responsibility = document.getElementById("id_responsibility");
+    var customerBox = document.getElementById("fault-customer-fields");
+
+    if (!payload || !orderType || !reason) return;
+
+    var data = JSON.parse(payload.textContent);
+
+    // Las opciones las pinta el servidor; aquí solo se ocultan las que no
+    // corresponden. El servidor vuelve a validar al registrar.
+    var typeOptions = Array.prototype.slice.call(orderType.options);
+    var reasonOptions = Array.prototype.slice.call(reason.options);
+
+    function typeAppliesToSubscription(typeId) {
+        var serviceType = data.subscriptions[subscription.value];
+        var scope = data.orderTypes[typeId] || [];
+        if (serviceType === undefined) return true;
+        return scope.length === 0 || scope.indexOf(serviceType) !== -1;
+    }
+
+    function refreshTypes() {
+        typeOptions.forEach(function (option) {
+            if (!option.value) return;
+            var visible = typeAppliesToSubscription(option.value);
+            option.hidden = !visible;
+            option.disabled = !visible;
+            if (!visible && option.selected) orderType.value = "";
+        });
+        refreshReasons();
+    }
+
+    function refreshReasons() {
+        var typeId = orderType.value;
+        reasonOptions.forEach(function (option) {
+            if (!option.value) return;
+            var visible = String(data.reasons[option.value]) === typeId;
+            option.hidden = !visible;
+            option.disabled = !visible;
+            if (!visible && option.selected) reason.value = "";
+        });
+    }
+
+    function refreshResponsibility() {
+        if (!responsibility || !customerBox) return;
+        customerBox.classList.toggle(
+            "d-none",
+            responsibility.value !== "CUSTOMER"
+        );
+    }
+
+    if (subscription) subscription.addEventListener("change", refreshTypes);
+    orderType.addEventListener("change", refreshReasons);
+    if (responsibility) {
+        responsibility.addEventListener("change", refreshResponsibility);
+    }
+
+    // Un doble clic registraba dos averías iguales. El botón se bloquea al
+    // primer envío; si el servidor devuelve errores, la página se vuelve a
+    // pintar con el botón habilitado.
+    var form = orderType.form;
+    if (form) {
+        form.addEventListener("submit", function () {
+            var button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+                button.textContent = "Registrando...";
+            }
+        });
+    }
+
+    refreshTypes();
+    refreshResponsibility();
+})();
+</script>
+{% endblock %}

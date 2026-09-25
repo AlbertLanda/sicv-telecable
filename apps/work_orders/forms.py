@@ -6,7 +6,10 @@ from django.db import models
 from apps.accounts.models import User
 from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
+from apps.work_orders.evidence_files import validate_evidence_file
 from apps.work_orders.models import (
+    FAULT_ORDER_TYPE_CODES,
+    FaultDetail,
     OrderReason,
     OrderSubtype,
     OrderType,
@@ -180,10 +183,14 @@ class WorkOrderCreateForm(forms.ModelForm):
         # cliente realmente tiene. Ofrecer "AVERÍA CABLE" a un abonado
         # solo-internet no es una opción: es una orden imposible que
         # alguien acabaría creando.
+        # Traslado y avería tienen su propia alta: el traslado pide destino y
+        # cobro; la avería, su responsable. Por aquí saldrían sin ellos.
         order_types = (
             OrderType.objects
             .filter(is_active=True)
-            .exclude(code__in=["OUTSIDE_PLANT", "TRANSFER"])
+            .exclude(
+                code__in=["OUTSIDE_PLANT", "TRANSFER", *FAULT_ORDER_TYPE_CODES]
+            )
         )
 
         if customer is not None:
@@ -666,6 +673,259 @@ class TransferCreateForm(forms.Form):
             "charge_mode": data["charge_mode"],
             "collection_mode": data["collection_mode"],
             "attention_type": WorkOrder.AttentionType.FIELD,
+            "priority": data["priority"],
+            "detail": data.get("detail", ""),
+            "scheduled_at": data.get("scheduled_at"),
+        }
+
+
+class MultipleEvidenceInput(forms.FileInput):
+    allow_multiple_selected = True
+
+
+class MultipleEvidenceField(forms.FileField):
+    """Varios archivos en un solo campo, cada uno validado como evidencia."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault(
+            "widget",
+            MultipleEvidenceInput(
+                attrs={
+                    "class": "form-control",
+                    "accept": "image/jpeg,image/png,image/webp,application/pdf",
+                }
+            ),
+        )
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+
+        if isinstance(data, (list, tuple)):
+            files = [single_file_clean(item, initial) for item in data]
+        else:
+            files = [single_file_clean(data, initial)]
+
+        files = [file for file in files if file]
+        for file in files:
+            validate_evidence_file(file)
+
+        return files
+
+
+class FaultCreateForm(forms.Form):
+    """Alta de una avería desde la ficha del abonado, con su responsable.
+
+    La responsabilidad arranca en Empresa. Marcar Cliente pide el sustento
+    -y admite evidencia-, porque es lo que termina en la deuda del abonado
+    cuando el técnico liquida.
+    """
+
+    subscription = SubscriptionChoiceField(
+        queryset=Subscription.objects.none(),
+        label="Suscripción",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    order_type = forms.ModelChoiceField(
+        queryset=OrderType.objects.none(),
+        label="Tipo de avería",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    reason = ReasonChoiceField(
+        queryset=OrderReason.objects.none(),
+        label="Motivo",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    responsibility = forms.ChoiceField(
+        choices=FaultDetail.Responsibility.choices,
+        initial=FaultDetail.Responsibility.COMPANY,
+        label="Responsable",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    responsibility_note = forms.CharField(
+        required=False,
+        label="Sustento",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": (
+                    "Explique por qué la avería es responsabilidad del cliente..."
+                ),
+            }
+        ),
+    )
+    responsibility_evidence = MultipleEvidenceField(
+        required=False,
+        label="Evidencia",
+        help_text="JPG, PNG, WEBP o PDF · máximo 10 MB por archivo.",
+    )
+
+    scheduled_at = forms.DateTimeField(
+        required=False,
+        label="Fecha programada",
+        input_formats=[
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+        ],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"class": "form-control", "type": "datetime-local"},
+        ),
+    )
+    priority = forms.ChoiceField(
+        choices=WorkOrder.Priority.choices,
+        initial=WorkOrder.Priority.NORMAL,
+        label="Prioridad",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    detail = forms.CharField(
+        required=False,
+        label="Detalle de la avería",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Lo que reporta el abonado e indicaciones para el técnico...",
+            }
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        customer = kwargs.pop("customer", None)
+        super().__init__(*args, **kwargs)
+        self.customer = customer
+
+        if customer is None:
+            self.fields["subscription"].queryset = Subscription.objects.none()
+        else:
+            self.fields["subscription"].queryset = (
+                Subscription.objects
+                .filter(customer=customer, is_active=True)
+                .select_related("service_type", "plan", "address")
+                .order_by("-created_at")
+            )
+
+        # Solo las averías que se emiten sobre algún servicio del abonado:
+        # «AVERÍA CABLE» a un abonado solo-internet es una orden imposible.
+        fault_types = OrderType.objects.filter(
+            is_active=True,
+            code__in=FAULT_ORDER_TYPE_CODES,
+        )
+        if customer is not None:
+            service_type_ids = list(
+                self.fields["subscription"].queryset
+                .values_list("service_type_id", flat=True)
+                .distinct()
+            )
+            fault_types = fault_types.filter(
+                models.Q(service_types__isnull=True)
+                | models.Q(service_types__in=service_type_ids)
+            ).distinct()
+
+        self.fields["order_type"].queryset = fault_types.order_by("name")
+        self.fields["reason"].queryset = (
+            OrderReason.objects
+            .filter(is_active=True, order_type__in=fault_types)
+            .select_related("order_type")
+            .order_by("order_type__name", "name")
+        )
+
+        self.fields["subscription"].empty_label = (
+            "Seleccione una suscripción del cliente..."
+        )
+        self.fields["order_type"].empty_label = "Seleccione el tipo de avería..."
+        self.fields["reason"].empty_label = "Seleccione el motivo..."
+
+    def clean(self):
+        data = super().clean()
+
+        subscription = data.get("subscription")
+        order_type = data.get("order_type")
+        reason = data.get("reason")
+
+        if subscription is not None and self.customer is not None:
+            if subscription.customer_id != self.customer.pk:
+                self.add_error(
+                    "subscription",
+                    "La suscripción no corresponde al abonado mostrado.",
+                )
+
+        if (
+            subscription is not None
+            and order_type is not None
+            and not order_type.applies_to_service_type(
+                subscription.service_type_id
+            )
+        ):
+            self.add_error(
+                "order_type",
+                (
+                    f"«{order_type.name}» no se emite sobre una suscripción "
+                    f"{subscription.service_type}."
+                ),
+            )
+
+        if (
+            order_type is not None
+            and reason is not None
+            and reason.order_type_id != order_type.pk
+        ):
+            self.add_error(
+                "reason",
+                "El motivo no corresponde al tipo de avería elegido.",
+            )
+
+        if data.get("responsibility") == FaultDetail.Responsibility.CUSTOMER:
+            if not (data.get("responsibility_note") or "").strip():
+                self.add_error(
+                    "responsibility_note",
+                    "Sustente por qué la avería es responsabilidad del cliente.",
+                )
+        else:
+            # Sustento y evidencia solo acompañan al cliente. Si el operador
+            # los cargó y luego cambió de responsable, no viajan.
+            data["responsibility_note"] = ""
+            data["responsibility_evidence"] = []
+
+        return data
+
+    def cascade_data(self):
+        """Mapa para encadenar suscripción -> tipo de avería -> motivo."""
+        return {
+            "subscriptions": {
+                str(subscription.pk): subscription.service_type_id
+                for subscription in self.fields["subscription"].queryset
+            },
+            "orderTypes": {
+                str(order_type.pk): [
+                    service_type.pk
+                    for service_type in order_type.service_types.all()
+                ]
+                for order_type in (
+                    self.fields["order_type"].queryset
+                    .prefetch_related("service_types")
+                )
+            },
+            "reasons": {
+                str(reason.pk): reason.order_type_id
+                for reason in self.fields["reason"].queryset
+            },
+        }
+
+    def service_arguments(self):
+        data = self.cleaned_data
+
+        return {
+            "subscription": data["subscription"],
+            "order_type": data["order_type"],
+            "customer": self.customer,
+            "reason": data["reason"],
+            "responsibility": data["responsibility"],
+            "responsibility_note": data.get("responsibility_note", ""),
+            "evidence_files": data.get("responsibility_evidence") or [],
             "priority": data["priority"],
             "detail": data.get("detail", ""),
             "scheduled_at": data.get("scheduled_at"),

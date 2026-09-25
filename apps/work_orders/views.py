@@ -28,7 +28,13 @@ from django.views.generic import FormView, TemplateView
 from apps.customers.models import Customer
 from apps.organization.context_processors import get_active_branch
 from apps.services.models import Subscription
+from apps.work_orders.faults import (
+    create_fault_work_order,
+    fault_charge_breakdown,
+    fault_detail_for,
+)
 from apps.work_orders.forms import (
+    FaultCreateForm,
     IncidentCreateForm,
     IncidentCloseForm,
     TransferCreateForm,
@@ -205,6 +211,65 @@ class TransferCreateView(
             self.request,
             format_html(
                 "Traslado <strong>{}</strong> registrado correctamente. "
+                '<a href="{}" class="alert-link">Ver ficha de la orden</a>.',
+                order.order_number,
+                reverse("work_orders:detail", kwargs={"pk": order.pk}),
+            ),
+        )
+
+        return redirect(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
+
+class FaultCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    """Alta de una avería desde la ficha del abonado, con su responsable."""
+
+    permission_required = "work_orders.add_workorder"
+    form_class = FaultCreateForm
+    template_name = "work_orders/fault_create.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.customer = get_object_or_404(
+            Customer.objects.select_related("branch"),
+            pk=self.kwargs["customer_pk"],
+            is_active=True,
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["customer"] = self.customer
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["customer"] = self.customer
+        context["has_subscriptions"] = (
+            Subscription.objects
+            .filter(customer=self.customer, is_active=True)
+            .exists()
+        )
+        return context
+
+    def form_valid(self, form):
+        try:
+            order = create_fault_work_order(
+                created_by=self.request.user,
+                **form.service_arguments(),
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            format_html(
+                "Avería <strong>{}</strong> registrada correctamente. "
                 '<a href="{}" class="alert-link">Ver ficha de la orden</a>.',
                 order.order_number,
                 reverse("work_orders:detail", kwargs={"pk": order.pk}),
@@ -915,6 +980,30 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
                 )
             )
 
+        fault_detail = None
+        fault_evidences = []
+        fault_breakdown = None
+        fault_proposal = None
+
+        if order.is_fault:
+            fault_detail = fault_detail_for(order)
+
+            if fault_detail.pk is not None:
+                fault_evidences = (
+                    fault_detail.evidences
+                    .select_related("uploaded_by")
+                    .all()
+                )
+
+            if fault_detail.is_customer_responsibility:
+                fault_breakdown = fault_charge_breakdown(order)
+                fault_proposal = (
+                    order.proposed_charges
+                    .select_related("charge")
+                    .order_by("-created_at")
+                    .first()
+                )
+
         return {
             "order": order,
             "customer": order.subscription.customer,
@@ -945,6 +1034,11 @@ class WorkOrderDetailView(LoginRequiredMixin, View):
             "technical_context": technical_context,
             "can_start_incident": can_start_incident,
             "can_close_incident": can_close_incident,
+
+            "fault_detail": fault_detail,
+            "fault_evidences": fault_evidences,
+            "fault_breakdown": fault_breakdown,
+            "fault_proposal": fault_proposal,
         }
 
     def get(self, request, *args, **kwargs):

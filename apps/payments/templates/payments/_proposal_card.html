@@ -1,5 +1,6 @@
 {% comment %}
-El interior de la tarjeta de una deuda de traslado sin resolver.
+El interior de la tarjeta de una deuda propuesta sin resolver: un traslado o
+una avería que es responsabilidad del cliente.
 
 Vive aparte porque lo piden dos sitios -la tarjeta que enlaza y la que no,
 según el permiso del operador- y tienen que decir lo mismo. Copiado, el primer
@@ -13,11 +14,11 @@ Espera `proposal`.
         Deuda pendiente
     </span>
     <span class="tc-pendiente-icono">
-        <i class="bi bi-box-arrow-right"></i>
+        <i class="bi {{ proposal.display_icon }}"></i>
     </span>
 </div>
 <div class="tc-pendiente-dato">
-    Deuda traslado
+    {{ proposal.display_title }}
 </div>
 <div class="tc-pendiente-pie">
     <i class="bi bi-clipboard-check"></i>{{ proposal.work_order.order_number }}

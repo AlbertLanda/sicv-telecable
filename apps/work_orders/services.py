@@ -1351,6 +1351,13 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
 
     apply_order_result(order)
 
+    # Una avería responsabilidad del cliente deja propuesta su deuda al
+    # terminar la atención: desde aquí los materiales ya no se editan.
+    # Importación local: `faults` construye sobre este módulo.
+    from apps.work_orders.faults import propose_fault_charge_on_close
+
+    propose_fault_charge_on_close(order=order)
+
     return order
 
 
@@ -1664,6 +1671,14 @@ def liquidate_order(
         liquidation=liquidation,
     )
     _finalize_transfer_on_liquidation(order, user)
+
+    # La deuda de una avería del cliente ya se propuso al finalizar la
+    # atención; esta llamada no la duplica y cubre la avería que se finalizó
+    # antes de que existiera ese paso. Importación local: `faults` construye
+    # sobre este módulo.
+    from apps.work_orders.faults import propose_fault_charge_on_close
+
+    propose_fault_charge_on_close(order=order)
 
     order.change_status(
         WorkOrder.Status.LIQUIDATED,

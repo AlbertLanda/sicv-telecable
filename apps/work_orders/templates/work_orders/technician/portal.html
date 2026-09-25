@@ -302,6 +302,46 @@
                         <div id="removed-materials-empty" class="empty-state compact">Aún no se registraron materiales retirados.</div>
                     </section>
 
+                    <!-- Va después de los materiales: el técnico declara lo instalado
+                         y cierra diciendo quién causó la avería. Lo que se le cobre
+                         al cliente no se muestra aquí; sale en su deuda. -->
+                    <section id="fault-responsibility-panel" class="panel" hidden>
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Avería</p>
+                                <h2>Responsabilidad</h2>
+                            </div>
+                            <span id="fault-responsibility-badge" class="mini-badge">Empresa</span>
+                        </div>
+                        <p id="fault-responsibility-help" class="helper">Inicia la atención para registrar la responsabilidad.</p>
+                        <form id="fault-responsibility-form" class="form-grid">
+                            <label class="field field-full">
+                                <span>Responsabilidad</span>
+                                <select id="fault-responsibility-select" name="responsibility">
+                                    <option value="COMPANY">Empresa</option>
+                                    <option value="CUSTOMER">Cliente</option>
+                                    <option value="OTHER">Otros</option>
+                                </select>
+                            </label>
+                            <div id="fault-customer-fields" class="field-full" hidden>
+                                <label class="field field-full">
+                                    <span>Sustento</span>
+                                    <textarea id="fault-responsibility-note" name="note" rows="3" placeholder="Describe por qué la avería es responsabilidad del cliente"></textarea>
+                                </label>
+                                <label class="upload-box">
+                                    <span>Adjuntar evidencia</span>
+                                    <small>JPG, PNG, WEBP o PDF · máximo 10 MB · puedes elegir varios</small>
+                                    <input id="fault-responsibility-files" name="files" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf">
+                                </label>
+                            </div>
+                            <div class="field-full">
+                                <button id="fault-responsibility-save" class="btn btn-primary btn-block" type="submit">Guardar responsabilidad</button>
+                            </div>
+                        </form>
+                        <div id="fault-evidence-list" class="evidence-list"></div>
+                        <p id="fault-responsibility-meta" class="helper"></p>
+                    </section>
+
                     <section id="materials-panel" class="panel">
                         <div class="panel-heading">
                             <div>

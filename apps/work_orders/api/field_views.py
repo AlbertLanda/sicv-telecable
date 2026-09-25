@@ -3,8 +3,9 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.generics import GenericAPIView
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.models import User
@@ -24,6 +25,8 @@ from apps.work_orders.api.field_completion import (
     liquidation_technical_data_from_field,
 )
 from apps.work_orders.api.field_serializers import (
+    FaultResponsibilityEvidenceSerializer,
+    FaultResponsibilityInputSerializer,
     InstallationMaterialUsageInputSerializer,
     InstallationMaterialUsageSerializer,
     MaterialCatalogSerializer,
@@ -41,7 +44,16 @@ from apps.work_orders.api.field_serializers import (
 )
 from apps.work_orders.api.serializers import WorkOrderDetailSerializer
 from apps.work_orders.api.views import TechnicianWorkOrderObjectMixin
-from apps.work_orders.models import OrderResult, WorkOrder, WorkOrderFieldSheet
+from apps.work_orders.faults import (
+    fault_detail_for,
+    set_fault_responsibility,
+)
+from apps.work_orders.models import (
+    FaultDetail,
+    OrderResult,
+    WorkOrder,
+    WorkOrderFieldSheet,
+)
 from apps.work_orders.services import (
     add_work_order_evidence,
     attend_order,
@@ -454,3 +466,98 @@ class WorkOrderEvidenceListCreateView(
             ).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+def _fault_responsibility_payload(order, request):
+    """Lo que el portal necesita para mostrar y registrar la responsabilidad.
+
+    No lleva montos: lo que se le cobre al cliente sale en su deuda, que
+    arma caja con el material que la liquidación congela.
+    """
+    detail = fault_detail_for(order)
+    evidences = (
+        detail.evidences.select_related("uploaded_by").all()
+        if detail.pk is not None
+        else []
+    )
+
+    return {
+        "responsibility": detail.responsibility,
+        "responsibility_display": detail.get_responsibility_display(),
+        "note": detail.responsibility_note,
+        "is_registered": detail.pk is not None,
+        "source": detail.responsibility_source if detail.pk else None,
+        "source_display": (
+            detail.get_responsibility_source_display() if detail.pk else None
+        ),
+        "set_by": (
+            {
+                "id": detail.responsibility_set_by_id,
+                "display_name": str(detail.responsibility_set_by),
+            }
+            if detail.responsibility_set_by_id
+            else None
+        ),
+        "set_at": detail.responsibility_set_at,
+        "editable": order.status == WorkOrder.Status.IN_PROGRESS,
+        "choices": [
+            {"value": value, "label": label}
+            for value, label in FaultDetail.Responsibility.choices
+        ],
+        "evidences": FaultResponsibilityEvidenceSerializer(
+            evidences,
+            many=True,
+            context={"request": request},
+        ).data,
+    }
+
+
+class FaultResponsibilityView(TechnicianWorkOrderObjectMixin, GenericAPIView):
+    """GET/POST /api/technicians/work-orders/<id>/fault-responsibility/
+
+    El técnico confirma o corrige quién causó la avería. Si es el cliente,
+    sustenta por qué y puede adjuntar fotos o PDF; al finalizar la atención, el material
+    instalado se le propone cobrar a los precios del catálogo.
+    """
+
+    serializer_class = FaultResponsibilityInputSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_fault_order(self):
+        order = self.get_object()
+        if not order.is_fault:
+            raise NotFound("Esta orden no es una avería.")
+        return order
+
+    def get(self, request, *args, **kwargs):
+        order = self.get_fault_order()
+        return Response(_fault_responsibility_payload(order, request))
+
+    def post(self, request, *args, **kwargs):
+        order = self.get_fault_order()
+        if order.status != WorkOrder.Status.IN_PROGRESS:
+            return Response(
+                {
+                    "detail": (
+                        "La responsabilidad solo puede registrarse cuando "
+                        "la orden está En atención."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            set_fault_responsibility(
+                order=order,
+                user=request.user,
+                responsibility=serializer.validated_data["responsibility"],
+                note=serializer.validated_data.get("note", ""),
+                evidence_files=serializer.validated_data.get("files", []),
+            )
+        except DjangoValidationError as exc:
+            return _django_validation_response(exc)
+
+        return Response(_fault_responsibility_payload(order, request))

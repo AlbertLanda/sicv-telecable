@@ -609,7 +609,7 @@ class ProposedChargeResolveForm(forms.Form):
         if self.is_discarding:
             if not (cleaned.get("note") or "").strip():
                 self.add_error(
-                    "note", "Descartar una deuda de traslado exige un motivo."
+                    "note", "Descartar una deuda propuesta exige un motivo."
                 )
 
             return cleaned

@@ -229,6 +229,11 @@
         <span>Bloque E - Órdenes de Trabajo del Cliente</span>
         {% if perms.work_orders.add_workorder %}
             <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'work_orders:fault_create' customer.pk %}"
+                   class="btn btn-warning btn-sm"
+                   title="Registrar una avería con su responsable.">
+                    + Avería
+                </a>
                 <a href="{% url 'work_orders:transfer_create' customer.pk %}"
                    class="btn btn-warning btn-sm"
                    title="Registrar un traslado interno o externo.">

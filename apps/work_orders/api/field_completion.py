@@ -8,6 +8,7 @@ Mantiene separadas tres responsabilidades:
 """
 
 from apps.inventory.models import WorkOrderMaterialMovement
+from apps.work_orders.faults import customer_pays_fault, fault_material_price
 from apps.work_orders.models import WorkOrder, WorkOrderLiquidationItem
 
 
@@ -44,13 +45,19 @@ def field_completion_summary(order: WorkOrder):
 
 
 def liquidation_items_from_field(order: WorkOrder):
-    """Convierte materiales de campo en snapshots de WorkOrderLiquidationItem."""
+    """Convierte materiales de campo en snapshots de WorkOrderLiquidationItem.
+
+    En una avería responsabilidad del cliente, lo instalado con precio en el
+    catálogo llega facturable a ese precio: el técnico no lo marca ni lo
+    escribe, y la liquidación congela el precio del día.
+    """
     items = []
     movements = (
         order.field_material_movements
         .select_related("material")
         .order_by("movement_type", "material__name")
     )
+    charges_customer = customer_pays_fault(order)
 
     for movement in movements:
         movement_type = (
@@ -58,6 +65,15 @@ def liquidation_items_from_field(order: WorkOrder):
             if movement.movement_type == WorkOrderMaterialMovement.MovementType.INSTALLED
             else WorkOrderLiquidationItem.MovementType.REMOVED
         )
+        is_billable = movement.is_billable
+        unit_price = movement.unit_price
+
+        if charges_customer:
+            price = fault_material_price(movement)
+            if price is not None:
+                is_billable = True
+                unit_price = price
+
         items.append(
             {
                 "movement_type": movement_type,
@@ -65,8 +81,8 @@ def liquidation_items_from_field(order: WorkOrder):
                 "material_name": movement.material.name,
                 "quantity": movement.quantity,
                 "unit_of_measure": movement.material.unit_of_measure,
-                "is_billable": movement.is_billable,
-                "unit_price": movement.unit_price,
+                "is_billable": is_billable,
+                "unit_price": unit_price,
                 "remarks": movement.remarks,
             }
         )

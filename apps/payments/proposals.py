@@ -1,9 +1,10 @@
 """
 Deudas propuestas por una orden de trabajo antes de convertirse en un cargo.
 
-El primer caso es TRASLADO. La propuesta conserva la decisión pendiente sin
-mover el saldo del abonado. Aceptarla emite el cargo; descartarla deja motivo,
-usuario y fecha para auditoría.
+Hay dos casos: el TRASLADO y la AVERÍA que es responsabilidad del cliente. La
+propuesta conserva la decisión pendiente sin mover el saldo del abonado.
+Aceptarla emite el cargo; descartarla deja motivo, usuario y fecha para
+auditoría.
 """
 
 from decimal import Decimal
@@ -20,6 +21,9 @@ from .services import create_manual_charge
 
 TRANSFER_ORDER_TYPE_CODE = "TRANSFER"
 TRANSFER_CONCEPT_CODE = "traslado"
+
+# Sembrado por la migración 0006 del catálogo de conceptos.
+FAULT_CONCEPT_CODE = "averia-cliente"
 
 
 def is_transfer_order(work_order):
@@ -87,17 +91,79 @@ def propose_transfer_charge(*, work_order):
     return proposal
 
 
+def fault_concept():
+    """Concepto con el que se emite la avería del cliente."""
+    concept = ChargeConcept.objects.filter(
+        code=FAULT_CONCEPT_CODE,
+        is_active=True,
+    ).first()
+
+    if concept is None:
+        raise ValidationError(
+            "No existe el concepto activo «AVERÍA CLIENTE» en el catálogo "
+            "de cobranza."
+        )
+
+    return concept
+
+
+def fault_description(work_order):
+    return f"{work_order.order_type.name} - RESPONSABILIDAD DEL CLIENTE"
+
+
+@transaction.atomic
+def propose_fault_charge(*, work_order):
+    """Deja propuesta la deuda de una avería responsabilidad del cliente.
+
+    Como en el traslado, una sola propuesta por orden: liquidar no se repite,
+    pero la restricción única de (orden, concepto) lo respalda en la base.
+    """
+    if not work_order.is_fault:
+        return None
+
+    concept = fault_concept()
+
+    existing = ProposedCharge.objects.filter(
+        work_order=work_order,
+        concept_item=concept,
+    ).first()
+    if existing is not None:
+        return existing
+
+    proposal = ProposedCharge(
+        customer_id=work_order.subscription.customer_id,
+        subscription=work_order.subscription,
+        work_order=work_order,
+        concept=concept.family,
+        concept_item=concept,
+        description=fault_description(work_order),
+    )
+    proposal.full_clean()
+    proposal.save()
+    return proposal
+
+
 def pending_proposals(customer):
     return (
         ProposedCharge.objects
         .filter(customer=customer, status=ProposedCharge.Status.PENDING)
-        .select_related("work_order", "work_order__subtype", "concept_item")
+        .select_related(
+            "work_order",
+            "work_order__order_type",
+            "work_order__subtype",
+            "concept_item",
+        )
         .order_by("-created_at", "-pk")
     )
 
 
 def suggested_proposed_charge_amount(proposal):
-    """Monto sugerido por la política registrada en la OT de traslado."""
+    """Monto sugerido: la política del traslado o el cálculo de la avería."""
+    if proposal.work_order.is_fault:
+        from apps.work_orders.faults import fault_charge_breakdown
+
+        return fault_charge_breakdown(proposal.work_order)["total"]
+
     if not is_transfer_order(proposal.work_order):
         return None
 
@@ -183,6 +249,23 @@ def accept_proposed_charge(*, proposal, user, amount, due_date, note=""):
                 "Registre una observación que justifique el ajuste."
             )
 
+    if locked.work_order.is_fault:
+        from apps.work_orders.faults import fault_charge_breakdown
+
+        breakdown = fault_charge_breakdown(locked.work_order)
+
+        if not breakdown["is_final"]:
+            raise ValidationError(
+                "La atención de la avería debe finalizarse antes de emitir "
+                "el cargo: el material instalado se conoce recién al terminar."
+            )
+
+        if amount != breakdown["total"] and not (note or "").strip():
+            raise ValidationError(
+                "El monto es distinto al calculado para la avería. "
+                "Registre una observación que justifique el ajuste."
+            )
+
     charge = create_manual_charge(
         customer=locked.customer,
         subscription=locked.subscription,
@@ -238,7 +321,7 @@ def discard_proposed_charge(*, proposal, user, reason):
     reason = (reason or "").strip()
     if not reason:
         raise ValidationError({
-            "note": "Descartar una deuda de traslado exige un motivo.",
+            "note": "Descartar una deuda propuesta exige un motivo.",
         })
 
     locked = ProposedCharge.objects.select_for_update().get(pk=proposal.pk)

@@ -86,6 +86,13 @@ urlpatterns = [
         name="transfer_create",
     ),
 
+    # Registrar una avería para un cliente, con su responsable.
+    path(
+        "customers/<int:customer_pk>/faults/create/",
+        views.FaultCreateView.as_view(),
+        name="fault_create",
+    ),
+
     # Registrar una incidencia para un cliente.
     path(
         "customers/<int:customer_pk>/incidents/create/",

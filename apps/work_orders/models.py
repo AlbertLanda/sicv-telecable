@@ -29,6 +29,13 @@ DEFINITIVE_CUT_REASONS = frozenset({
     "DEF_MOVING",
 })
 
+# Tipos de orden que son una avería física del servicio. Coinciden con el
+# catálogo operativo sembrado por ``cargar_catalogo_ordenes``.
+FAULT_ORDER_TYPE_CODES = frozenset({
+    "INTERNET_FAULT",
+    "CABLE_FAULT",
+})
+
 
 class OrderTypeQuerySet(models.QuerySet):
     """Consultas del catálogo de tipos de orden."""
@@ -946,6 +953,14 @@ class WorkOrder(models.Model):
         return (
             self.order_type_id is not None
             and self.order_type.code == "OUTSIDE_PLANT"
+        )
+
+    @property
+    def is_fault(self):
+        """Avería física del servicio: internet o cable."""
+        return (
+            self.order_type_id is not None
+            and self.order_type.code in FAULT_ORDER_TYPE_CODES
         )
 
     @property
@@ -2354,6 +2369,171 @@ class TransferDetail(models.Model):
 
     def __str__(self):
         return f"Detalle traslado - {self.work_order.order_number}"
+
+
+class FaultDetail(models.Model):
+    """Quién es responsable de una avería y con qué sustento.
+
+    Lo declara el operador al registrarla y lo confirma o corrige el técnico
+    en campo, que es quien ve la causa. Solo la responsabilidad del cliente
+    tiene efecto económico: al finalizar la atención, lo instalado se le cobra al precio
+    del catálogo de materiales más la atención de la avería, como deuda
+    propuesta que la ventanilla acepta o descarta. Nunca como cargo directo.
+
+    Una avería sin detalle -por ejemplo, la que NOC deriva desde una
+    incidencia- se lee como responsabilidad de la empresa, que es el valor
+    por defecto.
+    """
+
+    class Responsibility(models.TextChoices):
+        CUSTOMER = "CUSTOMER", "Cliente"
+        COMPANY = "COMPANY", "Empresa"
+        OTHER = "OTHER", "Otros"
+
+    class Source(models.TextChoices):
+        OPERATOR = "OPERATOR", "Operador"
+        TECHNICIAN = "TECHNICIAN", "Técnico"
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="fault_detail",
+        verbose_name="Orden de avería",
+    )
+
+    responsibility = models.CharField(
+        max_length=20,
+        choices=Responsibility.choices,
+        default=Responsibility.COMPANY,
+        verbose_name="Responsabilidad",
+    )
+
+    responsibility_note = models.TextField(
+        blank=True,
+        verbose_name="Sustento de la responsabilidad",
+    )
+
+    # La última palabra y quién la dijo. El técnico puede corregir lo que
+    # declaró el operador al registrar la avería.
+    responsibility_source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.OPERATOR,
+        verbose_name="Registrada por",
+    )
+    responsibility_set_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="fault_responsibilities_set",
+        null=True,
+        blank=True,
+        verbose_name="Usuario que la registró",
+    )
+    responsibility_set_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Registrada el",
+    )
+
+    # La atención de la avería, congelada al terminar la atención. Si la tarifa cambia
+    # mañana, la avería de hoy sigue explicando lo que se le propuso cobrar.
+    service_fee_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Atención de la avería",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Detalle de avería"
+        verbose_name_plural = "Detalles de avería"
+
+    def clean(self):
+        super().clean()
+
+        if self.work_order_id and not self.work_order.is_fault:
+            raise ValidationError({
+                "work_order": (
+                    "El detalle de avería solo puede asociarse "
+                    "a una orden de avería."
+                )
+            })
+
+        if (
+            self.is_customer_responsibility
+            and not (self.responsibility_note or "").strip()
+        ):
+            raise ValidationError({
+                "responsibility_note": (
+                    "Sustente por qué la avería es responsabilidad del cliente."
+                )
+            })
+
+    @property
+    def is_customer_responsibility(self):
+        return self.responsibility == self.Responsibility.CUSTOMER
+
+    def __str__(self):
+        return f"Detalle avería - {self.work_order.order_number}"
+
+
+def fault_evidence_upload_path(instance, filename):
+    """Evidencia del sustento, agrupada con el resto de la orden."""
+    return (
+        f"work_orders/{instance.fault_detail.work_order.order_number}"
+        f"/responsabilidad/{filename}"
+    )
+
+
+class FaultResponsibilityEvidence(models.Model):
+    """Foto o archivo que sustenta la responsabilidad de una avería."""
+
+    fault_detail = models.ForeignKey(
+        FaultDetail,
+        on_delete=models.CASCADE,
+        related_name="evidences",
+        verbose_name="Detalle de avería",
+    )
+
+    file = models.FileField(
+        upload_to=fault_evidence_upload_path,
+        verbose_name="Archivo o fotografía",
+    )
+
+    source = models.CharField(
+        max_length=20,
+        choices=FaultDetail.Source.choices,
+        verbose_name="Adjuntada por",
+    )
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="fault_responsibility_evidences",
+        null=True,
+        blank=True,
+        verbose_name="Usuario",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de carga",
+    )
+
+    class Meta:
+        verbose_name = "Evidencia de responsabilidad"
+        verbose_name_plural = "Evidencias de responsabilidad"
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return (
+            "Evidencia de responsabilidad - "
+            f"{self.fault_detail.work_order.order_number}"
+        )
 
 
 def evidence_upload_path(instance, filename):

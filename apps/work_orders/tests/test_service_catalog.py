@@ -16,7 +16,7 @@ from django.urls import reverse
 
 from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.forms import WorkOrderCreateForm
-from apps.work_orders.models import OrderReason, OrderType, WorkOrder
+from apps.work_orders.models import OrderReason, OrderResult, OrderType, WorkOrder
 from apps.work_orders.tests.base import WorkOrderTestCase
 from django.core.exceptions import ValidationError
 
@@ -110,9 +110,17 @@ class WorkOrderCreateFormScopeTests(OrderTypeScopeTests):
             status=Subscription.Status.ACTIVE,
         )
 
+        cable_services = OrderType.objects.create(
+            code="CABLE_SERVICES",
+            name="SERVICIOS",
+        )
+        cable_services.service_types.set([self.cable_service])
+
         form = WorkOrderCreateForm(customer=self.customer)
 
-        self.assertIn(self.cable_fault, form.fields["order_type"].queryset)
+        self.assertIn(cable_services, form.fields["order_type"].queryset)
+        # La avería tiene su propia alta, con responsable: aquí no se ofrece.
+        self.assertNotIn(self.cable_fault, form.fields["order_type"].queryset)
 
     def test_se_rechaza_un_servicio_que_no_corresponde_a_la_suscripcion(self):
         # El tipo se fuerza dentro del queryset para aislar la regla que se
@@ -312,6 +320,24 @@ class CargarCatalogoOrdenesTests(WorkOrderTestCase):
         self.assertIn("CUT", cable)
         self.assertIn("RECONNECTION", cable)
         self.assertIn("REQUIREMENT", cable)
+
+    def test_las_averias_traen_resultados_para_finalizar(self):
+        self.run_command()
+
+        for code in ("INTERNET_FAULT", "CABLE_FAULT"):
+            results = {
+                result.code: result.is_success
+                for result in OrderResult.objects.filter(
+                    order_type__code=code,
+                    is_active=True,
+                )
+            }
+
+            self.assertEqual(
+                results,
+                {"SUCCESSFUL": True, "NOT_COMPLETED": False},
+                code,
+            )
 
     def test_los_motivos_cuelgan_de_su_servicio(self):
         self.run_command()

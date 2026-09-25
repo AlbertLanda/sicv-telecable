@@ -5,7 +5,7 @@ from apps.inventory.models import Material, WorkOrderMaterialMovement
 
 @admin.register(Material)
 class MaterialAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "unit_of_measure", "is_active")
+    list_display = ("code", "name", "unit_of_measure", "customer_price", "is_active")
     list_filter = ("unit_of_measure", "is_active")
     search_fields = ("code", "name")
     ordering = ("name",)

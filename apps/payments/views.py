@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from apps.customers.models import Customer
+from apps.work_orders.faults import fault_charge_breakdown, fault_detail_for
 from apps.work_orders.models import TransferDetail, WorkOrderLiquidation
 from apps.work_orders.services import resolve_transfer_reconciliation
 from apps.organization.context_processors import (
@@ -960,7 +961,9 @@ class ProposedChargeResolveView(
                 ProposedCharge.objects.select_related(
                     "customer",
                     "subscription",
+                    "concept_item",
                     "work_order",
+                    "work_order__order_type",
                     "work_order__subtype",
                     "work_order__transfer_detail",
                 ),
@@ -979,6 +982,20 @@ class ProposedChargeResolveView(
 
         transfer = getattr(proposal.work_order, "transfer_detail", None)
         context["transfer_detail"] = transfer
+
+        # La avería explica su monto: quién la causó, con qué sustento y qué
+        # se instaló a qué precio. Es lo que la ventanilla mira antes de emitir.
+        if proposal.work_order.is_fault:
+            fault = fault_detail_for(proposal.work_order)
+            context["fault_detail"] = fault
+            context["fault_evidences"] = (
+                fault.evidences.select_related("uploaded_by").all()
+                if fault.pk is not None
+                else []
+            )
+            context["fault_breakdown"] = fault_charge_breakdown(
+                proposal.work_order
+            )
 
         suggested = suggested_proposed_charge_amount(proposal)
         context["suggested_amount"] = suggested
@@ -1006,7 +1023,7 @@ class ProposedChargeResolveView(
                     user=request.user,
                     reason=form.cleaned_data["note"],
                 )
-                aviso = "Deuda de traslado descartada."
+                aviso = f"{proposal.display_title} descartada."
             else:
                 accept_proposed_charge(
                     proposal=proposal,

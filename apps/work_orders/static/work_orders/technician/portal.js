@@ -540,7 +540,38 @@
         }
     }
 
+    // Los formularios del detalle son unos solos para todas las órdenes. Al
+    // abrir otra OT no pueden arrastrar lo escrito en la anterior, ni sus
+    // botones quedarse en «Finalizando…»: tras un cierre exitoso el botón no
+    // se restablece, porque el formulario simplemente se oculta.
+    function resetDetailForms() {
+        [
+            "#completion-result",
+            "#completion-remarks",
+            "#liquidation-resolution",
+            "#liquidation-notes",
+            "#installed-material-quantity",
+            "#installed-material-remarks",
+            "#installed-material-unit-price",
+            "#removed-material-quantity",
+            "#removed-material-remarks",
+            "#evidence-file",
+            "#evidence-description",
+            "#fault-responsibility-note",
+            "#fault-responsibility-files",
+        ].forEach((selector) => {
+            const input = $(selector);
+            if (input) input.value = "";
+        });
+        [
+            "#complete-order-submit",
+            "#liquidate-order-submit",
+            "#fault-responsibility-save",
+        ].forEach((selector) => setBusy($(selector), false));
+    }
+
     function openDetail(id, backScreen = "mine") {
+        if (state.detailId !== id) resetDetailForms();
         state.detailId = id;
         state.detailBackScreen = backScreen;
         navigate("detail");
@@ -595,6 +626,7 @@
         }
 
         $("#materials-panel").hidden = order.order_type_code !== "INSTALLATION";
+        $("#fault-responsibility-panel").hidden = !isFaultOrder(order);
         if (order.is_outside_plant) {
             $("#contract-panel").hidden = true;
             state.contractOrderId = null;
@@ -773,6 +805,9 @@
             if (!order.is_outside_plant) {
                 tasks.push(loadMaterials(id), loadContract(id));
             }
+            if (isFaultOrder(order)) {
+                tasks.push(loadFaultResponsibility(id));
+            }
 
             await Promise.all(tasks);
             content.hidden = false;
@@ -833,6 +868,107 @@
             showToast(error.message, "error");
         } finally {
             setBusy(button, false);
+        }
+    }
+
+    // Tipos de orden que son avería del servicio. Coinciden con el catálogo
+    // operativo (INTERNET_FAULT, CABLE_FAULT).
+    const FAULT_ORDER_TYPE_CODES = ["INTERNET_FAULT", "CABLE_FAULT"];
+
+    function isFaultOrder(order) {
+        return FAULT_ORDER_TYPE_CODES.includes(order?.order_type_code);
+    }
+
+    function syncFaultResponsibilityFields() {
+        const isCustomer = $("#fault-responsibility-select").value === "CUSTOMER";
+        $("#fault-customer-fields").hidden = !isCustomer;
+    }
+
+    function renderFaultResponsibility(payload) {
+        const editable = Boolean(payload.editable);
+
+        $("#fault-responsibility-badge").textContent = text(payload.responsibility_display, "Empresa");
+        $("#fault-responsibility-select").value = payload.responsibility || "COMPANY";
+        $("#fault-responsibility-note").value = payload.note || "";
+        $("#fault-responsibility-files").value = "";
+        [
+            "#fault-responsibility-select",
+            "#fault-responsibility-note",
+            "#fault-responsibility-files",
+            "#fault-responsibility-save",
+        ].forEach((selector) => {
+            $(selector).disabled = !editable;
+        });
+        $("#fault-responsibility-help").textContent = editable
+            ? "Confirma quién causó la avería. Si es el cliente, sustenta por qué y adjunta evidencia."
+            : "Inicia la atención para registrar la responsabilidad.";
+        syncFaultResponsibilityFields();
+
+        const list = $("#fault-evidence-list");
+        list.replaceChildren();
+        (payload.evidences || []).forEach((evidence) => {
+            const item = element("article", "evidence-item");
+            const link = element("a", "", `Evidencia de responsabilidad #${evidence.id}`);
+            link.href = evidence.file;
+            link.target = "_blank";
+            link.rel = "noopener";
+            const meta = element(
+                "p",
+                "",
+                `${formatDate(evidence.created_at)} · ${text(evidence.uploaded_by?.display_name, evidence.source_display)}`,
+            );
+            item.append(link, meta);
+            list.append(item);
+        });
+
+        $("#fault-responsibility-meta").textContent = payload.is_registered
+            ? `Registrada por ${text(payload.source_display, "").toLowerCase()} ${text(payload.set_by?.display_name, "")} · ${formatDate(payload.set_at)}`
+            : "Sin registrar: se considera responsabilidad de la empresa.";
+    }
+
+    async function loadFaultResponsibility(id) {
+        try {
+            renderFaultResponsibility(await api(`${config.workOrdersUrl}${id}/fault-responsibility/`));
+        } catch (error) {
+            showToast(`Responsabilidad: ${error.message}`, "error");
+        }
+    }
+
+    async function saveFaultResponsibility(event) {
+        event.preventDefault();
+        if (!state.detailId) return;
+
+        const responsibility = $("#fault-responsibility-select").value;
+        const isCustomer = responsibility === "CUSTOMER";
+        const note = $("#fault-responsibility-note").value.trim();
+
+        if (isCustomer && !note) {
+            showToast("Sustenta por qué la avería es responsabilidad del cliente.", "error");
+            return;
+        }
+
+        const data = new FormData();
+        data.append("responsibility", responsibility);
+        data.append("note", isCustomer ? note : "");
+        if (isCustomer) {
+            Array.from($("#fault-responsibility-files").files).forEach((file) => {
+                data.append("files", file);
+            });
+        }
+
+        const button = $("#fault-responsibility-save");
+        setBusy(button, true, "Guardando…");
+        try {
+            const payload = await api(`${config.workOrdersUrl}${state.detailId}/fault-responsibility/`, {
+                method: "POST",
+                body: data,
+            });
+            setBusy(button, false);
+            renderFaultResponsibility(payload);
+            showToast("Responsabilidad registrada.", "success");
+        } catch (error) {
+            setBusy(button, false);
+            showToast(error.message, "error");
         }
     }
 
@@ -1369,6 +1505,8 @@
         $("#available-scope-all").addEventListener("change", loadAvailable);
         $("#detail-back").addEventListener("click", () => navigate(state.detailBackScreen));
         $("#field-sheet-form").addEventListener("submit", saveFieldSheet);
+        $("#fault-responsibility-form").addEventListener("submit", saveFaultResponsibility);
+        $("#fault-responsibility-select").addEventListener("change", syncFaultResponsibilityFields);
         $("#installed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "INSTALLED"));
         $("#installed-material-billable").addEventListener("change", syncInstalledMaterialBillingFields);
         $("#removed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "REMOVED"));

@@ -1556,9 +1556,29 @@ class ProposedCharge(models.Model):
 
         if self.status == self.Status.DISCARDED and not self.note.strip():
             raise ValidationError({
-                "note": "Descartar una deuda de traslado exige un motivo.",
+                "note": "Descartar una deuda propuesta exige un motivo.",
             })
 
     @property
     def is_pending(self):
         return self.status == self.Status.PENDING
+
+    # Cómo se presenta cada propuesta en la ficha de deuda, según el concepto
+    # que la origina. Un concepto sin entrada se muestra como deuda genérica.
+    PRESENTATION = {
+        "traslado": ("Deuda traslado", "bi-box-arrow-right"),
+        "averia-cliente": ("Deuda avería", "bi-exclamation-triangle"),
+    }
+    DEFAULT_PRESENTATION = ("Deuda propuesta", "bi-receipt")
+
+    def _presentation(self):
+        code = self.concept_item.code if self.concept_item_id else ""
+        return self.PRESENTATION.get(code, self.DEFAULT_PRESENTATION)
+
+    @property
+    def display_title(self):
+        return self._presentation()[0]
+
+    @property
+    def display_icon(self):
+        return self._presentation()[1]
