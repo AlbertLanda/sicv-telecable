@@ -72,13 +72,15 @@ class TransferCatalogTests(WorkOrderTestCase):
         self.assertFalse(self.legacy_reason.is_active)
 
     def test_generic_order_form_does_not_offer_incomplete_transfer(self):
-        self.run_catalog()
-
         form = WorkOrderCreateForm(customer=self.customer)
 
         self.assertNotIn(
             "TRANSFER",
             set(form.fields["order_type"].queryset.values_list("code", flat=True)),
+        )
+        self.assertNotIn(
+            self.legacy_reason.pk,
+            set(form.fields["reason"].queryset.values_list("pk", flat=True)),
         )
 
     def test_catalog_is_idempotent_for_transfer_subtypes(self):
