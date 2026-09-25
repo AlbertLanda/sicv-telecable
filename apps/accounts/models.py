@@ -123,6 +123,15 @@ class User(AbstractUser):
         verbose_name="Teléfono"
     )
 
+    is_salesperson = models.BooleanField(
+        default=False,
+        verbose_name="Participa como vendedor",
+        help_text=(
+            "Permite atribuirle ventas sin cambiar su rol operativo. "
+            "Un administrador o ATC puede vender y seguir conservando su rol."
+        ),
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True
     )
