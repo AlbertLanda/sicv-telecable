@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
@@ -356,6 +358,10 @@ class PlanForm(forms.ModelForm):
             self.fields["code"].help_text = (
                 "El código no se edita: hay suscripciones apuntando a este plan."
             )
+
+    def clean_included_app_component_amount(self):
+        value = self.cleaned_data.get("included_app_component_amount")
+        return value if value is not None else Decimal("0.00")
 
     def clean_code(self):
         code = (self.cleaned_data.get("code") or "").strip().upper()
