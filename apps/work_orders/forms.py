@@ -203,6 +203,10 @@ class WorkOrderCreateForm(forms.ModelForm):
         self.fields["reason"].queryset = (
             OrderReason.objects
             .filter(is_active=True)
+            .exclude(
+                order_type__code="REQUIREMENT",
+                code="TRANSFER",
+            )
             .select_related("order_type")
             .order_by("order_type__name", "name")
         )
