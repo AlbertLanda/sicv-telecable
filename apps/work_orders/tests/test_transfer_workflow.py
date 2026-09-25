@@ -567,3 +567,111 @@ class TransferWorkflowTests(WorkOrderTestCase):
         )
         self.assertEqual(proposal.charge.amount, Decimal("28.00"))
 
+    def test_external_transfer_same_branch_keeps_service_code(self):
+        destination_zone = Zone.objects.create(
+            branch=self.branch,
+            name="Zona Sur",
+        )
+        original_code = self.subscription.service_code
+
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.external_subtype,
+            destination_branch=self.branch,
+            destination_zone=destination_zone,
+            requested_address_text="Jr. Nueva 500",
+            requested_supply_code="12345678",
+        )
+        technician = self._take_and_start(order)
+
+        confirm_external_transfer_destination(
+            order=order,
+            user=technician,
+            address="Jr. Nueva 500",
+            district="Distrito Destino",
+            zone=destination_zone,
+            supply_code="12345678",
+        )
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado externo dentro de la misma sede.",
+        )
+
+        self.subscription.refresh_from_db()
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertEqual(self.subscription.service_code, original_code)
+        self.assertEqual(detail.previous_service_code, original_code)
+        self.assertEqual(detail.resulting_service_code, original_code)
+        self.assertEqual(self.subscription.address.zone.branch, self.branch)
+
+    def test_external_transfer_cross_branch_changes_service_code_and_keeps_history(self):
+        destination_branch = Branch.objects.create(
+            code="JAUJA",
+            name="Jauja",
+        )
+        destination_zone = Zone.objects.create(
+            branch=destination_branch,
+            name="Zona Jauja",
+        )
+        technician = User.objects.create_user(
+            username="tecnico_jauja_codigo",
+            password="test1234",
+            role=User.Role.TECHNICIAN,
+            branch=destination_branch,
+        )
+        original_code = self.subscription.service_code
+
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.external_subtype,
+            destination_branch=destination_branch,
+            destination_zone=destination_zone,
+            requested_address_text="Jr. Destino 700",
+            requested_supply_code="87654321",
+        )
+        self._take_and_start(order, technician)
+
+        confirm_external_transfer_destination(
+            order=order,
+            user=technician,
+            address="Jr. Destino 700",
+            district="Jauja",
+            zone=destination_zone,
+            supply_code="87654321",
+        )
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado entre sedes ejecutado.",
+        )
+
+        self.subscription.refresh_from_db()
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertNotEqual(self.subscription.service_code, original_code)
+        self.assertTrue(
+            self.subscription.service_code.startswith("JA01-A")
+        )
+        self.assertTrue(
+            self.subscription.service_code.endswith("-INTERNET-01")
+        )
+        self.assertEqual(detail.previous_service_code, original_code)
+        self.assertEqual(
+            detail.resulting_service_code,
+            self.subscription.service_code,
+        )
+        self.assertEqual(
+            self.subscription.address.zone.branch,
+            destination_branch,
+        )
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.code, "CLI001")
+
