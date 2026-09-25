@@ -436,6 +436,7 @@ class InstallationWorkOrderCreateView(
                     "subscription__address__zone",
                     "subscription__service_type",
                     "subscription__plan",
+                    "subscription__seller",
                 ),
                 pk=self.kwargs["pk"],
                 customer_id=self.kwargs["customer_pk"],
