@@ -129,6 +129,11 @@ def record_work_order_material(
 
     is_billable = bool(is_billable)
     if is_billable:
+        if work_order.order_type.code != "TRANSFER":
+            raise ValidationError(
+                "Solo los materiales de una orden de traslado pueden "
+                "marcarse como facturables al abonado."
+            )
         if movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
             raise ValidationError(
                 "Solo un material instalado puede marcarse como facturable."
