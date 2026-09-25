@@ -254,6 +254,28 @@ class Plan(models.Model):
             "Una TV no utilizada ese día no queda pendiente para el futuro."
         ),
     )
+    included_app_plan = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="included_in_packages",
+        null=True,
+        blank=True,
+        verbose_name="APP incluida",
+        help_text=(
+            "Derecho APP incluido dentro del precio del paquete. "
+            "Debe apuntar a un plan del servicio APPS."
+        ),
+    )
+    included_app_component_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Componente mensual APP (S/)",
+        help_text=(
+            "Parte interna de la mensualidad total que corresponde a la APP. "
+            "No se suma al precio del paquete."
+        ),
+    )
     requires_geographic_tariff = models.BooleanField(
         default=False,
         verbose_name="Requiere tarifa por sede/zona",
@@ -287,6 +309,50 @@ class Plan(models.Model):
             raise ValidationError({
                 "included_tv_points": (
                     "Solo CABLE/DUO puede ofrecer cortesía inicial de TV."
+                )
+            })
+
+        if self.included_app_plan_id:
+            if self.generation != 2026:
+                raise ValidationError({
+                    "included_app_plan": (
+                        "Las APP incluidas en paquete solo aplican a planes 2026."
+                    )
+                })
+            if self.service_type_id and self.service_type.code == "APPS":
+                raise ValidationError({
+                    "included_app_plan": (
+                        "Un plan APPS independiente no puede incluir otra APP."
+                    )
+                })
+            if self.included_app_plan.service_type.code != "APPS":
+                raise ValidationError({
+                    "included_app_plan": (
+                        "La APP incluida debe pertenecer al servicio APPS."
+                    )
+                })
+            if self.included_app_component_amount <= Decimal("0.00"):
+                raise ValidationError({
+                    "included_app_component_amount": (
+                        "Indique qué parte de la mensualidad del paquete "
+                        "corresponde internamente a la APP."
+                    )
+                })
+            if (
+                self.monthly_price
+                and self.included_app_component_amount >= self.monthly_price
+            ):
+                raise ValidationError({
+                    "included_app_component_amount": (
+                        "El componente APP debe ser menor que la mensualidad "
+                        "total del paquete."
+                    )
+                })
+        elif self.included_app_component_amount:
+            raise ValidationError({
+                "included_app_component_amount": (
+                    "No puede registrar un componente APP sin seleccionar "
+                    "qué plan APPS está incluido."
                 )
             })
 
@@ -529,6 +595,24 @@ class Subscription(models.Model):
         default=0,
         verbose_name="Mensualidad base contratada",
     )
+    included_app_plan = models.ForeignKey(
+        Plan,
+        on_delete=models.PROTECT,
+        related_name="package_subscriptions",
+        null=True,
+        blank=True,
+        verbose_name="APP incluida contratada",
+    )
+    included_app_component_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Componente mensual APP contratado",
+        help_text=(
+            "Snapshot económico de la parte de la mensualidad incluida que "
+            "corresponde a la APP. No incrementa el total."
+        ),
+    )
     initial_tv_courtesy_granted = models.PositiveIntegerField(
         default=0,
         verbose_name="TV de cortesía otorgadas en instalación inicial",
@@ -647,6 +731,37 @@ class Subscription(models.Model):
             raise ValidationError({"plan": "El plan seleccionado no pertenece al tipo de servicio."})
         if self.tariff_id and self.plan_id and self.tariff.plan_id != self.plan_id:
             raise ValidationError({"tariff": "La tarifa aplicada no pertenece al plan seleccionado."})
+        if self.included_app_plan_id:
+            if self.plan_id and self.plan.generation != 2026:
+                raise ValidationError({
+                    "included_app_plan": "Solo los planes 2026 pueden incluir APP."
+                })
+            if self.included_app_plan.service_type.code != "APPS":
+                raise ValidationError({
+                    "included_app_plan": "La APP incluida debe ser un plan APPS."
+                })
+            if self.included_app_component_amount <= Decimal("0.00"):
+                raise ValidationError({
+                    "included_app_component_amount": (
+                        "El componente económico APP debe ser mayor a cero."
+                    )
+                })
+            if (
+                self.base_monthly_fee
+                and self.included_app_component_amount >= self.base_monthly_fee
+            ):
+                raise ValidationError({
+                    "included_app_component_amount": (
+                        "La parte APP debe ser menor que la mensualidad base "
+                        "contratada."
+                    )
+                })
+        elif self.included_app_component_amount:
+            raise ValidationError({
+                "included_app_component_amount": (
+                    "No puede existir importe APP sin una APP incluida."
+                )
+            })
         if self.service_type_id and not self.service_type.supports_tv_annexes:
             if self.annex_count or self.initial_tv_courtesy_granted:
                 raise ValidationError(
@@ -683,7 +798,17 @@ class Subscription(models.Model):
         return Decimal(self.annex_count) * self.service_type.annex_monthly_price
 
     @property
+    def main_service_monthly_component(self):
+        """Parte de la mensualidad que no corresponde a la APP incluida."""
+        return (
+            self.base_monthly_fee
+            + self.annex_monthly_charge
+            - self.included_app_component_amount
+        )
+
+    @property
     def total_monthly_price(self):
+        # La APP incluida es un desglose interno, no un adicional.
         return self.base_monthly_fee + self.annex_monthly_charge
 
     @property
