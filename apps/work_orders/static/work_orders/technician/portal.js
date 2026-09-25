@@ -594,7 +594,7 @@
             renderPlan(order.plan_details);
         }
 
-        $("#materials-panel").hidden = Boolean(order.is_outside_plant);
+        $("#materials-panel").hidden = order.order_type_code !== "INSTALLATION";
         if (order.is_outside_plant) {
             $("#contract-panel").hidden = true;
             state.contractOrderId = null;
