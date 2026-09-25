@@ -123,6 +123,7 @@ class SalesReportForm(forms.Form):
             User.objects
             .filter(
                 Q(is_salesperson=True)
+                | Q(role=User.Role.SALES)
                 | Q(role=User.Role.ADMIN)
                 | Q(sold_subscriptions__isnull=False)
             )
