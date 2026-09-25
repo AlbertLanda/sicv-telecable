@@ -22,6 +22,7 @@ from apps.services.models import Subscription
 
 from .models import (
     Charge,
+    ChargeComponent,
     ChargeConcept,
     Payment,
     PaymentAllocation,
@@ -127,6 +128,61 @@ def build_monthly_charge(subscription, period):
     )
 
 
+def snapshot_monthly_charge_components(charge):
+    """Congela el desglose del paquete sin cambiar el monto del cargo."""
+    if charge.concept != Charge.Concept.MONTHLY or charge.subscription_id is None:
+        return []
+
+    if charge.components.exists():
+        return list(charge.components.all())
+
+    subscription = charge.subscription
+    app_amount = Decimal(
+        subscription.included_app_component_amount or ZERO
+    )
+
+    components = []
+
+    if (
+        subscription.included_app_plan_id
+        and app_amount > ZERO
+        and app_amount < charge.amount
+    ):
+        main_amount = charge.amount - app_amount
+
+        components.append(
+            ChargeComponent(
+                charge=charge,
+                kind=ChargeComponent.Kind.MAIN,
+                code=subscription.service_type.code,
+                description=subscription.plan.name,
+                amount=main_amount,
+            )
+        )
+        components.append(
+            ChargeComponent(
+                charge=charge,
+                kind=ChargeComponent.Kind.INCLUDED_APP,
+                code="APPS",
+                description=subscription.included_app_plan.name,
+                amount=app_amount,
+            )
+        )
+    else:
+        components.append(
+            ChargeComponent(
+                charge=charge,
+                kind=ChargeComponent.Kind.MAIN,
+                code=subscription.service_type.code,
+                description=subscription.plan.name,
+                amount=charge.amount,
+            )
+        )
+
+    ChargeComponent.objects.bulk_create(components)
+    return components
+
+
 @transaction.atomic
 def generate_monthly_charges(period, branch=None, dry_run=False):
     """Emite la mensualidad de todas las suscripciones activas del periodo.
@@ -171,6 +227,7 @@ def generate_monthly_charges(period, branch=None, dry_run=False):
 
         charge.full_clean()
         charge.save()
+        snapshot_monthly_charge_components(charge)
         created.append(charge)
 
     if dry_run:
@@ -187,6 +244,7 @@ def outstanding_charges(customer, day=None):
         Charge.objects.filter(customer=customer)
         .outstanding()
         .select_related("subscription", "subscription__plan")
+        .prefetch_related("components")
         .order_by("due_date", "pk")
     )
 
