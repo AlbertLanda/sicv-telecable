@@ -1397,6 +1397,35 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(order.branch, self.branch)
         self.assertEqual(order.zone, self.zone)
 
+    def test_la_orden_hereda_el_vendedor_registrado_en_la_venta(self):
+        self.grant_add_workorder_permission()
+        self.subscription.seller = self.seller
+        self.subscription.save(update_fields=["seller", "updated_at"])
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "priority": WorkOrder.Priority.NORMAL,
+                "attention_type": WorkOrder.AttentionType.FIELD,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        order = WorkOrder.objects.get(subscription=self.subscription)
+
+        self.assertEqual(order.seller, self.seller)
+        self.assertEqual(
+            response.url,
+            reverse(
+                "contracts:installation_order_receipt",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "pk": self.contract.pk,
+                },
+            ),
+        )
+
     def test_post_con_datos_del_formulario_los_persiste_en_la_orden(self):
         """Los datos comerciales válidos llegan a la OT; instalación es FIELD."""
 
