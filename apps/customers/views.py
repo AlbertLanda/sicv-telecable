@@ -134,6 +134,34 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
                 )
             )
 
+        visible_subscriptions = (
+            Subscription.objects
+            .filter(is_active=True)
+            .exclude(status=Subscription.Status.CANCELLED)
+            .select_related(
+                "service_type",
+                "address",
+                "address__zone",
+                "address__zone__branch",
+            )
+            .order_by("service_number")
+        )
+
+        if active_branch:
+            visible_subscriptions = visible_subscriptions.filter(
+                Q(address__zone__branch=active_branch)
+                | Q(
+                    address__zone__isnull=True,
+                    customer__branch=active_branch,
+                )
+            )
+
+        operational_subscription_prefetch = Prefetch(
+            "subscriptions",
+            queryset=visible_subscriptions,
+            to_attr="operational_subscriptions",
+        )
+
         # ---------------------------------------------------------
         # BÚSQUEDA POR TIPO Y NÚMERO DE DOCUMENTO
         #
@@ -158,7 +186,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
                 .select_related("branch")
                 .prefetch_related(
                     "addresses",
-                    "subscriptions__service_type",
+                    operational_subscription_prefetch,
                 )
                 .distinct()
                 .order_by(
@@ -198,7 +226,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
                 .select_related("branch")
                 .prefetch_related(
                     "addresses",
-                    "subscriptions__service_type",
+                    operational_subscription_prefetch,
                 )
                 .order_by(
                     "paternal_surname",
