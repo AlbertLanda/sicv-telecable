@@ -23,7 +23,7 @@ def plans_by_service_type():
     plans = (
         Plan.objects
         .filter(is_active=True)
-        .select_related("billing_policy")
+        .select_related("billing_policy", "included_app_plan")
         .order_by(
             "service_type_id",
             "-generation",
@@ -46,6 +46,15 @@ def plans_by_service_type():
                 ),
                 "initial_tv_courtesy_limit": plan.initial_tv_courtesy_limit,
                 "monthly_price": str(plan.monthly_price),
+                "included_app_plan_id": plan.included_app_plan_id,
+                "included_app_label": (
+                    str(plan.included_app_plan)
+                    if plan.included_app_plan_id
+                    else ""
+                ),
+                "included_app_component_amount": str(
+                    plan.included_app_component_amount
+                ),
                 "requires_geographic_tariff": plan.requires_geographic_tariff,
                 "billing_policy": (
                     str(plan.billing_policy) if plan.billing_policy_id else ""
