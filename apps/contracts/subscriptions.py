@@ -42,7 +42,8 @@ def codigo_de_suscripcion(subscription):
 def suscripciones_contratables(customer):
     """Las suscripciones del cliente que todavía pueden recibir un contrato.
 
-    En Preventa, activas y sin contrato vigente. Un contrato por suscripción:
+    En Preventa, activas, con vendedor identificado y sin contrato vigente.
+    Un contrato por suscripción:
     dejar dentro las ya contratadas haría que la resolución eligiera una que
     después el propio contrato rechaza.
     """
@@ -56,6 +57,7 @@ def suscripciones_contratables(customer):
             customer=customer,
             is_active=True,
             status=Subscription.Status.PRESALE,
+            seller__isnull=False,
         )
         .exclude(contracts__is_active=True)
         .select_related("service_type", "plan", "address")
