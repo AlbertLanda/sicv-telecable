@@ -1,6 +1,8 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
+from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
 
 from .commercial import build_commercial_quote
@@ -37,25 +39,29 @@ class SubscriptionCreateForm(forms.ModelForm):
 
     class Meta:
         model = Subscription
-        fields = ["address", "service_type", "plan", "billing_cycle"]
+        fields = ["address", "service_type", "plan", "seller", "billing_cycle"]
         widgets = {
             "address": forms.Select(attrs={"class": "form-select"}),
             "service_type": forms.Select(attrs={"class": "form-select"}),
             "plan": forms.Select(attrs={"class": "form-select"}),
+            "seller": forms.Select(attrs={"class": "form-select"}),
             "billing_cycle": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
         }
         labels = {
             "address": "Domicilio del servicio",
             "service_type": "Tipo de servicio",
             "plan": "Plan",
+            "seller": "Vendedor",
             "billing_cycle": "Ciclo de facturación legado",
         }
 
     def __init__(self, *args, **kwargs):
         customer = kwargs.pop("customer", None)
+        actor = kwargs.pop("actor", None)
         super().__init__(*args, **kwargs)
 
         self.customer = customer
+        self.actor = actor
         self.calculated_annex_count = 0
         self.calculated_initial_courtesy_count = 0
         self.selected_quote = None
@@ -68,6 +74,25 @@ class SubscriptionCreateForm(forms.ModelForm):
                 .select_related("zone", "zone__branch", "customer__branch")
                 .order_by("-is_primary", "address")
             )
+
+        seller_filter = Q(is_salesperson=True)
+        if actor is not None and actor.is_active and actor.role == User.Role.ADMIN:
+            seller_filter |= Q(pk=actor.pk)
+
+        self.fields["seller"].queryset = (
+            User.objects
+            .filter(seller_filter, is_active=True)
+            .order_by("first_name", "last_name", "username")
+        )
+        self.fields["seller"].required = True
+        self.fields["seller"].empty_label = "Seleccione quién realizó la venta"
+
+        if (
+            actor is not None
+            and actor.is_active
+            and (actor.is_salesperson or actor.role == User.Role.ADMIN)
+        ):
+            self.fields["seller"].initial = actor.pk
 
         self.fields["service_type"].queryset = (
             ServiceType.objects.filter(is_active=True).order_by("name")
@@ -100,7 +125,17 @@ class SubscriptionCreateForm(forms.ModelForm):
         address = cleaned_data.get("address")
         service_type = cleaned_data.get("service_type")
         plan = cleaned_data.get("plan")
+        seller = cleaned_data.get("seller")
         tv_count = cleaned_data.get("tv_count")
+
+        if seller is not None:
+            if not seller.is_active:
+                self.add_error("seller", "El vendedor seleccionado está inactivo.")
+            elif not (seller.is_salesperson or seller.role == User.Role.ADMIN):
+                self.add_error(
+                    "seller",
+                    "La persona seleccionada no está habilitada como vendedor.",
+                )
 
         if self.customer and address:
             if address.customer_id != self.customer.pk:
