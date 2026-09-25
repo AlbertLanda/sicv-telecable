@@ -1,4 +1,5 @@
 import calendar
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -552,6 +553,57 @@ class Subscription(models.Model):
 
         return (
             f"{self.customer.code}-"
+            f"{self.service_type.code}-"
+            f"{self.service_number:02d}"
+        )
+
+    @classmethod
+    def next_branch_customer_code(cls, branch):
+        """Reserva lógica del siguiente código base visible de una sede.
+
+        Los códigos operativos que ya fueron asignados a suscripciones por un
+        traslado entre sedes también participan en el correlativo. Así nunca
+        se reutiliza un código solo porque no exista otro Customer físico con
+        ese valor: la persona sigue siendo única y el código pertenece a la
+        operación del servicio.
+        """
+        prefix = f"{Customer._prefix_for_branch(branch)}01-A"
+        pattern = re.compile(
+            rf"^{re.escape(prefix)}(?P<number>\d{{7}})(?:-|$)"
+        )
+        last_number = 0
+
+        customer_codes = Customer.objects.filter(
+            code__startswith=prefix,
+        ).values_list("code", flat=True)
+
+        service_codes = cls.objects.filter(
+            service_code__startswith=prefix,
+        ).values_list("service_code", flat=True)
+
+        for code in list(customer_codes) + list(service_codes):
+            match = pattern.match(code or "")
+            if match:
+                last_number = max(
+                    last_number,
+                    int(match.group("number")),
+                )
+
+        return f"{prefix}{last_number + 1:07d}"
+
+    def build_service_code_for_branch(self, branch):
+        """Genera un código nuevo para la misma suscripción en otra sede.
+
+        Un traslado dentro de la misma sede no llama este método y conserva
+        el código. Solo un traslado externo entre sedes crea un nuevo código
+        operativo, manteniendo el mismo Customer/DNI y la misma suscripción.
+        """
+        if not (branch and self.service_type_id and self.service_number):
+            return ""
+
+        base_code = self.next_branch_customer_code(branch)
+        return (
+            f"{base_code}-"
             f"{self.service_type.code}-"
             f"{self.service_number:02d}"
         )
