@@ -175,9 +175,12 @@ class WorkOrderTestCase(TestCase):
             name="Reconexión",
         )
 
-        self.transfer_type = OrderType.objects.create(
+        self.transfer_type, _ = OrderType.objects.update_or_create(
             code="TRANSFER",
-            name="Traslado",
+            defaults={
+                "name": "Traslado",
+                "is_active": True,
+            },
         )
 
         # Subtipos
@@ -193,16 +196,22 @@ class WorkOrderTestCase(TestCase):
             name="Corte definitivo",
         )
 
-        self.internal_subtype = OrderSubtype.objects.create(
+        self.internal_subtype, _ = OrderSubtype.objects.update_or_create(
             order_type=self.transfer_type,
             code="INTERNAL",
-            name="Traslado interno",
+            defaults={
+                "name": "Traslado interno",
+                "is_active": True,
+            },
         )
 
-        self.external_subtype = OrderSubtype.objects.create(
+        self.external_subtype, _ = OrderSubtype.objects.update_or_create(
             order_type=self.transfer_type,
             code="EXTERNAL",
-            name="Traslado externo",
+            defaults={
+                "name": "Traslado externo",
+                "is_active": True,
+            },
         )
 
         # Motivos
@@ -264,11 +273,14 @@ class WorkOrderTestCase(TestCase):
             is_success=True,
         )
 
-        self.transfer_success = OrderResult.objects.create(
+        self.transfer_success, _ = OrderResult.objects.update_or_create(
             order_type=self.transfer_type,
             code="SUCCESSFUL",
-            name="Exitoso",
-            is_success=True,
+            defaults={
+                "name": "Exitoso",
+                "is_success": True,
+                "is_active": True,
+            },
         )
 
         self._order_sequence = 0
