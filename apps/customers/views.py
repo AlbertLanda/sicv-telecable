@@ -962,6 +962,11 @@ class CustomerAddressCreateView(LoginRequiredMixin, CreateView):
             **kwargs,
         )
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["branch"] = self.customer.branch
+        return kwargs
+
     def get(self, request, *args, **kwargs):
         # -----------------------------------------------------------
         # OTRA DIRECCIÓN PARA OTRO SERVICIO (mejora solicitada 02/09)

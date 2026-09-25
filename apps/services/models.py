@@ -481,6 +481,17 @@ class Subscription(models.Model):
         verbose_name="Estado",
     )
     service_number = models.PositiveIntegerField(default=1, verbose_name="Número de servicio")
+    service_code = models.CharField(
+        max_length=80,
+        unique=True,
+        blank=True,
+        editable=False,
+        verbose_name="Código de servicio",
+        help_text=(
+            "Identifica de forma estable esta suscripción/domicilio. "
+            "Un mismo abonado puede tener varios códigos de servicio."
+        ),
+    )
     billing_cycle = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -528,6 +539,28 @@ class Subscription(models.Model):
                 name="unique_customer_service_number",
             ),
         ]
+
+    def build_service_code(self):
+        """Código visible y estable de esta suscripción.
+
+        El DNI/RUC identifica al abonado una sola vez. Cada servicio/domicilio
+        recibe su propio código para que contrato, orden y operación apunten
+        a la instalación correcta sin duplicar al cliente.
+        """
+        if not (self.customer_id and self.service_type_id and self.service_number):
+            return ""
+
+        return (
+            f"{self.customer.code}-"
+            f"{self.service_type.code}-"
+            f"{self.service_number:02d}"
+        )
+
+    def save(self, *args, **kwargs):
+        if not self.service_code:
+            self.service_code = self.build_service_code()
+
+        return super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()

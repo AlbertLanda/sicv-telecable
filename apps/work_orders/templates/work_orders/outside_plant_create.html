@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Nueva orden de Planta Externa{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-1">Nueva orden de Planta Externa</h1>
+            <p class="text-muted mb-0">
+                Trabajo de red o infraestructura. No requiere cliente ni suscripción.
+            </p>
+        </div>
+        <a href="{% url 'work_orders:outside_plant_queue' %}" class="btn btn-outline-secondary">← Volver</a>
+    </div>
+
+    <div class="card card-custom shadow-sm">
+        <div class="card-header bg-primary text-white fw-bold">Datos de la orden PEX</div>
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <div class="row g-3">
+                    {% for field in form %}
+                    <div class="{% if field.name == 'detail' %}col-12{% else %}col-md-6{% endif %}">
+                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">
+                            {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
+                        </label>
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <a href="{% url 'work_orders:outside_plant_queue' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Registrar Planta Externa
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{ zone_catalog|json_script:"pex-zone-catalog" }}
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const branchSelect = document.getElementById("id_branch");
+    const zoneSelect = document.getElementById("id_zone");
+    const zoneCatalogElement = document.getElementById("pex-zone-catalog");
+
+    if (!branchSelect || !zoneSelect || !zoneCatalogElement) {
+        return;
+    }
+
+    const zoneCatalog = JSON.parse(zoneCatalogElement.textContent);
+
+    function refreshZones() {
+        const branchId = Number(branchSelect.value || 0);
+        const previousZoneId = Number(zoneSelect.value || 0);
+
+        zoneSelect.replaceChildren();
+
+        const placeholder = new Option("Seleccione una zona", "");
+        zoneSelect.add(placeholder);
+
+        const branchZones = zoneCatalog.filter(
+            (zone) => Number(zone.branch_id) === branchId
+        );
+
+        branchZones.forEach((zone) => {
+            zoneSelect.add(new Option(zone.name, String(zone.id)));
+        });
+
+        const previousStillExists = branchZones.some(
+            (zone) => Number(zone.id) === previousZoneId
+        );
+
+        zoneSelect.value = previousStillExists ? String(previousZoneId) : "";
+    }
+
+    branchSelect.addEventListener("change", refreshZones);
+    refreshZones();
+});
+</script>
+{% endblock %}

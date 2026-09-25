@@ -351,7 +351,7 @@ class ContractCreateTests(TestCase):
         # campo bloqueado muestra.
         self.assertEqual(
             catalogo[self.subscription.pk]["label"],
-            str(self.subscription.pk),
+            self.subscription.service_code,
         )
 
     def test_la_pantalla_abre_en_duo_con_su_primer_plan(self):
@@ -444,7 +444,7 @@ class ContractCreateTests(TestCase):
 
         self.assertEqual(
             response.context["resolved_subscription_label"],
-            str(self.subscription.pk),
+            self.subscription.service_code,
         )
 
         self.assertContains(response, 'id="suscripcion-resuelta"')
@@ -1750,6 +1750,32 @@ class ContratoDeReferenciaMixin:
     """
 
     def setUp(self):
+        # Los assets corporativos se administran fuera del repositorio.
+        # Estas pruebas crean los suyos para no depender de los archivos
+        # presentes en la PC o servidor que ejecute la suite.
+        self._media_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._media_dir.cleanup)
+        self._media_override = override_settings(
+            MEDIA_ROOT=self._media_dir.name,
+        )
+        self._media_override.enable()
+        self.addCleanup(self._media_override.disable)
+
+        media_root = Path(self._media_dir.name)
+
+        logo = PILImage.new("RGB", (240, 60), (255, 255, 255))
+        logo_draw = ImageDraw.Draw(logo)
+        logo_draw.rectangle((12, 12, 228, 48), fill=(15, 76, 127))
+        logo.save(media_root / f"{branding.STEM_APAISADO}.png")
+
+        sello = PILImage.new("RGBA", (180, 70), (255, 255, 255, 0))
+        sello_draw = ImageDraw.Draw(sello)
+        sello_draw.rectangle((8, 8, 172, 62), outline=(20, 20, 20, 255), width=3)
+        sello_draw.line((20, 45, 160, 25), fill=(20, 20, 20, 255), width=4)
+        sello.save(
+            media_root / f"{branding.stem_de_la_firma('INV')}.png"
+        )
+
         # Jauja, porque es la sede del contrato firmado que sirve de
         # referencia: sus oficinas y su jurisdicción están confirmadas. Las
         # tres sedes las siembra una migración, así que aquí se toma la que

@@ -518,10 +518,13 @@ def _firmas(datos, estilos, ancla=None):
     ancho = PAGE_SIZE[0] - 2 * MARGEN_LATERAL
     ancho_firma = (ancho - HUECO_ENTRE_FIRMAS) / 2
 
+    firma_abonado = datos.get("firma_abonado") or {}
+    nombre_del_firmante = firma_abonado.get("firmante") or datos["cliente"]
+
     hueco = _HuecoDeLaFirma(
         ancho_firma,
         ALTO_DEL_TRAZO,
-        firma=datos.get("firma_abonado"),
+        firma=firma_abonado or None,
         ancla=ancla,
     )
 
@@ -554,7 +557,7 @@ def _firmas(datos, estilos, ancla=None):
                 "",
                 [
                     Paragraph("<b>EL ABONADO</b>", estilos["firma"]),
-                    Paragraph(datos["cliente"], estilos["firma"]),
+                    Paragraph(nombre_del_firmante, estilos["firma"]),
                     Paragraph(
                         f"{datos['documento_tipo']} {datos['documento_numero']}",
                         estilos["firma"],

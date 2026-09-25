@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import Contract
-from .subscriptions import resolver_suscripcion
+from .subscriptions import resolver_suscripcion, suscripciones_contratables
 from apps.accounts.models import User
 from apps.services.models import Plan, ServiceType
 from apps.work_orders.models import OrderReason, WorkOrder
@@ -150,22 +150,57 @@ class ContractCreateForm(forms.ModelForm):
         # ---------------------------------------------------------
 
         if service_type and plan and self.customer:
+            candidatas = suscripciones_contratables(self.customer).filter(
+                service_type=service_type,
+                plan=plan,
+            )
+
+            raw_subscription_id = (self.data.get("subscription_id") or "").strip()
+            subscription_id = None
+
+            if raw_subscription_id:
+                try:
+                    subscription_id = int(raw_subscription_id)
+                except (TypeError, ValueError):
+                    self.add_error(None, "La suscripción indicada no es válida.")
 
             subscription = resolver_suscripcion(
                 self.customer,
                 service_type,
                 plan,
+                subscription_id=subscription_id,
             )
 
-            if subscription is None:
+            if subscription is None and subscription_id:
                 self.add_error(
                     None,
                     (
-                        "Este cliente no tiene una suscripción en Preventa "
-                        "disponible para el servicio y plan elegidos. "
-                        "Regístrela antes de contratar."
+                        "La suscripción indicada ya no está disponible o no "
+                        "corresponde al servicio y plan elegidos."
                     ),
                 )
+
+            elif subscription is None:
+                cantidad = candidatas.count()
+
+                if cantidad > 1:
+                    self.add_error(
+                        None,
+                        (
+                            "Hay más de una suscripción disponible para este "
+                            "servicio y plan. Abra el contrato desde el resumen "
+                            "del código de servicio que desea contratar."
+                        ),
+                    )
+                else:
+                    self.add_error(
+                        None,
+                        (
+                            "Este cliente no tiene una suscripción en Preventa "
+                            "disponible para el servicio y plan elegidos. "
+                            "Regístrela antes de contratar."
+                        ),
+                    )
 
             else:
                 self.subscription_resuelta = subscription

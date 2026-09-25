@@ -66,6 +66,9 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     {% if perms.work_orders.view_incident %}
                         <a class="sidebar-link" href="{% url 'work_orders:incident_noc_queue' %}"><i class="bi bi-headset"></i>Incidencias NOC</a>
                     {% endif %}
+                    {% if perms.work_orders.view_outsideplant %}
+                        <a class="sidebar-link" href="{% url 'work_orders:outside_plant_queue' %}"><i class="bi bi-diagram-3"></i>Planta Externa</a>
+                    {% endif %}
                     <span class="sidebar-link-pending"><span>Técnicos</span><span class="pending-tag">pendiente</span></span>
                 </div>
             </div>

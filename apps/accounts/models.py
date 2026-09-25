@@ -58,6 +58,8 @@ class User(AbstractUser):
                 "work_orders.view_incident",
                 "work_orders.schedule_workorder",
                 "work_orders.cancel_workorder",
+                "work_orders.create_outsideplant",
+                "work_orders.view_outsideplant",
                 "payments.view_charge",
                 "payments.view_payment",
                 "payments.view_receipt",
@@ -70,6 +72,8 @@ class User(AbstractUser):
                 "work_orders.view_incident",
                 "work_orders.start_incident",
                 "work_orders.close_incident",
+                "work_orders.create_outsideplant",
+                "work_orders.view_outsideplant",
             }
         ),
     }

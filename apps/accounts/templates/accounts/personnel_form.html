@@ -94,6 +94,13 @@
                         {% for error in form.role.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
 
+                    <div id="technicianAreaField" class="col-md-4">
+                        <label class="form-label fw-semibold" for="{{ form.technician_area.id_for_label }}">{{ form.technician_area.label }}</label>
+                        {{ form.technician_area }}
+                        <div class="form-text">Define si recibe órdenes de Red interna o Planta Externa.</div>
+                        {% for error in form.technician_area.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+
                     <div class="col-md-4">
                         <label class="form-label fw-semibold" for="{{ form.branch.id_for_label }}">{{ form.branch.label }}</label>
                         {{ form.branch }}
@@ -180,6 +187,8 @@
     const role = document.getElementById("{{ form.role.id_for_label }}");
     const office = document.getElementById("{{ form.office.id_for_label }}");
     const atcCashScope = document.getElementById("atcCashScope");
+    const technicianAreaField = document.getElementById("technicianAreaField");
+    const technicianArea = document.getElementById("{{ form.technician_area.id_for_label }}");
     const allowedCheckboxes = Array.from(
         document.querySelectorAll('input[name="{{ form.allowed_offices.html_name }}"]')
     );
@@ -220,7 +229,10 @@
 
     function refreshRole() {
         const isAtc = role && role.value === "ATC";
+        const isTechnician = role && role.value === "TECHNICIAN";
         if (atcCashScope) atcCashScope.style.display = isAtc ? "" : "none";
+        if (technicianAreaField) technicianAreaField.style.display = isTechnician ? "" : "none";
+        if (technicianArea) technicianArea.disabled = !isTechnician;
         refreshAllowedOffices();
     }
 

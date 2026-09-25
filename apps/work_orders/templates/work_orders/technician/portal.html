@@ -135,7 +135,7 @@
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Ubicación</p>
-                                <h2>Domicilio del servicio</h2>
+                                <h2 id="detail-location-title">Domicilio del servicio</h2>
                             </div>
                         </div>
                         <dl class="data-list">
@@ -147,7 +147,7 @@
                         <p id="detail-gps-note" class="helper"></p>
                     </section>
 
-                    <section class="panel">
+                    <section id="detail-plan-panel" class="panel">
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Servicio</p>
@@ -203,11 +203,11 @@
                         <p id="field-sheet-help" class="helper">Inicia la atención para habilitar el registro técnico.</p>
                         <form id="field-sheet-form" class="form-grid">
                             <label class="field">
-                                <span>Caja NAP</span>
+                                <span id="field-nap-label">Caja NAP</span>
                                 <input id="field-nap" name="nap" maxlength="60" placeholder="Ej. NAP-HYO-023">
                             </label>
                             <label class="field">
-                                <span>Borne</span>
+                                <span id="field-terminal-label">Borne</span>
                                 <input id="field-terminal" name="terminal" maxlength="30" placeholder="Ej. 08">
                             </label>
                             <label class="field">
@@ -232,14 +232,14 @@
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Materiales</p>
-                                <h2>Material utilizado en domicilio</h2>
+                                <h2 id="installed-materials-title">Material utilizado en domicilio</h2>
                             </div>
                             <span id="installed-materials-count" class="mini-badge">0</span>
                         </div>
                         <p id="field-materials-help" class="helper">Declara aquí lo que realmente queda instalado. Si el material se mide en metros (UTP, RG-6 o fibra Drop), la cantidad registrada es el metraje instalado y el SICV calcula automáticamente cualquier exceso.</p>
                         <form id="installed-material-form" class="form-grid compact-form-grid">
                             <label class="field">
-                                <span>Material instalado</span>
+                                <span id="installed-material-label">Material instalado</span>
                                 <select id="installed-material-id" required>
                                     <option value="">Seleccione material...</option>
                                 </select>
@@ -264,7 +264,7 @@
                         <div class="panel-heading">
                             <div>
                                 <p class="eyebrow">Materiales</p>
-                                <h2>Material retirado de domicilio</h2>
+                                <h2 id="removed-materials-title">Material retirado de domicilio</h2>
                             </div>
                             <span id="removed-materials-count" class="mini-badge">0</span>
                         </div>

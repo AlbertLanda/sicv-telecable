@@ -154,11 +154,9 @@ def sembrar_catalogo(apps, schema_editor):
                 "speed_mbps": None,
                 "technology": "FTTH",
                 "monthly_price": 0,
-                # La cortesia inicial de TV de estos planes no esta
-                # confirmada. Cero es lo unico que se sabe: cada punto
-                # adicional se cobra como anexo hasta que negocio diga
-                # cuantos entran sin cargo.
-                "included_tv_points": 0,
+                # Negocio confirmó dos puntos de TV incluidos en el alta.
+                # Todo punto adicional se maneja como anexo.
+                "included_tv_points": 2,
                 "requires_geographic_tariff": False,
                 "is_active": True,
             },

@@ -7,11 +7,13 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
+from apps.accounts.models import User
 from apps.inventory.models import Material, WorkOrderMaterialMovement
 from apps.inventory.services import (
     delete_work_order_material,
     record_work_order_material,
 )
+from apps.technicians.models import TechnicianProfile
 from apps.services.installation_rules import (
     record_installation_material_usage,
     total_installation_excess_charge,
@@ -66,6 +68,27 @@ def _completion_payload(order):
         order_type=order.order_type,
         is_active=True,
     ).order_by("name")
+
+    expected_area = (
+        TechnicianProfile.Area.PEX
+        if order.is_outside_plant
+        else TechnicianProfile.Area.INTERNAL_NETWORK
+    )
+    participant_options = (
+        User.objects
+        .filter(
+            role=User.Role.TECHNICIAN,
+            is_active=True,
+            technician_profile__area=expected_area,
+        )
+        .order_by("first_name", "last_name", "username")
+    )
+    participants = (
+        order.participations
+        .select_related("user")
+        .order_by("started_at", "pk")
+    )
+
     return {
         "status": order.status,
         "status_display": order.get_status_display(),
@@ -76,6 +99,21 @@ def _completion_payload(order):
             else None
         ),
         "summary": field_completion_summary(order),
+        "participant_options": [
+            {
+                "id": participant.pk,
+                "display_name": str(participant),
+            }
+            for participant in participant_options
+        ],
+        "participants": [
+            {
+                "id": participation.user_id,
+                "display_name": str(participation.user),
+                "source": participation.get_source_display(),
+            }
+            for participation in participants
+        ],
     }
 
 
@@ -176,6 +214,9 @@ class LiquidateWorkOrderView(TechnicianWorkOrderObjectMixin, GenericAPIView):
                 technical_notes=technical_notes,
                 items=liquidation_items_from_field(order),
                 remarks=serializer.validated_data["remarks"],
+                participant_users=serializer.validated_data[
+                    "participant_users"
+                ],
                 **technical_data,
             )
         except DjangoValidationError as exc:

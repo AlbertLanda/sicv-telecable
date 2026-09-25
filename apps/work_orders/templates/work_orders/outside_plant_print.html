@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}{{ order.order_number }} - Planta Externa{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pex-print {
+        max-width: 960px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid var(--sicv-linea);
+        border-radius: 12px;
+        padding: 2rem;
+    }
+    .pex-print-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1.5rem;
+        border-bottom: 2px solid var(--sicv-azul);
+        padding-bottom: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    .pex-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .7rem 1.5rem;
+    }
+    .pex-label {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--sicv-tinta-tenue);
+    }
+    .pex-value { font-weight: 600; }
+    .pex-section {
+        border-top: 1px solid var(--sicv-linea);
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    .pex-material-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .pex-material-table th,
+    .pex-material-table td {
+        border-bottom: 1px solid #e5e7eb;
+        padding: .45rem;
+        text-align: left;
+    }
+    .screen-actions {
+        max-width: 960px;
+        margin: 0 auto 1rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: .5rem;
+    }
+    @media print {
+        header, nav, aside, footer, .screen-actions { display: none !important; }
+        body, main, .content-wrapper, .container-fluid {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+        }
+        .pex-print {
+            max-width: none;
+            border: 0;
+            padding: 0;
+        }
+        @page { size: A4; margin: 12mm; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="screen-actions">
+    <a href="{% url 'work_orders:outside_plant_detail' order.pk %}" class="btn btn-outline-secondary">Volver</a>
+    <button type="button" class="btn btn-primary" onclick="window.print()">Imprimir</button>
+</div>
+
+<section class="pex-print">
+    <div class="pex-print-head">
+        <div>
+            <div class="fw-bold fs-4 text-primary">TELECABLE</div>
+            <div class="text-muted">{{ order.branch.name }}</div>
+        </div>
+        <div class="text-end">
+            <div class="fw-bold fs-4">ORDEN DE PLANTA EXTERNA</div>
+            <div class="fw-bold text-primary fs-5">N.º {{ order.order_number }}</div>
+            <div class="small text-muted">{{ order.get_status_display }}</div>
+        </div>
+    </div>
+
+    <div class="pex-grid">
+        <div style="grid-column: 1 / -1;">
+            <div class="pex-label">Vía / tramo</div>
+            <div class="pex-value">{{ pex.route }}</div>
+        </div>
+        <div>
+            <div class="pex-label">Origen</div>
+            <div class="pex-value">{{ pex.get_origin_display }} · {{ order.created_by }}</div>
+        </div>
+        <div>
+            <div class="pex-label">Sede / zona</div>
+            <div class="pex-value">{{ order.branch }}{% if order.zone %} · {{ order.zone.name }}{% endif %}</div>
+        </div>
+        <div>
+            <div class="pex-label">Motivo</div>
+            <div class="pex-value">{{ order.reason.name|default:"—" }}</div>
+        </div>
+        <div>
+            <div class="pex-label">Prioridad</div>
+            <div class="pex-value">{{ order.get_priority_display }}</div>
+        </div>
+        <div>
+            <div class="pex-label">Emisión</div>
+            <div class="pex-value">{{ order.created_at|date:"d/m/Y H:i" }}</div>
+        </div>
+        <div>
+            <div class="pex-label">Atención</div>
+            <div class="pex-value">{{ order.attended_at|date:"d/m/Y H:i"|default:"Pendiente" }}</div>
+        </div>
+    </div>
+
+    <div class="pex-section">
+        <div class="pex-label">Detalle</div>
+        <div>{{ order.detail|default:"—"|linebreaksbr }}</div>
+    </div>
+
+    <div class="pex-section">
+        <div class="pex-label">Solución ejecutada</div>
+        <div>
+            {% if order.liquidation %}
+                {{ order.liquidation.resolution_detail|linebreaksbr }}
+            {% else %}
+                Pendiente de liquidación.
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="pex-section">
+        <div class="pex-grid">
+            <div>
+                <div class="pex-label">Resultado</div>
+                <div class="pex-value">{{ order.result.name|default:"Pendiente" }}</div>
+            </div>
+            <div>
+                <div class="pex-label">Responsable de liquidación</div>
+                <div class="pex-value">
+                    {% if order.liquidation %}{{ order.liquidation.liquidated_by }}{% else %}Pendiente{% endif %}
+                </div>
+            </div>
+            <div style="grid-column: 1 / -1;">
+                <div class="pex-label">Participantes</div>
+                <div class="pex-value">
+                    {% for participant in participants %}
+                        {{ participant }}{% if not forloop.last %} / {% endif %}
+                    {% empty %}
+                        Pendiente de registrar
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pex-section">
+        <div class="pex-grid">
+            <div>
+                <div class="pex-label mb-2">Materiales utilizados</div>
+                <table class="pex-material-table">
+                    {% for movement in materials_used %}
+                    <tr>
+                        <td>{{ movement.material.name }}</td>
+                        <td>{{ movement.quantity }} {{ movement.material.get_unit_of_measure_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2">Sin materiales registrados.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+            <div>
+                <div class="pex-label mb-2">Materiales retirados</div>
+                <table class="pex-material-table">
+                    {% for movement in materials_removed %}
+                    <tr>
+                        <td>{{ movement.material.name }}</td>
+                        <td>{{ movement.quantity }} {{ movement.material.get_unit_of_measure_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="2">Sin materiales registrados.</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="pex-section">
+        <div class="pex-label">Observaciones</div>
+        <div>
+            {% if order.liquidation %}
+                {{ order.liquidation.technical_notes|default:"Sin observaciones"|linebreaksbr }}
+            {% else %}
+                Pendiente de liquidación.
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between border-top mt-4 pt-3 small text-muted">
+        <span>Generado desde SICV · {{ order.order_number }}</span>
+        <span>Telecable</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{% if auto_print %}
+<script>
+window.addEventListener("load", function () { window.print(); });
+</script>
+{% endif %}
+{% endblock %}

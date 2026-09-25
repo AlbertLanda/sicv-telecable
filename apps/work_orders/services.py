@@ -1,15 +1,21 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.customers.models import CustomerAddress
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     DEFINITIVE_CUT_REASONS,
     TEMPORARY_CUT_REASONS,
     IncidentDetail,
     OrderType,
+    OutsidePlantDetail,
+    TransferDetail,
     WorkOrder,
+    WorkOrderParticipation,
     WorkOrderEvidence,
     WorkOrderFieldSheet,
     WorkOrderLiquidation,
@@ -41,6 +47,13 @@ ORDER_NUMBER_PADDING = 6
 # datos de prueba.
 INSTALLATION_ORDER_TYPE_CODE = "INSTALLATION"
 INCIDENT_ORDER_TYPE_CODE = "INCIDENT"
+OUTSIDE_PLANT_ORDER_TYPE_CODE = "OUTSIDE_PLANT"
+TRANSFER_ORDER_TYPE_CODE = "TRANSFER"
+
+TRANSFER_BASE_FEES = {
+    "INTERNAL": Decimal("20.00"),
+    "EXTERNAL": Decimal("30.00"),
+}
 
 # Estados de suscripción desde los que NO se admite registrar trabajo nuevo.
 SUBSCRIPTION_BLOCKED_STATUSES = (
@@ -97,35 +110,56 @@ def generate_order_number(year=None):
     return format_order_number(year, sequence.last_number)
 
 
-def _resolve_branch(subscription, branch):
-    """
-    La sede de la orden es la del cliente de la suscripción.
+def _resolve_branch(
+    subscription,
+    branch,
+    order_type=None,
+    subtype=None,
+):
+    """Resuelve la sede operativa de la OT.
 
-    Si el llamador la envía explícitamente debe coincidir: no se registra
-    trabajo de un cliente bajo la sede de otro.
+    Un traslado externo es la excepción deliberada: puede salir de Jauja y
+    atenderse en La Oroya/Huancayo, así que su sede de trabajo es la del
+    destino, no necesariamente la sede histórica del abonado.
     """
-    customer_branch = subscription.customer.branch
+    if subscription is None:
+        if branch is None or branch.pk is None:
+            raise ValidationError(
+                "Las órdenes sin abonado deben indicar una sede."
+            )
+        return branch
+
+    service_branch = (
+        subscription.address.zone.branch
+        if subscription.address_id
+        and subscription.address.zone_id
+        else subscription.customer.branch
+    )
 
     if branch is None:
-        return customer_branch
+        return service_branch
 
-    if branch.pk != customer_branch.pk:
+    is_external_transfer = (
+        order_type is not None
+        and order_type.code == TRANSFER_ORDER_TYPE_CODE
+        and subtype is not None
+        and subtype.code == "EXTERNAL"
+    )
+
+    if branch.pk != service_branch.pk and not is_external_transfer:
         raise ValidationError(
-            "La sede indicada no corresponde a la sede del cliente "
-            "de la suscripción."
+            "La sede indicada no corresponde a la sede actual del servicio."
         )
 
     return branch
 
 
 def _resolve_zone(subscription, zone, branch):
-    """
-    La zona de la orden debe ser coherente con la sede de la orden.
+    """La zona puede venir de la dirección del abonado o directamente en PEX."""
+    resolved_zone = zone
 
-    Si no se envía una zona explícita, se toma la zona de la dirección
-    de la suscripción, pero también se valida su coherencia.
-    """
-    resolved_zone = zone or subscription.address.zone
+    if subscription is not None and resolved_zone is None:
+        resolved_zone = subscription.address.zone
 
     if resolved_zone is None:
         return None
@@ -149,10 +183,18 @@ def _validate_creation_catalogs(subscription, order_type, subtype, reason, cause
             "El tipo de orden seleccionado no está activo."
         )
 
-    if not order_type.applies_to_service_type(subscription.service_type_id):
+    if (
+        subscription is not None
+        and not order_type.applies_to_service_type(subscription.service_type_id)
+    ):
         raise ValidationError({
             "order_type": f"«{order_type.name}» no se emite sobre una suscripción {subscription.service_type}."
         })
+
+    if subscription is None and order_type.code != OUTSIDE_PLANT_ORDER_TYPE_CODE:
+        raise ValidationError(
+            "Solo Planta Externa puede registrarse sin una suscripción."
+        )
 
     if subtype is not None and not subtype.is_active:
         raise ValidationError(
@@ -207,8 +249,19 @@ def _validate_seller(seller):
         )
 
 
-def _validate_creation_subscription(subscription, customer):
-    if subscription is None or subscription.pk is None:
+def _validate_creation_subscription(subscription, customer, order_type=None):
+    if subscription is None:
+        if (
+            order_type is not None
+            and order_type.code == OUTSIDE_PLANT_ORDER_TYPE_CODE
+        ):
+            return
+
+        raise ValidationError(
+            "Debe indicar una suscripción registrada."
+        )
+
+    if subscription.pk is None:
         raise ValidationError(
             "Debe indicar una suscripción registrada."
         )
@@ -280,11 +333,22 @@ def create_work_order(
             "El usuario que registra la orden debe estar activo."
         )
 
-    _validate_creation_subscription(subscription, customer)
+    # La suscripción puede haber cambiado desde que esta instancia fue
+    # cargada (por ejemplo, tras liquidar un traslado externo). Antes de
+    # resolver sede y zona se usa siempre el estado persistido vigente.
+    if subscription is not None and subscription.pk is not None:
+        subscription.refresh_from_db()
+
+    _validate_creation_subscription(subscription, customer, order_type)
     _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
 
-    branch = _resolve_branch(subscription, branch)
+    branch = _resolve_branch(
+        subscription,
+        branch,
+        order_type=order_type,
+        subtype=subtype,
+    )
     zone = _resolve_zone(subscription, zone, branch)
 
     order = WorkOrder(
@@ -313,16 +377,357 @@ def create_work_order(
     order.full_clean()
     order.save()
 
-    # Un traslado deja una deuda propuesta sobre el abonado: volver a tender
-    # el cable se cobra cuando pasa del metraje incluido. Se propone, no se
-    # emite: aquí todavía no se sabe cuántos metros va a llevar.
-    #
-    # La importación es local a propósito. `payments` apunta a `work_orders`
-    # -la propuesta cuelga de la orden que la origina-, y subirla al módulo
-    # cerraría el ciclo entre las dos apps al arrancar Django.
-    from apps.payments.proposals import propose_transfer_charge
+    return order
 
+
+@transaction.atomic
+def create_transfer_work_order(
+    *,
+    subscription,
+    created_by,
+    subtype,
+    customer=None,
+    destination_branch=None,
+    destination_zone=None,
+    previous_location="",
+    new_location="",
+    requested_address_text="",
+    requested_reference="",
+    requested_supply_code="",
+    requested_latitude=None,
+    requested_longitude=None,
+    estimated_extra_amount=Decimal("0.00"),
+    customer_agreed_amount=None,
+    charge_mode=TransferDetail.ChargeMode.UPFRONT_BASE,
+    collection_mode=TransferDetail.CollectionMode.IMMEDIATE,
+    attention_type=None,
+    priority=None,
+    detail="",
+    scheduled_at=None,
+):
+    """Registra un TRASLADO con su estimación y propuesta de cobro.
+
+    La propuesta no es deuda todavía. ATC puede resolverla el mismo día o
+    dejarla pendiente según la modalidad elegida. En externo, la sede/zona
+    de la OT representan el destino operativo para que llegue a la cuadrilla
+    que realmente la atenderá.
+    """
+    try:
+        order_type = OrderType.objects.get(
+            code=TRANSFER_ORDER_TYPE_CODE,
+            is_active=True,
+        )
+    except OrderType.DoesNotExist as exc:
+        raise ValidationError(
+            "El catálogo no contiene un tipo de orden TRASLADO activo."
+        ) from exc
+
+    if subtype is None or subtype.order_type_id != order_type.pk:
+        raise ValidationError(
+            "Debe indicar si el traslado es interno o externo."
+        )
+
+    if subtype.code not in TRANSFER_BASE_FEES:
+        raise ValidationError("El subtipo de traslado no es válido.")
+
+    try:
+        estimated_extra_amount = Decimal(estimated_extra_amount or 0)
+    except Exception as exc:
+        raise ValidationError("El adicional estimado no es válido.") from exc
+
+    if estimated_extra_amount < 0:
+        raise ValidationError("El adicional estimado no puede ser negativo.")
+
+    base_fee = TRANSFER_BASE_FEES[subtype.code]
+
+    valid_charge_modes = {
+        value for value, _label in TransferDetail.ChargeMode.choices
+    }
+    if charge_mode not in valid_charge_modes:
+        raise ValidationError("La modalidad de definición del cobro no es válida.")
+
+    valid_collection_modes = {
+        value for value, _label in TransferDetail.CollectionMode.choices
+    }
+    if collection_mode not in valid_collection_modes:
+        raise ValidationError("La modalidad de cobro no es válida.")
+
+    if customer_agreed_amount in ("", None):
+        if charge_mode == TransferDetail.ChargeMode.UPFRONT_BASE:
+            customer_agreed_amount = base_fee
+        elif charge_mode == TransferDetail.ChargeMode.UPFRONT_FULL:
+            customer_agreed_amount = base_fee + estimated_extra_amount
+        else:
+            customer_agreed_amount = None
+    else:
+        try:
+            customer_agreed_amount = Decimal(customer_agreed_amount)
+        except Exception as exc:
+            raise ValidationError(
+                "El monto informado al abonado no es válido."
+            ) from exc
+
+        if customer_agreed_amount < 0:
+            raise ValidationError(
+                "El monto informado al abonado no puede ser negativo."
+            )
+
+    if subtype.code == "INTERNAL":
+        destination_zone = subscription.address.zone
+        destination_branch = (
+            destination_zone.branch
+            if destination_zone is not None
+            else subscription.customer.branch
+        )
+    else:
+        if destination_branch is None or destination_branch.pk is None:
+            raise ValidationError(
+                "Un traslado externo debe indicar la sede destino."
+            )
+        if destination_zone is None or destination_zone.pk is None:
+            raise ValidationError(
+                "Un traslado externo debe indicar la zona destino."
+            )
+        if destination_zone.branch_id != destination_branch.pk:
+            raise ValidationError(
+                "La zona destino no pertenece a la sede destino."
+            )
+        if not (requested_address_text or "").strip():
+            raise ValidationError(
+                "Un traslado externo debe registrar el destino solicitado."
+            )
+
+    order = create_work_order(
+        subscription=subscription,
+        order_type=order_type,
+        created_by=created_by,
+        customer=customer,
+        branch=destination_branch,
+        zone=destination_zone,
+        subtype=subtype,
+        attention_type=attention_type,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
+
+    transfer = TransferDetail(
+        work_order=order,
+        previous_address=(
+            subscription.address if subtype.code == "EXTERNAL" else None
+        ),
+        previous_location=(previous_location or "").strip(),
+        new_location=(new_location or "").strip(),
+        requested_address_text=(requested_address_text or "").strip(),
+        requested_reference=(requested_reference or "").strip(),
+        requested_supply_code=(requested_supply_code or "").strip(),
+        requested_latitude=requested_latitude,
+        requested_longitude=requested_longitude,
+        base_fee_snapshot=base_fee,
+        estimated_extra_amount=estimated_extra_amount,
+        customer_agreed_amount=customer_agreed_amount,
+        charge_mode=charge_mode,
+        collection_mode=collection_mode,
+        requires_additional_cabling=estimated_extra_amount > 0,
+    )
+    transfer.full_clean()
+    transfer.save()
+
+    from apps.payments.proposals import propose_transfer_charge
     propose_transfer_charge(work_order=order)
+
+    return order
+
+
+@transaction.atomic
+def confirm_external_transfer_destination(
+    *,
+    order,
+    user,
+    address,
+    district,
+    zone,
+    reference="",
+    supply_code="",
+    latitude=None,
+    longitude=None,
+):
+    """El técnico confirma/corrige el domicilio real de un traslado externo."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+        or order.subtype_id is None
+        or order.subtype.code != "EXTERNAL"
+    ):
+        raise ValidationError(
+            "Solo un traslado externo admite confirmación de nuevo domicilio."
+        )
+
+    if order.status not in {
+        WorkOrder.Status.IN_PROGRESS,
+        WorkOrder.Status.ATTENDED,
+    }:
+        raise ValidationError(
+            "El destino solo puede confirmarse durante o al finalizar la atención."
+        )
+
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError(
+            "Debe indicar un técnico activo que confirma el domicilio."
+        )
+
+    if order.assigned_technician_id != user.pk:
+        raise ValidationError(
+            "Solo el técnico que atiende la orden puede confirmar el domicilio."
+        )
+
+    if zone is None or zone.pk is None or zone.branch_id != order.branch_id:
+        raise ValidationError(
+            "La zona confirmada debe pertenecer a la sede destino de la orden."
+        )
+
+    address = (address or "").strip()
+    district = (district or "").strip()
+    if not address or not district:
+        raise ValidationError(
+            "Debe indicar dirección y distrito del domicilio confirmado."
+        )
+
+    if (latitude is None) != (longitude is None):
+        raise ValidationError(
+            "La ubicación confirmada debe incluir latitud y longitud."
+        )
+
+    transfer = TransferDetail.objects.select_for_update().get(work_order=order)
+
+    if transfer.new_address_id:
+        destination = transfer.new_address
+        destination.zone = zone
+        destination.address = address
+        destination.reference = (reference or "").strip()
+        destination.district = district
+        destination.electrical_supply_code = (supply_code or "").strip()
+        destination.latitude = latitude
+        destination.longitude = longitude
+        destination.is_active = True
+        destination.full_clean()
+        destination.save()
+    else:
+        destination = CustomerAddress(
+            customer=order.subscription.customer,
+            zone=zone,
+            address=address,
+            reference=(reference or "").strip(),
+            district=district,
+            electrical_supply_code=(supply_code or "").strip(),
+            latitude=latitude,
+            longitude=longitude,
+            is_primary=False,
+            is_active=True,
+        )
+        destination.full_clean()
+        destination.save()
+
+    transfer.new_address = destination
+    transfer.confirmed_supply_code = (supply_code or "").strip()
+    transfer.confirmed_latitude = latitude
+    transfer.confirmed_longitude = longitude
+    transfer.confirmed_by = user
+    transfer.confirmed_at = timezone.now()
+    transfer.full_clean()
+    transfer.save()
+
+    return transfer
+
+
+@transaction.atomic
+def create_outside_plant_order(
+    *,
+    created_by,
+    branch,
+    route,
+    reason,
+    detail,
+    zone=None,
+    reference="",
+    latitude=None,
+    longitude=None,
+    priority=None,
+    scheduled_at=None,
+):
+    """Registra una OT PEX independiente de abonados."""
+
+    if created_by is None or created_by.pk is None or not created_by.is_active:
+        raise ValidationError(
+            "Debe indicar un usuario activo que registre la orden PEX."
+        )
+
+    if created_by.role not in (User.Role.ATC, User.Role.NOC):
+        raise ValidationError(
+            "Las órdenes de Planta Externa solo pueden ser creadas por ATC o NOC."
+        )
+
+    if not created_by.has_perm("work_orders.create_outsideplant"):
+        raise ValidationError(
+            "El usuario no está autorizado para registrar Planta Externa."
+        )
+
+    route = (route or "").strip()
+    detail = (detail or "").strip()
+    reference = (reference or "").strip()
+
+    if len(route) < 3:
+        raise ValidationError({"route": "Debe indicar la vía o tramo de trabajo."})
+
+    if len(detail) < 5:
+        raise ValidationError({
+            "detail": "Debe describir el trabajo o afectación de Planta Externa."
+        })
+
+    try:
+        order_type = OrderType.objects.get(
+            code=OUTSIDE_PLANT_ORDER_TYPE_CODE,
+            is_active=True,
+        )
+    except OrderType.DoesNotExist:
+        raise ValidationError(
+            "No existe el tipo de orden PLANTA EXTERNA activo."
+        )
+
+    if reason is None or reason.pk is None or reason.order_type_id != order_type.pk:
+        raise ValidationError(
+            "Debe indicar un motivo válido de Planta Externa."
+        )
+
+    origin = (
+        OutsidePlantDetail.Origin.NOC
+        if created_by.role == User.Role.NOC
+        else OutsidePlantDetail.Origin.ATC
+    )
+
+    order = create_work_order(
+        subscription=None,
+        order_type=order_type,
+        created_by=created_by,
+        branch=branch,
+        zone=zone,
+        reason=reason,
+        attention_type=WorkOrder.AttentionType.FIELD,
+        priority=priority,
+        detail=detail,
+        scheduled_at=scheduled_at,
+    )
+
+    pex = OutsidePlantDetail(
+        work_order=order,
+        origin=origin,
+        route=route,
+        reference=reference,
+        latitude=latitude,
+        longitude=longitude,
+    )
+    pex.full_clean(exclude=["work_order"])
+    pex.save()
 
     return order
 
@@ -861,6 +1266,37 @@ def start_order_attention(order: WorkOrder, user=None, remarks=""):
 
     return order
 
+def _require_signed_contract_for_successful_installation(order, result):
+    """Una instalación exitosa solo existe si el abonado aceptó su contrato."""
+
+    if (
+        order.order_type.code != INSTALLATION_ORDER_TYPE_CODE
+        or result.code != "SUCCESSFUL"
+    ):
+        return
+
+    from apps.contracts.signatures import (
+        contrato_de_la_orden,
+        firma_del_contrato,
+    )
+
+    contract = contrato_de_la_orden(order)
+
+    if contract is None:
+        raise ValidationError(
+            "No se puede finalizar la instalación: la suscripción no tiene "
+            "un contrato activo asociado."
+        )
+
+    signature = firma_del_contrato(contract)
+
+    if signature is None or not signature.signed_pdf:
+        raise ValidationError(
+            "No se puede finalizar la instalación hasta que el abonado "
+            "firme su contrato."
+        )
+
+
 @transaction.atomic
 def attend_order(order: WorkOrder, result, user=None, remarks=""):
     """
@@ -892,6 +1328,8 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
             "El resultado seleccionado no corresponde al tipo de orden."
         )
 
+    _require_signed_contract_for_successful_installation(order, result)
+
     order.result = result
     order.save(update_fields=["result", "updated_at"])
 
@@ -900,6 +1338,13 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
         user=user,
         remarks=remarks,
     )
+
+    if order.assigned_technician_id:
+        close_work_order_participation(
+            order,
+            order.assigned_technician,
+            source=WorkOrderParticipation.Source.FIELD,
+        )
 
     apply_order_result(order)
 
@@ -1018,6 +1463,89 @@ def add_work_order_evidence(order: WorkOrder, user, file, description=""):
     return evidence
 
 
+def open_work_order_participation(
+    order,
+    user,
+    *,
+    source,
+    remarks="",
+    recorded_by=None,
+):
+    """Abre una intervención trazable si no existe una vigente equivalente."""
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError("El participante debe ser un usuario activo.")
+
+    existing = (
+        WorkOrderParticipation.objects
+        .filter(
+            work_order=order,
+            user=user,
+            source=source,
+            ended_at__isnull=True,
+        )
+        .order_by("-started_at", "-pk")
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    participation = WorkOrderParticipation(
+        work_order=order,
+        user=user,
+        source=source,
+        remarks=(remarks or "").strip(),
+        recorded_by=recorded_by,
+    )
+    participation.full_clean(
+        exclude=["work_order", "user", "recorded_by"]
+    )
+    participation.save()
+    return participation
+
+
+def close_work_order_participation(order, user, *, source=None):
+    """Cierra las intervenciones activas del usuario en esa orden."""
+    queryset = WorkOrderParticipation.objects.filter(
+        work_order=order,
+        user=user,
+        ended_at__isnull=True,
+    )
+    if source is not None:
+        queryset = queryset.filter(source=source)
+
+    now = timezone.now()
+    queryset.update(ended_at=now)
+    return now
+
+
+def _validate_declared_field_participant(order, participant):
+    from apps.technicians.models import TechnicianProfile
+
+    if participant is None or participant.pk is None or not participant.is_active:
+        raise ValidationError("Todos los participantes deben estar activos.")
+
+    if participant.role != User.Role.TECHNICIAN:
+        raise ValidationError(
+            "Los participantes declarados en una liquidación deben ser técnicos."
+        )
+
+    try:
+        area = participant.technician_profile.area
+    except TechnicianProfile.DoesNotExist:
+        area = TechnicianProfile.Area.INTERNAL_NETWORK
+
+    expected = (
+        TechnicianProfile.Area.PEX
+        if order.is_outside_plant
+        else TechnicianProfile.Area.INTERNAL_NETWORK
+    )
+    if area != expected:
+        raise ValidationError(
+            "Uno de los participantes no pertenece a la cuadrilla "
+            f"{TechnicianProfile.Area(expected).label}."
+        )
+
+
 # Campos técnicos opcionales que liquidate_order() acepta y traslada tal cual
 # a WorkOrderLiquidation. Se declaran aquí para rechazar cualquier clave
 # desconocida antes de tocar la base de datos.
@@ -1039,6 +1567,7 @@ def liquidate_order(
     resolution_detail="",
     items=None,
     remarks="",
+    participant_users=None,
     **technical_data,
 ):
     """
@@ -1053,7 +1582,7 @@ def liquidate_order(
 
     `items` es una lista de diccionarios con las claves de
     WorkOrderLiquidationItem (movement_type, material_name, quantity,
-    unit_of_measure, material_code, remarks).
+    unit_of_measure, material_code, is_billable, unit_price, remarks).
     """
     if order.status != WorkOrder.Status.ATTENDED:
         raise ValidationError(
@@ -1105,6 +1634,33 @@ def liquidate_order(
         item = WorkOrderLiquidationItem(liquidation=liquidation, **item_data)
         item.full_clean(exclude=["liquidation"])
         item.save()
+
+    participation_time = timezone.now()
+    for participant in participant_users or []:
+        _validate_declared_field_participant(order, participant)
+
+        if order.participations.filter(user=participant).exists():
+            continue
+
+        participation = WorkOrderParticipation(
+            work_order=order,
+            user=participant,
+            source=WorkOrderParticipation.Source.LIQUIDATION,
+            started_at=participation_time,
+            ended_at=participation_time,
+            remarks="Participante declarado al liquidar la orden.",
+            recorded_by=user,
+        )
+        participation.full_clean(
+            exclude=["work_order", "user", "recorded_by"]
+        )
+        participation.save()
+
+    _sync_transfer_reconciliation_from_liquidation(
+        order=order,
+        liquidation=liquidation,
+    )
+    _finalize_transfer_on_liquidation(order, user)
 
     order.change_status(
         WorkOrder.Status.LIQUIDATED,
@@ -1188,6 +1744,8 @@ def _snapshot_items(liquidation):
             "material_name": item.material_name,
             "quantity": _snapshot_value(item.quantity),
             "unit_of_measure": item.unit_of_measure,
+            "is_billable": item.is_billable,
+            "unit_price": _snapshot_value(item.unit_price),
             "remarks": item.remarks,
         }
         for item in liquidation.items.all()
@@ -1372,6 +1930,12 @@ def resubmit_liquidation(
 
     items_after = _snapshot_items(liquidation) if new_items is not None else []
 
+    if new_items is not None:
+        _sync_transfer_reconciliation_from_liquidation(
+            order=liquidation.work_order,
+            liquidation=liquidation,
+        )
+
     # --- Traza de la corrección -------------------------------------------
     correction = WorkOrderLiquidationCorrection(
         liquidation=liquidation,
@@ -1440,6 +2004,20 @@ def _apply_installation_result(order, result_code):
             ]
         )
 
+        # El contrato refleja cuándo ese servicio quedó efectivamente activo.
+        # Se estampa al instalar con éxito, nunca al registrarlo en oficina.
+        from apps.contracts.signatures import contrato_de_la_orden
+
+        contract = contrato_de_la_orden(order)
+        if contract is not None:
+            contract.last_activation_date = timezone.localdate()
+            contract.save(
+                update_fields=[
+                    "last_activation_date",
+                    "updated_at",
+                ]
+            )
+
 def _apply_cut_result(order, result_code):
     if result_code != "SUCCESSFUL":
         return
@@ -1504,6 +2082,7 @@ def _apply_reconnection_result(order, result_code):
     )
 
 def _apply_transfer_result(order, result_code):
+    """Atender un traslado no cambia todavía el domicilio oficial."""
     if result_code != "SUCCESSFUL":
         return
 
@@ -1521,25 +2100,175 @@ def _apply_transfer_result(order, result_code):
 
     transfer_detail.full_clean()
 
-    subtype_code = order.subtype.code
-    subscription = order.subscription
-
-    if subtype_code == "INTERNAL":
-        # En un traslado interno la dirección del servicio NO cambia.
-        return
-
-    if subtype_code == "EXTERNAL":
-        subscription.address = transfer_detail.new_address
-
-        subscription.save(
-            update_fields=[
-                "address",
-                "updated_at",
-            ]
+    if order.subtype.code not in {"INTERNAL", "EXTERNAL"}:
+        raise ValidationError(
+            "El subtipo de traslado no es válido."
         )
 
+
+def _sync_transfer_reconciliation_from_liquidation(*, order, liquidation):
+    """Calcula el costo real del traslado sin generar deuda automáticamente."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+    ):
+        return None
+
+    transfer = order.transfer_detail
+    billable_extra = sum(
+        (item.billable_amount for item in liquidation.items.all()),
+        Decimal("0.00"),
+    )
+
+    transfer.actual_extra_amount = billable_extra
+    difference = (
+        transfer.base_fee_snapshot
+        + billable_extra
+        - (transfer.customer_agreed_amount or Decimal("0.00"))
+    )
+
+    if (
+        transfer.customer_agreed_amount is not None
+        and difference == Decimal("0.00")
+    ):
+        transfer.reconciliation_status = (
+            TransferDetail.ReconciliationStatus.MATCHED
+        )
+    else:
+        transfer.reconciliation_status = (
+            TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+        )
+
+    transfer.reconciliation_action = ""
+    transfer.reconciliation_note = ""
+    transfer.reconciled_by = None
+    transfer.reconciled_at = None
+    transfer.save(
+        update_fields=[
+            "actual_extra_amount",
+            "reconciliation_status",
+            "reconciliation_action",
+            "reconciliation_note",
+            "reconciled_by",
+            "reconciled_at",
+            "updated_at",
+        ]
+    )
+    return transfer
+
+
+@transaction.atomic
+def resolve_transfer_reconciliation(*, transfer, user, action, note=""):
+    """Registra la decisión comercial; nunca crea un cargo automáticamente."""
+    if transfer.pk is None:
+        raise ValidationError("El traslado debe estar registrado.")
+
+    locked = (
+        TransferDetail.objects
+        .select_for_update()
+        .select_related("work_order")
+        .get(pk=transfer.pk)
+    )
+
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError(
+            "Debe indicar un usuario activo que resuelve la regularización."
+        )
+
+    if not user.has_perm("work_orders.resolve_transfer_reconciliation"):
+        raise ValidationError(
+            "El usuario no está autorizado para resolver regularizaciones "
+            "económicas de traslados."
+        )
+
+    if locked.actual_extra_amount is None:
+        raise ValidationError(
+            "El traslado todavía no tiene un costo técnico real calculado."
+        )
+
+    if locked.reconciliation_status != (
+        TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+    ):
+        raise ValidationError(
+            "Este traslado no tiene una regularización pendiente."
+        )
+
+    try:
+        liquidation = locked.work_order.liquidation
+    except WorkOrderLiquidation.DoesNotExist as exc:
+        raise ValidationError(
+            "El traslado debe contar con una liquidación técnica."
+        ) from exc
+
+    if liquidation.review_status != WorkOrderLiquidation.ReviewStatus.VALIDATED:
+        raise ValidationError(
+            "La decisión económica solo puede cerrarse después de validar "
+            "la liquidación técnica."
+        )
+
+    valid_actions = {
+        value for value, _label in TransferDetail.ReconciliationAction.choices
+    }
+    if action not in valid_actions:
+        raise ValidationError("La decisión de regularización no es válida.")
+
+    note = (note or "").strip()
+    if not note:
+        raise ValidationError(
+            "La regularización debe conservar un sustento u observación."
+        )
+
+    locked.reconciliation_status = TransferDetail.ReconciliationStatus.RESOLVED
+    locked.reconciliation_action = action
+    locked.reconciliation_note = note
+    locked.reconciled_by = user
+    locked.reconciled_at = timezone.now()
+    locked.full_clean()
+    locked.save(
+        update_fields=[
+            "reconciliation_status",
+            "reconciliation_action",
+            "reconciliation_note",
+            "reconciled_by",
+            "reconciled_at",
+            "updated_at",
+        ]
+    )
+
+    transfer.__dict__.update(locked.__dict__)
+    return transfer
+
+
+def _finalize_transfer_on_liquidation(order, user):
+    """Aplica el domicilio real solo al liquidar un traslado exitoso."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+        or order.result_id is None
+        or not order.result.is_success
+    ):
         return
 
-    raise ValidationError(
-        "El subtipo de traslado no es válido."
-    )
+    transfer = order.transfer_detail
+
+    if order.subtype.code == "INTERNAL":
+        return
+
+    if order.subtype.code != "EXTERNAL":
+        raise ValidationError("El subtipo de traslado no es válido.")
+
+    if transfer.new_address_id is None:
+        raise ValidationError(
+            "Antes de liquidar un traslado externo el técnico debe confirmar "
+            "el nuevo domicilio."
+        )
+
+    if transfer.confirmed_by_id != getattr(user, "pk", None):
+        raise ValidationError(
+            "El domicilio debe haber sido confirmado por el técnico que "
+            "liquida la orden."
+        )
+
+    subscription = order.subscription
+    subscription.address = transfer.new_address
+    subscription.save(update_fields=["address", "updated_at"])

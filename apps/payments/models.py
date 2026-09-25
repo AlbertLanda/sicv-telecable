@@ -1452,8 +1452,6 @@ class ProposedCharge(models.Model):
         ChargeConcept,
         on_delete=models.PROTECT,
         related_name="proposed_charges",
-        null=True,
-        blank=True,
         verbose_name="Concepto del catálogo",
     )
 

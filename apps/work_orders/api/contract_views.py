@@ -184,16 +184,29 @@ class WorkOrderContractDocumentView(ContractOfOrderMixin, GenericAPIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        sin_firma = request.GET.get("sin_firma") == "1"
+        firma = firma_del_contrato(contract)
+
+        if not sin_firma and firma is not None and firma.signed_pdf:
+            respuesta = FileResponse(
+                firma.signed_pdf.open("rb"),
+                as_attachment=False,
+                filename=f"{contract.contract_number}.pdf",
+                content_type="application/pdf",
+            )
+            respuesta[CABECERA_DEL_ANCLA] = json.dumps(
+                firma.document_anchor or {}
+            )
+            return respuesta
+
         buffer = BytesIO()
         ancla = {}
         nombre = render_contract(
             contract,
             buffer,
             ancla=ancla,
-            # `?sin_firma=1` devuelve la hoja como estaba antes de firmarla.
-            # Es lo que se mira mientras se arrastra el trazo: con la firma
-            # dibujada debajo se verían dos.
-            con_firma=request.GET.get("sin_firma") != "1",
+            # sin_firma devuelve la hoja base mientras se recoloca el trazo.
+            con_firma=not sin_firma,
         )
         buffer.seek(0)
 

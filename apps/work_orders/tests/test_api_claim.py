@@ -177,6 +177,7 @@ class ClaimSuccessTests(ClaimWorkOrderAPITestCase):
                 "customer",
                 "service_type",
                 "plan",
+                "is_outside_plant",
                 "order_type",
                 "subtype",
                 "status",
@@ -197,6 +198,7 @@ class ClaimSuccessTests(ClaimWorkOrderAPITestCase):
                 "attended_at",
                 "can_start_attention",
                 "technical_data",
+                "participants",
             },
         )
 

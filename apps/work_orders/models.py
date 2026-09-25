@@ -540,6 +540,8 @@ class WorkOrder(models.Model):
         Subscription,
         on_delete=models.PROTECT,
         related_name="work_orders",
+        null=True,
+        blank=True,
         verbose_name="Suscripción"
     )
 
@@ -752,10 +754,31 @@ class WorkOrder(models.Model):
                 "close_incident",
                 "Puede finalizar incidencias NOC",
             ),
+            (
+                "create_outsideplant",
+                "Puede registrar órdenes de Planta Externa",
+            ),
+            (
+                "view_outsideplant",
+                "Puede consultar órdenes de Planta Externa",
+            ),
         ]
 
     def clean(self):
         super().clean()
+
+        is_outside_plant = (
+            self.order_type_id
+            and self.order_type.code == "OUTSIDE_PLANT"
+        )
+
+        if not is_outside_plant and self.subscription_id is None:
+            raise ValidationError({
+                "subscription": (
+                    "La suscripción es obligatoria para las órdenes "
+                    "vinculadas a un abonado."
+                )
+            })
 
         if self.order_type_id and self.order_type.code == "INCIDENT":
             if self.attention_type != self.AttentionType.SYSTEM:
@@ -914,6 +937,14 @@ class WorkOrder(models.Model):
         )
 
     @property
+    def is_outside_plant(self):
+        """Orden operativa de red que puede existir sin abonado."""
+        return (
+            self.order_type_id is not None
+            and self.order_type.code == "OUTSIDE_PLANT"
+        )
+
+    @property
     def is_liquidated(self):
         """
         La orden ya tiene una liquidación técnica registrada.
@@ -1026,6 +1057,27 @@ class WorkOrder(models.Model):
                 )
             })
 
+        from apps.technicians.models import TechnicianProfile
+
+        try:
+            technician_area = technician.technician_profile.area
+        except TechnicianProfile.DoesNotExist:
+            technician_area = TechnicianProfile.Area.INTERNAL_NETWORK
+
+        expected_area = (
+            TechnicianProfile.Area.PEX
+            if self.is_outside_plant
+            else TechnicianProfile.Area.INTERNAL_NETWORK
+        )
+
+        if technician_area != expected_area:
+            expected_label = TechnicianProfile.Area(expected_area).label
+            raise ValidationError({
+                "assigned_technician": (
+                    f"Esta orden corresponde a la cuadrilla {expected_label}."
+                )
+            })
+
         if self.status not in self.ASSIGNABLE_STATUSES:
             raise ValidationError({
                 "status": (
@@ -1099,6 +1151,17 @@ class WorkOrder(models.Model):
             remarks=remarks,
         )
 
+        participant = self.assigned_technician
+        if participant is not None:
+            WorkOrderParticipation.objects.create(
+                work_order=self,
+                user=participant,
+                source=WorkOrderParticipation.Source.FIELD,
+                started_at=self.started_at,
+                remarks=(remarks or "").strip(),
+                recorded_by=user,
+            )
+
         return self.started_at
 
     @transaction.atomic
@@ -1143,6 +1206,7 @@ class WorkOrder(models.Model):
 
         previous_schedule = self.scheduled_at
         previous_schedule_date = self.scheduled_date
+        previous_status = self.status
 
         if (
             new_schedule is not None
@@ -1202,6 +1266,12 @@ class WorkOrder(models.Model):
             remarks=reason,
         )
 
+        if previous_status == self.Status.IN_PROGRESS:
+            WorkOrderParticipation.objects.filter(
+                work_order=self,
+                ended_at__isnull=True,
+            ).update(ended_at=timezone.now())
+
         return reprogramming
 
     @transaction.atomic
@@ -1241,6 +1311,10 @@ class WorkOrder(models.Model):
         ).update(
             unassigned_at=now
         )
+        WorkOrderParticipation.objects.filter(
+            work_order=self,
+            ended_at__isnull=True,
+        ).update(ended_at=now)
 
         if self.assigned_technician_id is not None:
             self.assigned_technician = None
@@ -1261,6 +1335,171 @@ class WorkOrder(models.Model):
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
+
+class OutsidePlantDetail(models.Model):
+    """Datos propios de una intervención de Planta Externa.
+
+    PEX trabaja sobre red e infraestructura, no necesariamente sobre un
+    abonado. Por eso la ubicación vive aquí y no en CustomerAddress.
+    """
+
+    class Origin(models.TextChoices):
+        ATC = "ATC", "ATC"
+        NOC = "NOC", "NOC"
+
+    work_order = models.OneToOneField(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="outside_plant_detail",
+        verbose_name="Orden de Planta Externa",
+    )
+    origin = models.CharField(
+        max_length=10,
+        choices=Origin.choices,
+        verbose_name="Origen",
+    )
+    route = models.CharField(
+        max_length=220,
+        verbose_name="Vía / tramo",
+    )
+    reference = models.CharField(
+        max_length=220,
+        blank=True,
+        verbose_name="Referencia",
+    )
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud",
+    )
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Detalle de Planta Externa"
+        verbose_name_plural = "Detalles de Planta Externa"
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.work_order_id
+            and self.work_order.order_type.code != "OUTSIDE_PLANT"
+        ):
+            raise ValidationError({
+                "work_order": (
+                    "El detalle PEX solo puede asociarse a una orden "
+                    "de Planta Externa."
+                )
+            })
+
+        if not (self.route or "").strip():
+            raise ValidationError({
+                "route": "Debe indicar la vía, tramo o ubicación de trabajo."
+            })
+
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValidationError(
+                "Latitud y longitud deben registrarse juntas."
+            )
+
+    def __str__(self):
+        return f"PEX - {self.work_order.order_number}"
+
+
+class WorkOrderParticipation(models.Model):
+    """Cada intervención humana que aportó a resolver una orden.
+
+    La asignación vigente sigue viviendo en WorkOrderAssignment. Este modelo
+    responde una pregunta distinta: quiénes participaron realmente, incluso
+    si la orden cambió de turno o una cuadrilla trabajó en conjunto.
+    """
+
+    class Source(models.TextChoices):
+        FIELD = "FIELD", "Atención de campo"
+        NOC = "NOC", "Atención NOC"
+        LIQUIDATION = "LIQUIDATION", "Declarado en liquidación"
+
+    work_order = models.ForeignKey(
+        WorkOrder,
+        on_delete=models.CASCADE,
+        related_name="participations",
+        verbose_name="Orden",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="work_order_participations",
+        verbose_name="Participante",
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        verbose_name="Origen de participación",
+    )
+    started_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name="Inicio de participación",
+    )
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fin de participación",
+    )
+    remarks = models.TextField(
+        blank=True,
+        verbose_name="Aporte / observación",
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="recorded_work_order_participations",
+        null=True,
+        blank=True,
+        verbose_name="Registrado por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Participación en orden"
+        verbose_name_plural = "Participaciones en órdenes"
+        ordering = ["started_at", "pk"]
+        indexes = [
+            models.Index(
+                fields=["work_order", "user"],
+                name="wo_part_order_user_idx",
+            ),
+            models.Index(
+                fields=["work_order", "ended_at"],
+                name="wo_part_active_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.ended_at and self.ended_at < self.started_at:
+            raise ValidationError({
+                "ended_at": (
+                    "El fin de participación no puede ser anterior al inicio."
+                )
+            })
+
+    @property
+    def is_active(self):
+        return self.ended_at is None
+
+    def __str__(self):
+        return f"{self.work_order.order_number} - {self.user}"
+
 
 class IncidentDetail(models.Model):
     """
@@ -1597,6 +1836,43 @@ class CutDetail(models.Model):
         return f"Detalle corte - {self.work_order.order_number}"
 
 class TransferDetail(models.Model):
+    """Solicitud y constatación técnica de un traslado.
+
+    El destino solicitado por ATC no modifica el domicilio oficial. En un
+    traslado externo el técnico confirma el punto real en campo y recién la
+    liquidación exitosa mueve la suscripción a esa nueva dirección.
+    """
+
+    class ChargeMode(models.TextChoices):
+        UPFRONT_FULL = (
+            "UPFRONT_FULL",
+            "Cobrar monto informado al solicitar",
+        )
+        UPFRONT_BASE = (
+            "UPFRONT_BASE",
+            "Cobrar solo tarifa base al solicitar",
+        )
+        AFTER_TECHNICAL = (
+            "AFTER_TECHNICAL",
+            "Definir cobro después de constatación técnica",
+        )
+
+    class CollectionMode(models.TextChoices):
+        IMMEDIATE = "IMMEDIATE", "Cobrar el mismo día"
+        NEXT_INVOICE = "NEXT_INVOICE", "Cargar a la próxima mensualidad"
+
+    class ReconciliationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pendiente de costo real"
+        MATCHED = "MATCHED", "Sin diferencia"
+        REQUIRES_DECISION = "REQUIRES_DECISION", "Requiere regularización"
+        RESOLVED = "RESOLVED", "Regularización resuelta"
+
+    class ReconciliationAction(models.TextChoices):
+        CHARGE_DIFFERENCE = "CHARGE_DIFFERENCE", "Cobrar diferencia"
+        NEXT_INVOICE = "NEXT_INVOICE", "Cargar diferencia a próxima mensualidad"
+        KEEP_AGREED = "KEEP_AGREED", "Mantener monto acordado"
+        ABSORB = "ABSORB", "Absorber diferencia / cortesía"
+
     work_order = models.OneToOneField(
         WorkOrder,
         on_delete=models.CASCADE,
@@ -1613,13 +1889,15 @@ class TransferDetail(models.Model):
         verbose_name="Dirección anterior"
     )
 
+    # Dirección REAL confirmada en campo. Puede estar vacía mientras la OT
+    # externa sigue pendiente o en atención.
     new_address = models.ForeignKey(
         CustomerAddress,
         on_delete=models.PROTECT,
         related_name="transfer_destinations",
         null=True,
         blank=True,
-        verbose_name="Nueva dirección"
+        verbose_name="Nueva dirección confirmada"
     )
 
     previous_location = models.CharField(
@@ -1634,6 +1912,147 @@ class TransferDetail(models.Model):
         verbose_name="Nueva ubicación interna"
     )
 
+    # Lo que ATC registra al recibir la solicitud. Es una referencia operativa,
+    # no el domicilio oficial de la suscripción.
+    requested_address_text = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Destino solicitado",
+    )
+    requested_reference = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Referencia del destino solicitado",
+    )
+    requested_supply_code = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Suministro informado",
+    )
+    requested_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud solicitada",
+    )
+    requested_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud solicitada",
+    )
+
+    # Constatación del técnico. El suministro/GPS pueden venir de consulta
+    # externa o de la ubicación del teléfono en campo.
+    confirmed_supply_code = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Suministro confirmado",
+    )
+    confirmed_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Latitud confirmada",
+    )
+    confirmed_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        verbose_name="Longitud confirmada",
+    )
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="confirmed_transfer_destinations",
+        null=True,
+        blank=True,
+        verbose_name="Destino confirmado por",
+    )
+    confirmed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Destino confirmado el",
+    )
+
+    # Snapshot comercial. Si las tarifas cambian mañana, una OT antigua debe
+    # seguir explicando qué precio base se informó cuando fue registrada.
+    base_fee_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Tarifa base del traslado",
+    )
+    estimated_extra_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Adicional estimado",
+    )
+    customer_agreed_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Monto informado/aceptado por el abonado",
+    )
+    charge_mode = models.CharField(
+        max_length=30,
+        choices=ChargeMode.choices,
+        default=ChargeMode.UPFRONT_BASE,
+        verbose_name="Momento de definición del cobro",
+    )
+    collection_mode = models.CharField(
+        max_length=20,
+        choices=CollectionMode.choices,
+        default=CollectionMode.IMMEDIATE,
+        verbose_name="Forma prevista de cobro",
+    )
+
+    # Resultado económico real de la atención. El adicional real se calcula
+    # desde los materiales utilizados y marcados como facturables en la
+    # liquidación. Nunca genera deuda por sí solo.
+    actual_extra_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Adicional técnico real",
+    )
+    reconciliation_status = models.CharField(
+        max_length=30,
+        choices=ReconciliationStatus.choices,
+        default=ReconciliationStatus.PENDING,
+        verbose_name="Estado de conciliación",
+    )
+    reconciliation_action = models.CharField(
+        max_length=30,
+        choices=ReconciliationAction.choices,
+        blank=True,
+        verbose_name="Decisión de regularización",
+    )
+    reconciliation_note = models.TextField(
+        blank=True,
+        verbose_name="Sustento de regularización",
+    )
+    reconciled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reconciled_transfers",
+        null=True,
+        blank=True,
+        verbose_name="Regularización resuelta por",
+    )
+    reconciled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Regularización resuelta el",
+    )
+
     requires_additional_cabling = models.BooleanField(
         default=False,
         verbose_name="Requiere cableado adicional"
@@ -1645,6 +2064,12 @@ class TransferDetail(models.Model):
     class Meta:
         verbose_name = "Detalle de traslado"
         verbose_name_plural = "Detalles de traslado"
+        permissions = [
+            (
+                "resolve_transfer_reconciliation",
+                "Puede resolver regularizaciones económicas de traslados",
+            ),
+        ]
 
     def clean(self):
         super().clean()
@@ -1670,6 +2095,40 @@ class TransferDetail(models.Model):
         customer = self.work_order.subscription.customer
         current_address = self.work_order.subscription.address
 
+        if self.base_fee_snapshot < 0 or self.estimated_extra_amount < 0:
+            raise ValidationError(
+                "Los importes estimados del traslado no pueden ser negativos."
+            )
+
+        if self.actual_extra_amount is not None and self.actual_extra_amount < 0:
+            raise ValidationError({
+                "actual_extra_amount": (
+                    "El adicional técnico real no puede ser negativo."
+                )
+            })
+
+        if (
+            self.requested_latitude is None
+        ) != (
+            self.requested_longitude is None
+        ):
+            raise ValidationError({
+                "requested_latitude": (
+                    "La ubicación solicitada debe incluir latitud y longitud."
+                )
+            })
+
+        if (
+            self.confirmed_latitude is None
+        ) != (
+            self.confirmed_longitude is None
+        ):
+            raise ValidationError({
+                "confirmed_latitude": (
+                    "La ubicación confirmada debe incluir latitud y longitud."
+                )
+            })
+
         if self.previous_address:
             if self.previous_address.customer_id != customer.id:
                 raise ValidationError({
@@ -1685,6 +2144,18 @@ class TransferDetail(models.Model):
                     "new_address": (
                         "La nueva dirección debe pertenecer "
                         "al cliente de la suscripción."
+                    )
+                })
+
+            if (
+                self.new_address.zone_id
+                and self.work_order.branch_id
+                and self.new_address.zone.branch_id != self.work_order.branch_id
+            ):
+                raise ValidationError({
+                    "new_address": (
+                        "La dirección confirmada debe pertenecer a la sede "
+                        "destino de la orden."
                     )
                 })
 
@@ -1720,16 +2191,17 @@ class TransferDetail(models.Model):
                     )
                 })
 
-            if not self.new_address:
+            if not self.new_address and not self.requested_address_text.strip():
                 raise ValidationError({
-                    "new_address": (
-                        "Un traslado externo requiere "
-                        "una nueva dirección."
+                    "requested_address_text": (
+                        "Un traslado externo debe registrar el destino "
+                        "solicitado por el abonado."
                     )
                 })
 
             if (
                 self.previous_address_id
+                and self.work_order.status != WorkOrder.Status.LIQUIDATED
                 and self.previous_address_id != current_address.id
             ):
                 raise ValidationError({
@@ -1755,6 +2227,57 @@ class TransferDetail(models.Model):
             raise ValidationError({
                 "work_order": "El subtipo de traslado no es válido."
             })
+
+        if self.reconciliation_status == self.ReconciliationStatus.RESOLVED:
+            if not self.reconciliation_action:
+                raise ValidationError({
+                    "reconciliation_action": (
+                        "Una regularización resuelta debe indicar la decisión."
+                    )
+                })
+            if not self.reconciliation_note.strip():
+                raise ValidationError({
+                    "reconciliation_note": (
+                        "Una regularización resuelta debe conservar su sustento."
+                    )
+                })
+            if not self.reconciled_by_id or self.reconciled_at is None:
+                raise ValidationError(
+                    "Una regularización resuelta debe conservar quién y cuándo la resolvió."
+                )
+
+    @property
+    def estimated_total(self):
+        return self.base_fee_snapshot + self.estimated_extra_amount
+
+    @property
+    def actual_total(self):
+        if self.actual_extra_amount is None:
+            return None
+        return self.base_fee_snapshot + self.actual_extra_amount
+
+    @property
+    def reconciliation_difference(self):
+        """Diferencia técnica contra lo informado/acordado al abonado.
+
+        En modalidad posterior no existe monto acordado previo; en ese caso
+        todo el costo real queda pendiente de una decisión comercial.
+        """
+        actual = self.actual_total
+        if actual is None:
+            return None
+        agreed = self.customer_agreed_amount or Decimal("0.00")
+        return actual - agreed
+
+    @property
+    def initially_charged_amount(self):
+        proposal = (
+            self.work_order.proposed_charges
+            .filter(status="ACCEPTED", charge__isnull=False)
+            .select_related("charge")
+            .first()
+        )
+        return proposal.charge.amount if proposal is not None else Decimal("0.00")
 
     def __str__(self):
         return f"Detalle traslado - {self.work_order.order_number}"
@@ -2167,6 +2690,20 @@ class WorkOrderLiquidationItem(models.Model):
         verbose_name="Unidad de medida"
     )
 
+    is_billable = models.BooleanField(
+        default=False,
+        verbose_name="Facturable al abonado",
+    )
+
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio unitario facturable",
+    )
+
     remarks = models.TextField(
         blank=True,
         verbose_name="Observación"
@@ -2195,6 +2732,26 @@ class WorkOrderLiquidationItem(models.Model):
             raise ValidationError({
                 "quantity": "La cantidad declarada debe ser mayor que cero."
             })
+
+        if self.is_billable:
+            if self.movement_type != self.MovementType.USED:
+                raise ValidationError({
+                    "is_billable": (
+                        "Solo un material utilizado puede marcarse como facturable."
+                    )
+                })
+            if self.unit_price is None or self.unit_price <= 0:
+                raise ValidationError({
+                    "unit_price": (
+                        "Un material facturable debe indicar un precio unitario mayor que cero."
+                    )
+                })
+
+    @property
+    def billable_amount(self):
+        if not self.is_billable or self.movement_type != self.MovementType.USED:
+            return Decimal("0.00")
+        return self.quantity * self.unit_price
 
     def __str__(self):
         return f"{self.get_movement_type_display()}: {self.material_name} x {self.quantity}"

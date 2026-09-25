@@ -25,6 +25,7 @@ from django.views.generic import View
 
 from .models import Contract
 from .pdf import render_contract
+from .signatures import firma_del_contrato
 
 
 class ContractDocumentPdfView(LoginRequiredMixin, SingleObjectMixin, View):
@@ -57,6 +58,16 @@ class ContractDocumentPdfView(LoginRequiredMixin, SingleObjectMixin, View):
 
     def get(self, request, *args, **kwargs):
         contract = self.get_object()
+
+        firma = firma_del_contrato(contract)
+
+        if firma is not None and firma.signed_pdf:
+            return FileResponse(
+                firma.signed_pdf.open("rb"),
+                as_attachment=request.GET.get("ver") != "1",
+                filename=f"{contract.contract_number}.pdf",
+                content_type="application/pdf",
+            )
 
         buffer = BytesIO()
         nombre = render_contract(contract, buffer)

@@ -65,6 +65,7 @@ class TechnicianChannelMixin:
         "subscription__plan",
         "order_type",
         "subtype",
+        "outside_plant_detail",
     )
 
     # Relaciones que solo hacen falta al operar sobre UNA orden y que no se le
@@ -168,7 +169,8 @@ class AvailableWorkOrderListView(TechnicianChannelMixin, ListAPIView):
                 "branch",
                 "zone",
                 "subscription__address",
-            )
+            ),
+            technician=self.request.user,
         )
 
         user = self.request.user
@@ -451,7 +453,8 @@ class ClaimWorkOrderView(TechnicianChannelMixin, GenericAPIView):
             # opcionales (`zone`, `subtype`), y PostgreSQL rechaza un
             # `FOR UPDATE` sobre el lado nulable de un outer join. La ficha se
             # relee después, ya fuera de la carrera.
-            WorkOrder.objects.select_for_update(of=("self",))
+            WorkOrder.objects.select_for_update(of=("self",)),
+            technician=self.request.user,
         ).get(pk=self.kwargs["pk"])
 
         order.assign_technician(

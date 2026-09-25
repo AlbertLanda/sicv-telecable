@@ -1,6 +1,7 @@
 from django import forms
 
 from .models import Customer, CustomerAddress
+from apps.organization.models import Zone
 
 
 class CustomerInitialForm(forms.Form):
@@ -347,6 +348,21 @@ class CustomerAddressForm(forms.ModelForm):
             "gps_link": "Enlace GPS",
             "is_primary": "Dirección principal",
         }
+
+    def __init__(self, *args, branch=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if branch is None and self.instance.pk and self.instance.customer_id:
+            branch = self.instance.customer.branch
+
+        if branch is not None:
+            self.fields["zone"].queryset = (
+                Zone.objects
+                .filter(branch=branch, is_active=True)
+                .order_by("name")
+            )
+
+        self.fields["zone"].empty_label = "Seleccione una zona"
 
     def clean_address(self):
         return self.cleaned_data.get("address", "").strip()

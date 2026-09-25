@@ -11,14 +11,18 @@ Cable. Todos esos tipos comparten las mismas reglas: PENDING, sin técnico y
 atención FIELD.
 """
 
+from django.db.models import Q
+
+from apps.technicians.models import TechnicianProfile
 from apps.work_orders.field_order_types import (
+    OUTSIDE_PLANT_ORDER_TYPE_CODE,
     TECHNICIAN_AVAILABLE_ORDER_TYPE_CODES,
 )
 from apps.work_orders.models import WorkOrder
 from apps.work_orders.services import SUBSCRIPTION_BLOCKED_STATUSES
 
 
-def available_work_orders(queryset=None):
+def available_work_orders(queryset=None, technician=None):
     """Órdenes que un técnico puede ver y tomar desde la app.
 
     Condiciones de negocio:
@@ -47,11 +51,29 @@ def available_work_orders(queryset=None):
     """
     base = WorkOrder.objects.all() if queryset is None else queryset
 
-    return base.filter(
+    queryset = base.filter(
         status=WorkOrder.Status.PENDING,
         assigned_technician__isnull=True,
         attention_type=WorkOrder.AttentionType.FIELD,
         order_type__code__in=TECHNICIAN_AVAILABLE_ORDER_TYPE_CODES,
-    ).exclude(
-        subscription__status__in=SUBSCRIPTION_BLOCKED_STATUSES,
+    ).filter(
+        Q(subscription__isnull=True)
+        | ~Q(subscription__status__in=SUBSCRIPTION_BLOCKED_STATUSES)
+    )
+
+    if technician is None:
+        return queryset
+
+    try:
+        area = technician.technician_profile.area
+    except TechnicianProfile.DoesNotExist:
+        area = TechnicianProfile.Area.INTERNAL_NETWORK
+
+    if area == TechnicianProfile.Area.PEX:
+        return queryset.filter(
+            order_type__code=OUTSIDE_PLANT_ORDER_TYPE_CODE
+        )
+
+    return queryset.exclude(
+        order_type__code=OUTSIDE_PLANT_ORDER_TYPE_CODE
     )

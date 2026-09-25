@@ -309,15 +309,64 @@ class WorkOrderTestCase(TestCase):
 
         return order
 
+    def ensure_signed_installation_contract(self, order):
+        """Fixture liviano: contrato y firma válidos sin renderizar un PDF real."""
+
+        from datetime import date
+
+        from apps.contracts.models import Contract, ContractSignature
+
+        contract = (
+            Contract.objects
+            .filter(subscription=order.subscription, is_active=True)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if contract is None:
+            contract = Contract.objects.create(
+                contract_number=f"CONT-TEST-{order.subscription_id}",
+                customer=order.subscription.customer,
+                subscription=order.subscription,
+                service_type=order.subscription.service_type,
+                plan=order.subscription.plan,
+                modality=Contract.Modality.SALE,
+                installments=1,
+                start_date=date(2026, 9, 23),
+                status=Contract.Status.ACTIVE,
+                is_active=True,
+            )
+
+        ContractSignature.objects.get_or_create(
+            contract=contract,
+            defaults={
+                "image": "tests/firma.png",
+                "signed_pdf": "tests/contrato-firmado.pdf",
+                "signer_name": str(order.subscription.customer),
+                "work_order": order,
+                "captured_by": self.technician,
+            },
+        )
+
+        return contract
+
     def create_attended_order(self, order_type=None, result=None, **kwargs):
         """Crea una orden ya atendida, lista para liquidarse."""
         from apps.work_orders.services import attend_order
 
         order = self.create_order_in_progress(order_type=order_type, **kwargs)
 
+        selected_result = result or self.installation_success
+
+        if (
+            order.order_type.code == "INSTALLATION"
+            and selected_result.code == "SUCCESSFUL"
+        ):
+            self.ensure_signed_installation_contract(order)
+
         attend_order(
             order,
-            result=result or self.installation_success,
+            result=selected_result,
             user=self.technician,
         )
 

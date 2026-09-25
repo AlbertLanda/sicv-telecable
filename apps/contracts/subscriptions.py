@@ -36,7 +36,7 @@ def codigo_de_suscripcion(subscription):
     if subscription is None:
         return SIN_SUSCRIPCION
 
-    return str(subscription.pk)
+    return subscription.service_code or str(subscription.pk)
 
 
 def suscripciones_contratables(customer):
@@ -63,14 +63,29 @@ def suscripciones_contratables(customer):
     )
 
 
-def resolver_suscripcion(customer, service_type, plan):
-    """La suscripción que le toca al contrato, o None si no hay ninguna."""
+def resolver_suscripcion(customer, service_type, plan, *, subscription_id=None):
+    """La suscripción exacta que le toca al contrato, o None.
+
+    Si la pantalla llega desde el resumen de una suscripción, su id manda:
+    dos domicilios pueden tener el mismo servicio y plan y no se puede
+    adivinar cuál quiso contratar ATC.
+
+    Sin id solo se resuelve automáticamente cuando existe una única
+    candidata. La ambigüedad se deja al formulario para mostrar un mensaje
+    explícito en lugar de elegir silenciosamente la más antigua.
+    """
 
     if customer is None or service_type is None or plan is None:
         return None
 
-    return (
-        suscripciones_contratables(customer)
-        .filter(service_type=service_type, plan=plan)
-        .first()
+    queryset = suscripciones_contratables(customer).filter(
+        service_type=service_type,
+        plan=plan,
     )
+
+    if subscription_id:
+        return queryset.filter(pk=subscription_id).first()
+
+    candidatas = list(queryset[:2])
+
+    return candidatas[0] if len(candidatas) == 1 else None

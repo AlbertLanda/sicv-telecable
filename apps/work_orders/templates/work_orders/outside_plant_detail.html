@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ order.order_number }} - Planta Externa{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <div class="text-muted small">PLANTA EXTERNA</div>
+            <h1 class="h3 mb-1">{{ order.order_number }}</h1>
+            <span class="badge text-bg-primary">{{ order.get_status_display }}</span>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'work_orders:outside_plant_print' order.pk %}" class="btn btn-outline-primary">
+                <i class="bi bi-printer"></i> Imprimir
+            </a>
+            <a href="{% url 'work_orders:outside_plant_queue' %}" class="btn btn-outline-secondary">← Volver</a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header fw-bold">Solicitud de red</div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Vía / tramo</dt><dd class="col-sm-8">{{ pex.route }}</dd>
+                        <dt class="col-sm-4">Referencia</dt><dd class="col-sm-8">{{ pex.reference|default:"—" }}</dd>
+                        <dt class="col-sm-4">Sede / zona</dt><dd class="col-sm-8">{{ order.branch }}{% if order.zone %} · {{ order.zone.name }}{% endif %}</dd>
+                        <dt class="col-sm-4">Origen</dt><dd class="col-sm-8">{{ pex.get_origin_display }} · {{ order.created_by }}</dd>
+                        <dt class="col-sm-4">Motivo</dt><dd class="col-sm-8">{{ order.reason.name|default:"—" }}</dd>
+                        <dt class="col-sm-4">Detalle</dt><dd class="col-sm-8">{{ order.detail|linebreaksbr }}</dd>
+                        <dt class="col-sm-4">GPS</dt>
+                        <dd class="col-sm-8">
+                            {% if pex.latitude != None and pex.longitude != None %}
+                                {{ pex.latitude }}, {{ pex.longitude }}
+                            {% else %}No registrado{% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header fw-bold">Materiales declarados</div>
+                <div class="card-body">
+                    {% for movement in materials %}
+                        <div class="d-flex justify-content-between border-bottom py-2">
+                            <span>{{ movement.get_movement_type_display }} · {{ movement.material.name }}</span>
+                            <strong>{{ movement.quantity }} {{ movement.material.get_unit_of_measure_display }}</strong>
+                        </div>
+                    {% empty %}
+                        <div class="text-muted">Todavía no se declararon materiales.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            {% if order.liquidation %}
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header fw-bold">Liquidación</div>
+                <div class="card-body">
+                    <p><strong>Solución:</strong><br>{{ order.liquidation.resolution_detail|linebreaksbr }}</p>
+                    <p class="mb-0"><strong>Observaciones:</strong><br>{{ order.liquidation.technical_notes|default:"Sin observaciones"|linebreaksbr }}</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card card-custom shadow-sm mb-3">
+                <div class="card-header fw-bold">Participantes</div>
+                <div class="card-body">
+                    {% for participation in participants %}
+                        <div class="border-bottom py-2">
+                            <strong>{{ participation.user }}</strong>
+                            <div class="small text-muted">
+                                {{ participation.get_source_display }} ·
+                                {{ participation.started_at|date:"d/m/Y H:i" }}
+                                {% if participation.ended_at %}– {{ participation.ended_at|date:"d/m/Y H:i" }}{% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-muted">Aún no hay participantes registrados.</div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card card-custom shadow-sm">
+                <div class="card-header fw-bold">Evidencias</div>
+                <div class="card-body">
+                    {% for evidence in evidences %}
+                        <div class="mb-2">
+                            <a href="{{ evidence.file.url }}" target="_blank" rel="noopener">{{ evidence.description|default:evidence.file.name }}</a>
+                        </div>
+                    {% empty %}
+                        <div class="text-muted">Sin evidencias.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

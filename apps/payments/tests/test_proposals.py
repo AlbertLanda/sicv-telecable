@@ -20,8 +20,11 @@ from apps.payments.proposals import (
 )
 from apps.payments.services import customer_debt
 from apps.payments.tests.base import PaymentsTestCase
-from apps.work_orders.models import OrderReason, OrderType
-from apps.work_orders.services import create_work_order
+from apps.work_orders.models import OrderSubtype, OrderType
+from apps.work_orders.services import (
+    create_transfer_work_order,
+    create_work_order,
+)
 
 
 class TransferProposalTestCase(PaymentsTestCase):
@@ -30,40 +33,48 @@ class TransferProposalTestCase(PaymentsTestCase):
     def setUp(self):
         super().setUp()
 
+        self.transfer_type = OrderType.objects.create(
+            code="TRANSFER",
+            name="TRASLADO",
+        )
+        self.internal = OrderSubtype.objects.create(
+            order_type=self.transfer_type,
+            code="INTERNAL",
+            name="TRASLADO INTERNO",
+        )
         self.requirement = OrderType.objects.create(
             code="REQUIREMENT",
             name="REQUERIMIENTO",
         )
-        self.transfer_reason = OrderReason.objects.create(
-            order_type=self.requirement,
-            code="TRANSFER",
-            name="TRASLADO",
-        )
-        self.wifi_reason = OrderReason.objects.create(
-            order_type=self.requirement,
-            code="WIFI_PASSWORD",
-            name="CLAVE DE WIFI",
-        )
 
-        self.concept, _ = ChargeConcept.objects.get_or_create(
+        self.concept, _ = ChargeConcept.objects.update_or_create(
             code="traslado",
-            defaults={"name": "TRASLADO", "family": Charge.Concept.OTHER},
+            defaults={
+                "name": "TRASLADO",
+                "family": Charge.Concept.OTHER,
+                "is_active": True,
+            },
         )
 
         self.operator = self.make_user("traslados1")
 
-    def make_transfer_order(self, reason=None):
-        return create_work_order(
+    def make_transfer_order(self):
+        # Se informa al abonado el mismo monto que luego se acepta, para que
+        # aceptar no exija la observación de ajuste.
+        return create_transfer_work_order(
             subscription=self.subscription,
-            order_type=self.requirement,
-            reason=reason or self.transfer_reason,
+            customer=self.customer,
             created_by=self.operator,
+            subtype=self.internal,
+            previous_location="Sala",
+            new_location="Dormitorio",
+            customer_agreed_amount=Decimal("50.00"),
         )
 
 
 class ProposalCreationTests(TransferProposalTestCase):
 
-    def test_orden_con_motivo_traslado_deja_la_deuda_propuesta(self):
+    def test_orden_de_traslado_deja_la_deuda_propuesta(self):
         order = self.make_transfer_order()
 
         proposal = ProposedCharge.objects.get(work_order=order)
@@ -72,7 +83,7 @@ class ProposalCreationTests(TransferProposalTestCase):
         self.assertEqual(proposal.customer, self.customer)
         self.assertEqual(proposal.subscription, self.subscription)
         self.assertEqual(proposal.concept_item, self.concept)
-        self.assertEqual(proposal.description, "TRASLADO DE DOMICILIO")
+        self.assertEqual(proposal.description, "TRASLADO INTERNO")
 
     def test_proponer_no_emite_deuda_ni_mueve_el_saldo(self):
         antes = customer_debt(self.customer)["total"]
@@ -82,12 +93,7 @@ class ProposalCreationTests(TransferProposalTestCase):
         self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
         self.assertEqual(customer_debt(self.customer)["total"], antes)
 
-    def test_otro_motivo_del_mismo_tipo_no_propone_nada(self):
-        order = self.make_transfer_order(reason=self.wifi_reason)
-
-        self.assertFalse(ProposedCharge.objects.filter(work_order=order).exists())
-
-    def test_orden_sin_motivo_no_propone_nada(self):
+    def test_orden_de_otro_tipo_no_propone_nada(self):
         order = create_work_order(
             subscription=self.subscription,
             order_type=self.requirement,
@@ -153,7 +159,7 @@ class ProposalResolutionTests(TransferProposalTestCase):
         self.assertEqual(deuda["total"], Decimal("50.00"))
         self.assertIn(self.proposal.charge, list(deuda["charges"]))
         self.assertEqual(
-            self.proposal.charge.description, "TRASLADO DE DOMICILIO"
+            self.proposal.charge.description, "TRASLADO INTERNO"
         )
 
     def test_una_propuesta_ya_aceptada_no_se_acepta_otra_vez(self):
@@ -268,7 +274,7 @@ class ProposalWebTests(TransferProposalTestCase):
         response = self.client.get(self.resolve_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "TRASLADO DE DOMICILIO")
+        self.assertContains(response, "TRASLADO INTERNO")
         self.assertContains(response, self.order.order_number)
 
     def test_los_campos_llevan_el_trazo_visual_de_las_demas_pantallas(self):

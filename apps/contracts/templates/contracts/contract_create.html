@@ -81,6 +81,8 @@ que es donde consta cuál se instaló.
     <form method="post" novalidate>
 
         {% csrf_token %}
+        <input type="hidden" name="subscription_id" id="id_subscription_id"
+               value="{{ selected_subscription_id }}">
 
         {% if form.non_field_errors %}
             <div class="alert alert-danger tc-full">
@@ -280,6 +282,7 @@ que es donde consta cuál se instaló.
     var servicio = document.getElementById("{{ form.service_type.id_for_label }}");
     var plan = document.getElementById("{{ form.plan.id_for_label }}");
     var suscripcion = document.getElementById("suscripcion-resuelta");
+    var suscripcionId = document.getElementById("id_subscription_id");
 
     var playhub = document.getElementById("playhub");
     var playhubCorreo = document.getElementById("{{ form.playhub_email.id_for_label }}");
@@ -328,23 +331,41 @@ que es donde consta cuál se instaló.
         );
     }
 
-    // La misma regla que el servidor: la primera suscripción en Preventa
-    // del cliente que corresponda al servicio y plan elegidos. El catálogo
-    // llega ordenado por número de servicio, así que «la primera» significa
-    // lo mismo en los dos lados.
-    function mostrarSuscripcion() {
-        var elegida = null;
+    // El id exacto que llega desde el resumen manda mientras servicio y plan
+    // sigan siendo los mismos. Sin él solo se autoelige cuando hay una única
+    // candidata: dos domicilios con el mismo plan nunca se resuelven por
+    // "la primera".
+    function mostrarSuscripcion(preservarExacta) {
+        var candidatas = [];
 
         if (servicio.value && plan.value) {
-            elegida = suscripciones.filter(function (item) {
+            candidatas = suscripciones.filter(function (item) {
                 return String(item.service_type) === String(servicio.value)
                     && String(item.plan) === String(plan.value);
+            });
+        }
+
+        var elegida = null;
+
+        if (preservarExacta && suscripcionId.value) {
+            elegida = candidatas.filter(function (item) {
+                return String(item.id) === String(suscripcionId.value);
             })[0] || null;
         }
 
-        // El mismo texto que pone el servidor cuando no hay ninguna, para
-        // que el campo no cambie de discurso al tocar un combo.
-        suscripcion.value = elegida ? elegida.label : "Ninguno";
+        if (!elegida && candidatas.length === 1) {
+            elegida = candidatas[0];
+        }
+
+        suscripcionId.value = elegida ? elegida.id : "";
+
+        if (elegida) {
+            suscripcion.value = elegida.label;
+        } else if (candidatas.length > 1) {
+            suscripcion.value = "Seleccione desde el resumen del servicio";
+        } else {
+            suscripcion.value = "Ninguno";
+        }
     }
 
     function alternarPlayhub() {
@@ -362,16 +383,18 @@ que es donde consta cuál se instaló.
     }
 
     pintarPlanes(planElegido);
-    mostrarSuscripcion();
+    mostrarSuscripcion(true);
     alternarPlayhub();
 
     servicio.addEventListener("change", function () {
         pintarPlanes(null);
-        mostrarSuscripcion();
+        mostrarSuscripcion(false);
         alternarPlayhub();
     });
 
-    plan.addEventListener("change", mostrarSuscripcion);
+    plan.addEventListener("change", function () {
+        mostrarSuscripcion(false);
+    });
 })();
 </script>
 
