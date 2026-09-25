@@ -190,11 +190,15 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
                     TransferDetail.ReconciliationStatus.REQUIRES_DECISION
                 ),
             )
+            .exclude(
+                work_order__proposed_charges__status=ProposedCharge.Status.PENDING
+            )
             .select_related(
                 "work_order",
                 "work_order__subtype",
                 "work_order__subscription",
             )
+            .distinct()
             .order_by("-updated_at", "-pk")
         )
         context["can_resolve_transfer_reconciliation"] = user.has_perm(
@@ -1044,6 +1048,9 @@ class TransferReconciliationResolveView(
                 ),
                 pk=self.kwargs["transfer_pk"],
                 work_order__subscription__customer=self.customer,
+                reconciliation_status=(
+                    TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+                ),
             )
         return self.transfer
 
