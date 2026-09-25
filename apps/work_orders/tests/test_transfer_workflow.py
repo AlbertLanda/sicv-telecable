@@ -436,8 +436,14 @@ class TransferWorkflowTests(WorkOrderTestCase):
 
         validator = self.atc_user
         validator.user_permissions.add(
-            Permission.objects.get(codename="validate_liquidation"),
-            Permission.objects.get(codename="resolve_transfer_reconciliation"),
+            Permission.objects.get(
+                content_type__app_label="work_orders",
+                codename="validate_liquidation",
+            ),
+            Permission.objects.get(
+                content_type__app_label="work_orders",
+                codename="resolve_transfer_reconciliation",
+            ),
         )
         validate_liquidation(liquidation, validator=validator)
 
