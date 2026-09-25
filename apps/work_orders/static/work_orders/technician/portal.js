@@ -686,7 +686,7 @@
         state.detailEditable = editable;
 
         $("#installed-material-billable-field").hidden = !isTransfer;
-        $("#installed-material-price-field").hidden = !isTransfer;
+        $("#installed-material-price-field").hidden = !isTransfer || !billable;
         if (!isTransfer) {
             $("#installed-material-billable").value = "0";
             $("#installed-material-unit-price").value = "";
