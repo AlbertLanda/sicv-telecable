@@ -721,6 +721,11 @@
                                     <th>Movimiento</th>
                                     <th class="text-end">Cantidad</th>
                                     <th>Unidad</th>
+                                    {% if order.order_type.code == "TRANSFER" %}
+                                    <th>Facturable</th>
+                                    <th class="text-end">Precio unit.</th>
+                                    <th class="text-end">Subtotal</th>
+                                    {% endif %}
                                 </tr>
                             </thead>
                             <tbody>
@@ -735,6 +740,15 @@
                                     <td>{{ item.get_movement_type_display }}</td>
                                     <td class="text-end tabular">{{ item.quantity }}</td>
                                     <td>{{ item.get_unit_of_measure_display|default:"-" }}</td>
+                                    {% if order.order_type.code == "TRANSFER" %}
+                                    <td>{% if item.is_billable %}Sí{% else %}No{% endif %}</td>
+                                    <td class="text-end tabular">
+                                        {% if item.is_billable %}S/ {{ item.unit_price|floatformat:2 }}{% else %}-{% endif %}
+                                    </td>
+                                    <td class="text-end tabular">
+                                        {% if item.is_billable %}S/ {{ item.billable_amount|floatformat:2 }}{% else %}-{% endif %}
+                                    </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                             </tbody>
