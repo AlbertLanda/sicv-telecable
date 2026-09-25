@@ -174,6 +174,13 @@ urlpatterns = [
         name="cancel",
     ),
 
+    # Desistimiento de una instalación que aún es alta provisional.
+    path(
+        "<int:pk>/installation/withdraw/",
+        views.InstallationWithdrawalView.as_view(),
+        name="installation_withdrawal",
+    ),
+
     # Ficha única de la orden para el flujo general.
     path(
         "<int:pk>/",
