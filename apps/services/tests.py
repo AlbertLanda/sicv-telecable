@@ -223,6 +223,70 @@ class SubscriptionCreateTests(TestCase):
             Subscription.objects.filter(customer=self.customer).exists()
         )
 
+    def test_alta_antigua_sin_vendedor_puede_completarse_antes_del_contrato(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            registered_by=self.user,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        url = reverse(
+            "services:subscription_seller",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "subscription_pk": subscription.pk,
+            },
+        )
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Completar datos comerciales")
+        self.assertContains(response, "Vendedor responsable de la venta")
+
+        response = self.client.post(
+            url,
+            {"seller": self.seller.pk},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("customers:detail", kwargs={"pk": self.customer.pk}),
+        )
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.seller, self.seller)
+        self.assertEqual(subscription.registered_by, self.user)
+
+    def test_resumen_bloquea_contrato_si_falta_vendedor(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            registered_by=self.user,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Falta identificar al vendedor")
+        self.assertContains(response, "Completar vendedor")
+        self.assertNotContains(response, "Generar contrato")
+
     # -------------------------------------------------------------
     # PRESALE
     # -------------------------------------------------------------
