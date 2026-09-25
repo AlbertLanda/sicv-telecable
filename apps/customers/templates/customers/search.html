@@ -27,7 +27,7 @@ SICV - Buscar abonado
                     name="q"
                     value="{{ current_query }}"
                     class="form-control search-field"
-                    placeholder="Código, documento, nombre, teléfono o dirección"
+                    placeholder="Código de servicio, documento, nombre, teléfono o dirección"
                     autocomplete="off"
                     autofocus
                 >
@@ -89,12 +89,22 @@ SICV - Buscar abonado
 
                     {% for customer in customers %}
 
-                        {% with direccion=customer.addresses.all|first %}
+                        {% with fallback_address=customer.addresses.all|first %}
                             <tr>
                                 <td>
-                                    <a href="{% url 'customers:detail' customer.pk %}" class="fw-semibold">
-                                        {{ customer.code }}
-                                    </a>
+                                    {% for suscripcion in customer.operational_subscriptions %}
+                                        <div>
+                                            <a href="{% url 'customers:detail' customer.pk %}"
+                                               class="fw-semibold">
+                                                {{ suscripcion.service_code }}
+                                            </a>
+                                        </div>
+                                    {% empty %}
+                                        <a href="{% url 'customers:detail' customer.pk %}"
+                                           class="fw-semibold">
+                                            {{ customer.code }}
+                                        </a>
+                                    {% endfor %}
                                 </td>
 
                                 <td>{{ customer }}</td>
@@ -105,23 +115,33 @@ SICV - Buscar abonado
                                 </td>
 
                                 <td>
-                                    {% if direccion %}
-                                        {{ direccion.address }}
-                                    {% else %}
-                                        <span class="text-muted">Sin dirección</span>
-                                    {% endif %}
+                                    {% for suscripcion in customer.operational_subscriptions %}
+                                        <div>{{ suscripcion.address.address }}</div>
+                                    {% empty %}
+                                        {% if fallback_address %}
+                                            {{ fallback_address.address }}
+                                        {% else %}
+                                            <span class="text-muted">Sin dirección</span>
+                                        {% endif %}
+                                    {% endfor %}
                                 </td>
 
                                 <td>
-                                    {% if direccion and direccion.district %}
-                                        {{ direccion.district }}
-                                    {% else %}
-                                        <span class="text-muted">—</span>
-                                    {% endif %}
+                                    {% for suscripcion in customer.operational_subscriptions %}
+                                        <div>
+                                            {{ suscripcion.address.district|default:"—" }}
+                                        </div>
+                                    {% empty %}
+                                        {% if fallback_address and fallback_address.district %}
+                                            {{ fallback_address.district }}
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    {% endfor %}
                                 </td>
 
                                 <td>
-                                    {% for suscripcion in customer.subscriptions.all %}
+                                    {% for suscripcion in customer.operational_subscriptions %}
                                         <span class="service-tag">
                                             {{ suscripcion.service_type.name }}
                                         </span>
@@ -131,7 +151,7 @@ SICV - Buscar abonado
                                 </td>
 
                                 <td class="text-end tabular">
-                                    {{ customer.subscriptions.all|length }}
+                                    {{ customer.operational_subscriptions|length }}
                                 </td>
                             </tr>
                         {% endwith %}
