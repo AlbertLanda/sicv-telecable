@@ -49,6 +49,7 @@ from .proposals import (
     accept_proposed_charge,
     discard_proposed_charge,
     pending_proposals,
+    suggested_proposed_charge_amount,
 )
 from .services import (
     BILLING_MONTH_DAYS,
@@ -929,7 +930,11 @@ class ProposedChargeResolveView(
         if self.proposal is None:
             self.proposal = get_object_or_404(
                 ProposedCharge.objects.select_related(
-                    "customer", "subscription", "work_order"
+                    "customer",
+                    "subscription",
+                    "work_order",
+                    "work_order__subtype",
+                    "work_order__transfer_detail",
                 ),
                 pk=self.kwargs["proposal_pk"],
                 customer=self.customer,
@@ -940,9 +945,21 @@ class ProposedChargeResolveView(
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        context["proposal"] = self.get_proposal()
+        proposal = self.get_proposal()
+        context["proposal"] = proposal
         context["now"] = timezone.localtime()
-        context.setdefault("form", ProposedChargeResolveForm())
+
+        transfer = getattr(proposal.work_order, "transfer_detail", None)
+        context["transfer_detail"] = transfer
+
+        suggested = suggested_proposed_charge_amount(proposal)
+        context["suggested_amount"] = suggested
+
+        if "form" not in context:
+            initial = {}
+            if suggested is not None:
+                initial["amount"] = suggested
+            context["form"] = ProposedChargeResolveForm(initial=initial)
 
         return context
 

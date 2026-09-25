@@ -129,10 +129,15 @@ def _resolve_branch(
             )
         return branch
 
-    customer_branch = subscription.customer.branch
+    service_branch = (
+        subscription.address.zone.branch
+        if subscription.address_id
+        and subscription.address.zone_id
+        else subscription.customer.branch
+    )
 
     if branch is None:
-        return customer_branch
+        return service_branch
 
     is_external_transfer = (
         order_type is not None
@@ -141,10 +146,9 @@ def _resolve_branch(
         and subtype.code == "EXTERNAL"
     )
 
-    if branch.pk != customer_branch.pk and not is_external_transfer:
+    if branch.pk != service_branch.pk and not is_external_transfer:
         raise ValidationError(
-            "La sede indicada no corresponde a la sede del cliente "
-            "de la suscripción."
+            "La sede indicada no corresponde a la sede actual del servicio."
         )
 
     return branch
@@ -462,8 +466,12 @@ def create_transfer_work_order(
             )
 
     if subtype.code == "INTERNAL":
-        destination_branch = subscription.customer.branch
         destination_zone = subscription.address.zone
+        destination_branch = (
+            destination_zone.branch
+            if destination_zone is not None
+            else subscription.customer.branch
+        )
     else:
         if destination_branch is None or destination_branch.pk is None:
             raise ValidationError(

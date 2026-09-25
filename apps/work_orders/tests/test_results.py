@@ -182,8 +182,8 @@ class OrderResultTests(WorkOrderTestCase):
 
         self.assertEqual(self.subscription.address, self.address)
 
-    def test_successful_external_transfer_changes_address(self):
-        """24. Traslado externo exitoso cambia la dirección."""
+    def test_successful_external_transfer_keeps_address_until_liquidation(self):
+        """24. Atender un traslado externo aún no cambia el domicilio."""
         self.subscription.status = Subscription.Status.ACTIVE
         self.subscription.save(update_fields=["status"])
 
@@ -202,7 +202,7 @@ class OrderResultTests(WorkOrderTestCase):
 
         self.subscription.refresh_from_db()
 
-        self.assertEqual(self.subscription.address, self.other_address)
+        self.assertEqual(self.subscription.address, self.address)
 
     def test_apply_result_without_result_is_rejected(self):
         """Complemento: no se pueden aplicar efectos sin resultado."""

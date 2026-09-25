@@ -70,6 +70,51 @@ tabla de deuda; descartar renuncia a cobrarlo diciendo por qué.
                                value="{{ proposal.work_order.order_number }}" disabled>
                     </div>
 
+                    {% if transfer_detail %}
+                    <div class="tc-form-label">Tipo</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-md"
+                               value="{{ proposal.work_order.subtype.name }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Tarifa base</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer_detail.base_fee_snapshot }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Adicional estimado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="S/ {{ transfer_detail.estimated_extra_amount }}" disabled>
+                    </div>
+
+                    <div class="tc-form-label">Monto informado</div>
+                    <div class="tc-form-field">
+                        <input type="text" class="tc-input tc-readonly tc-w-sm"
+                               value="{% if transfer_detail.customer_agreed_amount != None %}S/ {{ transfer_detail.customer_agreed_amount }}{% else %}Pendiente{% endif %}"
+                               disabled>
+                    </div>
+
+                    <div class="tc-form-label">Política</div>
+                    <div class="tc-form-field">
+                        <div class="tc-form-hint">
+                            {{ transfer_detail.get_charge_mode_display }} ·
+                            {{ transfer_detail.get_collection_mode_display }}
+                        </div>
+                        {% if transfer_detail.charge_mode == "AFTER_TECHNICAL" %}
+                            <div class="tc-form-hint">
+                                El cargo no puede emitirse antes de la liquidación técnica.
+                            </div>
+                        {% else %}
+                            <div class="tc-form-hint">
+                                El importe es una propuesta. Si difiere del monto informado
+                                al abonado, el ajuste exige observación.
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
                     {% comment %}
                     La deuda se marca aquí. Es una sola línea y podría darse
                     por marcada, pero entonces aceptar sería un botón que emite

@@ -10,6 +10,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from apps.work_orders.models import TransferDetail
+
 from .models import ChargeConcept, ProposedCharge
 from .services import create_manual_charge
 
