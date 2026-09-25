@@ -99,6 +99,8 @@ def record_work_order_material(
     quantity,
     user,
     remarks="",
+    is_billable=False,
+    unit_price=None,
 ):
     """Crea o actualiza un material instalado/retirado durante la atención.
 
@@ -125,12 +127,27 @@ def record_work_order_material(
     if quantity is None or quantity <= 0:
         raise ValidationError("La cantidad debe ser mayor a cero.")
 
+    is_billable = bool(is_billable)
+    if is_billable:
+        if movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
+            raise ValidationError(
+                "Solo un material instalado puede marcarse como facturable."
+            )
+        if unit_price is None or unit_price <= 0:
+            raise ValidationError(
+                "Un material facturable debe indicar un precio unitario mayor que cero."
+            )
+    else:
+        unit_price = None
+
     movement, _created = WorkOrderMaterialMovement.objects.update_or_create(
         work_order=work_order,
         material=material,
         movement_type=movement_type,
         defaults={
             "quantity": quantity,
+            "is_billable": is_billable,
+            "unit_price": unit_price,
             "remarks": remarks or "",
             "recorded_by": user,
         },
