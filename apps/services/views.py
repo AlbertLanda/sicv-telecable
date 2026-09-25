@@ -290,6 +290,9 @@ class SubscriptionSummaryView(LoginRequiredMixin, DetailView):
                 "address__zone",
                 "service_type",
                 "plan",
+                "seller",
+                "registered_by",
+                "included_app_plan",
                 "tariff",
                 "billing_policy",
             )
