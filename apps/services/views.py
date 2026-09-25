@@ -11,7 +11,12 @@ from apps.customers.models import Customer
 
 from .catalog import plans_by_service_type, service_type_config
 from .commercial import build_commercial_quote
-from .forms import PlanForm, ServiceTypeForm, SubscriptionCreateForm
+from .forms import (
+    PlanForm,
+    ServiceTypeForm,
+    SubscriptionCreateForm,
+    SubscriptionSellerForm,
+)
 from .models import Plan, ServiceType, Subscription
 
 
@@ -147,6 +152,125 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
         context["plans_by_service_type"] = plans_by_service_type()
         context["service_type_config"] = service_type_config()
         context["commercial_quotes"] = _commercial_quotes_for_customer(self.customer)
+        return context
+
+
+class SubscriptionSellerUpdateView(LoginRequiredMixin, UpdateView):
+    """Recupera altas antiguas que llegaron a Preventa sin vendedor."""
+
+    model = Subscription
+    form_class = SubscriptionSellerForm
+    template_name = "services/subscription_seller_form.html"
+    pk_url_kwarg = "subscription_pk"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.customer = get_object_or_404(
+            Customer,
+            pk=self.kwargs["customer_pk"],
+            is_active=True,
+        )
+
+        subscription = get_object_or_404(
+            Subscription.objects.select_related(
+                "customer",
+                "service_type",
+                "plan",
+                "address",
+                "registered_by",
+                "seller",
+            ),
+            pk=self.kwargs["subscription_pk"],
+            customer=self.customer,
+            is_active=True,
+            status__in=(
+                Subscription.Status.PRESALE,
+                Subscription.Status.INSTALLATION,
+            ),
+        )
+
+        if subscription.seller_id:
+            messages.info(
+                request,
+                "La venta ya tiene vendedor identificado.",
+            )
+            return redirect(
+                "services:subscription_summary",
+                customer_pk=self.customer.pk,
+                subscription_pk=subscription.pk,
+            )
+
+        self._subscription = subscription
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        return (
+            Subscription.objects
+            .filter(
+                customer=self.customer,
+                is_active=True,
+                status__in=(
+                    Subscription.Status.PRESALE,
+                    Subscription.Status.INSTALLATION,
+                ),
+            )
+            .select_related(
+                "customer",
+                "service_type",
+                "plan",
+                "address",
+                "registered_by",
+            )
+        )
+
+    def get_object(self, queryset=None):
+        if hasattr(self, "_subscription"):
+            return self._subscription
+        return super().get_object(queryset)
+
+    def form_valid(self, form):
+        seller = form.cleaned_data["seller"]
+
+        try:
+            with transaction.atomic():
+                locked = (
+                    Subscription.objects
+                    .select_for_update()
+                    .select_related("seller")
+                    .get(pk=self.object.pk)
+                )
+
+                if locked.seller_id:
+                    messages.info(
+                        self.request,
+                        "La venta ya tiene vendedor identificado.",
+                    )
+                else:
+                    locked.seller = seller
+                    locked.full_clean()
+                    locked.save(update_fields=["seller", "updated_at"])
+                    messages.success(
+                        self.request,
+                        (
+                            f"Vendedor registrado: {seller}. "
+                            "El alta ya puede continuar al contrato."
+                        ),
+                    )
+
+                self.object = locked
+
+        except ValidationError as exc:
+            form.add_error(None, " ".join(exc.messages))
+            return self.form_invalid(form)
+
+        return redirect(
+            "customers:detail",
+            pk=self.customer.pk,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["customer"] = self.customer
+        context["subscription"] = self.object
         return context
 
 
