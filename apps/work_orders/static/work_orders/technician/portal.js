@@ -682,7 +682,15 @@
     function configureTechnicalMode(order) {
         const editable = order.status === "IN_PROGRESS";
         const isPex = Boolean(order.is_outside_plant);
+        const isTransfer = order.order_type_code === "TRANSFER";
         state.detailEditable = editable;
+
+        $("#installed-material-billable-field").hidden = !isTransfer;
+        $("#installed-material-price-field").hidden = !isTransfer;
+        if (!isTransfer) {
+            $("#installed-material-billable").value = "0";
+            $("#installed-material-unit-price").value = "";
+        }
 
         $("#field-sheet-mode").textContent = editable ? "Editable" : "Solo lectura";
         $("#field-nap-label").textContent = isPex ? "Caja NAP (si aplica)" : "Caja NAP";
@@ -712,7 +720,11 @@
             ? (
                 isPex
                     ? "Declara por separado el material utilizado y el material retirado durante la intervención de red."
-                    : "Declara por separado lo que queda instalado y lo que se retira del domicilio."
+                    : (
+                        isTransfer
+                            ? "Declara lo utilizado y marca como facturable solo lo que corresponde cobrar al abonado. El precio unitario alimentará el costo técnico real del traslado."
+                            : "Declara por separado lo que queda instalado y lo que se retira del domicilio."
+                    )
             )
             : (
                 isPex
@@ -732,6 +744,8 @@
         ].forEach((selector) => {
             $(selector).disabled = !editable;
         });
+        $("#installed-material-billable").disabled = !editable || !isTransfer;
+        syncInstalledMaterialBillingFields();
         ["#material-type", "#material-meters", "#material-submit"].forEach((selector) => {
             $(selector).disabled = !editable;
         });
@@ -856,6 +870,16 @@
                 element("strong", "", material.name || "Material"),
                 element("p", "", `${text(item.quantity, "0")} ${unit}${item.remarks ? ` · ${item.remarks}` : ""}`),
             );
+            if (item.is_billable) {
+                const subtotal = Number(item.quantity || 0) * Number(item.unit_price || 0);
+                row.append(
+                    element(
+                        "p",
+                        "helper",
+                        `Facturable · ${money(item.unit_price)} por ${unit || "unidad"} · subtotal ${money(subtotal)}`,
+                    ),
+                );
+            }
             if (state.detailEditable) {
                 const remove = element("button", "btn btn-danger btn-block", "Quitar registro");
                 remove.type = "button";
@@ -895,6 +919,16 @@
         }
     }
 
+    function syncInstalledMaterialBillingFields() {
+        const isTransfer = state.currentOrder?.order_type_code === "TRANSFER";
+        const billable = isTransfer && $("#installed-material-billable").value === "1";
+        $("#installed-material-price-field").hidden = !isTransfer;
+        $("#installed-material-unit-price").disabled = !state.detailEditable || !billable;
+        if (!billable) {
+            $("#installed-material-unit-price").value = "";
+        }
+    }
+
     async function saveFieldMaterial(event, movementType) {
         event.preventDefault();
         if (!state.detailId) return;
@@ -904,6 +938,15 @@
         const materialId = $(`#${prefix}-material-id`).value;
         const quantity = $(`#${prefix}-material-quantity`).value;
         const remarks = $(`#${prefix}-material-remarks`).value.trim();
+        const isTransfer = state.currentOrder?.order_type_code === "TRANSFER";
+        const isBillable = (
+            installed
+            && isTransfer
+            && $("#installed-material-billable").value === "1"
+        );
+        const unitPrice = isBillable
+            ? $("#installed-material-unit-price").value
+            : null;
         const button = $(`#${prefix}-material-submit`);
 
         if (!materialId) {
@@ -912,6 +955,10 @@
         }
         if (quantity === "" || Number(quantity) <= 0) {
             showToast("Ingresa una cantidad mayor a cero.", "error");
+            return;
+        }
+        if (isBillable && (unitPrice === "" || Number(unitPrice) <= 0)) {
+            showToast("Indica el precio unitario del material facturable.", "error");
             return;
         }
 
@@ -923,11 +970,18 @@
                     material_id: Number(materialId),
                     movement_type: movementType,
                     quantity,
+                    is_billable: isBillable,
+                    unit_price: unitPrice,
                     remarks,
                 }),
             });
             $(`#${prefix}-material-quantity`).value = "";
             $(`#${prefix}-material-remarks`).value = "";
+            if (installed) {
+                $("#installed-material-billable").value = "0";
+                $("#installed-material-unit-price").value = "";
+                syncInstalledMaterialBillingFields();
+            }
             renderFieldMaterials(payload);
             showToast(
                 installed
@@ -1316,6 +1370,7 @@
         $("#detail-back").addEventListener("click", () => navigate(state.detailBackScreen));
         $("#field-sheet-form").addEventListener("submit", saveFieldSheet);
         $("#installed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "INSTALLED"));
+        $("#installed-material-billable").addEventListener("change", syncInstalledMaterialBillingFields);
         $("#removed-material-form").addEventListener("submit", (event) => saveFieldMaterial(event, "REMOVED"));
         $("#materials-form").addEventListener("submit", saveMaterial);
         $("#evidence-form").addEventListener("submit", uploadEvidence);
