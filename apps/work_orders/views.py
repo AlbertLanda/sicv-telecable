@@ -31,6 +31,7 @@ from apps.services.models import Subscription
 from apps.work_orders.forms import (
     IncidentCreateForm,
     IncidentCloseForm,
+    InstallationWithdrawalForm,
     TransferCreateForm,
     WorkOrderAssignForm,
     WorkOrderCreateForm,
@@ -40,6 +41,10 @@ from apps.work_orders.forms import (
     WorkOrderScheduleWeekForm,
     WorkOrderStartAttentionForm,
     WorkOrderCancelForm,
+)
+from apps.work_orders.installation_withdrawal import (
+    installation_withdrawal_preview,
+    withdraw_pending_installation,
 )
 from apps.work_orders.location import resolve_location_display
 from apps.work_orders.models import WorkOrder
@@ -765,6 +770,73 @@ class WorkOrderCancelView(
             "customers:orders",
             pk=order.subscription.customer_id,
         )
+
+class InstallationWithdrawalView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    permission_required = "work_orders.withdraw_installation"
+    form_class = InstallationWithdrawalForm
+    template_name = "work_orders/installation_withdrawal.html"
+
+    def get_work_order(self):
+        if not hasattr(self, "_work_order"):
+            self._work_order = get_object_or_404(
+                WorkOrder.objects.select_related(
+                    "subscription",
+                    "subscription__customer",
+                    "subscription__address",
+                    "subscription__address__zone__branch",
+                    "order_type",
+                ),
+                pk=self.kwargs["pk"],
+            )
+        return self._work_order
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        order = self.get_work_order()
+        context["order"] = order
+        context["customer"] = order.subscription.customer
+        context["preview"] = installation_withdrawal_preview(order)
+        return context
+
+    def form_valid(self, form):
+        order = self.get_work_order()
+        customer_pk = order.subscription.customer_id
+
+        try:
+            result = withdraw_pending_installation(
+                order=order,
+                user=self.request.user,
+                reason=form.cleaned_data["reason"],
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+            return self.form_invalid(form)
+
+        if result["customer_deleted"]:
+            messages.success(
+                self.request,
+                (
+                    f"Desistimiento registrado. La alta provisional "
+                    f"{result['service_code']} fue eliminada y el código "
+                    "quedó disponible nuevamente."
+                ),
+            )
+            return redirect("customers:search")
+
+        messages.success(
+            self.request,
+            (
+                f"Desistimiento registrado. El servicio provisional "
+                f"{result['service_code']} fue retirado. El abonado se "
+                "conservó porque mantiene otra información válida."
+            ),
+        )
+        return redirect("customers:detail", pk=customer_pk)
+
 
 class WorkOrderDetailView(LoginRequiredMixin, View):
     """
