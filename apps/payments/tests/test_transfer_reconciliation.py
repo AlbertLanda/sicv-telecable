@@ -103,7 +103,7 @@ class TransferReconciliationWebTests(WorkOrderTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Regularización de traslado")
-        self.assertContains(response, "Diferencia S/ 8.00")
+        self.assertContains(response, "Diferencia S/ 8,00")
         self.assertContains(response, self.order.order_number)
 
     def test_reconciliation_page_shows_commercial_and_real_amounts(self):
@@ -121,9 +121,9 @@ class TransferReconciliationWebTests(WorkOrderTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Costo técnico real")
-        self.assertContains(response, "S/ 28.00")
+        self.assertContains(response, "S/ 28,00")
         self.assertContains(response, "Monto acordado")
-        self.assertContains(response, "S/ 20.00")
+        self.assertContains(response, "S/ 20,00")
         self.assertContains(response, "Monto ya emitido")
         self.assertContains(response, "Diferencia")
 
