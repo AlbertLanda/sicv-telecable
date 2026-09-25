@@ -603,9 +603,10 @@ def confirm_external_transfer_destination(
         destination.latitude = latitude
         destination.longitude = longitude
         destination.is_active = True
+        destination.full_clean()
         destination.save()
     else:
-        destination = CustomerAddress.objects.create(
+        destination = CustomerAddress(
             customer=order.subscription.customer,
             zone=zone,
             address=address,
@@ -617,6 +618,8 @@ def confirm_external_transfer_destination(
             is_primary=False,
             is_active=True,
         )
+        destination.full_clean()
+        destination.save()
 
     transfer.new_address = destination
     transfer.confirmed_supply_code = (supply_code or "").strip()

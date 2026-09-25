@@ -6,6 +6,8 @@ mover el saldo del abonado. Aceptarla emite el cargo; descartarla deja motivo,
 usuario y fecha para auditoría.
 """
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -94,6 +96,29 @@ def pending_proposals(customer):
     )
 
 
+def suggested_proposed_charge_amount(proposal):
+    """Monto sugerido por la política registrada en la OT de traslado."""
+    if not is_transfer_order(proposal.work_order):
+        return None
+
+    try:
+        transfer = proposal.work_order.transfer_detail
+    except TransferDetail.DoesNotExist:
+        return None
+
+    if transfer.charge_mode == transfer.ChargeMode.UPFRONT_BASE:
+        return transfer.base_fee_snapshot
+
+    if transfer.charge_mode == transfer.ChargeMode.UPFRONT_FULL:
+        return (
+            transfer.customer_agreed_amount
+            if transfer.customer_agreed_amount is not None
+            else transfer.estimated_total
+        )
+
+    return None
+
+
 @transaction.atomic
 def accept_proposed_charge(*, proposal, user, amount, due_date, note=""):
     """Emite exactamente un cargo desde una propuesta todavía pendiente."""
@@ -111,6 +136,33 @@ def accept_proposed_charge(*, proposal, user, amount, due_date, note=""):
         raise ValidationError(
             f"La propuesta ya está {locked.get_status_display().lower()}."
         )
+
+    try:
+        amount = Decimal(amount)
+    except Exception as exc:
+        raise ValidationError("El monto propuesto no es válido.") from exc
+
+    if is_transfer_order(locked.work_order):
+        transfer = locked.work_order.transfer_detail
+
+        if (
+            transfer.charge_mode == transfer.ChargeMode.AFTER_TECHNICAL
+            and locked.work_order.status != locked.work_order.Status.LIQUIDATED
+        ):
+            raise ValidationError(
+                "Este traslado quedó definido para cobrar después de la "
+                "constatación técnica. Debe liquidarse antes de emitir el cargo."
+            )
+
+        if (
+            transfer.customer_agreed_amount is not None
+            and amount != transfer.customer_agreed_amount
+            and not (note or "").strip()
+        ):
+            raise ValidationError(
+                "El monto es distinto al informado al abonado. "
+                "Registre una observación que justifique el ajuste."
+            )
 
     charge = create_manual_charge(
         customer=locked.customer,

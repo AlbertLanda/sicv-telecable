@@ -224,7 +224,7 @@ class TransferProposalWebTests(TransferProposalTests):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            response.context["form"].fields["amount"].initial,
+            response.context["form"].initial["amount"],
             Decimal("20.00"),
         )
         self.assertContains(response, "TRASLADO INTERNO")
