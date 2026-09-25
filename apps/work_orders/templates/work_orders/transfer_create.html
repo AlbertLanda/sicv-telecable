@@ -354,6 +354,36 @@
     var agreed = document.getElementById("id_customer_agreed_amount");
     var chargeMode = document.getElementById("id_charge_mode");
 
+    var supplyInput = document.getElementById("id_requested_supply_code");
+    var requestedAddress = document.getElementById("id_requested_address_text");
+    var requestedLatitude = document.getElementById("id_requested_latitude");
+    var requestedLongitude = document.getElementById("id_requested_longitude");
+    var consultSupplyButton = document.getElementById(
+        "btn-consultar-suministro-traslado"
+    );
+    var useSupplyButton = document.getElementById(
+        "btn-usar-suministro-traslado"
+    );
+    var supplyMessage = document.getElementById(
+        "traslado-suministro-mensaje"
+    );
+    var supplyPreview = document.getElementById(
+        "traslado-suministro-preview"
+    );
+    var previewAddress = document.getElementById(
+        "traslado-preview-address"
+    );
+    var previewDistrict = document.getElementById(
+        "traslado-preview-district"
+    );
+    var previewCoordinates = document.getElementById(
+        "traslado-preview-coordinates"
+    );
+    var previewMapsLink = document.getElementById(
+        "traslado-preview-maps-link"
+    );
+    var pendingSupplyLocation = null;
+
     if (!payload || !subtype) return;
 
     var data = JSON.parse(payload.textContent);
@@ -413,10 +443,143 @@
         });
     }
 
+    function clearSupplyPreview(clearAppliedLocation) {
+        pendingSupplyLocation = null;
+
+        if (supplyPreview) {
+            supplyPreview.classList.add("d-none");
+        }
+        if (previewMapsLink) {
+            previewMapsLink.classList.add("d-none");
+            previewMapsLink.removeAttribute("href");
+        }
+
+        if (clearAppliedLocation) {
+            if (requestedAddress) requestedAddress.value = "";
+            if (requestedLatitude) requestedLatitude.value = "";
+            if (requestedLongitude) requestedLongitude.value = "";
+        }
+    }
+
+    async function consultSupply() {
+        if (!supplyInput || !consultSupplyButton) return;
+
+        var supplyCode = supplyInput.value.trim();
+        clearSupplyPreview(true);
+
+        if (!supplyCode) {
+            supplyMessage.textContent = "Ingrese un código de suministro.";
+            supplyMessage.className = "text-danger small mt-1";
+            supplyInput.focus();
+            return;
+        }
+
+        consultSupplyButton.disabled = true;
+        consultSupplyButton.textContent = "Consultando...";
+        supplyMessage.textContent = "Consultando ubicación del suministro...";
+        supplyMessage.className = "text-muted small mt-1";
+
+        try {
+            var response = await fetch(
+                "{% url 'customers:lookup_supply' %}?supply_number="
+                + encodeURIComponent(supplyCode),
+                {
+                    method: "GET",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+            var result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.message || "No fue posible consultar el suministro."
+                );
+            }
+
+            var locationData = result.data || {};
+            pendingSupplyLocation = locationData;
+
+            previewAddress.textContent =
+                locationData.address || "No disponible";
+            previewDistrict.textContent =
+                locationData.district || "No disponible";
+
+            if (locationData.latitude && locationData.longitude) {
+                previewCoordinates.textContent =
+                    locationData.latitude + ", " + locationData.longitude;
+            } else {
+                previewCoordinates.textContent = "No disponibles";
+            }
+
+            if (locationData.gps_link) {
+                previewMapsLink.href = locationData.gps_link;
+                previewMapsLink.classList.remove("d-none");
+            }
+
+            supplyPreview.classList.remove("d-none");
+            supplyMessage.textContent =
+                locationData.latitude && locationData.longitude
+                    ? (
+                        "Suministro encontrado con coordenadas GPS. "
+                        + "Confirme para usar esta ubicación."
+                    )
+                    : (
+                        "Suministro encontrado sin coordenadas exactas. "
+                        + "El técnico confirmará el GPS en campo."
+                    );
+            supplyMessage.className = "text-success small mt-1";
+        } catch (error) {
+            supplyMessage.textContent =
+                error.message || "Ocurrió un error al consultar el suministro.";
+            supplyMessage.className = "text-danger small mt-1";
+        } finally {
+            consultSupplyButton.disabled = false;
+            consultSupplyButton.textContent = "Consultar";
+        }
+    }
+
+    function useSupplyLocation() {
+        if (!pendingSupplyLocation) return;
+
+        if (requestedAddress) {
+            requestedAddress.value = pendingSupplyLocation.address || "";
+        }
+        if (requestedLatitude) {
+            requestedLatitude.value = pendingSupplyLocation.latitude || "";
+        }
+        if (requestedLongitude) {
+            requestedLongitude.value = pendingSupplyLocation.longitude || "";
+        }
+
+        supplyMessage.textContent =
+            "Ubicación aplicada al traslado. Revise sede, zona y referencia.";
+        supplyMessage.className = "text-primary small mt-1";
+    }
+
     subtype.addEventListener("change", refreshSubtype);
     if (branch) branch.addEventListener("change", refreshZones);
     if (extra) extra.addEventListener("input", refreshMoney);
     if (chargeMode) chargeMode.addEventListener("change", refreshMoney);
+
+    if (supplyInput) {
+        supplyInput.addEventListener("input", function () {
+            clearSupplyPreview(true);
+            if (supplyMessage) {
+                supplyMessage.textContent = "";
+                supplyMessage.className = "small mt-1";
+            }
+        });
+    }
+    if (consultSupplyButton) {
+        consultSupplyButton.addEventListener("click", consultSupply);
+    }
+    if (useSupplyButton) {
+        useSupplyButton.addEventListener("click", useSupplyLocation);
+    }
 
     refreshZones();
     refreshSubtype();
