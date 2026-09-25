@@ -116,6 +116,14 @@ def suggested_proposed_charge_amount(proposal):
             else transfer.estimated_total
         )
 
+    if transfer.charge_mode == transfer.ChargeMode.AFTER_TECHNICAL:
+        if (
+            proposal.work_order.status
+            == proposal.work_order.Status.LIQUIDATED
+            and transfer.actual_total is not None
+        ):
+            return transfer.actual_total
+
     return None
 
 
