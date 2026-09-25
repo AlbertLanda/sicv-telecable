@@ -26,6 +26,14 @@ urlpatterns = [
         name="subscription_create",
     ),
     path(
+        "customers/<int:customer_pk>/subscriptions/<int:subscription_pk>/seller/",
+        require_authenticated_permission(
+            "services.add_subscription",
+            views.SubscriptionSellerUpdateView,
+        ),
+        name="subscription_seller",
+    ),
+    path(
         "customers/<int:customer_pk>/subscriptions/<int:subscription_pk>/summary/",
         views.SubscriptionSummaryView.as_view(),
         name="subscription_summary",
