@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Ventas por vendedor - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    .sales-filter { max-width:720px; }
+    .sales-filter .tc-form-field { max-width:280px; }
+    .sales-summary-grid {
+        display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+        gap:12px;
+    }
+    .sales-summary-card {
+        border:1px solid var(--tc-border);
+        border-radius:8px;
+        padding:14px 16px;
+        background:#fff;
+    }
+    .sales-summary-card .value {
+        font-size:1.45rem;
+        font-weight:800;
+        color:#123f70;
+    }
+    .sales-summary-card .label {
+        color:#64748b;
+        font-size:.78rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tc-content">
+
+    <div class="tc-breadcrumb">
+        Reportes &rsaquo; <strong>Ventas por vendedor</strong>
+    </div>
+
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner">
+            <h2 class="tc-section-title">
+                <i class="bi bi-graph-up-arrow"></i>Ventas por vendedor
+            </h2>
+        </div>
+
+        <div class="tc-section-body">
+            <form method="get" class="tc-form sales-filter" novalidate>
+                <label class="tc-form-label" for="{{ form.day.id_for_label }}">
+                    {{ form.day.label }}
+                </label>
+                <div class="tc-form-field">
+                    {{ form.day }}
+                    {% for error in form.day.errors %}
+                        <div class="tc-form-error">{{ error }}</div>
+                    {% endfor %}
+                </div>
+
+                <label class="tc-form-label" for="{{ form.seller.id_for_label }}">
+                    {{ form.seller.label }}
+                </label>
+                <div class="tc-form-field">
+                    {{ form.seller }}
+                    {% for error in form.seller.errors %}
+                        <div class="tc-form-error">{{ error }}</div>
+                    {% endfor %}
+                </div>
+
+                <div></div>
+                <div class="tc-form-field">
+                    <button type="submit" class="tc-btn primary">
+                        <i class="bi bi-search"></i>Consultar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    {% if report %}
+        <section class="tc-card tc-section tc-full">
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    Resumen del {{ report.day|date:"d/m/Y" }}
+                    {% if report.branch %} · {{ report.branch.name }}{% endif %}
+                </h2>
+            </div>
+            <div class="tc-section-body">
+                <div class="sales-summary-grid">
+                    <div class="sales-summary-card">
+                        <div class="value">{{ report.total_sales }}</div>
+                        <div class="label">Ventas registradas</div>
+                    </div>
+                    <div class="sales-summary-card">
+                        <div class="value">{{ report.seller_count }}</div>
+                        <div class="label">Vendedores con ventas</div>
+                    </div>
+                    {% for item in report.summary %}
+                        <div class="sales-summary-card">
+                            <div class="value">{{ item.count }}</div>
+                            <div class="label">{{ item.label }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="tc-card tc-section tc-full">
+            <div class="tc-section-head">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-list-check"></i>Detalle de ventas
+                </h2>
+            </div>
+
+            <div class="table-responsive">
+                <table class="tc-table">
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Vendedor</th>
+                            <th>Registrado por</th>
+                            <th>Código de servicio</th>
+                            <th>Abonado</th>
+                            <th>Servicio</th>
+                            <th>Plan</th>
+                            <th>Domicilio</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for subscription in report.rows %}
+                            <tr>
+                                <td>{{ subscription.created_at|date:"H:i" }}</td>
+                                <td><strong>{{ subscription.seller|default:"Sin vendedor" }}</strong></td>
+                                <td>{{ subscription.registered_by|default:"—" }}</td>
+                                <td>
+                                    <a href="{% url 'customers:detail' subscription.customer_id %}">
+                                        {{ subscription.service_code }}
+                                    </a>
+                                </td>
+                                <td>{{ subscription.customer }}</td>
+                                <td>{{ subscription.service_type }}</td>
+                                <td>{{ subscription.plan }}</td>
+                                <td>{{ subscription.address.address }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="tc-empty">
+                                    No hay ventas registradas con estos filtros.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    {% endif %}
+
+</div>
+{% endblock %}
