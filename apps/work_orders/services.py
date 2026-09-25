@@ -1145,9 +1145,9 @@ def create_installation_work_order(
     revisión-. `create_work_order()` sigue validando que el valor pertenezca
     a `WorkOrder.AttentionType`.
 
-    `seller` se hereda de la suscripción cuando la venta ya fue atribuida
-    durante el alta. El argumento solo queda como compatibilidad para
-    suscripciones históricas que todavía no tengan vendedor.
+    `seller` se hereda obligatoriamente de la suscripción. Una instalación
+    no puede convertirse en el lugar donde recién se decide quién vendió:
+    esa atribución debe quedar cerrada antes del contrato.
 
     `created_by` debe salir del usuario ejecutor (`request.user`), nunca de
     datos enviados por el navegador.
@@ -1202,6 +1202,16 @@ def create_installation_work_order(
 
     if seller is None:
         seller = locked_subscription.seller
+
+    if locked_subscription.seller_id is None:
+        raise ValidationError(
+            "La venta debe tener vendedor identificado antes de generar "
+            "la orden de instalación."
+        )
+
+    # En una instalación nueva manda la atribución registrada en la venta.
+    # Un argumento distinto no puede sobrescribirla desde otra pantalla.
+    seller = locked_subscription.seller
 
     return create_work_order(
         subscription=locked_subscription,
