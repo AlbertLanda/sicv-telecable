@@ -2100,6 +2100,13 @@ class TransferDetail(models.Model):
                 "Los importes estimados del traslado no pueden ser negativos."
             )
 
+        if self.actual_extra_amount is not None and self.actual_extra_amount < 0:
+            raise ValidationError({
+                "actual_extra_amount": (
+                    "El adicional técnico real no puede ser negativo."
+                )
+            })
+
         if (
             self.requested_latitude is None
         ) != (
@@ -2194,6 +2201,7 @@ class TransferDetail(models.Model):
 
             if (
                 self.previous_address_id
+                and self.work_order.status != WorkOrder.Status.LIQUIDATED
                 and self.previous_address_id != current_address.id
             ):
                 raise ValidationError({
@@ -2219,6 +2227,24 @@ class TransferDetail(models.Model):
             raise ValidationError({
                 "work_order": "El subtipo de traslado no es válido."
             })
+
+        if self.reconciliation_status == self.ReconciliationStatus.RESOLVED:
+            if not self.reconciliation_action:
+                raise ValidationError({
+                    "reconciliation_action": (
+                        "Una regularización resuelta debe indicar la decisión."
+                    )
+                })
+            if not self.reconciliation_note.strip():
+                raise ValidationError({
+                    "reconciliation_note": (
+                        "Una regularización resuelta debe conservar su sustento."
+                    )
+                })
+            if not self.reconciled_by_id or self.reconciled_at is None:
+                raise ValidationError(
+                    "Una regularización resuelta debe conservar quién y cuándo la resolvió."
+                )
 
     @property
     def estimated_total(self):
