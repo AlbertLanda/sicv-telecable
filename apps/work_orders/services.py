@@ -245,7 +245,7 @@ def _validate_seller(seller):
 
     if not (
         getattr(seller, "is_salesperson", False)
-        or seller.role == User.Role.ADMIN
+        or seller.role in (User.Role.SALES, User.Role.ADMIN)
     ):
         raise ValidationError(
             "La persona indicada no está habilitada para figurar como vendedor."
