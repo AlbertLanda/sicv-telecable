@@ -4,10 +4,13 @@ from django import forms
 from django.db import models
 
 from apps.accounts.models import User
+from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     OrderReason,
+    OrderSubtype,
     OrderType,
+    TransferDetail,
     WorkOrder,
     WorkOrderEvidence,
     WorkOrderFieldSheet,
@@ -177,9 +180,11 @@ class WorkOrderCreateForm(forms.ModelForm):
         # cliente realmente tiene. Ofrecer "AVERÍA CABLE" a un abonado
         # solo-internet no es una opción: es una orden imposible que
         # alguien acabaría creando.
-        order_types = OrderType.objects.filter(
-            is_active=True,
-        ).exclude(code="OUTSIDE_PLANT")
+        order_types = (
+            OrderType.objects
+            .filter(is_active=True)
+            .exclude(code__in=["OUTSIDE_PLANT", "TRANSFER"])
+        )
 
         if customer is not None:
             service_type_ids = list(
@@ -312,6 +317,334 @@ class WorkOrderCreateForm(forms.ModelForm):
             "detail": data.get("detail", ""),
             "scheduled_at": data.get("scheduled_at"),
         }
+
+class TransferCreateForm(forms.Form):
+    """Alta específica de traslado interno/externo desde la ficha del abonado."""
+
+    subscription = SubscriptionChoiceField(
+        queryset=Subscription.objects.none(),
+        label="Suscripción",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    subtype = forms.ModelChoiceField(
+        queryset=OrderSubtype.objects.none(),
+        label="Tipo de traslado",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    destination_branch = forms.ModelChoiceField(
+        queryset=Branch.objects.none(),
+        required=False,
+        label="Sede destino",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    destination_zone = forms.ModelChoiceField(
+        queryset=Zone.objects.none(),
+        required=False,
+        label="Zona destino",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    previous_location = forms.CharField(
+        required=False,
+        max_length=200,
+        label="Ubicación interna actual",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    new_location = forms.CharField(
+        required=False,
+        max_length=200,
+        label="Nueva ubicación interna",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+
+    requested_address_text = forms.CharField(
+        required=False,
+        max_length=250,
+        label="Dirección solicitada",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Dirección o referencia que indica el abonado",
+            }
+        ),
+    )
+    requested_reference = forms.CharField(
+        required=False,
+        max_length=250,
+        label="Referencia",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    requested_supply_code = forms.CharField(
+        required=False,
+        max_length=50,
+        label="Suministro informado",
+        widget=forms.TextInput(attrs={"class": "form-control"}),
+    )
+    requested_latitude = forms.DecimalField(
+        required=False,
+        max_digits=10,
+        decimal_places=7,
+        label="Latitud estimada",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "step": "0.0000001"}
+        ),
+    )
+    requested_longitude = forms.DecimalField(
+        required=False,
+        max_digits=10,
+        decimal_places=7,
+        label="Longitud estimada",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "step": "0.0000001"}
+        ),
+    )
+
+    estimated_extra_amount = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+        initial=0,
+        label="Adicional estimado",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "min": "0", "step": "0.01"}
+        ),
+        help_text=(
+            "Estimación previa de exceso/material. La liquidación técnica "
+            "confirmará lo realmente utilizado."
+        ),
+    )
+    customer_agreed_amount = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+        label="Monto informado al abonado",
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "min": "0", "step": "0.01"}
+        ),
+    )
+    charge_mode = forms.ChoiceField(
+        choices=TransferDetail.ChargeMode.choices,
+        initial=TransferDetail.ChargeMode.UPFRONT_BASE,
+        label="Definición del cobro",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    collection_mode = forms.ChoiceField(
+        choices=TransferDetail.CollectionMode.choices,
+        initial=TransferDetail.CollectionMode.IMMEDIATE,
+        label="Forma prevista de cobro",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    scheduled_at = forms.DateTimeField(
+        required=False,
+        label="Fecha programada",
+        input_formats=[
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+        ],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"class": "form-control", "type": "datetime-local"},
+        ),
+    )
+    priority = forms.ChoiceField(
+        choices=WorkOrder.Priority.choices,
+        initial=WorkOrder.Priority.NORMAL,
+        label="Prioridad",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    detail = forms.CharField(
+        required=False,
+        label="Detalle de la solicitud",
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Indicaciones para el técnico...",
+            }
+        ),
+    )
+
+    BASE_FEES = {
+        "INTERNAL": "20.00",
+        "EXTERNAL": "30.00",
+    }
+
+    def __init__(self, *args, **kwargs):
+        customer = kwargs.pop("customer", None)
+        super().__init__(*args, **kwargs)
+        self.customer = customer
+
+        if customer is None:
+            self.fields["subscription"].queryset = Subscription.objects.none()
+        else:
+            self.fields["subscription"].queryset = (
+                Subscription.objects
+                .filter(customer=customer, is_active=True)
+                .select_related("service_type", "plan", "address", "address__zone")
+                .order_by("-created_at")
+            )
+
+        transfer_type = OrderType.objects.filter(
+            code="TRANSFER",
+            is_active=True,
+        ).first()
+
+        self.fields["subtype"].queryset = (
+            OrderSubtype.objects.filter(
+                order_type=transfer_type,
+                is_active=True,
+            ).order_by("name")
+            if transfer_type
+            else OrderSubtype.objects.none()
+        )
+
+        self.fields["destination_branch"].queryset = (
+            Branch.objects.filter(is_active=True).order_by("name")
+        )
+        self.fields["destination_zone"].queryset = (
+            Zone.objects.filter(is_active=True)
+            .select_related("branch")
+            .order_by("branch__name", "name")
+        )
+
+        if customer is not None:
+            self.fields["destination_branch"].initial = customer.branch_id
+
+    def clean(self):
+        data = super().clean()
+
+        subtype = data.get("subtype")
+        subscription = data.get("subscription")
+        destination_branch = data.get("destination_branch")
+        destination_zone = data.get("destination_zone")
+        charge_mode = data.get("charge_mode")
+
+        if subscription is not None and self.customer is not None:
+            if subscription.customer_id != self.customer.pk:
+                self.add_error(
+                    "subscription",
+                    "La suscripción no corresponde al abonado mostrado.",
+                )
+
+        if subtype is None:
+            return data
+
+        if subtype.code == "INTERNAL":
+            if not (data.get("previous_location") or "").strip():
+                self.add_error(
+                    "previous_location",
+                    "Indique la ubicación interna actual.",
+                )
+            if not (data.get("new_location") or "").strip():
+                self.add_error(
+                    "new_location",
+                    "Indique la nueva ubicación interna.",
+                )
+
+        elif subtype.code == "EXTERNAL":
+            if destination_branch is None:
+                self.add_error(
+                    "destination_branch",
+                    "Seleccione la sede destino.",
+                )
+            if destination_zone is None:
+                self.add_error(
+                    "destination_zone",
+                    "Seleccione la zona destino.",
+                )
+            elif (
+                destination_branch is not None
+                and destination_zone.branch_id != destination_branch.pk
+            ):
+                self.add_error(
+                    "destination_zone",
+                    "La zona no pertenece a la sede destino.",
+                )
+
+            if not (data.get("requested_address_text") or "").strip():
+                self.add_error(
+                    "requested_address_text",
+                    "Registre la dirección o referencia solicitada.",
+                )
+        else:
+            self.add_error("subtype", "El subtipo de traslado no es válido.")
+
+        lat = data.get("requested_latitude")
+        lon = data.get("requested_longitude")
+        if (lat is None) != (lon is None):
+            self.add_error(
+                "requested_latitude",
+                "Si registra ubicación debe indicar latitud y longitud.",
+            )
+
+        if (
+            charge_mode == TransferDetail.ChargeMode.UPFRONT_FULL
+            and data.get("customer_agreed_amount") is None
+        ):
+            self.add_error(
+                "customer_agreed_amount",
+                "Indique el monto informado al abonado.",
+            )
+
+        return data
+
+    def catalog_data(self):
+        return {
+            "baseFees": self.BASE_FEES,
+            "zones": {
+                str(branch.pk): [
+                    {"id": zone.pk, "name": zone.name}
+                    for zone in self.fields["destination_zone"].queryset
+                    if zone.branch_id == branch.pk
+                ]
+                for branch in self.fields["destination_branch"].queryset
+            },
+            "subtypes": {
+                str(subtype.pk): subtype.code
+                for subtype in self.fields["subtype"].queryset
+            },
+        }
+
+    def service_arguments(self):
+        data = self.cleaned_data
+        subtype = data["subtype"]
+
+        return {
+            "subscription": data["subscription"],
+            "customer": self.customer,
+            "subtype": subtype,
+            "destination_branch": (
+                data.get("destination_branch")
+                if subtype.code == "EXTERNAL"
+                else None
+            ),
+            "destination_zone": (
+                data.get("destination_zone")
+                if subtype.code == "EXTERNAL"
+                else None
+            ),
+            "previous_location": data.get("previous_location", ""),
+            "new_location": data.get("new_location", ""),
+            "requested_address_text": data.get("requested_address_text", ""),
+            "requested_reference": data.get("requested_reference", ""),
+            "requested_supply_code": data.get("requested_supply_code", ""),
+            "requested_latitude": data.get("requested_latitude"),
+            "requested_longitude": data.get("requested_longitude"),
+            "estimated_extra_amount": data.get("estimated_extra_amount") or 0,
+            "customer_agreed_amount": data.get("customer_agreed_amount"),
+            "charge_mode": data["charge_mode"],
+            "collection_mode": data["collection_mode"],
+            "attention_type": WorkOrder.AttentionType.FIELD,
+            "priority": data["priority"],
+            "detail": data.get("detail", ""),
+            "scheduled_at": data.get("scheduled_at"),
+        }
+
 
 class IncidentCreateForm(forms.Form):
     """

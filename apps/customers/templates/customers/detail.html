@@ -228,7 +228,18 @@
     <div class="card-header panel-head d-flex justify-content-between align-items-center">
         <span>Bloque E - Órdenes de Trabajo del Cliente</span>
         {% if perms.work_orders.add_workorder %}
-            <a href="{% url 'work_orders:create' customer.pk %}" class="btn btn-light btn-sm" title="Registrar una nueva orden de trabajo para este cliente.">+ Nueva orden de trabajo</a>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'work_orders:transfer_create' customer.pk %}"
+                   class="btn btn-warning btn-sm"
+                   title="Registrar un traslado interno o externo.">
+                    + Traslado
+                </a>
+                <a href="{% url 'work_orders:create' customer.pk %}"
+                   class="btn btn-light btn-sm"
+                   title="Registrar una nueva orden de trabajo para este cliente.">
+                    + Nueva orden de trabajo
+                </a>
+            </div>
         {% endif %}
     </div>
     <div class="card-body p-0">

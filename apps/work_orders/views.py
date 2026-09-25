@@ -31,6 +31,7 @@ from apps.services.models import Subscription
 from apps.work_orders.forms import (
     IncidentCreateForm,
     IncidentCloseForm,
+    TransferCreateForm,
     WorkOrderAssignForm,
     WorkOrderCreateForm,
     WorkOrderEvidenceUploadForm,
@@ -46,6 +47,7 @@ from apps.work_orders.services import (
     add_work_order_evidence,
     close_incident_attention,
     create_incident_work_order,
+    create_transfer_work_order,
     create_work_order,
     get_subscription_technical_context,
     start_incident_attention,
@@ -154,6 +156,65 @@ class WorkOrderCreateView(
             "customers:detail",
             kwargs={"pk": self.customer.pk},
         )
+
+class TransferCreateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    FormView,
+):
+    """Alta específica de traslado desde la ficha del abonado."""
+
+    permission_required = "work_orders.add_workorder"
+    form_class = TransferCreateForm
+    template_name = "work_orders/transfer_create.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        self.customer = get_object_or_404(
+            Customer.objects.select_related("branch"),
+            pk=self.kwargs["customer_pk"],
+            is_active=True,
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["customer"] = self.customer
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["customer"] = self.customer
+        context["has_subscriptions"] = (
+            Subscription.objects
+            .filter(customer=self.customer, is_active=True)
+            .exists()
+        )
+        return context
+
+    def form_valid(self, form):
+        try:
+            order = create_transfer_work_order(
+                created_by=self.request.user,
+                **form.service_arguments(),
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            format_html(
+                "Traslado <strong>{}</strong> registrado correctamente. "
+                '<a href="{}" class="alert-link">Ver ficha de la orden</a>.',
+                order.order_number,
+                reverse("work_orders:detail", kwargs={"pk": order.pk}),
+            ),
+        )
+
+        return redirect(
+            reverse("customers:detail", kwargs={"pk": self.customer.pk})
+        )
+
 
 class IncidentCreateView(
     LoginRequiredMixin,

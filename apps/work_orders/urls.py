@@ -79,6 +79,13 @@ urlpatterns = [
         name="create",
     ),
 
+    # Registrar un traslado interno/externo para un cliente.
+    path(
+        "customers/<int:customer_pk>/transfers/create/",
+        views.TransferCreateView.as_view(),
+        name="transfer_create",
+    ),
+
     # Registrar una incidencia para un cliente.
     path(
         "customers/<int:customer_pk>/incidents/create/",
