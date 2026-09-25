@@ -28,7 +28,7 @@ class SubscriptionChoiceField(forms.ModelChoiceField):
     """
 
     def label_from_instance(self, obj):
-        return str(obj.plan)
+        return f"{obj.service_code} · {obj.plan}"
 
 
 class ReasonChoiceField(forms.ModelChoiceField):
