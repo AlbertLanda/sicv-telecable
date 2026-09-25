@@ -1889,6 +1889,20 @@ class TransferDetail(models.Model):
         verbose_name="Dirección anterior"
     )
 
+    # Snapshot de identidad operativa. El Customer/DNI nunca se duplica:
+    # el código pertenece a la suscripción. Un traslado externo dentro de la
+    # misma sede conserva el código; entre sedes puede cambiar de prefijo.
+    previous_service_code = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Código de servicio anterior",
+    )
+    resulting_service_code = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Código de servicio resultante",
+    )
+
     # Dirección REAL confirmada en campo. Puede estar vacía mientras la OT
     # externa sigue pendiente o en atención.
     new_address = models.ForeignKey(
