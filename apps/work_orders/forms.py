@@ -382,8 +382,14 @@ class TransferCreateForm(forms.Form):
     requested_supply_code = forms.CharField(
         required=False,
         max_length=50,
-        label="Suministro informado",
-        widget=forms.TextInput(attrs={"class": "form-control"}),
+        label="Código de suministro eléctrico",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Ingrese el suministro y consulte su ubicación",
+                "inputmode": "numeric",
+            }
+        ),
     )
     requested_latitude = forms.DecimalField(
         required=False,
@@ -570,10 +576,23 @@ class TransferCreateForm(forms.Form):
                     "La zona no pertenece a la sede destino.",
                 )
 
-            if not (data.get("requested_address_text") or "").strip():
+            supply_code = (data.get("requested_supply_code") or "").strip()
+            requested_address = (
+                data.get("requested_address_text") or ""
+            ).strip()
+
+            if not supply_code:
                 self.add_error(
-                    "requested_address_text",
-                    "Registre la dirección o referencia solicitada.",
+                    "requested_supply_code",
+                    "Ingrese el código de suministro del nuevo domicilio.",
+                )
+            elif not requested_address:
+                self.add_error(
+                    "requested_supply_code",
+                    (
+                        "Consulte el suministro y use la ubicación encontrada "
+                        "antes de registrar el traslado."
+                    ),
                 )
         else:
             self.add_error("subtype", "El subtipo de traslado no es válido.")
@@ -582,8 +601,11 @@ class TransferCreateForm(forms.Form):
         lon = data.get("requested_longitude")
         if (lat is None) != (lon is None):
             self.add_error(
-                "requested_latitude",
-                "Si registra ubicación debe indicar latitud y longitud.",
+                "requested_supply_code",
+                (
+                    "La ubicación del suministro quedó incompleta: "
+                    "debe contener latitud y longitud."
+                ),
             )
 
         if (
