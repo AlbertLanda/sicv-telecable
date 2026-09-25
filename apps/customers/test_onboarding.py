@@ -20,13 +20,13 @@ User = get_user_model()
 
 class CustomerOnboardingTests(TestCase):
     def setUp(self):
-        self.branch = Branch.objects.create(
-            code="HUANCAYO",
-            name="Huancayo",
-        )
+        # HUANCAYO ya existe por la migración que siembra las sedes
+        # reales. El test debe reutilizarla en vez de intentar duplicar un
+        # código único.
+        self.branch = Branch.objects.get(code="HUANCAYO")
         self.zone = Zone.objects.create(
             branch=self.branch,
-            name="Centro",
+            name="Zona test onboarding",
         )
         self.user = User.objects.create_user(
             username="atc_onboarding",
