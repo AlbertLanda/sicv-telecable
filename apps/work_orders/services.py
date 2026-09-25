@@ -1581,7 +1581,7 @@ def liquidate_order(
 
     `items` es una lista de diccionarios con las claves de
     WorkOrderLiquidationItem (movement_type, material_name, quantity,
-    unit_of_measure, material_code, remarks).
+    unit_of_measure, material_code, is_billable, unit_price, remarks).
     """
     if order.status != WorkOrder.Status.ATTENDED:
         raise ValidationError(
@@ -1655,6 +1655,10 @@ def liquidate_order(
         )
         participation.save()
 
+    _sync_transfer_reconciliation_from_liquidation(
+        order=order,
+        liquidation=liquidation,
+    )
     _finalize_transfer_on_liquidation(order, user)
 
     order.change_status(
@@ -1739,6 +1743,8 @@ def _snapshot_items(liquidation):
             "material_name": item.material_name,
             "quantity": _snapshot_value(item.quantity),
             "unit_of_measure": item.unit_of_measure,
+            "is_billable": item.is_billable,
+            "unit_price": _snapshot_value(item.unit_price),
             "remarks": item.remarks,
         }
         for item in liquidation.items.all()
@@ -1923,6 +1929,12 @@ def resubmit_liquidation(
 
     items_after = _snapshot_items(liquidation) if new_items is not None else []
 
+    if new_items is not None:
+        _sync_transfer_reconciliation_from_liquidation(
+            order=liquidation.work_order,
+            liquidation=liquidation,
+        )
+
     # --- Traza de la corrección -------------------------------------------
     correction = WorkOrderLiquidationCorrection(
         liquidation=liquidation,
@@ -2091,6 +2103,139 @@ def _apply_transfer_result(order, result_code):
         raise ValidationError(
             "El subtipo de traslado no es válido."
         )
+
+
+def _sync_transfer_reconciliation_from_liquidation(*, order, liquidation):
+    """Calcula el costo real del traslado sin generar deuda automáticamente."""
+    if (
+        order.order_type_id is None
+        or order.order_type.code != TRANSFER_ORDER_TYPE_CODE
+    ):
+        return None
+
+    transfer = order.transfer_detail
+    billable_extra = sum(
+        (item.billable_amount for item in liquidation.items.all()),
+        Decimal("0.00"),
+    )
+
+    transfer.actual_extra_amount = billable_extra
+    difference = (
+        transfer.base_fee_snapshot
+        + billable_extra
+        - (transfer.customer_agreed_amount or Decimal("0.00"))
+    )
+
+    if (
+        transfer.customer_agreed_amount is not None
+        and difference == Decimal("0.00")
+    ):
+        transfer.reconciliation_status = (
+            TransferDetail.ReconciliationStatus.MATCHED
+        )
+    else:
+        transfer.reconciliation_status = (
+            TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+        )
+
+    transfer.reconciliation_action = ""
+    transfer.reconciliation_note = ""
+    transfer.reconciled_by = None
+    transfer.reconciled_at = None
+    transfer.save(
+        update_fields=[
+            "actual_extra_amount",
+            "reconciliation_status",
+            "reconciliation_action",
+            "reconciliation_note",
+            "reconciled_by",
+            "reconciled_at",
+            "updated_at",
+        ]
+    )
+    return transfer
+
+
+@transaction.atomic
+def resolve_transfer_reconciliation(*, transfer, user, action, note=""):
+    """Registra la decisión comercial; nunca crea un cargo automáticamente."""
+    if transfer.pk is None:
+        raise ValidationError("El traslado debe estar registrado.")
+
+    locked = (
+        TransferDetail.objects
+        .select_for_update()
+        .select_related("work_order")
+        .get(pk=transfer.pk)
+    )
+
+    if user is None or user.pk is None or not user.is_active:
+        raise ValidationError(
+            "Debe indicar un usuario activo que resuelve la regularización."
+        )
+
+    if not user.has_perm("work_orders.resolve_transfer_reconciliation"):
+        raise ValidationError(
+            "El usuario no está autorizado para resolver regularizaciones "
+            "económicas de traslados."
+        )
+
+    if locked.actual_extra_amount is None:
+        raise ValidationError(
+            "El traslado todavía no tiene un costo técnico real calculado."
+        )
+
+    if locked.reconciliation_status != (
+        TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+    ):
+        raise ValidationError(
+            "Este traslado no tiene una regularización pendiente."
+        )
+
+    try:
+        liquidation = locked.work_order.liquidation
+    except WorkOrderLiquidation.DoesNotExist as exc:
+        raise ValidationError(
+            "El traslado debe contar con una liquidación técnica."
+        ) from exc
+
+    if liquidation.review_status != WorkOrderLiquidation.ReviewStatus.VALIDATED:
+        raise ValidationError(
+            "La decisión económica solo puede cerrarse después de validar "
+            "la liquidación técnica."
+        )
+
+    valid_actions = {
+        value for value, _label in TransferDetail.ReconciliationAction.choices
+    }
+    if action not in valid_actions:
+        raise ValidationError("La decisión de regularización no es válida.")
+
+    note = (note or "").strip()
+    if not note:
+        raise ValidationError(
+            "La regularización debe conservar un sustento u observación."
+        )
+
+    locked.reconciliation_status = TransferDetail.ReconciliationStatus.RESOLVED
+    locked.reconciliation_action = action
+    locked.reconciliation_note = note
+    locked.reconciled_by = user
+    locked.reconciled_at = timezone.now()
+    locked.full_clean()
+    locked.save(
+        update_fields=[
+            "reconciliation_status",
+            "reconciliation_action",
+            "reconciliation_note",
+            "reconciled_by",
+            "reconciled_at",
+            "updated_at",
+        ]
+    )
+
+    transfer.__dict__.update(locked.__dict__)
+    return transfer
 
 
 def _finalize_transfer_on_liquidation(order, user):
