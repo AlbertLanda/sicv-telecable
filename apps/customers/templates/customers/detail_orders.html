@@ -69,6 +69,15 @@ del abonado, una incidencia siempre abre esa ficha especializada.
             {% else %}
                 <a href="{% url 'work_orders:detail' featured_open_order.pk %}" class="tc-btn muted"><i class="bi bi-file-earmark-text"></i>Ver liquidación técnica<span class="visually-hidden">Ver ficha técnica</span></a>
                 <a href="{% url 'work_orders:schedule_board' %}" class="tc-btn"><i class="bi bi-calendar3"></i>Reprogramar</a>
+                {% if featured_open_order.order_type.code == "INSTALLATION" and perms.work_orders.withdraw_installation %}
+                    <a
+                        href="{% url 'work_orders:installation_withdrawal' featured_open_order.pk %}"
+                        class="tc-btn"
+                    >
+                        <i class="bi bi-person-x"></i>
+                        Desistimiento
+                    </a>
+                {% endif %}
                 {% if perms.work_orders.cancel_workorder %}
                     {% if featured_open_order.status == "PENDING" or featured_open_order.status == "ASSIGNED" or featured_open_order.status == "DERIVED" or featured_open_order.status == "REPROGRAMMED" %}
                         <a
@@ -216,6 +225,15 @@ del abonado, una incidencia siempre abre esa ficha especializada.
                         </td>
                         <td>
                             <a class="tc-icon-btn" href="{% url 'work_orders:initial_print' order.pk %}" title="Ver orden inicial"><i class="bi bi-file-earmark-text"></i></a>
+                            {% if order.order_type.code == "INSTALLATION" and perms.work_orders.withdraw_installation %}
+                                {% if order.status == "PENDING" or order.status == "ASSIGNED" or order.status == "DERIVED" or order.status == "IN_PROGRESS" or order.status == "REPROGRAMMED" %}
+                                    <a class="tc-icon-btn"
+                                       href="{% url 'work_orders:installation_withdrawal' order.pk %}"
+                                       title="Registrar desistimiento">
+                                        <i class="bi bi-person-x"></i>
+                                    </a>
+                                {% endif %}
+                            {% endif %}
                             {% if order.order_type.code == "INCIDENT" %}
                                 {% if perms.work_orders.view_incident %}
                                     <a class="tc-icon-btn" href="{% url 'work_orders:incident_noc_detail' order.pk %}?origin=customer_orders" title="Ver historial NOC"><i class="bi bi-clock-history"></i></a>
