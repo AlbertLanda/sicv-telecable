@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 
 from apps.accounts.models import User
@@ -13,7 +14,10 @@ from apps.work_orders.services import (
     confirm_external_transfer_destination,
     create_transfer_work_order,
     liquidate_order,
+    resolve_transfer_reconciliation,
     start_order_attention,
+    submit_liquidation,
+    validate_liquidation,
 )
 from apps.work_orders.tests.base import WorkOrderTestCase
 
@@ -312,3 +316,150 @@ class TransferWorkflowTests(WorkOrderTestCase):
 
         self.assertEqual(next_order.branch, destination_branch)
         self.assertEqual(next_order.zone, destination_zone)
+
+    def test_liquidation_calculates_real_billable_cost_without_auto_charge(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+        )
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+                {
+                    "movement_type": "USED",
+                    "material_name": "Conector operativo",
+                    "quantity": Decimal("1.00"),
+                    "unit_of_measure": "UNIT",
+                    "is_billable": False,
+                },
+            ],
+        )
+
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertEqual(detail.actual_extra_amount, Decimal("8.00"))
+        self.assertEqual(detail.actual_total, Decimal("28.00"))
+        self.assertEqual(detail.reconciliation_difference, Decimal("8.00"))
+        self.assertEqual(
+            detail.reconciliation_status,
+            TransferDetail.ReconciliationStatus.REQUIRES_DECISION,
+        )
+        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+
+    def test_liquidation_marks_reconciliation_matched_when_real_equals_agreed(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+            estimated_extra_amount=Decimal("8.00"),
+            charge_mode=TransferDetail.ChargeMode.UPFRONT_FULL,
+            customer_agreed_amount=Decimal("28.00"),
+        )
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+            ],
+        )
+
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertEqual(detail.actual_total, Decimal("28.00"))
+        self.assertEqual(detail.reconciliation_difference, Decimal("0.00"))
+        self.assertEqual(
+            detail.reconciliation_status,
+            TransferDetail.ReconciliationStatus.MATCHED,
+        )
+
+    def test_regularization_decision_is_audited_and_does_not_create_charge(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+        )
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+
+        liquidation = liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+            ],
+        )
+
+        submit_liquidation(liquidation, user=technician)
+
+        validator = self.atc_user
+        validator.user_permissions.add(
+            Permission.objects.get(codename="validate_liquidation"),
+            Permission.objects.get(codename="resolve_transfer_reconciliation"),
+        )
+        validate_liquidation(liquidation, validator=validator)
+
+        detail = TransferDetail.objects.get(work_order=order)
+        resolve_transfer_reconciliation(
+            transfer=detail,
+            user=validator,
+            action=TransferDetail.ReconciliationAction.ABSORB,
+            note="Diferencia absorbida por cortesía comercial autorizada.",
+        )
+
+        detail.refresh_from_db()
+
+        self.assertEqual(
+            detail.reconciliation_status,
+            TransferDetail.ReconciliationStatus.RESOLVED,
+        )
+        self.assertEqual(
+            detail.reconciliation_action,
+            TransferDetail.ReconciliationAction.ABSORB,
+        )
+        self.assertEqual(detail.reconciled_by, validator)
+        self.assertIsNotNone(detail.reconciled_at)
+        self.assertIn("cortesía", detail.reconciliation_note)
+        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+
