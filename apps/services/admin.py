@@ -140,6 +140,8 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "customer",
         "service_type",
         "plan",
+        "seller",
+        "registered_by",
         "address",
         "service_number",
         "base_monthly_fee",
@@ -162,6 +164,8 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "address",
         "tariff",
         "billing_policy",
+        "seller",
+        "registered_by",
     )
     readonly_fields = (
         "tariff",
