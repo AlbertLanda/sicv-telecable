@@ -7,6 +7,7 @@ from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.payments.models import Charge, ChargeConcept, ProposedCharge
+from apps.payments.proposals import suggested_proposed_charge_amount
 from apps.services.models import Subscription
 from apps.work_orders.models import TransferDetail, WorkOrder, WorkOrderLiquidation
 from apps.work_orders.services import (
@@ -461,5 +462,44 @@ class TransferWorkflowTests(WorkOrderTestCase):
         self.assertEqual(detail.reconciled_by, validator)
         self.assertIsNotNone(detail.reconciled_at)
         self.assertIn("cortesía", detail.reconciliation_note)
+        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+
+    def test_after_technical_suggests_real_cost_only_after_liquidation(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+            charge_mode=TransferDetail.ChargeMode.AFTER_TECHNICAL,
+        )
+        proposal = ProposedCharge.objects.get(work_order=order)
+
+        self.assertIsNone(suggested_proposed_charge_amount(proposal))
+
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+            ],
+        )
+
+        proposal.refresh_from_db()
+        self.assertEqual(
+            suggested_proposed_charge_amount(proposal),
+            Decimal("28.00"),
+        )
         self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
 
