@@ -743,6 +743,10 @@ class WorkOrder(models.Model):
                 "Puede anular órdenes de trabajo",
             ),
             (
+                "withdraw_installation",
+                "Puede registrar desistimientos de instalación",
+            ),
+            (
                 "view_incident",
                 "Puede consultar incidencias NOC",
             ),
@@ -1335,6 +1339,61 @@ class WorkOrder(models.Model):
 
     def __str__(self):
         return f"{self.order_number} - {self.order_type.name}"
+
+class InstallationWithdrawal(models.Model):
+    """Auditoría mínima de un alta provisional eliminada por desistimiento.
+
+    No conserva FK al abonado, domicilio, suscripción ni OT porque esos
+    registros pueden ser eliminados. Solo queda la evidencia administrativa
+    necesaria para explicar por qué un código volvió a quedar disponible.
+    """
+
+    order_number = models.CharField(
+        max_length=30,
+        db_index=True,
+        verbose_name="Orden retirada",
+    )
+    branch_code = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Sede",
+    )
+    released_customer_code = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Código de abonado liberado",
+    )
+    released_service_code = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Código de servicio liberado",
+    )
+    reason = models.TextField(
+        verbose_name="Motivo del desistimiento",
+    )
+    withdrawn_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="installation_withdrawals",
+        verbose_name="Registrado por",
+    )
+    customer_deleted = models.BooleanField(
+        default=False,
+        verbose_name="Alta de cliente eliminada",
+    )
+    withdrawn_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de desistimiento",
+    )
+
+    class Meta:
+        verbose_name = "Desistimiento de instalación"
+        verbose_name_plural = "Desistimientos de instalación"
+        ordering = ["-withdrawn_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.order_number} - {self.released_service_code}"
+
 
 class OutsidePlantDetail(models.Model):
     """Datos propios de una intervención de Planta Externa.
