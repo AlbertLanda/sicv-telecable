@@ -100,8 +100,10 @@
                         <div class="border rounded p-3">
                             <div class="fw-semibold mb-1">Destino solicitado</div>
                             <div class="text-muted small mb-3">
-                                Esta información es preliminar. El técnico confirmará
-                                suministro, GPS y domicilio real en campo.
+                                Consulte el suministro eléctrico del nuevo domicilio.
+                                El SICV recuperará la dirección y coordenadas como
+                                referencia preliminar; el técnico confirmará la
+                                ubicación real durante la atención.
                             </div>
 
                             <div class="row g-3">
@@ -126,25 +128,77 @@
                                     {% endfor %}
                                 </div>
 
-                                <div class="col-md-8">
-                                    <label class="form-label"
-                                           for="{{ form.requested_address_text.id_for_label }}">
-                                        {{ form.requested_address_text.label }}
-                                    </label>
-                                    {{ form.requested_address_text }}
-                                    {% for error in form.requested_address_text.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                                <div class="col-md-4">
+                                <div class="col-md-7">
                                     <label class="form-label"
                                            for="{{ form.requested_supply_code.id_for_label }}">
                                         {{ form.requested_supply_code.label }}
                                     </label>
-                                    {{ form.requested_supply_code }}
+                                    <div class="input-group">
+                                        {{ form.requested_supply_code }}
+                                        <button
+                                            type="button"
+                                            id="btn-consultar-suministro-traslado"
+                                            class="btn btn-outline-primary"
+                                        >
+                                            Consultar
+                                        </button>
+                                    </div>
+                                    <div id="traslado-suministro-mensaje"
+                                         class="small mt-1"></div>
                                     {% for error in form.requested_supply_code.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
+                                        <div class="text-danger small mt-1">{{ error }}</div>
                                     {% endfor %}
+                                </div>
+
+                                <div class="col-12 d-none"
+                                     id="traslado-suministro-preview">
+                                    <div class="alert alert-light border mb-0">
+                                        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                            <div>
+                                                <strong class="d-block mb-2">
+                                                    Ubicación encontrada
+                                                </strong>
+                                                <div class="small mb-1">
+                                                    <span class="text-muted">Dirección:</span>
+                                                    <span id="traslado-preview-address">—</span>
+                                                </div>
+                                                <div class="small mb-1">
+                                                    <span class="text-muted">Distrito:</span>
+                                                    <span id="traslado-preview-district">—</span>
+                                                </div>
+                                                <div class="small">
+                                                    <span class="text-muted">Coordenadas:</span>
+                                                    <span id="traslado-preview-coordinates">
+                                                        No disponibles
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex gap-2 flex-wrap">
+                                                <a
+                                                    id="traslado-preview-maps-link"
+                                                    href="#"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="btn btn-outline-primary btn-sm d-none"
+                                                >
+                                                    Ver en Maps
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    id="btn-usar-suministro-traslado"
+                                                    class="btn btn-primary btn-sm"
+                                                >
+                                                    Usar esta ubicación
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="small text-muted mt-2">
+                                            La consulta sirve como referencia para ATC.
+                                            El domicilio oficial solo cambiará al liquidar
+                                            exitosamente el traslado externo.
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="col-12">
@@ -158,25 +212,10 @@
                                     {% endfor %}
                                 </div>
 
-                                <div class="col-md-6">
-                                    <label class="form-label"
-                                           for="{{ form.requested_latitude.id_for_label }}">
-                                        {{ form.requested_latitude.label }}
-                                    </label>
+                                <div class="d-none" aria-hidden="true">
+                                    {{ form.requested_address_text }}
                                     {{ form.requested_latitude }}
-                                    {% for error in form.requested_latitude.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label"
-                                           for="{{ form.requested_longitude.id_for_label }}">
-                                        {{ form.requested_longitude.label }}
-                                    </label>
                                     {{ form.requested_longitude }}
-                                    {% for error in form.requested_longitude.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
