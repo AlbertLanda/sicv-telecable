@@ -375,3 +375,32 @@ class CustomerAddressForm(forms.ModelForm):
 
     def clean_electrical_supply_code(self):
         return self.cleaned_data.get("electrical_supply_code", "").strip()
+
+class IncompleteRegistrationDiscardForm(forms.Form):
+    reason = forms.CharField(
+        label="Motivo del descarte",
+        min_length=5,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": (
+                    "Ej.: El abonado decidió no continuar con el alta "
+                    "antes de generar la instalación."
+                ),
+            }
+        ),
+    )
+    confirm = forms.BooleanField(
+        required=True,
+        label=(
+            "Confirmo que esta alta nunca llegó a operar y deseo eliminar "
+            "sus datos provisionales."
+        ),
+        error_messages={
+            "required": "Debe confirmar el descarte para continuar.",
+        },
+    )
+
