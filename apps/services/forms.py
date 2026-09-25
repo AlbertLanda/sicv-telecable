@@ -11,6 +11,62 @@ from .commercial import build_commercial_quote
 from .models import BillingPolicy, Plan, ServiceType, Subscription
 
 
+def eligible_sellers_queryset():
+    """Personal activo que puede recibir atribución comercial."""
+    return (
+        User.objects
+        .filter(
+            Q(is_salesperson=True)
+            | Q(role=User.Role.SALES)
+            | Q(role=User.Role.ADMIN),
+            is_active=True,
+        )
+        .order_by("first_name", "last_name", "username")
+    )
+
+
+def seller_is_eligible(user):
+    return bool(
+        user
+        and user.is_active
+        and (
+            user.is_salesperson
+            or user.role in (User.Role.SALES, User.Role.ADMIN)
+        )
+    )
+
+
+class SubscriptionSellerForm(forms.ModelForm):
+    """Completa una alta antigua que quedó sin vendedor antes del contrato."""
+
+    class Meta:
+        model = Subscription
+        fields = ["seller"]
+        widgets = {
+            "seller": forms.Select(attrs={"class": "form-select"}),
+        }
+        labels = {
+            "seller": "Vendedor responsable de la venta",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["seller"].queryset = eligible_sellers_queryset()
+        self.fields["seller"].required = True
+        self.fields["seller"].empty_label = "Seleccione quién realizó la venta"
+        self.fields["seller"].error_messages["required"] = (
+            "Seleccione quién realizó la venta."
+        )
+
+    def clean_seller(self):
+        seller = self.cleaned_data.get("seller")
+        if not seller_is_eligible(seller):
+            raise forms.ValidationError(
+                "La persona seleccionada no está habilitada como vendedor."
+            )
+        return seller
+
+
 class SubscriptionCreateForm(forms.ModelForm):
     # Compatibilidad con POST antiguos: el correlativo real lo genera el servidor.
     service_number = forms.IntegerField(
@@ -77,17 +133,7 @@ class SubscriptionCreateForm(forms.ModelForm):
                 .order_by("-is_primary", "address")
             )
 
-        seller_filter = (
-            Q(is_salesperson=True)
-            | Q(role=User.Role.SALES)
-            | Q(role=User.Role.ADMIN)
-        )
-
-        self.fields["seller"].queryset = (
-            User.objects
-            .filter(seller_filter, is_active=True)
-            .order_by("first_name", "last_name", "username")
-        )
+        self.fields["seller"].queryset = eligible_sellers_queryset()
         self.fields["seller"].required = True
         self.fields["seller"].error_messages["required"] = (
             "Seleccione quién realizó la venta."
@@ -138,17 +184,11 @@ class SubscriptionCreateForm(forms.ModelForm):
         seller = cleaned_data.get("seller")
         tv_count = cleaned_data.get("tv_count")
 
-        if seller is not None:
-            if not seller.is_active:
-                self.add_error("seller", "El vendedor seleccionado está inactivo.")
-            elif not (
-                seller.is_salesperson
-                or seller.role in (User.Role.SALES, User.Role.ADMIN)
-            ):
-                self.add_error(
-                    "seller",
-                    "La persona seleccionada no está habilitada como vendedor.",
-                )
+        if seller is not None and not seller_is_eligible(seller):
+            self.add_error(
+                "seller",
+                "La persona seleccionada no está habilitada como vendedor.",
+            )
 
         if self.customer and address:
             if address.customer_id != self.customer.pk:
