@@ -66,6 +66,7 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["customer"] = self.customer
+        kwargs["actor"] = self.request.user
         return kwargs
 
     def form_valid(self, form):
@@ -75,6 +76,7 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
 
                 subscription = form.save(commit=False)
                 subscription.customer = locked_customer
+                subscription.registered_by = self.request.user
                 subscription.status = Subscription.Status.PRESALE
                 subscription.annex_count = form.calculated_annex_count
                 subscription.initial_tv_courtesy_granted = (
