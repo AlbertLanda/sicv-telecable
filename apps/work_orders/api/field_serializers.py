@@ -95,6 +95,8 @@ class WorkOrderMaterialMovementSerializer(serializers.ModelSerializer):
             "movement_label",
             "material",
             "quantity",
+            "is_billable",
+            "unit_price",
             "remarks",
             "recorded_by",
             "updated_at",
@@ -121,12 +123,45 @@ class WorkOrderMaterialMovementInputSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal("0.01"),
     )
+    is_billable = serializers.BooleanField(
+        required=False,
+        default=False,
+    )
+    unit_price = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
     remarks = serializers.CharField(
         required=False,
         allow_blank=True,
         max_length=250,
         default="",
     )
+
+    def validate(self, attrs):
+        movement_type = attrs.get("movement_type")
+        is_billable = attrs.get("is_billable", False)
+        unit_price = attrs.get("unit_price")
+
+        if is_billable:
+            if movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
+                raise serializers.ValidationError(
+                    "Solo un material instalado puede marcarse como facturable."
+                )
+            if unit_price is None:
+                raise serializers.ValidationError({
+                    "unit_price": (
+                        "Indique el precio unitario del material facturable."
+                    )
+                })
+        else:
+            attrs["unit_price"] = None
+
+        return attrs
 
 
 class WorkOrderMaterialMovementDeleteSerializer(serializers.Serializer):
