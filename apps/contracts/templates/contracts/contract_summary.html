@@ -190,10 +190,13 @@ que es la puerta común a todas.
                            disabled>
                 </div>
 
-                {% if contract.service_type.requires_playhub_account %}
+                {% if contract.service_type.requires_playhub_account or contract.subscription.included_app_plan %}
                     <div class="tc-playhub">
                         <div class="tc-playhub-title">
                             <i class="bi bi-person-badge"></i>Cuenta PlayHub
+                            {% if contract.subscription.included_app_plan %}
+                                · {{ contract.subscription.included_app_plan }}
+                            {% endif %}
                         </div>
 
                         <div class="tc-form">
