@@ -37,6 +37,35 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             is_active=True,
         )
 
+        subscription_id = (
+            request.GET.get("subscription")
+            or request.POST.get("subscription_id")
+        )
+        if subscription_id:
+            subscription = (
+                Subscription.objects
+                .filter(
+                    pk=subscription_id,
+                    customer=self.customer,
+                    is_active=True,
+                    status=Subscription.Status.PRESALE,
+                )
+                .first()
+            )
+            if subscription is not None and subscription.seller_id is None:
+                messages.warning(
+                    request,
+                    (
+                        "Primero identifique al vendedor de la venta. "
+                        "Después podrá generar el contrato."
+                    ),
+                )
+                return redirect(
+                    "services:subscription_seller",
+                    customer_pk=self.customer.pk,
+                    subscription_pk=subscription.pk,
+                )
+
         return super().dispatch(
             request,
             *args,
@@ -433,6 +462,20 @@ class InstallationWorkOrderCreateView(
 
     def get(self, request, *args, **kwargs):
         contract = self.get_contract()
+
+        if contract.subscription.seller_id is None:
+            messages.warning(
+                request,
+                (
+                    "Primero identifique al vendedor de la venta. "
+                    "La orden de instalación debe heredarlo de la suscripción."
+                ),
+            )
+            return redirect(
+                "services:subscription_seller",
+                customer_pk=contract.customer_id,
+                subscription_pk=contract.subscription_id,
+            )
 
         if self._has_blocking_installation(contract.subscription):
             messages.error(
