@@ -513,6 +513,20 @@ class InstallationWorkOrderCreateView(
     def form_valid(self, form):
         contract = self.get_contract()
 
+        if contract.subscription.seller_id is None:
+            messages.warning(
+                self.request,
+                (
+                    "Primero identifique al vendedor de la venta. "
+                    "Después podrá generar la orden de instalación."
+                ),
+            )
+            return redirect(
+                "services:subscription_seller",
+                customer_pk=contract.customer_id,
+                subscription_pk=contract.subscription_id,
+            )
+
         try:
             order = create_installation_work_order(
                 subscription=contract.subscription,
