@@ -89,6 +89,9 @@ class SubscriptionCreateForm(forms.ModelForm):
             .order_by("first_name", "last_name", "username")
         )
         self.fields["seller"].required = True
+        self.fields["seller"].error_messages["required"] = (
+            "Seleccione quién realizó la venta."
+        )
         self.fields["seller"].empty_label = "Seleccione quién realizó la venta"
 
         if (
