@@ -777,6 +777,18 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Código anterior</div>
+                            <div class="ot-field-value">
+                                {{ order.transfer_detail.previous_service_code|default:"-" }}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
+                            <div class="ot-field-label">Código resultante</div>
+                            <div class="ot-field-value">
+                                {{ order.transfer_detail.resulting_service_code|default:"-" }}
+                            </div>
+                        </div>
+                        <div class="col-sm-6 ot-field">
                             <div class="ot-field-label">Monto acordado</div>
                             <div class="ot-field-value">
                                 {% if order.transfer_detail.customer_agreed_amount != None %}
