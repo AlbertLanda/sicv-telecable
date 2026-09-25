@@ -100,6 +100,7 @@ class PersonnelForm(forms.ModelForm):
             "branch",
             "office",
             "allowed_offices",
+            "is_salesperson",
             "is_active",
         ]
         labels = {
@@ -112,6 +113,7 @@ class PersonnelForm(forms.ModelForm):
             "branch": "Sede",
             "office": "Oficina principal",
             "allowed_offices": "Oficinas habilitadas para efectivo",
+            "is_salesperson": "Participa como vendedor",
             "is_active": "Usuario activo",
         }
         widgets = {
@@ -126,6 +128,7 @@ class PersonnelForm(forms.ModelForm):
             "allowed_offices": OfficeCheckboxSelectMultiple(
                 attrs={"class": "form-check-input"}
             ),
+            "is_salesperson": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
