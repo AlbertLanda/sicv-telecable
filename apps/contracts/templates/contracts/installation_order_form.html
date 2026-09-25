@@ -156,6 +156,9 @@
                             {{ form.seller.label }}
                         </label>
                         {{ form.seller }}
+                        {% if form.seller.help_text %}
+                            <div class="form-text">{{ form.seller.help_text }}</div>
+                        {% endif %}
                         {% for error in form.seller.errors %}
                             <div class="text-danger small mt-1">{{ error }}</div>
                         {% endfor %}
