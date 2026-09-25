@@ -204,8 +204,18 @@ class ContractCreateForm(forms.ModelForm):
                     )
 
             else:
-                self.subscription_resuelta = subscription
-                self.instance.subscription = subscription
+                if subscription.seller_id is None:
+                    self.add_error(
+                        None,
+                        (
+                            "Primero identifique al vendedor de esta venta. "
+                            "El contrato no puede generarse antes de completar "
+                            "la atribución comercial."
+                        ),
+                    )
+                else:
+                    self.subscription_resuelta = subscription
+                    self.instance.subscription = subscription
 
         return cleaned_data
 
