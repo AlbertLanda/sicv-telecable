@@ -717,7 +717,7 @@ class Subscription(models.Model):
                 raise ValidationError({"seller": "El vendedor seleccionado está inactivo."})
             if not (
                 getattr(self.seller, "is_salesperson", False)
-                or self.seller.role == "ADMIN"
+                or self.seller.role in ("SALES", "ADMIN")
             ):
                 raise ValidationError({
                     "seller": (
