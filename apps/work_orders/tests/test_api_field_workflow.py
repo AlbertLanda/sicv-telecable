@@ -1,5 +1,7 @@
 """Pruebas de integración API: claim -> start -> ficha -> materiales -> evidencias -> cierre."""
 
+from decimal import Decimal
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework import status
@@ -7,12 +9,15 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from apps.inventory.models import Material, WorkOrderMaterialMovement
+from apps.payments.models import Charge, ChargeConcept
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     WorkOrder,
     WorkOrderFieldSheet,
+    TransferDetail,
     WorkOrderLiquidationItem,
 )
+from apps.work_orders.services import create_transfer_work_order
 from apps.work_orders.tests.base import WorkOrderTestCase
 
 
@@ -206,6 +211,101 @@ class TechnicianFieldWorkflowAPITests(WorkOrderTestCase):
         response = self.api.get(self.url("field_materials", order))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_non_transfer_cannot_mark_field_material_as_billable(self):
+        order = self.create_order_in_progress()
+        material = Material.objects.get(code="CABLE_RG6")
+
+        response = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "INSTALLED",
+                "quantity": "10.00",
+                "is_billable": True,
+                "unit_price": "0.80",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(
+            WorkOrderMaterialMovement.objects.filter(work_order=order).exists()
+        )
+
+    def test_transfer_billable_material_reaches_liquidation_and_real_cost(self):
+        self.subscription.status = Subscription.Status.ACTIVE
+        self.subscription.save(update_fields=["status"])
+        ChargeConcept.objects.update_or_create(
+            code="traslado",
+            defaults={
+                "name": "TRASLADO",
+                "family": Charge.Concept.OTHER,
+                "is_active": True,
+            },
+        )
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+        )
+        order.assign_technician(
+            self.technician,
+            assigned_by=self.technician,
+        )
+        start = self.api.post(self.url("start", order), {}, format="json")
+        self.assertEqual(start.status_code, status.HTTP_200_OK)
+
+        material = Material.objects.get(code="CABLE_RG6")
+        registered = self.api.post(
+            self.url("field_materials", order),
+            {
+                "material_id": material.pk,
+                "movement_type": "INSTALLED",
+                "quantity": "10.00",
+                "is_billable": True,
+                "unit_price": "0.80",
+                "remarks": "Exceso informado en campo.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(registered.status_code, status.HTTP_200_OK)
+        item = registered.data["item"]
+        self.assertTrue(item["is_billable"])
+        self.assertEqual(item["unit_price"], "0.80")
+
+        completed = self.api.post(
+            self.url("complete", order),
+            {"result_id": self.transfer_success.pk},
+            format="json",
+        )
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
+
+        liquidated = self.api.post(
+            self.url("liquidate", order),
+            {"resolution_detail": "Traslado interno ejecutado."},
+            format="json",
+        )
+        self.assertEqual(liquidated.status_code, status.HTTP_200_OK)
+
+        order.refresh_from_db()
+        transfer = TransferDetail.objects.get(work_order=order)
+        snapshot = order.liquidation.items.get(material_code="CABLE_RG6")
+
+        self.assertTrue(snapshot.is_billable)
+        self.assertEqual(snapshot.unit_price, Decimal("0.80"))
+        self.assertEqual(snapshot.billable_amount, Decimal("8.0000"))
+        self.assertEqual(transfer.actual_extra_amount, Decimal("8.00"))
+        self.assertEqual(transfer.actual_total, Decimal("28.00"))
+        self.assertEqual(
+            transfer.reconciliation_status,
+            TransferDetail.ReconciliationStatus.REQUIRES_DECISION,
+        )
+        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
 
     def test_evidence_requires_in_progress(self):
         order = self.create_assigned_order()
