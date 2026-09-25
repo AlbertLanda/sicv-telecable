@@ -5,6 +5,7 @@ from apps.customers.coordinates import (
     normalize_coordinate_pair,
 )
 from apps.organization.models import Branch, Zone
+from .codes import next_available_branch_code
 
 
 class Customer(models.Model):
@@ -67,41 +68,14 @@ class Customer(models.Model):
 
     @classmethod
     def generate_code(cls, branch):
-        """
-        Genera el siguiente código de abonado para `branch`.
+        """Genera el primer código de abonado realmente disponible.
 
-        El correlativo se calcula a partir del código más alto ya
-        usado en esa sede (no de un conteo de filas), para no repetir
-        números si algún cliente de esa sede quedó inactivo. Como
-        todos los correlativos de una misma sede comparten el mismo
-        prefijo y ancho fijo (7 dígitos con ceros a la izquierda), el
-        orden alfabético de los códigos coincide con el orden
-        numérico: no hace falta parsear todos los códigos, solo el
-        último.
+        Un cliente inactivo o un código que exista en la historia real de un
+        servicio sigue reservado. En cambio, una alta provisional eliminada
+        por desistimiento deja de ocupar el correlativo y puede reutilizarse.
         """
-
         code_prefix = f"{cls._prefix_for_branch(branch)}01-A"
-
-        last_code = (
-            cls.objects
-            .filter(
-                branch=branch,
-                code__startswith=code_prefix,
-            )
-            .order_by("-code")
-            .values_list("code", flat=True)
-            .first()
-        )
-
-        last_number = 0
-
-        if last_code:
-            suffix = last_code[len(code_prefix):]
-
-            if suffix.isdigit():
-                last_number = int(suffix)
-
-        return f"{code_prefix}{last_number + 1:07d}"
+        return next_available_branch_code(code_prefix)
 
     code = models.CharField(
         max_length=30,
