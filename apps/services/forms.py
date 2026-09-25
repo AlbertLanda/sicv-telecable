@@ -75,9 +75,11 @@ class SubscriptionCreateForm(forms.ModelForm):
                 .order_by("-is_primary", "address")
             )
 
-        seller_filter = Q(is_salesperson=True)
-        if actor is not None and actor.is_active and actor.role == User.Role.ADMIN:
-            seller_filter |= Q(pk=actor.pk)
+        seller_filter = (
+            Q(is_salesperson=True)
+            | Q(role=User.Role.SALES)
+            | Q(role=User.Role.ADMIN)
+        )
 
         self.fields["seller"].queryset = (
             User.objects
@@ -90,7 +92,10 @@ class SubscriptionCreateForm(forms.ModelForm):
         if (
             actor is not None
             and actor.is_active
-            and (actor.is_salesperson or actor.role == User.Role.ADMIN)
+            and (
+                actor.is_salesperson
+                or actor.role in (User.Role.SALES, User.Role.ADMIN)
+            )
         ):
             self.fields["seller"].initial = actor.pk
 
@@ -131,7 +136,10 @@ class SubscriptionCreateForm(forms.ModelForm):
         if seller is not None:
             if not seller.is_active:
                 self.add_error("seller", "El vendedor seleccionado está inactivo.")
-            elif not (seller.is_salesperson or seller.role == User.Role.ADMIN):
+            elif not (
+                seller.is_salesperson
+                or seller.role in (User.Role.SALES, User.Role.ADMIN)
+            ):
                 self.add_error(
                     "seller",
                     "La persona seleccionada no está habilitada como vendedor.",
