@@ -22,6 +22,8 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from apps.customers.models import Customer
+from apps.work_orders.models import TransferDetail, WorkOrderLiquidation
+from apps.work_orders.services import resolve_transfer_reconciliation
 from apps.organization.context_processors import (
     get_active_branch,
     get_active_office,
@@ -33,6 +35,7 @@ from .forms import (
     PaymentRegisterForm,
     PaymentVoidForm,
     ProposedChargeResolveForm,
+    TransferReconciliationForm,
 )
 from .models import (
     Charge,
@@ -178,6 +181,31 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         context["pending_proposals"] = list(pending_proposals(self.customer))
         context["can_resolve_proposal"] = user.has_perm(
             "payments.resolve_proposedcharge"
+        )
+
+        context["pending_transfer_reconciliations"] = list(
+            TransferDetail.objects.filter(
+                work_order__subscription__customer=self.customer,
+                reconciliation_status=(
+                    TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+                ),
+                work_order__liquidation__review_status=(
+                    WorkOrderLiquidation.ReviewStatus.VALIDATED
+                ),
+            )
+            .exclude(
+                work_order__proposed_charges__status=ProposedCharge.Status.PENDING
+            )
+            .select_related(
+                "work_order",
+                "work_order__subtype",
+                "work_order__subscription",
+            )
+            .distinct()
+            .order_by("-updated_at", "-pk")
+        )
+        context["can_resolve_transfer_reconciliation"] = user.has_perm(
+            "work_orders.resolve_transfer_reconciliation"
         )
 
         return context
@@ -998,3 +1026,102 @@ class ProposedChargeResolveView(
         messages.success(request, aviso)
 
         return redirect("payments:debt", pk=self.customer.pk)
+
+class TransferReconciliationResolveView(
+    PermissionRequiredMixin, CustomerScopedMixin, TemplateView
+):
+    """Regularización económica posterior a la liquidación de un traslado."""
+
+    template_name = "payments/transfer_reconciliation_resolve.html"
+    permission_required = (
+        "payments.view_charge",
+        "work_orders.resolve_transfer_reconciliation",
+    )
+
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+        self.transfer = None
+
+    def get_transfer(self):
+        if self.transfer is None:
+            queryset = (
+                TransferDetail.objects.select_related(
+                    "work_order",
+                    "work_order__subtype",
+                    "work_order__subscription",
+                    "work_order__subscription__customer",
+                    "reconciled_by",
+                )
+                .exclude(
+                    work_order__proposed_charges__status=(
+                        ProposedCharge.Status.PENDING
+                    )
+                )
+                .distinct()
+            )
+            self.transfer = get_object_or_404(
+                queryset,
+                pk=self.kwargs["transfer_pk"],
+                work_order__subscription__customer=self.customer,
+                reconciliation_status=(
+                    TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+                ),
+                work_order__liquidation__review_status=(
+                    WorkOrderLiquidation.ReviewStatus.VALIDATED
+                ),
+            )
+        return self.transfer
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        transfer = self.get_transfer()
+        context["transfer"] = transfer
+        context["proposal"] = (
+            transfer.work_order.proposed_charges
+            .select_related("charge")
+            .order_by("-created_at")
+            .first()
+        )
+        context["now"] = timezone.localtime()
+
+        try:
+            context["liquidation"] = transfer.work_order.liquidation
+        except WorkOrderLiquidation.DoesNotExist:
+            context["liquidation"] = None
+
+        if "form" not in context:
+            context["form"] = TransferReconciliationForm(transfer=transfer)
+
+        return context
+
+    def post(self, request, *args, **kwargs):
+        transfer = self.get_transfer()
+        form = TransferReconciliationForm(
+            request.POST,
+            transfer=transfer,
+        )
+
+        if not form.is_valid():
+            return self.render_to_response(
+                self.get_context_data(form=form)
+            )
+
+        try:
+            resolve_transfer_reconciliation(
+                transfer=transfer,
+                user=request.user,
+                action=form.cleaned_data["action"],
+                note=form.cleaned_data["note"],
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(
+                self.get_context_data(form=form)
+            )
+
+        messages.success(
+            request,
+            "Regularización del traslado registrada con trazabilidad.",
+        )
+        return redirect("payments:debt", pk=self.customer.pk)
+

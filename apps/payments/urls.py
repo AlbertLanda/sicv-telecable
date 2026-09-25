@@ -76,6 +76,11 @@ urlpatterns = [
         views.ProposedChargeResolveView.as_view(),
         name="proposal_resolve",
     ),
+    path(
+        "clientes/<int:pk>/traslados/<int:transfer_pk>/regularizacion/",
+        views.TransferReconciliationResolveView.as_view(),
+        name="transfer_reconciliation_resolve",
+    ),
 
     # --------------------------------------------------------------
     # Comprobante y anulación.

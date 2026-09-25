@@ -287,6 +287,43 @@ class CustomerUIConsultaTests(TestCase):
         self.assertContains(response, "Empresa Telecable SAC")
         self.assertEqual(response.context["customer_found"], self.customer_2)
 
+    def test_busqueda_general_encuentra_codigo_operativo_del_servicio(self):
+        response = self.client.get(
+            self.search_url,
+            {"q": self.subscription.service_code},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Juan")
+        self.assertIn(self.customer, response.context["customers"])
+
+    def test_padron_de_sede_sigue_la_sede_del_servicio_vigente(self):
+        destination_branch = Branch.objects.create(
+            code="JAUJA-SEARCH",
+            name="Jauja búsqueda",
+        )
+        destination_zone = Zone.objects.create(
+            branch=destination_branch,
+            name="Zona Jauja búsqueda",
+        )
+        moved_address = CustomerAddress.objects.create(
+            customer=self.customer_2,
+            zone=destination_zone,
+            address="Jr. Nuevo 900",
+            district="Jauja",
+            is_primary=False,
+        )
+        self.other_subscription.address = moved_address
+        self.other_subscription.save(update_fields=["address", "updated_at"])
+
+        response = self.client.get(self.search_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(
+            self.customer_2,
+            list(response.context["customers"]),
+        )
+
     def test_busqueda_sin_coincidencias(self):
         response = self.client.get(
             self.search_url,

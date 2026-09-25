@@ -100,8 +100,10 @@
                         <div class="border rounded p-3">
                             <div class="fw-semibold mb-1">Destino solicitado</div>
                             <div class="text-muted small mb-3">
-                                Esta información es preliminar. El técnico confirmará
-                                suministro, GPS y domicilio real en campo.
+                                Consulte el suministro eléctrico del nuevo domicilio.
+                                El SICV recuperará la dirección y coordenadas como
+                                referencia preliminar; el técnico confirmará la
+                                ubicación real durante la atención.
                             </div>
 
                             <div class="row g-3">
@@ -126,25 +128,77 @@
                                     {% endfor %}
                                 </div>
 
-                                <div class="col-md-8">
-                                    <label class="form-label"
-                                           for="{{ form.requested_address_text.id_for_label }}">
-                                        {{ form.requested_address_text.label }}
-                                    </label>
-                                    {{ form.requested_address_text }}
-                                    {% for error in form.requested_address_text.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                                <div class="col-md-4">
+                                <div class="col-md-7">
                                     <label class="form-label"
                                            for="{{ form.requested_supply_code.id_for_label }}">
                                         {{ form.requested_supply_code.label }}
                                     </label>
-                                    {{ form.requested_supply_code }}
+                                    <div class="input-group">
+                                        {{ form.requested_supply_code }}
+                                        <button
+                                            type="button"
+                                            id="btn-consultar-suministro-traslado"
+                                            class="btn btn-outline-primary"
+                                        >
+                                            Consultar
+                                        </button>
+                                    </div>
+                                    <div id="traslado-suministro-mensaje"
+                                         class="small mt-1"></div>
                                     {% for error in form.requested_supply_code.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
+                                        <div class="text-danger small mt-1">{{ error }}</div>
                                     {% endfor %}
+                                </div>
+
+                                <div class="col-12 d-none"
+                                     id="traslado-suministro-preview">
+                                    <div class="alert alert-light border mb-0">
+                                        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                            <div>
+                                                <strong class="d-block mb-2">
+                                                    Ubicación encontrada
+                                                </strong>
+                                                <div class="small mb-1">
+                                                    <span class="text-muted">Dirección:</span>
+                                                    <span id="traslado-preview-address">—</span>
+                                                </div>
+                                                <div class="small mb-1">
+                                                    <span class="text-muted">Distrito:</span>
+                                                    <span id="traslado-preview-district">—</span>
+                                                </div>
+                                                <div class="small">
+                                                    <span class="text-muted">Coordenadas:</span>
+                                                    <span id="traslado-preview-coordinates">
+                                                        No disponibles
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex gap-2 flex-wrap">
+                                                <a
+                                                    id="traslado-preview-maps-link"
+                                                    href="#"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="btn btn-outline-primary btn-sm d-none"
+                                                >
+                                                    Ver en Maps
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    id="btn-usar-suministro-traslado"
+                                                    class="btn btn-primary btn-sm"
+                                                >
+                                                    Usar esta ubicación
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="small text-muted mt-2">
+                                            La consulta sirve como referencia para ATC.
+                                            El domicilio oficial solo cambiará al liquidar
+                                            exitosamente el traslado externo.
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="col-12">
@@ -158,25 +212,10 @@
                                     {% endfor %}
                                 </div>
 
-                                <div class="col-md-6">
-                                    <label class="form-label"
-                                           for="{{ form.requested_latitude.id_for_label }}">
-                                        {{ form.requested_latitude.label }}
-                                    </label>
+                                <div class="d-none" aria-hidden="true">
+                                    {{ form.requested_address_text }}
                                     {{ form.requested_latitude }}
-                                    {% for error in form.requested_latitude.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label"
-                                           for="{{ form.requested_longitude.id_for_label }}">
-                                        {{ form.requested_longitude.label }}
-                                    </label>
                                     {{ form.requested_longitude }}
-                                    {% for error in form.requested_longitude.errors %}
-                                        <div class="text-danger small">{{ error }}</div>
-                                    {% endfor %}
                                 </div>
                             </div>
                         </div>
@@ -315,6 +354,36 @@
     var agreed = document.getElementById("id_customer_agreed_amount");
     var chargeMode = document.getElementById("id_charge_mode");
 
+    var supplyInput = document.getElementById("id_requested_supply_code");
+    var requestedAddress = document.getElementById("id_requested_address_text");
+    var requestedLatitude = document.getElementById("id_requested_latitude");
+    var requestedLongitude = document.getElementById("id_requested_longitude");
+    var consultSupplyButton = document.getElementById(
+        "btn-consultar-suministro-traslado"
+    );
+    var useSupplyButton = document.getElementById(
+        "btn-usar-suministro-traslado"
+    );
+    var supplyMessage = document.getElementById(
+        "traslado-suministro-mensaje"
+    );
+    var supplyPreview = document.getElementById(
+        "traslado-suministro-preview"
+    );
+    var previewAddress = document.getElementById(
+        "traslado-preview-address"
+    );
+    var previewDistrict = document.getElementById(
+        "traslado-preview-district"
+    );
+    var previewCoordinates = document.getElementById(
+        "traslado-preview-coordinates"
+    );
+    var previewMapsLink = document.getElementById(
+        "traslado-preview-maps-link"
+    );
+    var pendingSupplyLocation = null;
+
     if (!payload || !subtype) return;
 
     var data = JSON.parse(payload.textContent);
@@ -374,10 +443,143 @@
         });
     }
 
+    function clearSupplyPreview(clearAppliedLocation) {
+        pendingSupplyLocation = null;
+
+        if (supplyPreview) {
+            supplyPreview.classList.add("d-none");
+        }
+        if (previewMapsLink) {
+            previewMapsLink.classList.add("d-none");
+            previewMapsLink.removeAttribute("href");
+        }
+
+        if (clearAppliedLocation) {
+            if (requestedAddress) requestedAddress.value = "";
+            if (requestedLatitude) requestedLatitude.value = "";
+            if (requestedLongitude) requestedLongitude.value = "";
+        }
+    }
+
+    async function consultSupply() {
+        if (!supplyInput || !consultSupplyButton) return;
+
+        var supplyCode = supplyInput.value.trim();
+        clearSupplyPreview(true);
+
+        if (!supplyCode) {
+            supplyMessage.textContent = "Ingrese un código de suministro.";
+            supplyMessage.className = "text-danger small mt-1";
+            supplyInput.focus();
+            return;
+        }
+
+        consultSupplyButton.disabled = true;
+        consultSupplyButton.textContent = "Consultando...";
+        supplyMessage.textContent = "Consultando ubicación del suministro...";
+        supplyMessage.className = "text-muted small mt-1";
+
+        try {
+            var response = await fetch(
+                "{% url 'customers:lookup_supply' %}?supply_number="
+                + encodeURIComponent(supplyCode),
+                {
+                    method: "GET",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                        "Accept": "application/json"
+                    }
+                }
+            );
+
+            var result = await response.json();
+
+            if (!response.ok || !result.ok) {
+                throw new Error(
+                    result.message || "No fue posible consultar el suministro."
+                );
+            }
+
+            var locationData = result.data || {};
+            pendingSupplyLocation = locationData;
+
+            previewAddress.textContent =
+                locationData.address || "No disponible";
+            previewDistrict.textContent =
+                locationData.district || "No disponible";
+
+            if (locationData.latitude && locationData.longitude) {
+                previewCoordinates.textContent =
+                    locationData.latitude + ", " + locationData.longitude;
+            } else {
+                previewCoordinates.textContent = "No disponibles";
+            }
+
+            if (locationData.gps_link) {
+                previewMapsLink.href = locationData.gps_link;
+                previewMapsLink.classList.remove("d-none");
+            }
+
+            supplyPreview.classList.remove("d-none");
+            supplyMessage.textContent =
+                locationData.latitude && locationData.longitude
+                    ? (
+                        "Suministro encontrado con coordenadas GPS. "
+                        + "Confirme para usar esta ubicación."
+                    )
+                    : (
+                        "Suministro encontrado sin coordenadas exactas. "
+                        + "El técnico confirmará el GPS en campo."
+                    );
+            supplyMessage.className = "text-success small mt-1";
+        } catch (error) {
+            supplyMessage.textContent =
+                error.message || "Ocurrió un error al consultar el suministro.";
+            supplyMessage.className = "text-danger small mt-1";
+        } finally {
+            consultSupplyButton.disabled = false;
+            consultSupplyButton.textContent = "Consultar";
+        }
+    }
+
+    function useSupplyLocation() {
+        if (!pendingSupplyLocation) return;
+
+        if (requestedAddress) {
+            requestedAddress.value = pendingSupplyLocation.address || "";
+        }
+        if (requestedLatitude) {
+            requestedLatitude.value = pendingSupplyLocation.latitude || "";
+        }
+        if (requestedLongitude) {
+            requestedLongitude.value = pendingSupplyLocation.longitude || "";
+        }
+
+        supplyMessage.textContent =
+            "Ubicación aplicada al traslado. Revise sede, zona y referencia.";
+        supplyMessage.className = "text-primary small mt-1";
+    }
+
     subtype.addEventListener("change", refreshSubtype);
     if (branch) branch.addEventListener("change", refreshZones);
     if (extra) extra.addEventListener("input", refreshMoney);
     if (chargeMode) chargeMode.addEventListener("change", refreshMoney);
+
+    if (supplyInput) {
+        supplyInput.addEventListener("input", function () {
+            clearSupplyPreview(true);
+            if (supplyMessage) {
+                supplyMessage.textContent = "";
+                supplyMessage.className = "small mt-1";
+            }
+        });
+    }
+    if (consultSupplyButton) {
+        consultSupplyButton.addEventListener("click", consultSupply);
+    }
+    if (useSupplyButton) {
+        useSupplyButton.addEventListener("click", useSupplyLocation);
+    }
 
     refreshZones();
     refreshSubtype();

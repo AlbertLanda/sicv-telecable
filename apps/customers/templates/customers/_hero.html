@@ -19,7 +19,16 @@
                 {% if customer.is_active %}<span class="tc-active">Activo</span>{% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
             </div>
 
-            <div class="tc-ident">Código: <strong>{{ customer.code }}</strong> &nbsp;|&nbsp; {{ customer.document_type }}: <strong>{{ customer.document_number }}</strong></div>
+            <div class="tc-ident">
+                Código{% if active_service_codes|length > 1 %}s{% endif %}:
+                {% for service_code in active_service_codes %}
+                    <strong>{{ service_code }}</strong>{% if not forloop.last %} · {% endif %}
+                {% empty %}
+                    <strong>{{ customer.code }}</strong>
+                {% endfor %}
+                &nbsp;|&nbsp; {{ customer.document_type }}:
+                <strong>{{ customer.document_number }}</strong>
+            </div>
 
             <div class="tc-contact">
                 <span><i class="bi bi-telephone-fill"></i>{{ customer.phone|default:"No registrado" }}</span>

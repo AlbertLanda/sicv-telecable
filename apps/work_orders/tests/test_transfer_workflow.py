@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import Permission
@@ -7,7 +8,7 @@ from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
 from apps.organization.models import Branch, Zone
 from apps.payments.models import Charge, ChargeConcept, ProposedCharge
-from apps.payments.proposals import suggested_proposed_charge_amount
+from apps.payments.proposals import accept_proposed_charge, suggested_proposed_charge_amount
 from apps.services.models import Subscription
 from apps.work_orders.models import TransferDetail, WorkOrder, WorkOrderLiquidation
 from apps.work_orders.services import (
@@ -413,6 +414,13 @@ class TransferWorkflowTests(WorkOrderTestCase):
             previous_location="Sala",
             new_location="Dormitorio",
         )
+        proposal = ProposedCharge.objects.get(work_order=order)
+        accept_proposed_charge(
+            proposal=proposal,
+            user=self.atc_user,
+            amount=Decimal("20.00"),
+            due_date=date(2026, 9, 30),
+        )
         technician = self._take_and_start(order)
         attend_order(order, result=self.transfer_success, user=technician)
 
@@ -451,8 +459,8 @@ class TransferWorkflowTests(WorkOrderTestCase):
         resolve_transfer_reconciliation(
             transfer=detail,
             user=validator,
-            action=TransferDetail.ReconciliationAction.ABSORB,
-            note="Diferencia absorbida por cortesía comercial autorizada.",
+            action=TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
+            note="Se autoriza cobrar la diferencia en una operación separada.",
         )
 
         detail.refresh_from_db()
@@ -463,12 +471,14 @@ class TransferWorkflowTests(WorkOrderTestCase):
         )
         self.assertEqual(
             detail.reconciliation_action,
-            TransferDetail.ReconciliationAction.ABSORB,
+            TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
         )
         self.assertEqual(detail.reconciled_by, validator)
         self.assertIsNotNone(detail.reconciled_at)
-        self.assertIn("cortesía", detail.reconciliation_note)
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+        self.assertIn("operación separada", detail.reconciliation_note)
+        charges = Charge.objects.filter(customer=self.customer)
+        self.assertEqual(charges.count(), 1)
+        self.assertEqual(charges.get().amount, Decimal("20.00"))
 
     def test_after_technical_suggests_real_cost_only_after_liquidation(self):
         order = create_transfer_work_order(
@@ -508,4 +518,157 @@ class TransferWorkflowTests(WorkOrderTestCase):
             Decimal("28.00"),
         )
         self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+
+    def test_after_technical_accepting_real_cost_closes_reconciliation(self):
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.internal_subtype,
+            previous_location="Sala",
+            new_location="Dormitorio",
+            charge_mode=TransferDetail.ChargeMode.AFTER_TECHNICAL,
+        )
+        proposal = ProposedCharge.objects.get(work_order=order)
+
+        technician = self._take_and_start(order)
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado interno ejecutado.",
+            items=[
+                {
+                    "movement_type": "USED",
+                    "material_name": "Cable drop",
+                    "quantity": Decimal("10.00"),
+                    "unit_of_measure": "METER",
+                    "is_billable": True,
+                    "unit_price": Decimal("0.80"),
+                },
+            ],
+        )
+
+        accept_proposed_charge(
+            proposal=proposal,
+            user=self.atc_user,
+            amount=Decimal("28.00"),
+            due_date=date(2026, 9, 30),
+        )
+
+        detail = TransferDetail.objects.get(work_order=order)
+        proposal.refresh_from_db()
+
+        self.assertEqual(detail.customer_agreed_amount, Decimal("28.00"))
+        self.assertEqual(detail.reconciliation_difference, Decimal("0.00"))
+        self.assertEqual(
+            detail.reconciliation_status,
+            TransferDetail.ReconciliationStatus.MATCHED,
+        )
+        self.assertEqual(proposal.charge.amount, Decimal("28.00"))
+
+    def test_external_transfer_same_branch_keeps_service_code(self):
+        destination_zone = Zone.objects.create(
+            branch=self.branch,
+            name="Zona Sur",
+        )
+        original_code = self.subscription.service_code
+
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.external_subtype,
+            destination_branch=self.branch,
+            destination_zone=destination_zone,
+            requested_address_text="Jr. Nueva 500",
+            requested_supply_code="12345678",
+        )
+        technician = self._take_and_start(order)
+
+        confirm_external_transfer_destination(
+            order=order,
+            user=technician,
+            address="Jr. Nueva 500",
+            district="Distrito Destino",
+            zone=destination_zone,
+            supply_code="12345678",
+        )
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado externo dentro de la misma sede.",
+        )
+
+        self.subscription.refresh_from_db()
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertEqual(self.subscription.service_code, original_code)
+        self.assertEqual(detail.previous_service_code, original_code)
+        self.assertEqual(detail.resulting_service_code, original_code)
+        self.assertEqual(self.subscription.address.zone.branch, self.branch)
+
+    def test_external_transfer_cross_branch_changes_service_code_and_keeps_history(self):
+        destination_branch = Branch.objects.get(code="JAUJA")
+        destination_zone = Zone.objects.create(
+            branch=destination_branch,
+            name="Zona Jauja",
+        )
+        technician = User.objects.create_user(
+            username="tecnico_jauja_codigo",
+            password="test1234",
+            role=User.Role.TECHNICIAN,
+            branch=destination_branch,
+        )
+        original_code = self.subscription.service_code
+
+        order = create_transfer_work_order(
+            subscription=self.subscription,
+            customer=self.customer,
+            created_by=self.atc_user,
+            subtype=self.external_subtype,
+            destination_branch=destination_branch,
+            destination_zone=destination_zone,
+            requested_address_text="Jr. Destino 700",
+            requested_supply_code="87654321",
+        )
+        self._take_and_start(order, technician)
+
+        confirm_external_transfer_destination(
+            order=order,
+            user=technician,
+            address="Jr. Destino 700",
+            district="Jauja",
+            zone=destination_zone,
+            supply_code="87654321",
+        )
+        attend_order(order, result=self.transfer_success, user=technician)
+        liquidate_order(
+            order,
+            user=technician,
+            resolution_detail="Traslado entre sedes ejecutado.",
+        )
+
+        self.subscription.refresh_from_db()
+        detail = TransferDetail.objects.get(work_order=order)
+
+        self.assertNotEqual(self.subscription.service_code, original_code)
+        self.assertTrue(
+            self.subscription.service_code.startswith("JA01-A")
+        )
+        self.assertTrue(
+            self.subscription.service_code.endswith("-INTERNET-01")
+        )
+        self.assertEqual(detail.previous_service_code, original_code)
+        self.assertEqual(
+            detail.resulting_service_code,
+            self.subscription.service_code,
+        )
+        self.assertEqual(
+            self.subscription.address.zone.branch,
+            destination_branch,
+        )
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.code, "CLI001")
 

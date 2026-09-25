@@ -5,7 +5,7 @@ from email.quoprimime import quote
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Prefetch
+from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -99,7 +99,68 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         active_branch = get_active_branch(self.request)
 
         if active_branch:
-            queryset = queryset.filter(branch=active_branch)
+            operational_subscriptions = (
+                Subscription.objects
+                .filter(
+                    customer_id=OuterRef("pk"),
+                    is_active=True,
+                )
+                .exclude(status=Subscription.Status.CANCELLED)
+            )
+            subscriptions_in_branch = operational_subscriptions.filter(
+                Q(address__zone__branch=active_branch)
+                | Q(
+                    address__zone__isnull=True,
+                    customer__branch=active_branch,
+                )
+            )
+
+            queryset = (
+                queryset
+                .annotate(
+                    has_operational_subscription=Exists(
+                        operational_subscriptions
+                    ),
+                    has_service_in_active_branch=Exists(
+                        subscriptions_in_branch
+                    ),
+                )
+                .filter(
+                    Q(has_service_in_active_branch=True)
+                    | Q(
+                        has_operational_subscription=False,
+                        branch=active_branch,
+                    )
+                )
+            )
+
+        visible_subscriptions = (
+            Subscription.objects
+            .filter(is_active=True)
+            .exclude(status=Subscription.Status.CANCELLED)
+            .select_related(
+                "service_type",
+                "address",
+                "address__zone",
+                "address__zone__branch",
+            )
+            .order_by("service_number")
+        )
+
+        if active_branch:
+            visible_subscriptions = visible_subscriptions.filter(
+                Q(address__zone__branch=active_branch)
+                | Q(
+                    address__zone__isnull=True,
+                    customer__branch=active_branch,
+                )
+            )
+
+        operational_subscription_prefetch = Prefetch(
+            "subscriptions",
+            queryset=visible_subscriptions,
+            to_attr="operational_subscriptions",
+        )
 
         # ---------------------------------------------------------
         # BÚSQUEDA POR TIPO Y NÚMERO DE DOCUMENTO
@@ -125,7 +186,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
                 .select_related("branch")
                 .prefetch_related(
                     "addresses",
-                    "subscriptions__service_type",
+                    operational_subscription_prefetch,
                 )
                 .distinct()
                 .order_by(
@@ -141,6 +202,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         #
         # Permite buscar por:
         # - Código de cliente
+        # - Código operativo de una suscripción/domicilio
         # - DNI / RUC / CE / Pasaporte
         # - Nombres
         # - Apellido paterno
@@ -164,7 +226,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
                 .select_related("branch")
                 .prefetch_related(
                     "addresses",
-                    "subscriptions__service_type",
+                    operational_subscription_prefetch,
                 )
                 .order_by(
                     "paternal_surname",
@@ -179,6 +241,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
         for word in words:
             word_filter = (
                 Q(code__icontains=word)
+                | Q(subscriptions__service_code__icontains=word)
                 | Q(document_number__icontains=word)
                 | Q(first_name__icontains=word)
                 | Q(paternal_surname__icontains=word)
@@ -199,7 +262,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
             .select_related("branch")
             .prefetch_related(
                 "addresses",
-                "subscriptions__service_type",
+                operational_subscription_prefetch,
             )
             .distinct()
             .order_by(

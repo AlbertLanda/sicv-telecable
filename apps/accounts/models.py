@@ -58,6 +58,7 @@ class User(AbstractUser):
                 "work_orders.view_incident",
                 "work_orders.schedule_workorder",
                 "work_orders.cancel_workorder",
+                "work_orders.withdraw_installation",
                 "work_orders.create_outsideplant",
                 "work_orders.view_outsideplant",
                 "payments.view_charge",

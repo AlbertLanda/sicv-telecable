@@ -115,6 +115,16 @@ del abonado, una incidencia siempre abre esa ficha especializada.
                         </li>
 
                         <li>
+                            <a
+                                class="dropdown-item"
+                                href="{% url 'work_orders:transfer_create' customer.pk %}"
+                            >
+                                <i class="bi bi-arrow-left-right me-2"></i>
+                                Traslado
+                            </a>
+                        </li>
+
+                        <li>
                             <hr class="dropdown-divider">
                         </li>
 

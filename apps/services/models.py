@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.customers.models import Customer, CustomerAddress
+from apps.customers.codes import next_available_branch_code
 from apps.organization.models import Branch, Zone
 
 
@@ -552,6 +553,50 @@ class Subscription(models.Model):
 
         return (
             f"{self.customer.code}-"
+            f"{self.service_type.code}-"
+            f"{self.service_number:02d}"
+        )
+
+    @classmethod
+    def next_branch_customer_code(cls, branch):
+        """Devuelve el primer código base disponible en la sede destino."""
+        prefix = f"{Customer._prefix_for_branch(branch)}01-A"
+        return next_available_branch_code(prefix)
+
+    @classmethod
+    def next_service_number(cls, customer, service_type):
+        """Primer número de servicio libre para ese abonado/tipo.
+
+        Las suscripciones canceladas que permanecen en historial siguen
+        ocupando su número. Solo un registro físicamente eliminado por un alta
+        provisional desistida vuelve a dejar un hueco reutilizable.
+        """
+        used = set(
+            cls.objects.filter(
+                customer=customer,
+                service_type=service_type,
+            ).values_list("service_number", flat=True)
+        )
+
+        candidate = 1
+        while candidate in used:
+            candidate += 1
+
+        return candidate
+
+    def build_service_code_for_branch(self, branch):
+        """Genera un código nuevo para la misma suscripción en otra sede.
+
+        Un traslado dentro de la misma sede no llama este método y conserva
+        el código. Solo un traslado externo entre sedes crea un nuevo código
+        operativo, manteniendo el mismo Customer/DNI y la misma suscripción.
+        """
+        if not (branch and self.service_type_id and self.service_number):
+            return ""
+
+        base_code = self.next_branch_customer_code(branch)
+        return (
+            f"{base_code}-"
             f"{self.service_type.code}-"
             f"{self.service_number:02d}"
         )

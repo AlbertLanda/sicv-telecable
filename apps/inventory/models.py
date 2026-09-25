@@ -70,6 +70,18 @@ class WorkOrderMaterialMovement(models.Model):
         validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name="Cantidad",
     )
+    is_billable = models.BooleanField(
+        default=False,
+        verbose_name="Facturable al abonado",
+    )
+    unit_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio unitario facturable",
+    )
     remarks = models.CharField(
         max_length=250,
         blank=True,

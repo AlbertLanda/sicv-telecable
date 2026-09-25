@@ -38,6 +38,53 @@ class TransferCreateWebTests(WorkOrderTestCase):
         self.assertContains(response, "Interno: S/ 20")
         self.assertContains(response, "Externo: S/ 30")
 
+    def test_page_exposes_supply_lookup_for_external_transfer(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'id="btn-consultar-suministro-traslado"',
+        )
+        self.assertContains(
+            response,
+            'id="btn-usar-suministro-traslado"',
+        )
+        self.assertContains(response, "Ubicación encontrada")
+        self.assertContains(response, reverse("customers:lookup_supply"))
+
+    def test_external_transfer_requires_supply_location_to_be_applied(self):
+        branch = Branch.objects.create(code="SED02", name="Sede Destino")
+        zone = Zone.objects.create(branch=branch, name="Zona Destino")
+
+        response = self.client.post(
+            self.url,
+            {
+                "subscription": self.subscription.pk,
+                "subtype": self.external_subtype.pk,
+                "destination_branch": branch.pk,
+                "destination_zone": zone.pk,
+                "requested_address_text": "Av. escrita manualmente 500",
+                "requested_supply_code": "",
+                "estimated_extra_amount": "0.00",
+                "customer_agreed_amount": "",
+                "charge_mode": TransferDetail.ChargeMode.UPFRONT_BASE,
+                "collection_mode": TransferDetail.CollectionMode.IMMEDIATE,
+                "scheduled_at": "",
+                "priority": WorkOrder.Priority.NORMAL,
+                "detail": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "requested_supply_code",
+            response.context["form"].errors,
+        )
+        self.assertFalse(
+            WorkOrder.objects.filter(order_type=self.transfer_type).exists()
+        )
+
     def test_internal_transfer_can_be_registered_from_web(self):
         response = self.client.post(
             self.url,
@@ -81,7 +128,7 @@ class TransferCreateWebTests(WorkOrderTestCase):
                 "destination_zone": zone.pk,
                 "requested_address_text": "Av. Nueva 500",
                 "requested_reference": "Frente al parque",
-                "requested_supply_code": "SUM-100",
+                "requested_supply_code": "12345678",
                 "requested_latitude": "-11.5000000",
                 "requested_longitude": "-75.9000000",
                 "estimated_extra_amount": "15.00",
@@ -134,3 +181,13 @@ class TransferCreateWebTests(WorkOrderTestCase):
         self.assertFalse(
             WorkOrder.objects.filter(order_type=self.transfer_type).exists()
         )
+
+    def test_customer_orders_menu_exposes_transfer_entry(self):
+        response = self.client.get(
+            reverse("customers:orders", kwargs={"pk": self.customer.pk})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Traslado")
+        self.assertContains(response, self.url)
+

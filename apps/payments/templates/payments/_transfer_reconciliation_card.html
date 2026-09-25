@@ -1,0 +1,24 @@
+{% comment %}
+Tarjeta de una conciliación económica pendiente de traslado.
+Es información operativa: todavía no genera deuda nueva por sí sola.
+Espera `transfer`.
+{% endcomment %}
+
+<div class="tc-pendiente-cab">
+    <span class="tc-pendiente-rotulo">
+        Regularización de traslado
+    </span>
+    <span class="tc-pendiente-icono">
+        <i class="bi bi-calculator"></i>
+    </span>
+</div>
+<div class="tc-pendiente-dato">
+    Diferencia S/ {{ transfer.reconciliation_difference|floatformat:2 }}
+</div>
+<div class="tc-pendiente-pie">
+    <i class="bi bi-clipboard-check"></i>{{ transfer.work_order.order_number }}
+    &middot; Real S/ {{ transfer.actual_total|floatformat:2 }}
+    {% if transfer.customer_agreed_amount != None %}
+        &middot; Acordado S/ {{ transfer.customer_agreed_amount|floatformat:2 }}
+    {% endif %}
+</div>

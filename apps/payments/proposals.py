@@ -172,6 +172,17 @@ def accept_proposed_charge(*, proposal, user, amount, due_date, note=""):
                 "Registre una observación que justifique el ajuste."
             )
 
+        if (
+            transfer.charge_mode == transfer.ChargeMode.AFTER_TECHNICAL
+            and transfer.actual_total is not None
+            and amount != transfer.actual_total
+            and not (note or "").strip()
+        ):
+            raise ValidationError(
+                "El monto es distinto al costo técnico real. "
+                "Registre una observación que justifique el ajuste."
+            )
+
     charge = create_manual_charge(
         customer=locked.customer,
         subscription=locked.subscription,
@@ -189,6 +200,30 @@ def accept_proposed_charge(*, proposal, user, amount, due_date, note=""):
     locked.resolved_at = timezone.now()
     locked.full_clean()
     locked.save()
+
+    if (
+        is_transfer_order(locked.work_order)
+        and transfer.charge_mode == transfer.ChargeMode.AFTER_TECHNICAL
+    ):
+        transfer.customer_agreed_amount = amount
+        if (
+            transfer.actual_total is not None
+            and amount == transfer.actual_total
+        ):
+            transfer.reconciliation_status = (
+                transfer.ReconciliationStatus.MATCHED
+            )
+        else:
+            transfer.reconciliation_status = (
+                transfer.ReconciliationStatus.REQUIRES_DECISION
+            )
+        transfer.save(
+            update_fields=[
+                "customer_agreed_amount",
+                "reconciliation_status",
+                "updated_at",
+            ]
+        )
 
     proposal.__dict__.update(locked.__dict__)
     return proposal
