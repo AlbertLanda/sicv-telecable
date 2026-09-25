@@ -2,6 +2,7 @@ import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -441,6 +442,24 @@ class Subscription(models.Model):
         related_name="subscriptions",
         verbose_name="Cliente",
     )
+    seller = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sold_subscriptions",
+        null=True,
+        blank=True,
+        verbose_name="Vendedor",
+        help_text="Persona a quien se atribuye comercialmente esta venta.",
+    )
+    registered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="registered_subscriptions",
+        null=True,
+        blank=True,
+        verbose_name="Registrado por",
+        help_text="Usuario que ingresó la contratación al SICV.",
+    )
     address = models.ForeignKey(
         CustomerAddress,
         on_delete=models.PROTECT,
@@ -609,6 +628,19 @@ class Subscription(models.Model):
 
     def clean(self):
         super().clean()
+        if self.seller_id:
+            if not self.seller.is_active:
+                raise ValidationError({"seller": "El vendedor seleccionado está inactivo."})
+            if not (
+                getattr(self.seller, "is_salesperson", False)
+                or self.seller.role == "ADMIN"
+            ):
+                raise ValidationError({
+                    "seller": (
+                        "La persona seleccionada no está habilitada para "
+                        "figurar como vendedor."
+                    )
+                })
         if self.address_id and self.customer_id and self.address.customer_id != self.customer_id:
             raise ValidationError({"address": "La dirección seleccionada no pertenece al cliente."})
         if self.plan_id and self.service_type_id and self.plan.service_type_id != self.service_type_id:
