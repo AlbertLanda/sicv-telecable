@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
+from apps.organization.models import Branch
 from apps.services.models import Subscription
 from apps.work_orders.models import (
     DEFINITIVE_CUT_REASONS,
@@ -515,6 +516,8 @@ def create_transfer_work_order(
         previous_address=(
             subscription.address if subtype.code == "EXTERNAL" else None
         ),
+        previous_service_code=subscription.service_code or "",
+        resulting_service_code=subscription.service_code or "",
         previous_location=(previous_location or "").strip(),
         new_location=(new_location or "").strip(),
         requested_address_text=(requested_address_text or "").strip(),
@@ -2286,6 +2289,57 @@ def _finalize_transfer_on_liquidation(order, user):
             "liquida la orden."
         )
 
-    subscription = order.subscription
+    subscription = (
+        Subscription.objects
+        .select_for_update()
+        .select_related(
+            "address__zone__branch",
+            "service_type",
+            "customer",
+        )
+        .get(pk=order.subscription_id)
+    )
+
+    origin_branch_id = (
+        subscription.address.zone.branch_id
+        if subscription.address_id
+        and subscription.address.zone_id
+        else subscription.customer.branch_id
+    )
+    destination_branch = transfer.new_address.zone.branch
+
+    if not transfer.previous_service_code:
+        transfer.previous_service_code = subscription.service_code or ""
+
+    # Externo dentro de la misma sede: cambia el domicilio, no la identidad
+    # operativa del servicio. Entre sedes: la misma persona y suscripción
+    # continúan, pero el servicio recibe un código con el prefijo de la nueva
+    # sede. El Branch se bloquea para serializar dos traslados simultáneos que
+    # estén reservando correlativos de esa sede.
+    if origin_branch_id != destination_branch.pk:
+        destination_branch = (
+            Branch.objects
+            .select_for_update()
+            .get(pk=destination_branch.pk)
+        )
+        subscription.service_code = (
+            subscription.build_service_code_for_branch(destination_branch)
+        )
+
     subscription.address = transfer.new_address
-    subscription.save(update_fields=["address", "updated_at"])
+    subscription.save(
+        update_fields=[
+            "address",
+            "service_code",
+            "updated_at",
+        ]
+    )
+
+    transfer.resulting_service_code = subscription.service_code or ""
+    transfer.save(
+        update_fields=[
+            "previous_service_code",
+            "resulting_service_code",
+            "updated_at",
+        ]
+    )
