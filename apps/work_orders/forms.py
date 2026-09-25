@@ -494,7 +494,11 @@ class TransferCreateForm(forms.Form):
         else:
             self.fields["subscription"].queryset = (
                 Subscription.objects
-                .filter(customer=customer, is_active=True)
+                .filter(
+                    customer=customer,
+                    is_active=True,
+                    status=Subscription.Status.ACTIVE,
+                )
                 .select_related("service_type", "plan", "address", "address__zone")
                 .order_by("-created_at")
             )
