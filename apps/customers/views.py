@@ -262,7 +262,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
             .select_related("branch")
             .prefetch_related(
                 "addresses",
-                "subscriptions__service_type",
+                operational_subscription_prefetch,
             )
             .distinct()
             .order_by(
