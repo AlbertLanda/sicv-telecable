@@ -333,6 +333,12 @@ def create_work_order(
             "El usuario que registra la orden debe estar activo."
         )
 
+    # La suscripción puede haber cambiado desde que esta instancia fue
+    # cargada (por ejemplo, tras liquidar un traslado externo). Antes de
+    # resolver sede y zona se usa siempre el estado persistido vigente.
+    if subscription is not None and subscription.pk is not None:
+        subscription.refresh_from_db()
+
     _validate_creation_subscription(subscription, customer, order_type)
     _validate_creation_catalogs(subscription, order_type, subtype, reason, cause)
     _validate_seller(seller)
