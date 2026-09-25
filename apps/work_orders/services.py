@@ -2192,6 +2192,11 @@ def resolve_transfer_reconciliation(*, transfer, user, action, note=""):
             "Este traslado no tiene una regularización pendiente."
         )
 
+    if locked.work_order.proposed_charges.filter(status="PENDING").exists():
+        raise ValidationError(
+            "Primero debe resolverse la propuesta inicial de cobro del traslado."
+        )
+
     try:
         liquidation = locked.work_order.liquidation
     except WorkOrderLiquidation.DoesNotExist as exc:
