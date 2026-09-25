@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.views.generic import DetailView, ListView, TemplateView, View
 
 from apps.customers.models import Customer
-from apps.work_orders.models import TransferDetail
+from apps.work_orders.models import TransferDetail, WorkOrderLiquidation
 from apps.work_orders.services import resolve_transfer_reconciliation
 from apps.organization.context_processors import (
     get_active_branch,
@@ -1061,7 +1061,7 @@ class TransferReconciliationResolveView(
 
         try:
             context["liquidation"] = transfer.work_order.liquidation
-        except transfer.work_order.liquidation.RelatedObjectDoesNotExist:
+        except WorkOrderLiquidation.DoesNotExist:
             context["liquidation"] = None
 
         if "form" not in context:
