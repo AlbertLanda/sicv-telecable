@@ -427,7 +427,13 @@
             {% if perms.work_orders.view_workorder %}
             <a class="sicv-topnav-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-clipboard2-check"></i> Órdenes de trabajo</a>
             {% endif %}
+            {% if perms.services.view_subscription %}
+            <a class="sicv-topnav-link" href="{% url 'reports:sales' %}"><i class="bi bi-bar-chart"></i> Reportes</a>
+            {% elif perms.inventory.view_workordermaterialmovement %}
+            <a class="sicv-topnav-link" href="{% url 'reports:materials' %}"><i class="bi bi-bar-chart"></i> Reportes</a>
+            {% else %}
             <span class="sicv-topnav-link opacity-50"><i class="bi bi-bar-chart"></i> Reportes</span>
+            {% endif %}
             <a class="sicv-topnav-link" href="{% url 'accounts:profile' %}"><i class="bi bi-gear"></i> Configuración</a>
         </nav>
 
