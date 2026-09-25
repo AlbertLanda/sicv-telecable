@@ -87,6 +87,12 @@ class ContractCreateTests(TestCase):
             role=User.Role.ATC,
             branch=self.branch,
         )
+        self.seller = User.objects.create_user(
+            username="vendedor_contratos",
+            password="123",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
 
         self.client.login(
             username="colaborador",
@@ -126,6 +132,7 @@ class ContractCreateTests(TestCase):
 
         self.subscription = Subscription.objects.create(
             customer=self.customer,
+            seller=self.seller,
             address=self.address,
             service_type=self.service_type,
             plan=self.plan,
@@ -141,6 +148,7 @@ class ContractCreateTests(TestCase):
 
         self.apps_subscription = Subscription.objects.create(
             customer=self.customer,
+            seller=self.seller,
             address=self.address,
             service_type=self.apps_service_type,
             plan=self.apps_plan,
@@ -482,6 +490,7 @@ class ContractCreateTests(TestCase):
 
         otra_suscripcion = Subscription.objects.create(
             customer=self.customer,
+            seller=self.seller,
             address=self.address,
             service_type=self.service_type,
             plan=otro_plan,
@@ -553,6 +562,7 @@ class ContractCreateTests(TestCase):
 
         suscripcion_ajena = Subscription.objects.create(
             customer=otro_cliente,
+            seller=self.seller,
             address=otra_direccion,
             service_type=self.service_type,
             plan=plan_sin_suscripcion_propia,
@@ -610,6 +620,7 @@ class ContractCreateTests(TestCase):
     def test_una_suscripcion_activa_no_es_contratable(self):
         active_subscription = Subscription.objects.create(
             customer=self.customer,
+            seller=self.seller,
             address=self.address,
             service_type=self.service_type,
             plan=self.plan,
@@ -667,6 +678,7 @@ class ContractCreateTests(TestCase):
 
         other_subscription = Subscription.objects.create(
             customer=other_customer,
+            seller=self.seller,
             address=other_address,
             service_type=self.service_type,
             plan=self.plan,
@@ -678,6 +690,26 @@ class ContractCreateTests(TestCase):
             other_subscription.pk,
             self.catalogo_de_suscripciones(),
         )
+
+    def test_no_permite_generar_contrato_si_falta_vendedor(self):
+        self.subscription.seller = None
+        self.subscription.save(update_fields=["seller", "updated_at"])
+
+        response = self.client.get(
+            f"{self.create_url}?subscription={self.subscription.pk}"
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "services:subscription_seller",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": self.subscription.pk,
+                },
+            ),
+        )
+        self.assertFalse(Contract.objects.exists())
 
     # -------------------------------------------------------------
     # CREACIÓN CORRECTA
@@ -1036,6 +1068,7 @@ class ContractCreateTests(TestCase):
 
         other_subscription = Subscription.objects.create(
             customer=other_customer,
+            seller=self.seller,
             address=other_address,
             service_type=self.service_type,
             plan=self.plan,
@@ -1112,6 +1145,7 @@ class ContractCreateTests(TestCase):
 
         other_subscription = Subscription.objects.create(
             customer=other_customer,
+            seller=self.seller,
             address=other_address,
             service_type=self.service_type,
             plan=self.plan,
@@ -1240,6 +1274,8 @@ class InstallationWorkOrderCreateTests(TestCase):
             role=User.Role.SALES,
             branch=self.branch,
         )
+        self.subscription.seller = self.seller
+        self.subscription.save(update_fields=["seller", "updated_at"])
 
         self.summary_url = reverse(
             "contracts:contract_summary",
@@ -1333,6 +1369,27 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(response.context["subscription"], self.subscription)
         self.assertContains(response, self.plan.name)
         self.assertContains(response, self.address.address)
+
+    def test_no_permite_instalacion_si_la_venta_no_tiene_vendedor(self):
+        self.grant_add_workorder_permission()
+        self.subscription.seller = None
+        self.subscription.save(update_fields=["seller", "updated_at"])
+
+        response = self.client.get(self.generate_url)
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "services:subscription_seller",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": self.subscription.pk,
+                },
+            ),
+        )
+        self.assertFalse(
+            WorkOrder.objects.filter(subscription=self.subscription).exists()
+        )
 
     def test_get_redirige_al_resumen_si_ya_hay_instalacion_abierta(self):
         """
