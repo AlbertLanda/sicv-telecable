@@ -145,8 +145,11 @@ class SalesReportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["report"]["total_sales"], 1)
-        self.assertContains(response, str(self.seller))
-        self.assertNotContains(response, other_seller.username)
+
+        rows = list(response.context["report"]["rows"])
+        self.assertEqual(rows, [self.subscription])
+        self.assertEqual(rows[0].seller, self.seller)
+        self.assertNotEqual(rows[0].seller, other_seller)
 
     def test_report_does_not_mix_another_active_branch(self):
         other_branch = Branch.objects.create(
