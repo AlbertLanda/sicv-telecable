@@ -1,9 +1,11 @@
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import Permission
 from django.urls import reverse
 
 from apps.payments.models import Charge, ChargeConcept
+from apps.payments.proposals import accept_proposed_charge
 from apps.services.models import Subscription
 from apps.work_orders.models import TransferDetail
 from apps.work_orders.services import (
@@ -40,6 +42,14 @@ class TransferReconciliationWebTests(WorkOrderTestCase):
             previous_location="Sala",
             new_location="Dormitorio",
         )
+        self.proposal = self.order.proposed_charges.get()
+        accept_proposed_charge(
+            proposal=self.proposal,
+            user=self.atc_user,
+            amount=Decimal("20.00"),
+            due_date=date(2026, 9, 30),
+        )
+
         self.order.assign_technician(
             self.technician,
             assigned_by=self.technician,
@@ -114,6 +124,7 @@ class TransferReconciliationWebTests(WorkOrderTestCase):
         self.assertContains(response, "S/ 28.00")
         self.assertContains(response, "Monto acordado")
         self.assertContains(response, "S/ 20.00")
+        self.assertContains(response, "Monto ya emitido")
         self.assertContains(response, "Diferencia")
 
     def test_authorized_user_can_absorb_difference_with_audit_only(self):
@@ -146,5 +157,7 @@ class TransferReconciliationWebTests(WorkOrderTestCase):
         )
         self.assertEqual(transfer.reconciled_by, self.resolver)
         self.assertIsNotNone(transfer.reconciled_at)
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+        charges = Charge.objects.filter(customer=self.customer)
+        self.assertEqual(charges.count(), 1)
+        self.assertEqual(charges.get().amount, Decimal("20.00"))
         self.assertNotContains(response, "Regularización de traslado")
