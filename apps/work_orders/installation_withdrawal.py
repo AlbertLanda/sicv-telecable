@@ -5,7 +5,7 @@ from django.db.models.deletion import ProtectedError
 from apps.contracts.models import ContractSignature
 from apps.customers.models import Customer, CustomerAddress
 from apps.inventory.models import WorkOrderMaterialMovement
-from apps.payments.models import Charge, ProposedCharge
+from apps.payments.models import Charge, Payment, PaymentCommitment, ProposedCharge
 from apps.services.models import Subscription
 
 from .models import (
@@ -94,6 +94,31 @@ def installation_withdrawal_issues(order):
         issues.append(
             "La suscripción ya tiene cargos/deuda emitida."
         )
+
+    # Si esta es la única contratación del abonado, cualquier movimiento
+    # económico a su nombre puede corresponder justamente a esta alta. No se
+    # elimina físicamente hasta que ese registro sea resuelto por cobranza.
+    has_other_subscriptions = subscription.customer.subscriptions.exclude(
+        pk=subscription.pk
+    ).exists()
+    if not has_other_subscriptions:
+        if Payment.objects.filter(customer=subscription.customer).exists():
+            issues.append(
+                "El abonado ya tiene un pago/comprobante registrado."
+            )
+        if PaymentCommitment.objects.filter(
+            customer=subscription.customer
+        ).exists():
+            issues.append(
+                "El abonado ya tiene un compromiso de pago registrado."
+            )
+        if Charge.objects.filter(
+            customer=subscription.customer,
+            subscription__isnull=True,
+        ).exists():
+            issues.append(
+                "El abonado ya tiene cargos económicos no ligados a otra suscripción."
+            )
 
     if ProposedCharge.objects.filter(subscription=subscription).exists():
         issues.append(
