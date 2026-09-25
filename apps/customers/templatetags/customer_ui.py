@@ -43,14 +43,25 @@ def customer_hero(customer, heading_level=2):
             customer=customer,
             status=Subscription.Status.ACTIVE,
         )
-        .select_related("billing_policy")
+        .select_related("billing_policy", "address", "address__zone")
     )
+
+    # Si solo existe un servicio activo, la cabecera debe mostrar la
+    # ubicación vigente de ese servicio. En abonados con varios servicios no
+    # se inventa una dirección única y se conserva la dirección principal.
+    if len(active_subscriptions) == 1:
+        primary_address = active_subscriptions[0].address
 
     debt = customer_debt(customer)
 
     return {
         "customer": customer,
         "primary_address": primary_address,
+        "active_service_codes": [
+            subscription.service_code
+            for subscription in active_subscriptions
+            if subscription.service_code
+        ],
         "heading_level": heading_level,
         "active_subscription_count": len(active_subscriptions),
         "open_order_count": (
