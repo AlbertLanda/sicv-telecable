@@ -6,6 +6,8 @@ from django import forms
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
+from apps.work_orders.models import TransferDetail
+
 from .models import (
     Charge,
     ChargeConcept,
@@ -624,3 +626,50 @@ class ProposedChargeResolveForm(forms.Form):
             self.add_error("due_date", "Indique hasta cuándo paga.")
 
         return cleaned
+
+class TransferReconciliationForm(forms.Form):
+    """Decisión humana sobre la diferencia económica de un traslado."""
+
+    action = forms.ChoiceField(
+        label="Decisión",
+        choices=TransferDetail.ReconciliationAction.choices,
+        widget=forms.Select(),
+    )
+    note = forms.CharField(
+        label="Sustento / observación",
+        required=True,
+        max_length=1000,
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text=(
+            "La decisión queda auditada con el usuario y la fecha. "
+            "Registrar la decisión no genera un cargo automáticamente."
+        ),
+    )
+
+    def __init__(self, *args, transfer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.transfer = transfer
+
+        if transfer is not None:
+            difference = transfer.reconciliation_difference
+            if difference is not None and difference <= 0:
+                blocked = {
+                    TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
+                    TransferDetail.ReconciliationAction.NEXT_INVOICE,
+                }
+                self.fields["action"].choices = [
+                    (value, label)
+                    for value, label in TransferDetail.ReconciliationAction.choices
+                    if value not in blocked
+                ]
+
+        _style_widgets(self)
+
+    def clean_note(self):
+        note = (self.cleaned_data.get("note") or "").strip()
+        if not note:
+            raise forms.ValidationError(
+                "Indique el sustento de la decisión de regularización."
+            )
+        return note
+
