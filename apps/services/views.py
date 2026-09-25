@@ -91,6 +91,24 @@ class SubscriptionCreateView(LoginRequiredMixin, CreateView):
                 subscription.billing_policy = quote["billing_policy"]
                 subscription.base_installation_fee = quote["installation_fee"]
                 subscription.base_monthly_fee = quote["monthly_fee"]
+                subscription.included_app_plan = (
+                    subscription.plan.included_app_plan
+                )
+                subscription.included_app_component_amount = (
+                    subscription.plan.included_app_component_amount
+                    if subscription.plan.included_app_plan_id
+                    else 0
+                )
+
+                if (
+                    subscription.included_app_plan_id
+                    and subscription.included_app_component_amount
+                    >= subscription.base_monthly_fee
+                ):
+                    raise ValidationError(
+                        "El componente APP configurado debe ser menor que "
+                        "la mensualidad real aplicada a este domicilio."
+                    )
 
                 subscription.service_number = (
                     Subscription.next_service_number(
