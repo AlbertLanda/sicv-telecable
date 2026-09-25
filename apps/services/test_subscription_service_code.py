@@ -61,10 +61,7 @@ class SubscriptionServiceCodeTests(TestCase):
 
     def test_codigo_para_otra_sede_usa_prefijo_destino_sin_duplicar_cliente(self):
         subscription = self.crear(1, "Jr. Uno 100")
-        destination = Branch.objects.create(
-            code="JAUJA",
-            name="Jauja",
-        )
+        destination = Branch.objects.get(code="JAUJA")
         original_customer_code = self.customer.code
 
         relocated_code = subscription.build_service_code_for_branch(
