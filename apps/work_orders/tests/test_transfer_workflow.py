@@ -610,10 +610,7 @@ class TransferWorkflowTests(WorkOrderTestCase):
         self.assertEqual(self.subscription.address.zone.branch, self.branch)
 
     def test_external_transfer_cross_branch_changes_service_code_and_keeps_history(self):
-        destination_branch = Branch.objects.create(
-            code="JAUJA",
-            name="Jauja",
-        )
+        destination_branch = Branch.objects.get(code="JAUJA")
         destination_zone = Zone.objects.create(
             branch=destination_branch,
             name="Zona Jauja",
