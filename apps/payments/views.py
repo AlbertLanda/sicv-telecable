@@ -189,6 +189,9 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
                 reconciliation_status=(
                     TransferDetail.ReconciliationStatus.REQUIRES_DECISION
                 ),
+                work_order__liquidation__review_status=(
+                    WorkOrderLiquidation.ReviewStatus.VALIDATED
+                ),
             )
             .exclude(
                 work_order__proposed_charges__status=ProposedCharge.Status.PENDING
@@ -1030,7 +1033,10 @@ class TransferReconciliationResolveView(
     """Regularización económica posterior a la liquidación de un traslado."""
 
     template_name = "payments/transfer_reconciliation_resolve.html"
-    permission_required = "work_orders.resolve_transfer_reconciliation"
+    permission_required = (
+        "payments.view_charge",
+        "work_orders.resolve_transfer_reconciliation",
+    )
 
     def setup(self, request, *args, **kwargs):
         super().setup(request, *args, **kwargs)
@@ -1038,18 +1044,30 @@ class TransferReconciliationResolveView(
 
     def get_transfer(self):
         if self.transfer is None:
-            self.transfer = get_object_or_404(
+            queryset = (
                 TransferDetail.objects.select_related(
                     "work_order",
                     "work_order__subtype",
                     "work_order__subscription",
                     "work_order__subscription__customer",
                     "reconciled_by",
-                ),
+                )
+                .exclude(
+                    work_order__proposed_charges__status=(
+                        ProposedCharge.Status.PENDING
+                    )
+                )
+                .distinct()
+            )
+            self.transfer = get_object_or_404(
+                queryset,
                 pk=self.kwargs["transfer_pk"],
                 work_order__subscription__customer=self.customer,
                 reconciliation_status=(
                     TransferDetail.ReconciliationStatus.REQUIRES_DECISION
+                ),
+                work_order__liquidation__review_status=(
+                    WorkOrderLiquidation.ReviewStatus.VALIDATED
                 ),
             )
         return self.transfer
