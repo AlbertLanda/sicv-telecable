@@ -246,7 +246,8 @@ class ContractCreateForm(forms.ModelForm):
 class InstallationWorkOrderForm(forms.Form):
     """
     Datos que ATC ingresa al generar la Orden de Instalación desde el
-    resumen de contratación: observaciones, prioridad, motivo y vendedor.
+    resumen de contratación: observaciones, prioridad y motivo. El vendedor
+    ya viene cerrado desde la suscripción y aquí solo se muestra heredado.
 
     La instalación FTTH es siempre trabajo de campo. El formulario mantiene
     `attention_type` únicamente como dato explícito del contrato existente,
@@ -320,7 +321,7 @@ class InstallationWorkOrderForm(forms.Form):
         queryset=User.objects.none(),
         required=False,
         label="Vendedor",
-        empty_label="Sin vendedor",
+        empty_label="Vendedor no disponible",
         widget=forms.Select(
             attrs={
                 "class": "form-select",
