@@ -414,6 +414,13 @@ class TransferWorkflowTests(WorkOrderTestCase):
             previous_location="Sala",
             new_location="Dormitorio",
         )
+        proposal = ProposedCharge.objects.get(work_order=order)
+        accept_proposed_charge(
+            proposal=proposal,
+            user=self.atc_user,
+            amount=Decimal("20.00"),
+            due_date=date(2026, 9, 30),
+        )
         technician = self._take_and_start(order)
         attend_order(order, result=self.transfer_success, user=technician)
 
@@ -452,8 +459,8 @@ class TransferWorkflowTests(WorkOrderTestCase):
         resolve_transfer_reconciliation(
             transfer=detail,
             user=validator,
-            action=TransferDetail.ReconciliationAction.ABSORB,
-            note="Diferencia absorbida por cortesía comercial autorizada.",
+            action=TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
+            note="Se autoriza cobrar la diferencia en una operación separada.",
         )
 
         detail.refresh_from_db()
@@ -464,12 +471,14 @@ class TransferWorkflowTests(WorkOrderTestCase):
         )
         self.assertEqual(
             detail.reconciliation_action,
-            TransferDetail.ReconciliationAction.ABSORB,
+            TransferDetail.ReconciliationAction.CHARGE_DIFFERENCE,
         )
         self.assertEqual(detail.reconciled_by, validator)
         self.assertIsNotNone(detail.reconciled_at)
-        self.assertIn("cortesía", detail.reconciliation_note)
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+        self.assertIn("operación separada", detail.reconciliation_note)
+        charges = Charge.objects.filter(customer=self.customer)
+        self.assertEqual(charges.count(), 1)
+        self.assertEqual(charges.get().amount, Decimal("20.00"))
 
     def test_after_technical_suggests_real_cost_only_after_liquidation(self):
         order = create_transfer_work_order(
