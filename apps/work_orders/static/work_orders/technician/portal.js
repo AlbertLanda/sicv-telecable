@@ -686,7 +686,7 @@
         state.detailEditable = editable;
 
         $("#installed-material-billable-field").hidden = !isTransfer;
-        $("#installed-material-price-field").hidden = !isTransfer || !billable;
+        $("#installed-material-price-field").hidden = true;
         if (!isTransfer) {
             $("#installed-material-billable").value = "0";
             $("#installed-material-unit-price").value = "";
@@ -922,7 +922,7 @@
     function syncInstalledMaterialBillingFields() {
         const isTransfer = state.currentOrder?.order_type_code === "TRANSFER";
         const billable = isTransfer && $("#installed-material-billable").value === "1";
-        $("#installed-material-price-field").hidden = !isTransfer;
+        $("#installed-material-price-field").hidden = !isTransfer || !billable;
         $("#installed-material-unit-price").disabled = !state.detailEditable || !billable;
         if (!billable) {
             $("#installed-material-unit-price").value = "";
