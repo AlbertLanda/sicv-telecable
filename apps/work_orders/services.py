@@ -229,12 +229,11 @@ def _validate_creation_catalogs(subscription, order_type, subtype, reason, cause
 
 
 def _validate_seller(seller):
-    """
-    `seller` es opcional -no toda orden nace de una venta con vendedor
-    identificado-, pero cuando se envía debe ser un usuario activo con rol
-    Ventas: igual que assigned_technician exige rol Técnico en el formulario
-    de despacho, aquí se exige rol Ventas para no registrar como vendedor a
-    un usuario de otra área.
+    """Valida la atribución comercial sin mezclarla con el rol operativo.
+
+    `is_salesperson` permite que una persona de ATC/administración pueda
+    figurar como vendedor sin entregarle permisos del rol Ventas. Los
+    administradores también pueden atribuirse una venta directamente.
     """
     if seller is None:
         return
@@ -244,9 +243,12 @@ def _validate_seller(seller):
             "El vendedor indicado debe ser un usuario activo."
         )
 
-    if seller.role != User.Role.SALES:
+    if not (
+        getattr(seller, "is_salesperson", False)
+        or seller.role == User.Role.ADMIN
+    ):
         raise ValidationError(
-            "El vendedor indicado debe tener el rol de Ventas."
+            "La persona indicada no está habilitada para figurar como vendedor."
         )
 
 
@@ -1143,8 +1145,9 @@ def create_installation_work_order(
     revisión-. `create_work_order()` sigue validando que el valor pertenezca
     a `WorkOrder.AttentionType`.
 
-    `seller` es opcional y se valida en create_work_order() (usuario activo
-    con rol Ventas).
+    `seller` se hereda de la suscripción cuando la venta ya fue atribuida
+    durante el alta. El argumento solo queda como compatibilidad para
+    suscripciones históricas que todavía no tengan vendedor.
 
     `created_by` debe salir del usuario ejecutor (`request.user`), nunca de
     datos enviados por el navegador.
@@ -1196,6 +1199,9 @@ def create_installation_work_order(
             "La suscripción ya tiene una orden de instalación abierta. "
             "Finalícela o anúlela antes de generar otra."
         )
+
+    if seller is None:
+        seller = locked_subscription.seller
 
     return create_work_order(
         subscription=locked_subscription,
