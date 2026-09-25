@@ -34,6 +34,12 @@ class CustomerOnboardingTests(TestCase):
             role=User.Role.ATC,
             branch=self.branch,
         )
+        self.seller = User.objects.create_user(
+            username="seller_onboarding",
+            password="123",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
         self.customer = Customer.objects.create(
             code="HY01-A0000001",
             branch=self.branch,
@@ -74,9 +80,35 @@ class CustomerOnboardingTests(TestCase):
             ),
         )
 
-    def test_presale_without_contract_resumes_at_contract(self):
+    def test_presale_without_seller_resumes_at_commercial_attribution(self):
         subscription = Subscription.objects.create(
             customer=self.customer,
+            address=self.address,
+            service_type=self.service,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+        )
+
+        state = customer_onboarding_state(self.customer)
+
+        self.assertTrue(state["incomplete"])
+        self.assertEqual(state["stage"], "SELLER")
+        self.assertEqual(state["subscription"], subscription)
+        self.assertEqual(
+            state["next_url"],
+            reverse(
+                "services:subscription_seller",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            ),
+        )
+
+    def test_presale_with_seller_without_contract_resumes_at_contract(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            seller=self.seller,
             address=self.address,
             service_type=self.service,
             plan=self.plan,
