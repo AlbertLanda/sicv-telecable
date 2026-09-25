@@ -8,6 +8,7 @@ from apps.services.models import Subscription
 
 INCOMPLETE_STAGES = {
     "SUBSCRIPTION",
+    "SELLER",
     "CONTRACT",
     "INSTALLATION_ORDER",
 }
@@ -51,6 +52,32 @@ def customer_onboarding_state(customer):
         }
 
     for subscription in pending:
+        if subscription.seller_id is None:
+            return {
+                "stage": "SELLER",
+                "label": "Alta incompleta",
+                "detail": (
+                    f"{subscription.service_code}: falta identificar al vendedor "
+                    "antes de generar el contrato."
+                ),
+                "incomplete": True,
+                "next_url": reverse(
+                    "services:subscription_seller",
+                    kwargs={
+                        "customer_pk": customer.pk,
+                        "subscription_pk": subscription.pk,
+                    },
+                ),
+                "next_label": "Completar vendedor",
+                "subscription": subscription,
+                "contract": (
+                    subscription.contracts
+                    .filter(is_active=True)
+                    .order_by("-created_at", "-pk")
+                    .first()
+                ),
+            }
+
         contract = (
             subscription.contracts
             .filter(is_active=True)
