@@ -193,6 +193,10 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
         source="order_type.name",
         read_only=True,
     )
+    order_type_code = serializers.CharField(
+        source="order_type.code",
+        read_only=True,
+    )
     subtype = serializers.CharField(
         source="subtype.name",
         read_only=True,
@@ -233,6 +237,7 @@ class WorkOrderListSerializer(serializers.ModelSerializer):
             "plan",
             "is_outside_plant",
             "order_type",
+            "order_type_code",
             "subtype",
             "status",
             "status_display",
