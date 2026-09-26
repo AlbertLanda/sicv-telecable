@@ -886,7 +886,7 @@ class ContractCreateTests(TestCase):
             "playhub_email",
             (
                 "Los datos PlayHub solo corresponden a servicios "
-                "que se entregan a una cuenta."
+                "o paquetes que incluyen una APP entregada a cuenta."
             ),
         )
 

@@ -18,19 +18,6 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
         </div>
 
-        {% comment %}
-        El dashboard va primero y suelto: es la portada del sistema -a donde
-        lleva el login- y no una opción de una sección. Cada usuario ve en él
-        solo las cifras de los módulos que puede abrir.
-        {% endcomment %}
-        <section class="sidebar-section" data-sidebar-section="dashboard inicio portada resumen indicadores cifras">
-            <a class="sidebar-home{% if request.resolver_match.url_name == 'dashboard' %} active{% endif %}"
-               href="{% url 'dashboard' %}"
-               {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>
-                <i class="bi bi-grid-1x2"></i><span>Dashboard</span>
-            </a>
-        </section>
-
         <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
                 <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>

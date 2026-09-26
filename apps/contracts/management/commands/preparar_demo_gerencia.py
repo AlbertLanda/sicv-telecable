@@ -385,6 +385,7 @@ class Command(BaseCommand):
             plan=plan,
             tariff=quote["tariff"],
             billing_policy=quote["billing_policy"],
+            seller=seller,
             status=Subscription.Status.PRESALE,
             service_number=service_number,
             billing_cycle=23,

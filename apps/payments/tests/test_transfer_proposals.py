@@ -20,19 +20,22 @@ class TransferProposalTests(PaymentsTestCase):
     def setUp(self):
         super().setUp()
 
-        self.transfer_type = OrderType.objects.create(
+        # El catalogo de traslado ya viene sembrado por la migracion
+        # work_orders.0030_seed_transfer_catalog, asi que se toma el que
+        # existe en vez de crear uno que choca con el codigo unico.
+        self.transfer_type, _ = OrderType.objects.update_or_create(
             code="TRANSFER",
-            name="TRASLADO",
+            defaults={"name": "TRASLADO"},
         )
-        self.internal = OrderSubtype.objects.create(
+        self.internal, _ = OrderSubtype.objects.update_or_create(
             order_type=self.transfer_type,
             code="INTERNAL",
-            name="TRASLADO INTERNO",
+            defaults={"name": "TRASLADO INTERNO"},
         )
-        self.external = OrderSubtype.objects.create(
+        self.external, _ = OrderSubtype.objects.update_or_create(
             order_type=self.transfer_type,
             code="EXTERNAL",
-            name="TRASLADO EXTERNO",
+            defaults={"name": "TRASLADO EXTERNO"},
         )
         self.concept, _ = ChargeConcept.objects.update_or_create(
             code="traslado",

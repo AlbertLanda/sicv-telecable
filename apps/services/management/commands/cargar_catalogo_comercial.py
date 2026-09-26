@@ -143,7 +143,7 @@ class Command(BaseCommand):
             service.save()
             result[code] = service
 
-        self.stdout.write(self.style.SUCCESS("✓ Tipos de servicio: INTERNET / CABLE / DUO"))
+        self.stdout.write(self.style.SUCCESS("OK Tipos de servicio: INTERNET / CABLE / DUO"))
         return result
 
     def _load_installation_order_catalog(self):
@@ -194,7 +194,7 @@ class Command(BaseCommand):
         order_type.save()
         self.stdout.write(
             self.style.SUCCESS(
-                "✓ Catalogo OT de instalacion: INSTALLATION / NEW_CLIENT / resultados"
+                "OK Catalogo OT de instalacion: INSTALLATION / NEW_CLIENT / resultados"
             )
         )
         return stats
@@ -303,7 +303,7 @@ class Command(BaseCommand):
             plan_ftth.save()
             stats["created" if created else "updated"] += 1
 
-        self.stdout.write(self.style.SUCCESS("✓ Planes 2025/2026 y Super Economico confirmados"))
+        self.stdout.write(self.style.SUCCESS("OK Planes 2025/2026 y Super Economico confirmados"))
         return stats
 
     def _load_confirmed_cable_tariffs(self, branches):
@@ -334,7 +334,7 @@ class Command(BaseCommand):
             tariff.save()
             stats["created" if created else "updated"] += 1
 
-        self.stdout.write(self.style.SUCCESS("✓ Tarifas Cable confirmadas para Jauja y Huancayo"))
+        self.stdout.write(self.style.SUCCESS("OK Tarifas Cable confirmadas para Jauja y Huancayo"))
         return stats
 
     # Niveles de la linea 2026. La regla de La Oroya se expresa excluyendo las
@@ -396,7 +396,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                "✓ Cobertura 2026 confirmada: La Oroya vende la linea 2026 "
+                "OK Cobertura 2026 confirmada: La Oroya vende la linea 2026 "
                 "(se bloquean Economico y Super Economico)"
             )
         )
@@ -448,5 +448,5 @@ class Command(BaseCommand):
             rule.save()
             stats["created" if created else "updated"] += 1
 
-        self.stdout.write(self.style.SUCCESS("✓ Reglas de instalacion UTP / RG6 / Drop"))
+        self.stdout.write(self.style.SUCCESS("OK Reglas de instalacion UTP / RG6 / Drop"))
         return stats

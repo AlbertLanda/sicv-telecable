@@ -835,15 +835,50 @@ class CreateWorkOrderValidationTests(WorkOrderTestCase):
         self.assertEqual(WorkOrder.objects.count(), 0)
 
 
-    def test_rejects_subscription_zone_from_another_branch(self):
+    # Desde que los traslados externos existen, la sede de la orden sale de
+    # la zona de la direccion y no del cliente, asi que una zona "de otra
+    # sede" ya no es una inconsistencia: es ella la que manda. Lo que si
+    # sigue siendo invalido es contradecirla, y eso es lo que se cubre aqui.
+
+    def test_rejects_branch_that_contradicts_the_subscription_zone(self):
         other_branch = Branch.objects.create(
             code="SED04",
             name="Sede Inconsistente",
         )
 
+        with self.assertRaises(ValidationError):
+            self._create(branch=other_branch)
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+
+    def test_rejects_explicit_zone_from_another_branch(self):
+        other_branch = Branch.objects.create(
+            code="SED05",
+            name="Sede Ajena",
+        )
+
         foreign_zone = Zone.objects.create(
             branch=other_branch,
-            name="Zona Inconsistente",
+            name="Zona Ajena",
+        )
+
+        with self.assertRaises(ValidationError):
+            self._create(zone=foreign_zone)
+
+        self.assertEqual(WorkOrder.objects.count(), 0)
+
+
+    def test_branch_follows_the_zone_of_the_subscription_address(self):
+        """La sede de la orden es la de la zona del domicilio atendido."""
+        other_branch = Branch.objects.create(
+            code="SED06",
+            name="Sede Destino",
+        )
+
+        foreign_zone = Zone.objects.create(
+            branch=other_branch,
+            name="Zona Destino",
         )
 
         self.subscription.address.zone = foreign_zone
@@ -851,10 +886,10 @@ class CreateWorkOrderValidationTests(WorkOrderTestCase):
             update_fields=["zone", "updated_at"]
         )
 
-        with self.assertRaises(ValidationError):
-            self._create()
+        order = self._create()
 
-        self.assertEqual(WorkOrder.objects.count(), 0)
+        self.assertEqual(order.branch, other_branch)
+        self.assertEqual(order.zone, foreign_zone)
 
 
 class CreateWorkOrderSubscriptionStateTests(WorkOrderTestCase):

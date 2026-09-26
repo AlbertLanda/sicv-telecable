@@ -179,6 +179,7 @@ class ClaimSuccessTests(ClaimWorkOrderAPITestCase):
                 "plan",
                 "is_outside_plant",
                 "order_type",
+                "order_type_code",
                 "subtype",
                 "status",
                 "status_display",

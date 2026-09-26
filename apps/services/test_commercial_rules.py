@@ -78,6 +78,15 @@ class CommercialServiceRulesTests(TestCase):
             included_tv_points=2,
         )
 
+        # El alta exige atribuir la venta desde
+        # services.0014_subscription_sales_attribution.
+        self.seller = User.objects.create_user(
+            username="vendedor_comercial",
+            password="test-password",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
+
     def test_alta_domicilio_ya_no_solicita_numero_de_medidor(self):
         form = CustomerAddressForm()
         self.assertNotIn("meter_number", form.fields)
@@ -91,6 +100,7 @@ class CommercialServiceRulesTests(TestCase):
                 "plan": self.duo_plan.pk,
                 "billing_cycle": 1,
                 "tv_count": 5,
+                "seller": self.seller.pk,
             },
             customer=self.customer,
         )
@@ -106,6 +116,7 @@ class CommercialServiceRulesTests(TestCase):
                 "plan": self.duo_plan.pk,
                 "billing_cycle": 1,
                 "tv_count": 1,
+                "seller": self.seller.pk,
             },
             customer=self.customer,
         )
@@ -163,6 +174,7 @@ class CommercialServiceRulesTests(TestCase):
                 "service_type": self.internet.pk,
                 "plan": self.internet_plan.pk,
                 "billing_cycle": 1,
+                "seller": self.seller.pk,
             },
             customer=self.customer,
         )
@@ -233,6 +245,14 @@ class SubscriptionCreateViewRulesTests(TestCase):
             role=User.Role.ATC,
             branch=self.branch,
         )
+        # El alta exige atribuir la venta desde
+        # services.0014_subscription_sales_attribution.
+        self.seller = User.objects.create_user(
+            username="vendedor_vista",
+            password="test-password",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
         self.client.force_login(self.user)
         self.url = reverse(
             "services:subscription_create",
@@ -248,6 +268,7 @@ class SubscriptionCreateViewRulesTests(TestCase):
                 "plan": self.plan.pk,
                 "billing_cycle": 1,
                 "tv_count": 5,
+                "seller": self.seller.pk,
             },
         )
 

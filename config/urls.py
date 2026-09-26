@@ -5,8 +5,6 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 from django.views.generic import RedirectView
 
-from apps.reports.views import DashboardView
-
 
 urlpatterns = [
     # Raíz del sistema → Login
@@ -34,14 +32,6 @@ urlpatterns = [
         "accounts/logout/",
         auth_views.LogoutView.as_view(),
         name="logout",
-    ),
-
-    # Portada: lo primero que se ve al entrar. Vive en reportes porque solo
-    # lee cifras, pero cuelga de la raíz porque es la casa del sistema.
-    path(
-        "dashboard/",
-        DashboardView.as_view(),
-        name="dashboard",
     ),
 
     # Mi perfil y cambio de clave del propio usuario.

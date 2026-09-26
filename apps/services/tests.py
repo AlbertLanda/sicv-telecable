@@ -520,6 +520,7 @@ class SubscriptionCreateTests(TestCase):
             address=self.address,
             service_type=self.service_type,
             plan=self.plan,
+            seller=self.seller,
             service_number=1,
             status=Subscription.Status.PRESALE,
         )
@@ -554,6 +555,7 @@ class SubscriptionCreateTests(TestCase):
             address=self.address,
             service_type=self.service_type,
             plan=self.plan,
+            seller=self.seller,
             service_number=1,
             status=Subscription.Status.PRESALE,
         )

@@ -202,6 +202,15 @@ class CableInitialPaymentTests(TestCase):
             valid_from=date(2026, 1, 1),
         )
 
+        # El alta exige atribuir la venta desde
+        # services.0014_subscription_sales_attribution.
+        self.seller = User.objects.create_user(
+            username="vendedor_tarifas",
+            password="test-password",
+            role=User.Role.SALES,
+            branch=self.branch,
+        )
+
     def test_cinco_tv_requieren_130_soles_para_instalar(self):
         form = SubscriptionCreateForm(
             data={
@@ -209,6 +218,7 @@ class CableInitialPaymentTests(TestCase):
                 "service_type": self.cable.pk,
                 "plan": self.plan.pk,
                 "tv_count": 5,
+                "seller": self.seller.pk,
             },
             customer=self.customer,
         )
