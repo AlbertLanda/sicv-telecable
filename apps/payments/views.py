@@ -557,7 +557,10 @@ class ReceiptScopedMixin:
             "payment__received_by",
             "payment__collector",
             "sequence",
-        ).prefetch_related("payment__allocations__charge")
+        ).prefetch_related(
+            "payment__allocations__charge",
+            "payment__allocations__charge__components",
+        )
 
 
 class ReceiptDetailView(

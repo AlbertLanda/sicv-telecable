@@ -6,6 +6,7 @@ from apps.work_orders.models import (
     OrderType,
     OrderCause,
     OrderResult,
+    InstallationWithdrawal,
     WorkOrder,
     WorkOrderAssignment,
     WorkOrderEvidence,
@@ -686,3 +687,45 @@ class WorkOrderReprogrammingAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(InstallationWithdrawal)
+class InstallationWithdrawalAdmin(admin.ModelAdmin):
+    list_display = (
+        "order_number",
+        "released_service_code",
+        "released_customer_code",
+        "branch_code",
+        "customer_deleted",
+        "withdrawn_by",
+        "withdrawn_at",
+    )
+    list_filter = ("customer_deleted", "branch_code", "withdrawn_at")
+    search_fields = (
+        "order_number",
+        "released_service_code",
+        "released_customer_code",
+        "reason",
+    )
+    readonly_fields = (
+        "order_number",
+        "branch_code",
+        "released_customer_code",
+        "released_service_code",
+        "reason",
+        "withdrawn_by",
+        "customer_deleted",
+        "withdrawn_at",
+    )
+    list_select_related = ("withdrawn_by",)
+    date_hierarchy = "withdrawn_at"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+

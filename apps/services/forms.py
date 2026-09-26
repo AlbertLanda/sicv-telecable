@@ -1,10 +1,70 @@
+from decimal import Decimal
+
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
+from apps.accounts.models import User
 from apps.customers.models import CustomerAddress
 
 from .commercial import build_commercial_quote
 from .models import BillingPolicy, Plan, ServiceType, Subscription
+
+
+def eligible_sellers_queryset():
+    """Personal activo que puede recibir atribución comercial."""
+    return (
+        User.objects
+        .filter(
+            Q(is_salesperson=True)
+            | Q(role=User.Role.SALES)
+            | Q(role=User.Role.ADMIN),
+            is_active=True,
+        )
+        .order_by("first_name", "last_name", "username")
+    )
+
+
+def seller_is_eligible(user):
+    return bool(
+        user
+        and user.is_active
+        and (
+            user.is_salesperson
+            or user.role in (User.Role.SALES, User.Role.ADMIN)
+        )
+    )
+
+
+class SubscriptionSellerForm(forms.ModelForm):
+    """Completa una alta antigua que quedó sin vendedor antes del contrato."""
+
+    class Meta:
+        model = Subscription
+        fields = ["seller"]
+        widgets = {
+            "seller": forms.Select(attrs={"class": "form-select"}),
+        }
+        labels = {
+            "seller": "Vendedor responsable de la venta",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["seller"].queryset = eligible_sellers_queryset()
+        self.fields["seller"].required = True
+        self.fields["seller"].empty_label = "Seleccione quién realizó la venta"
+        self.fields["seller"].error_messages["required"] = (
+            "Seleccione quién realizó la venta."
+        )
+
+    def clean_seller(self):
+        seller = self.cleaned_data.get("seller")
+        if not seller_is_eligible(seller):
+            raise forms.ValidationError(
+                "La persona seleccionada no está habilitada como vendedor."
+            )
+        return seller
 
 
 class SubscriptionCreateForm(forms.ModelForm):
@@ -37,25 +97,29 @@ class SubscriptionCreateForm(forms.ModelForm):
 
     class Meta:
         model = Subscription
-        fields = ["address", "service_type", "plan", "billing_cycle"]
+        fields = ["address", "service_type", "plan", "seller", "billing_cycle"]
         widgets = {
             "address": forms.Select(attrs={"class": "form-select"}),
             "service_type": forms.Select(attrs={"class": "form-select"}),
             "plan": forms.Select(attrs={"class": "form-select"}),
+            "seller": forms.Select(attrs={"class": "form-select"}),
             "billing_cycle": forms.NumberInput(attrs={"class": "form-control", "min": "1"}),
         }
         labels = {
             "address": "Domicilio del servicio",
             "service_type": "Tipo de servicio",
             "plan": "Plan",
+            "seller": "Vendedor",
             "billing_cycle": "Ciclo de facturación legado",
         }
 
     def __init__(self, *args, **kwargs):
         customer = kwargs.pop("customer", None)
+        actor = kwargs.pop("actor", None)
         super().__init__(*args, **kwargs)
 
         self.customer = customer
+        self.actor = actor
         self.calculated_annex_count = 0
         self.calculated_initial_courtesy_count = 0
         self.selected_quote = None
@@ -68,6 +132,23 @@ class SubscriptionCreateForm(forms.ModelForm):
                 .select_related("zone", "zone__branch", "customer__branch")
                 .order_by("-is_primary", "address")
             )
+
+        self.fields["seller"].queryset = eligible_sellers_queryset()
+        self.fields["seller"].required = True
+        self.fields["seller"].error_messages["required"] = (
+            "Seleccione quién realizó la venta."
+        )
+        self.fields["seller"].empty_label = "Seleccione quién realizó la venta"
+
+        if (
+            actor is not None
+            and actor.is_active
+            and (
+                actor.is_salesperson
+                or actor.role in (User.Role.SALES, User.Role.ADMIN)
+            )
+        ):
+            self.fields["seller"].initial = actor.pk
 
         self.fields["service_type"].queryset = (
             ServiceType.objects.filter(is_active=True).order_by("name")
@@ -100,7 +181,14 @@ class SubscriptionCreateForm(forms.ModelForm):
         address = cleaned_data.get("address")
         service_type = cleaned_data.get("service_type")
         plan = cleaned_data.get("plan")
+        seller = cleaned_data.get("seller")
         tv_count = cleaned_data.get("tv_count")
+
+        if seller is not None and not seller_is_eligible(seller):
+            self.add_error(
+                "seller",
+                "La persona seleccionada no está habilitada como vendedor.",
+            )
 
         if self.customer and address:
             if address.customer_id != self.customer.pk:
@@ -260,6 +348,8 @@ class PlanForm(forms.ModelForm):
             "technology",
             "monthly_price",
             "included_tv_points",
+            "included_app_plan",
+            "included_app_component_amount",
             "requires_geographic_tariff",
             "is_active",
         ]
@@ -281,10 +371,29 @@ class PlanForm(forms.ModelForm):
         self.fields["billing_policy"].queryset = BillingPolicy.objects.filter(
             is_active=True
         )
+        self.fields["included_app_plan"].queryset = (
+            Plan.objects
+            .filter(
+                is_active=True,
+                service_type__code="APPS",
+            )
+            .select_related("service_type")
+            .order_by("name")
+        )
+        self.fields["included_app_plan"].required = False
+        self.fields["included_app_component_amount"].required = False
         self.fields["monthly_price"].label = "Mensualidad normal (S/)"
         self.fields["billing_policy"].help_text = (
             "Define el vencimiento, el descuento por pronto pago y el corte. "
             "El precio de pronto pago se calcula con su descuento."
+        )
+        self.fields["included_app_plan"].help_text = (
+            "Solo planes 2026. Seleccione el derecho APPS que forma parte "
+            "del paquete; no se cobrará encima de la mensualidad."
+        )
+        self.fields["included_app_component_amount"].help_text = (
+            "Importe interno de la mensualidad que corresponde a APPS. "
+            "La suma total que paga el abonado no cambia."
         )
 
         if self.instance.pk:
@@ -292,6 +401,10 @@ class PlanForm(forms.ModelForm):
             self.fields["code"].help_text = (
                 "El código no se edita: hay suscripciones apuntando a este plan."
             )
+
+    def clean_included_app_component_amount(self):
+        value = self.cleaned_data.get("included_app_component_amount")
+        return value if value is not None else Decimal("0.00")
 
     def clean_code(self):
         code = (self.cleaned_data.get("code") or "").strip().upper()

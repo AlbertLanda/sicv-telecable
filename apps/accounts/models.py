@@ -44,6 +44,8 @@ class User(AbstractUser):
                 "accounts.view_user",
                 "accounts.add_user",
                 "accounts.change_user",
+                "customers.discard_incomplete_registration",
+                "services.view_subscription",
             }
         ),
         Role.ATC: frozenset(
@@ -51,6 +53,7 @@ class User(AbstractUser):
                 "customers.add_customer",
                 "customers.change_customer",
                 "customers.add_customeraddress",
+                "customers.discard_incomplete_registration",
                 "services.add_subscription",
                 "contracts.add_contract",
                 "work_orders.add_workorder",
@@ -121,6 +124,15 @@ class User(AbstractUser):
         max_length=20,
         blank=True,
         verbose_name="Teléfono"
+    )
+
+    is_salesperson = models.BooleanField(
+        default=False,
+        verbose_name="Participa como vendedor",
+        help_text=(
+            "Permite atribuirle ventas sin cambiar su rol operativo. "
+            "Un administrador o ATC puede vender y seguir conservando su rol."
+        ),
     )
 
     created_at = models.DateTimeField(

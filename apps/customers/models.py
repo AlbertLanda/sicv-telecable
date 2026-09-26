@@ -167,6 +167,12 @@ class Customer(models.Model):
         verbose_name = "Cliente"
         verbose_name_plural = "Clientes"
         ordering = ["paternal_surname", "maternal_surname", "first_name"]
+        permissions = [
+            (
+                "discard_incomplete_registration",
+                "Puede descartar altas comerciales incompletas",
+            ),
+        ]
 
         constraints = [
             models.UniqueConstraint(
@@ -330,3 +336,47 @@ class CustomerAddress(models.Model):
 
     def __str__(self):
         return f"{self.customer} - {self.address}"
+
+class IncompleteRegistrationDiscard(models.Model):
+    """Auditoría mínima de un alta comercial que nunca llegó a operar.
+
+    No conserva FK al cliente para que su código pueda liberarse. Solo deja
+    constancia administrativa del código, etapa, motivo, usuario y fecha.
+    """
+
+    released_customer_code = models.CharField(
+        max_length=30,
+        db_index=True,
+        verbose_name="Código de abonado liberado",
+    )
+    branch_code = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Sede",
+    )
+    stage = models.CharField(
+        max_length=40,
+        verbose_name="Etapa descartada",
+    )
+    reason = models.TextField(
+        verbose_name="Motivo",
+    )
+    discarded_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.PROTECT,
+        related_name="incomplete_registration_discards",
+        verbose_name="Descartado por",
+    )
+    discarded_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de descarte",
+    )
+
+    class Meta:
+        verbose_name = "Descarte de alta incompleta"
+        verbose_name_plural = "Descartes de altas incompletas"
+        ordering = ["-discarded_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.released_customer_code} - {self.stage}"
+

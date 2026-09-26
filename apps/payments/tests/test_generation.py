@@ -14,10 +14,10 @@ from io import StringIO
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from apps.payments.models import Charge
+from apps.payments.models import Charge, ChargeComponent
 from apps.payments.services import generate_monthly_charges
 from apps.payments.tests.base import PaymentsTestCase
-from apps.services.models import BillingPolicy, Subscription
+from apps.services.models import BillingPolicy, Plan, ServiceType, Subscription
 
 
 PERIOD = date(2026, 9, 1)
@@ -36,6 +36,59 @@ class MonthlyChargeGenerationTests(PaymentsTestCase):
         self.assertEqual(charge.concept, Charge.Concept.MONTHLY)
         self.assertEqual(charge.period, PERIOD)
         self.assertEqual(charge.amount, self.subscription.total_monthly_price)
+
+    def test_included_app_is_split_without_increasing_the_monthly_charge(self):
+        apps, _ = ServiceType.objects.get_or_create(
+            code="APPS",
+            defaults={
+                "name": "APPS",
+                "requires_playhub_account": True,
+            },
+        )
+        app_plan = Plan.objects.create(
+            service_type=apps,
+            code="APP-TEST-PREMIUM",
+            name="APP PREMIUM",
+            monthly_price=0,
+        )
+
+        self.subscription.plan.generation = 2026
+        self.subscription.plan.included_app_plan = app_plan
+        self.subscription.plan.included_app_component_amount = Decimal("10.00")
+        self.subscription.plan.save(
+            update_fields=[
+                "generation",
+                "included_app_plan",
+                "included_app_component_amount",
+                "updated_at",
+            ]
+        )
+        self.subscription.included_app_plan = app_plan
+        self.subscription.included_app_component_amount = Decimal("10.00")
+        self.subscription.save(
+            update_fields=[
+                "included_app_plan",
+                "included_app_component_amount",
+                "updated_at",
+            ]
+        )
+
+        charge = generate_monthly_charges(PERIOD)["created"][0]
+        components = list(charge.components.order_by("kind"))
+
+        self.assertEqual(charge.amount, Decimal("80.00"))
+        self.assertEqual(len(components), 2)
+        self.assertEqual(
+            sum((item.amount for item in components), Decimal("0.00")),
+            charge.amount,
+        )
+        self.assertEqual(
+            ChargeComponent.objects.get(
+                charge=charge,
+                kind=ChargeComponent.Kind.INCLUDED_APP,
+            ).amount,
+            Decimal("10.00"),
+        )
 
     def test_by_calendar_month_it_expires_when_the_month_closes(self):
         charge = generate_monthly_charges(PERIOD)["created"][0]

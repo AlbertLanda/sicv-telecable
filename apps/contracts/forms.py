@@ -1,9 +1,10 @@
 from django import forms
+from django.db import models
 
 from .models import Contract
 from .subscriptions import resolver_suscripcion, suscripciones_contratables
 from apps.accounts.models import User
-from apps.services.models import Plan, ServiceType
+from apps.services.models import Plan, ServiceType, Subscription
 from apps.work_orders.models import OrderReason, WorkOrder
 
 
@@ -181,9 +182,32 @@ class ContractCreateForm(forms.ModelForm):
                 )
 
             elif subscription is None:
+                missing_seller = (
+                    Subscription.objects
+                    .filter(
+                        customer=self.customer,
+                        is_active=True,
+                        status=Subscription.Status.PRESALE,
+                        service_type=service_type,
+                        plan=plan,
+                        seller__isnull=True,
+                    )
+                    .exclude(contracts__is_active=True)
+                    .exists()
+                )
+
                 cantidad = candidatas.count()
 
-                if cantidad > 1:
+                if missing_seller:
+                    self.add_error(
+                        None,
+                        (
+                            "Existe una suscripción en Preventa para este "
+                            "servicio y plan, pero falta identificar al vendedor. "
+                            "Complete la atribución comercial antes del contrato."
+                        ),
+                    )
+                elif cantidad > 1:
                     self.add_error(
                         None,
                         (
@@ -203,8 +227,18 @@ class ContractCreateForm(forms.ModelForm):
                     )
 
             else:
-                self.subscription_resuelta = subscription
-                self.instance.subscription = subscription
+                if subscription.seller_id is None:
+                    self.add_error(
+                        None,
+                        (
+                            "Primero identifique al vendedor de esta venta. "
+                            "El contrato no puede generarse antes de completar "
+                            "la atribución comercial."
+                        ),
+                    )
+                else:
+                    self.subscription_resuelta = subscription
+                    self.instance.subscription = subscription
 
         return cleaned_data
 
@@ -212,7 +246,8 @@ class ContractCreateForm(forms.ModelForm):
 class InstallationWorkOrderForm(forms.Form):
     """
     Datos que ATC ingresa al generar la Orden de Instalación desde el
-    resumen de contratación: observaciones, prioridad, motivo y vendedor.
+    resumen de contratación: observaciones, prioridad y motivo. El vendedor
+    ya viene cerrado desde la suscripción y aquí solo se muestra heredado.
 
     La instalación FTTH es siempre trabajo de campo. El formulario mantiene
     `attention_type` únicamente como dato explícito del contrato existente,
@@ -286,7 +321,7 @@ class InstallationWorkOrderForm(forms.Form):
         queryset=User.objects.none(),
         required=False,
         label="Vendedor",
-        empty_label="Sin vendedor",
+        empty_label="Vendedor no disponible",
         widget=forms.Select(
             attrs={
                 "class": "form-select",
@@ -295,7 +330,10 @@ class InstallationWorkOrderForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        subscription = kwargs.pop("subscription", None)
         super().__init__(*args, **kwargs)
+
+        self.subscription = subscription
 
         # Solo motivos activos del catálogo de INSTALACIÓN: el mismo
         # criterio de alcance que ya aplica WorkOrderCreateForm para el
@@ -309,14 +347,23 @@ class InstallationWorkOrderForm(forms.Form):
             .order_by("name")
         )
 
-        # Solo usuarios activos con rol Ventas: el mismo criterio que
-        # _validate_seller exige en el servicio, para que el formulario
-        # nunca ofrezca una opción que el servicio vaya a rechazar.
+        # Las altas nuevas ya llegan con vendedor en la suscripción.
+        # El selector permanece para contratos históricos que no lo tengan.
         self.fields["seller"].queryset = (
             User.objects
+            .filter(is_active=True)
             .filter(
-                role=User.Role.SALES,
-                is_active=True,
+                models.Q(is_salesperson=True)
+                | models.Q(role=User.Role.SALES)
+                | models.Q(role=User.Role.ADMIN)
             )
             .order_by("first_name", "last_name", "username")
         )
+
+        if subscription is not None and subscription.seller_id:
+            self.fields["seller"].initial = subscription.seller_id
+            self.fields["seller"].disabled = True
+            self.fields["seller"].required = False
+            self.fields["seller"].help_text = (
+                "Se heredó de la venta registrada en la suscripción."
+            )

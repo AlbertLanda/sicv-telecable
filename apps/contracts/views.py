@@ -37,6 +37,35 @@ class ContractCreateView(LoginRequiredMixin, CreateView):
             is_active=True,
         )
 
+        subscription_id = (
+            request.GET.get("subscription")
+            or request.POST.get("subscription_id")
+        )
+        if subscription_id:
+            subscription = (
+                Subscription.objects
+                .filter(
+                    pk=subscription_id,
+                    customer=self.customer,
+                    is_active=True,
+                    status=Subscription.Status.PRESALE,
+                )
+                .first()
+            )
+            if subscription is not None and subscription.seller_id is None:
+                messages.warning(
+                    request,
+                    (
+                        "Primero identifique al vendedor de la venta. "
+                        "Después podrá generar el contrato."
+                    ),
+                )
+                return redirect(
+                    "services:subscription_seller",
+                    customer_pk=self.customer.pk,
+                    subscription_pk=subscription.pk,
+                )
+
         return super().dispatch(
             request,
             *args,
@@ -407,6 +436,7 @@ class InstallationWorkOrderCreateView(
                     "subscription__address__zone",
                     "subscription__service_type",
                     "subscription__plan",
+                    "subscription__seller",
                 ),
                 pk=self.kwargs["pk"],
                 customer_id=self.kwargs["customer_pk"],
@@ -434,6 +464,20 @@ class InstallationWorkOrderCreateView(
     def get(self, request, *args, **kwargs):
         contract = self.get_contract()
 
+        if contract.subscription.seller_id is None:
+            messages.warning(
+                request,
+                (
+                    "Primero identifique al vendedor de la venta. "
+                    "La orden de instalación debe heredarlo de la suscripción."
+                ),
+            )
+            return redirect(
+                "services:subscription_seller",
+                customer_pk=contract.customer_id,
+                subscription_pk=contract.subscription_id,
+            )
+
         if self._has_blocking_installation(contract.subscription):
             messages.error(
                 request,
@@ -451,6 +495,11 @@ class InstallationWorkOrderCreateView(
 
         return super().get(request, *args, **kwargs)
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["subscription"] = self.get_contract().subscription
+        return kwargs
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
@@ -465,6 +514,20 @@ class InstallationWorkOrderCreateView(
     def form_valid(self, form):
         contract = self.get_contract()
 
+        if contract.subscription.seller_id is None:
+            messages.warning(
+                self.request,
+                (
+                    "Primero identifique al vendedor de la venta. "
+                    "Después podrá generar la orden de instalación."
+                ),
+            )
+            return redirect(
+                "services:subscription_seller",
+                customer_pk=contract.customer_id,
+                subscription_pk=contract.subscription_id,
+            )
+
         try:
             order = create_installation_work_order(
                 subscription=contract.subscription,
@@ -474,7 +537,10 @@ class InstallationWorkOrderCreateView(
                 priority=form.cleaned_data.get("priority") or None,
                 detail=form.cleaned_data.get("detail", ""),
                 attention_type=form.cleaned_data.get("attention_type") or None,
-                seller=form.cleaned_data.get("seller"),
+                seller=(
+                    contract.subscription.seller
+                    or form.cleaned_data.get("seller")
+                ),
             )
 
         except ValidationError as exc:

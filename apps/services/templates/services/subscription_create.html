@@ -7,13 +7,18 @@
             <h2 class="fw-bold mb-1">Nueva suscripción</h2>
             <p class="text-muted mb-0">Seleccione domicilio, servicio y plan. El SICV resolverá la tarifa y política vigentes.</p>
         </div>
-        <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">← Volver a la ficha</a>
+        <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-outline-secondary">← Continuar después</a>
     </div>
 
     <div class="card shadow-sm border-0">
         <div class="card-header bg-light"><strong>Datos de la suscripción</strong></div>
         <div class="card-body">
             <div class="alert alert-info"><strong>Cliente:</strong> {{ customer }}</div>
+            <div class="alert alert-warning small">
+                Si sale de esta pantalla, el alta no se pierde: la ficha quedará
+                marcada como <strong>Alta incompleta</strong> y podrá reanudarse
+                exactamente desde este paso.
+            </div>
 
             <form method="post" novalidate>
                 {% csrf_token %}
@@ -38,6 +43,15 @@
                         {% for error in form.plan.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         <div class="form-text">Los planes se filtran por servicio y se validan contra las reglas comerciales del domicilio.</div>
                     </div>
+                    <div class="col-md-6">
+                        <label for="{{ form.seller.id_for_label }}" class="form-label">{{ form.seller.label }}</label>
+                        {{ form.seller }}
+                        {% for error in form.seller.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        <div class="form-text">
+                            Es quien realizó la venta. El usuario que la registra se guarda automáticamente por separado.
+                        </div>
+                    </div>
+
                     <div class="col-md-6">
                         <div class="border rounded p-3 bg-light h-100">
                             <small class="text-muted d-block">Generación / categoría</small>
@@ -72,6 +86,32 @@
                         </div>
                     </div>
 
+                    <div class="col-12 d-none" id="included-app-section">
+                        <div class="card border-info-subtle bg-light">
+                            <div class="card-body">
+                                <h5 class="fw-bold mb-2">APP incluida en el paquete</h5>
+                                <div class="alert alert-info small py-2">
+                                    La APP forma parte del precio del plan. Este
+                                    desglose <strong>no agrega ningún cobro</strong>.
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">Derecho APP</small>
+                                        <strong id="included-app-label">—</strong>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">Componente principal</small>
+                                        <strong id="included-main-amount">S/ 0.00</strong>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted d-block">Componente APP</small>
+                                        <strong id="included-app-amount">S/ 0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="col-12">
                         <div class="card border-success-subtle">
                             <div class="card-header bg-light"><strong>Cotización comercial</strong></div>
@@ -94,7 +134,7 @@
                 {{ form.billing_cycle.as_hidden }}
                 <hr class="my-4">
                 <div class="d-flex justify-content-end gap-2">
-                    <a href="{% url 'customers:detail' customer.pk %}#bloque-c" class="btn btn-outline-secondary">Cancelar</a>
+                    <a href="{% url 'customers:detail' customer.pk %}" class="btn btn-outline-secondary">Continuar después</a>
                     <button type="submit" class="btn btn-primary">Registrar suscripción</button>
                 </div>
             </form>
@@ -118,6 +158,7 @@
     var planField = document.getElementById("{{ form.plan.id_for_label }}");
     var tvCountField = document.getElementById("{{ form.tv_count.id_for_label }}");
     var tvSection = document.getElementById("tv-annex-section");
+    var includedAppSection = document.getElementById("included-app-section");
     var initialPlanValue = "{{ form.plan.value|default_if_none:'' }}";
 
     function money(value) { return "S/ " + Number(value || 0).toFixed(2); }
@@ -190,6 +231,17 @@
 
         var installation = Number(quote.installation_fee || 0);
         var monthly = Number(quote.monthly_fee || 0);
+
+        if (plan && plan.included_app_plan_id) {
+            var appAmount = Number(plan.included_app_component_amount || 0);
+            includedAppSection.classList.remove("d-none");
+            document.getElementById("included-app-label").textContent = plan.included_app_label || "APP incluida";
+            document.getElementById("included-app-amount").textContent = money(appAmount);
+            document.getElementById("included-main-amount").textContent = money(monthly - appAmount);
+        } else {
+            includedAppSection.classList.add("d-none");
+        }
+
         document.getElementById("quote-installation").textContent = money(installation);
         document.getElementById("quote-monthly").textContent = money(monthly);
         document.getElementById("quote-annex-installation").textContent = money(annex.installation);

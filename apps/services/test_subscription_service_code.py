@@ -59,6 +59,21 @@ class SubscriptionServiceCodeTests(TestCase):
         )
         self.assertNotEqual(primero.service_code, segundo.service_code)
 
+    def test_numero_de_servicio_eliminado_vuelve_a_quedar_libre(self):
+        self.crear(1, "Jr. Uno 100")
+        segundo = self.crear(2, "Jr. Dos 200")
+        self.crear(3, "Jr. Tres 300")
+
+        segundo.delete()
+
+        self.assertEqual(
+            Subscription.next_service_number(
+                self.customer,
+                self.service,
+            ),
+            2,
+        )
+
     def test_codigo_para_otra_sede_usa_prefijo_destino_sin_duplicar_cliente(self):
         subscription = self.crear(1, "Jr. Uno 100")
         destination = Branch.objects.get(code="JAUJA")

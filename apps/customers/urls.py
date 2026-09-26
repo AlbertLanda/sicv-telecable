@@ -64,6 +64,13 @@ urlpatterns = [
         name="address_create",
     ),
 
+    # Descartar un alta comercial que nunca llegó a operar.
+    path(
+        "<int:pk>/discard-incomplete/",
+        views.IncompleteRegistrationDiscardView.as_view(),
+        name="discard_incomplete",
+    ),
+
     # Usar cliente existente
     path(
         "<int:pk>/use/",

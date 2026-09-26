@@ -486,6 +486,24 @@ class InstallationCreationRejectionTests(InstallationPublicationTestCase):
     sin correlativo consumido.
     """
 
+    def test_subscription_without_seller_cannot_generate_installation(self):
+        from django.core.exceptions import ValidationError
+
+        self.subscription.seller = None
+        self.subscription.save(update_fields=["seller", "updated_at"])
+
+        with self.assertRaises(ValidationError) as caught:
+            create_installation_work_order(
+                subscription=self.subscription,
+                created_by=self.atc_user,
+            )
+
+        self.assertIn(
+            "vendedor identificado",
+            " ".join(caught.exception.messages),
+        )
+        self.assertFalse(WorkOrder.objects.exists())
+
     def test_cancelled_subscription_cannot_generate_an_installation(self):
         """No se registra trabajo sobre una suscripción cancelada."""
         from django.core.exceptions import ValidationError

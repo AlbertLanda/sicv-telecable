@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Descartar alta incompleta - SICV{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-1">Descartar alta incompleta</h1>
+            <p class="text-muted mb-0">
+                Elimina únicamente una contratación que todavía no produjo
+                instalación, firma ni movimiento económico.
+            </p>
+        </div>
+        <a href="{% url 'customers:detail' customer.pk %}"
+           class="btn btn-outline-secondary">← Volver a la ficha</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Abonado</small>
+                    <strong>{{ customer }}</strong>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Código</small>
+                    <strong>{{ customer.code }}</strong>
+                </div>
+                <div class="col-md-4">
+                    <small class="text-muted d-block">Etapa pendiente</small>
+                    <strong>{{ onboarding.detail }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not can_discard %}
+        <div class="alert alert-warning">
+            <strong>Esta alta ya no puede borrarse como provisional.</strong>
+            <ul class="mb-0 mt-2">
+                {% for issue in issues %}<li>{{ issue }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% else %}
+        <div class="alert alert-danger">
+            Se eliminarán el cliente, sus domicilios y cualquier suscripción o
+            contrato todavía provisional. El código <strong>{{ customer.code }}</strong>
+            volverá a quedar disponible. Quedará solo una auditoría administrativa
+            sin datos personales.
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold"
+                       for="{{ form.reason.id_for_label }}">
+                    {{ form.reason.label }} *
+                </label>
+                {{ form.reason }}
+                {% for error in form.reason.errors %}
+                    <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="form-check mb-4">
+                {{ form.confirm }}
+                <label class="form-check-label"
+                       for="{{ form.confirm.id_for_label }}">
+                    {{ form.confirm.label }}
+                </label>
+                {% for error in form.confirm.errors %}
+                    <div class="text-danger small mt-1">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{% url 'customers:detail' customer.pk %}"
+                   class="btn btn-outline-secondary">Cancelar</a>
+                <button type="submit" class="btn btn-danger">
+                    Descartar alta incompleta
+                </button>
+            </div>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

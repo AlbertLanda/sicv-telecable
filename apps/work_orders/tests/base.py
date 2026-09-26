@@ -133,6 +133,10 @@ class WorkOrderTestCase(TestCase):
             is_active=False,
         )
 
+        # Toda instalación nueva hereda el vendedor de la suscripción.
+        self.subscription.seller = self.seller
+        self.subscription.save(update_fields=["seller", "updated_at"])
+
         # --- Usuarios del ciclo de revisión --------------------------------
         # El validador se define por PERMISO, no por rol. Se le asigna un rol
         # cualquiera a propósito para demostrar que la autorización no depende

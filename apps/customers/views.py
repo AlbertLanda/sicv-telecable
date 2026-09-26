@@ -22,8 +22,14 @@ from .forms import (
     CustomerAddressForm,
     CustomerInitialForm,
     CustomerRegistrationForm,
+    IncompleteRegistrationDiscardForm,
 )
 from .models import Customer, CustomerAddress
+from .onboarding import (
+    customer_onboarding_state,
+    discard_incomplete_registration,
+    incomplete_registration_issues,
+)
 from .services.activity import (
     build_customer_operational_summary,
     build_customer_recent_activity,
@@ -48,7 +54,7 @@ from apps.customers.services.distriluz_gps import (
 from urllib.parse import quote
 
 from apps.organization.context_processors import get_active_branch
-from apps.organization.models import Zone
+from apps.organization.models import Branch, Zone
 from apps.services.models import Subscription
 from apps.contracts.models import Contract
 
@@ -328,6 +334,9 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
 
         context["customer_found"] = customer_found
 
+        for customer in context.get("customers") or []:
+            customer.onboarding_state = customer_onboarding_state(customer)
+
         return context
 
 class CustomerDocumentLookupView(LoginRequiredMixin, View):
@@ -601,9 +610,14 @@ class CustomerGeneralDataView(LoginRequiredMixin, FormView):
                 # Ver Customer.generate_code().
                 # -----------------------------------------
 
-                customer.code = Customer.generate_code(
-                    customer.branch
+                # Serializa la reserva del correlativo por sede. Dos altas
+                # concurrentes en Jauja/Huancayo no pueden elegir el mismo
+                # primer hueco libre antes de que una de ellas confirme.
+                locked_branch = Branch.objects.select_for_update().get(
+                    pk=customer.branch_id
                 )
+                customer.branch = locked_branch
+                customer.code = Customer.generate_code(locked_branch)
 
                 customer.save()
 
@@ -950,7 +964,74 @@ class CustomerDetailView(LoginRequiredMixin, DetailView):
             work_orders=context["work_orders"],
         )
 
+        context["onboarding"] = customer_onboarding_state(customer)
+        context["onboarding"]["discard_issues"] = (
+            incomplete_registration_issues(customer)
+            if context["onboarding"]["incomplete"]
+            else []
+        )
+        context["onboarding"]["can_discard"] = (
+            context["onboarding"]["incomplete"]
+            and not context["onboarding"]["discard_issues"]
+            and self.request.user.has_perm(
+                "customers.discard_incomplete_registration"
+            )
+        )
+
         return context
+
+
+class IncompleteRegistrationDiscardView(
+    LoginRequiredMixin,
+    FormView,
+):
+    form_class = IncompleteRegistrationDiscardForm
+    template_name = "customers/incomplete_registration_discard.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_perm(
+            "customers.discard_incomplete_registration"
+        ):
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+
+        self.customer = get_object_or_404(
+            Customer.objects.select_related("branch"),
+            pk=self.kwargs["pk"],
+            is_active=True,
+        )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        state = customer_onboarding_state(self.customer)
+        issues = incomplete_registration_issues(self.customer)
+
+        context["customer"] = self.customer
+        context["onboarding"] = state
+        context["issues"] = issues
+        context["can_discard"] = state["incomplete"] and not issues
+        return context
+
+    def form_valid(self, form):
+        try:
+            audit = discard_incomplete_registration(
+                customer=self.customer,
+                user=self.request.user,
+                reason=form.cleaned_data["reason"],
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc.messages)
+            return self.form_invalid(form)
+
+        messages.success(
+            self.request,
+            (
+                f"Alta incompleta {audit.released_customer_code} descartada. "
+                "El código quedó disponible nuevamente."
+            ),
+        )
+        return redirect("customers:search")
 
 
 class CustomerWorkOrderUIPreviewView(LoginRequiredMixin, DetailView):

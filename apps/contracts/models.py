@@ -213,6 +213,9 @@ class Contract(models.Model):
         if self.service_type_id:
             requiere_playhub = self.service_type.requires_playhub_account
 
+            if self.subscription_id and self.subscription.included_app_plan_id:
+                requiere_playhub = True
+
             correo = (self.playhub_email or "").strip()
             celular = (self.playhub_phone or "").strip()
 
@@ -236,7 +239,7 @@ class Contract(models.Model):
                 raise ValidationError({
                     "playhub_email": (
                         "Los datos PlayHub solo corresponden a servicios "
-                        "que se entregan a una cuenta."
+                        "o paquetes que incluyen una APP entregada a cuenta."
                     )
                 })
 

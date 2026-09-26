@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Completar vendedor - SICV{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-start mb-4">
+        <div>
+            <h1 class="h3 mb-1">Completar datos comerciales</h1>
+            <p class="text-muted mb-0">
+                El vendedor debe quedar identificado antes de generar el contrato.
+            </p>
+        </div>
+        <a href="{% url 'customers:detail' customer.pk %}"
+           class="btn btn-outline-secondary">← Continuar después</a>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Código de servicio</small>
+                    <strong>{{ subscription.service_code }}</strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Servicio</small>
+                    <strong>{{ subscription.service_type }}</strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Plan</small>
+                    <strong>{{ subscription.plan }}</strong>
+                </div>
+                <div class="col-md-3">
+                    <small class="text-muted d-block">Registrado por</small>
+                    <strong>{{ subscription.registered_by|default:"—" }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-warning">
+        Esta alta todavía no puede generar contrato porque falta identificar
+        quién realizó la venta. <strong>Registrado por</strong> y
+        <strong>Vendedor</strong> son datos distintos.
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold"
+                           for="{{ form.seller.id_for_label }}">
+                        {{ form.seller.label }} *
+                    </label>
+                    {{ form.seller }}
+                    {% for error in form.seller.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                    <div class="form-text">
+                        Seleccione a la persona a quien corresponde comercialmente esta venta.
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{% url 'customers:detail' customer.pk %}"
+                       class="btn btn-outline-secondary">Continuar después</a>
+                    <button type="submit" class="btn btn-primary">
+                        Guardar vendedor
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

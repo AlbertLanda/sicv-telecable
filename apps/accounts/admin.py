@@ -22,6 +22,7 @@ class UserAdmin(DjangoUserAdmin):
         "get_full_name",
         "role",
         "branch",
+        "is_salesperson",
         "is_active",
         "is_staff",
     )
@@ -29,6 +30,7 @@ class UserAdmin(DjangoUserAdmin):
     list_filter = (
         "role",
         "branch",
+        "is_salesperson",
         "is_active",
         "is_staff",
     )
@@ -56,6 +58,7 @@ class UserAdmin(DjangoUserAdmin):
                     "branch",
                     "office",
                     "allowed_offices",
+                    "is_salesperson",
                 ),
             },
         ),
@@ -72,6 +75,7 @@ class UserAdmin(DjangoUserAdmin):
                     "branch",
                     "office",
                     "allowed_offices",
+                    "is_salesperson",
                 ),
             },
         ),

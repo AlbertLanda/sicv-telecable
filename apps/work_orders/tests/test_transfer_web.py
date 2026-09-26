@@ -30,6 +30,25 @@ class TransferCreateWebTests(WorkOrderTestCase):
         )
         self.client.login(username="atc1", password="test1234")
 
+    def test_transfer_selector_only_lists_active_services(self):
+        pending_address = self.other_address
+        pending = Subscription.objects.create(
+            customer=self.customer,
+            address=pending_address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=2,
+        )
+
+        response = self.client.get(self.url)
+
+        queryset = response.context["form"].fields["subscription"].queryset
+        self.assertIn(self.subscription, queryset)
+        self.assertNotIn(pending, queryset)
+        self.assertContains(response, self.subscription.service_code)
+        self.assertNotContains(response, pending.service_code)
+
     def test_page_exposes_internal_and_external_transfer_flow(self):
         response = self.client.get(self.url)
 

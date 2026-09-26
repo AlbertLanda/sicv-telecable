@@ -501,7 +501,11 @@ class TransferCreateForm(forms.Form):
         else:
             self.fields["subscription"].queryset = (
                 Subscription.objects
-                .filter(customer=customer, is_active=True)
+                .filter(
+                    customer=customer,
+                    is_active=True,
+                    status=Subscription.Status.ACTIVE,
+                )
                 .select_related("service_type", "plan", "address", "address__zone")
                 .order_by("-created_at")
             )
@@ -1319,6 +1323,40 @@ class WorkOrderRescheduleForm(forms.Form):
         error_messages={"invalid": "Debe indicar una hora válida."},
     )
     reason = forms.CharField(required=False)
+
+class InstallationWithdrawalForm(forms.Form):
+    reason = forms.CharField(
+        label="Motivo del desistimiento",
+        required=True,
+        min_length=5,
+        max_length=1000,
+        strip=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": (
+                    "Ej.: El abonado se desistió antes de que se realice "
+                    "la instalación."
+                ),
+            }
+        ),
+        help_text=(
+            "Esta acción elimina únicamente un alta todavía provisional. "
+            "Si ya existe firma, cargo o evidencia técnica, el sistema la bloqueará."
+        ),
+    )
+    confirm = forms.BooleanField(
+        required=True,
+        label=(
+            "Confirmo que el abonado desistió antes de instalarse "
+            "y solicito retirar esta alta provisional."
+        ),
+        error_messages={
+            "required": "Debe confirmar el desistimiento para continuar.",
+        },
+    )
+
 
 class WorkOrderCancelForm(forms.Form):
     reason = forms.CharField(

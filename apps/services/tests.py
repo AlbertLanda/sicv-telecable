@@ -31,6 +31,17 @@ class SubscriptionCreateTests(TestCase):
             branch=self.branch,
         )
 
+        # La persona que digita el alta no tiene por qué ser quien vendió.
+        # Este vendedor conserva rol ATC y recibe atribución comercial por la
+        # bandera independiente.
+        self.seller = User.objects.create_user(
+            username="vendedor_atc",
+            password="123",
+            role=User.Role.ATC,
+            branch=self.branch,
+            is_salesperson=True,
+        )
+
         self.service_type = ServiceType.objects.create(
             code="INTERNET",
             name="Internet",
@@ -141,6 +152,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -164,6 +176,117 @@ class SubscriptionCreateTests(TestCase):
             self.plan,
         )
 
+    def test_la_venta_distingue_vendedor_de_usuario_que_registra(self):
+        response = self.client.post(
+            self.subscription_url,
+            {
+                "address": self.address.pk,
+                "service_type": self.service_type.pk,
+                "plan": self.plan.pk,
+                "seller": self.seller.pk,
+                "service_number": 1,
+                "billing_cycle": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        subscription = Subscription.objects.get(
+            customer=self.customer,
+            service_type=self.service_type,
+            service_number=1,
+        )
+
+        self.assertEqual(subscription.seller, self.seller)
+        self.assertEqual(subscription.registered_by, self.user)
+        self.assertNotEqual(subscription.seller, subscription.registered_by)
+
+    def test_vendedor_es_obligatorio_en_una_venta_nueva(self):
+        response = self.client.post(
+            self.subscription_url,
+            {
+                "address": self.address.pk,
+                "service_type": self.service_type.pk,
+                "plan": self.plan.pk,
+                "service_number": 1,
+                "billing_cycle": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(
+            response.context["form"],
+            "seller",
+            "Seleccione quién realizó la venta.",
+        )
+        self.assertFalse(
+            Subscription.objects.filter(customer=self.customer).exists()
+        )
+
+    def test_alta_antigua_sin_vendedor_puede_completarse_antes_del_contrato(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            registered_by=self.user,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        url = reverse(
+            "services:subscription_seller",
+            kwargs={
+                "customer_pk": self.customer.pk,
+                "subscription_pk": subscription.pk,
+            },
+        )
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Completar datos comerciales")
+        self.assertContains(response, "Vendedor responsable de la venta")
+
+        response = self.client.post(
+            url,
+            {"seller": self.seller.pk},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("customers:detail", kwargs={"pk": self.customer.pk}),
+        )
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.seller, self.seller)
+        self.assertEqual(subscription.registered_by, self.user)
+
+    def test_resumen_bloquea_contrato_si_falta_vendedor(self):
+        subscription = Subscription.objects.create(
+            customer=self.customer,
+            registered_by=self.user,
+            address=self.address,
+            service_type=self.service_type,
+            plan=self.plan,
+            status=Subscription.Status.PRESALE,
+            service_number=1,
+        )
+
+        response = self.client.get(
+            reverse(
+                "services:subscription_summary",
+                kwargs={
+                    "customer_pk": self.customer.pk,
+                    "subscription_pk": subscription.pk,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Falta identificar al vendedor")
+        self.assertContains(response, "Completar vendedor")
+        self.assertNotContains(response, "Generar contrato")
+
     # -------------------------------------------------------------
     # PRESALE
     # -------------------------------------------------------------
@@ -175,6 +298,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -204,6 +328,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.other_address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -232,6 +357,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -255,6 +381,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan_2.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -296,6 +423,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -329,6 +457,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 0,
                 "billing_cycle": 1,
             },
@@ -362,6 +491,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -546,6 +676,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": 1,
             },
@@ -568,6 +699,7 @@ class SubscriptionCreateTests(TestCase):
                 "address": self.address.pk,
                 "service_type": self.service_type.pk,
                 "plan": self.plan.pk,
+                "seller": self.seller.pk,
                 "service_number": 1,
                 "billing_cycle": "",
             },

@@ -1367,6 +1367,27 @@ class CustomerCodeGenerationTests(TestCase):
         self.assertEqual(primero.code, "HY01-A0000001")
         self.assertEqual(segundo.code, "HY01-A0000002")
 
+    def test_correlativo_eliminado_vuelve_a_quedar_disponible(self):
+        primero = self._registrar_cliente(
+            self.huancayo,
+            "70000011",
+            "Libre",
+        )
+        segundo = self._registrar_cliente(
+            self.huancayo,
+            "70000012",
+            "Ocupado",
+        )
+        codigo_liberado = primero.code
+
+        primero.delete()
+
+        self.assertEqual(segundo.code, "HY01-A0000002")
+        self.assertEqual(
+            Customer.generate_code(self.huancayo),
+            codigo_liberado,
+        )
+
     def test_correlativo_es_independiente_por_sede(self):
         huancayo_cliente = self._registrar_cliente(
             self.huancayo,

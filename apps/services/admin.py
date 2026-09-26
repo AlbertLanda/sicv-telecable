@@ -55,6 +55,8 @@ class PlanAdmin(admin.ModelAdmin):
         "speed_mbps",
         "monthly_price",
         "initial_tv_courtesy_limit_display",
+        "included_app_plan",
+        "included_app_component_amount",
         "requires_geographic_tariff",
         "billing_policy",
         "is_active",
@@ -68,7 +70,7 @@ class PlanAdmin(admin.ModelAdmin):
         "is_active",
     )
     search_fields = ("code", "name", "service_type__name")
-    autocomplete_fields = ("billing_policy",)
+    autocomplete_fields = ("billing_policy", "included_app_plan")
 
     @admin.display(description="Máx. TV cortesía inicial")
     def initial_tv_courtesy_limit_display(self, obj):
@@ -140,9 +142,13 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "customer",
         "service_type",
         "plan",
+        "seller",
+        "registered_by",
         "address",
         "service_number",
         "base_monthly_fee",
+        "included_app_plan",
+        "included_app_component_amount",
         "initial_tv_courtesy_granted",
         "annex_count",
         "status",
@@ -162,6 +168,8 @@ class SubscriptionAdmin(admin.ModelAdmin):
         "address",
         "tariff",
         "billing_policy",
+        "seller",
+        "registered_by",
     )
     readonly_fields = (
         "tariff",

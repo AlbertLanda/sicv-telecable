@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Charge,
+    ChargeComponent,
     ChargeConcept,
     Payment,
     PaymentAllocation,
@@ -40,6 +41,25 @@ class PaymentAllocationInline(admin.TabularInline):
     raw_id_fields = ["charge"]
 
 
+class ChargeComponentInline(admin.TabularInline):
+    model = ChargeComponent
+    extra = 0
+    can_delete = False
+    readonly_fields = (
+        "kind",
+        "code",
+        "description",
+        "amount",
+        "created_at",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Charge)
 class ChargeAdmin(admin.ModelAdmin):
     list_display = [
@@ -58,6 +78,7 @@ class ChargeAdmin(admin.ModelAdmin):
     ]
     date_hierarchy = "due_date"
     raw_id_fields = ["customer", "subscription", "concept_item"]
+    inlines = [ChargeComponentInline]
 
 
 @admin.register(ProposedCharge)

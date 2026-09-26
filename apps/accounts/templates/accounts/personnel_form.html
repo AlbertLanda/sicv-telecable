@@ -114,6 +114,14 @@
                     </div>
                     <div class="col-md-4 d-flex align-items-end pb-2">
                         <div class="form-check form-switch">
+                            {{ form.is_salesperson }}
+                            <label class="form-check-label fw-semibold" for="{{ form.is_salesperson.id_for_label }}">{{ form.is_salesperson.label }}</label>
+                            <div class="form-text">Actívelo si esta persona puede figurar como responsable de una venta, sin importar su rol operativo.</div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4 d-flex align-items-end pb-2">
+                        <div class="form-check form-switch">
                             {{ form.is_active }}
                             <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
                             <div class="form-text">Desactive una cuenta en vez de eliminarla para conservar su historial.</div>

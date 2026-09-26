@@ -142,7 +142,20 @@
                                     </td>
                                     <td>{{ charge.issued_on|date:"d/m/Y" }}</td>
                                     <td class="num">{{ charge.quantity|floatformat:5 }}</td>
-                                    <td>{{ charge.description }}</td>
+                                    <td>
+                                        {{ charge.description }}
+                                        {% if charge.components.all %}
+                                            <div class="small text-muted mt-1">
+                                                {% for component in charge.components.all %}
+                                                    <div>
+                                                        {{ component.get_kind_display }}:
+                                                        {{ component.description }}
+                                                        · S/ {{ component.amount|floatformat:2 }}
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ charge.period_label|default:"—" }}</td>
                                     <td>{{ charge.currency }}</td>
                                     <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>

@@ -81,6 +81,7 @@ SICV - Buscar abonado
                         <th>Dirección</th>
                         <th>Sector</th>
                         <th>Servicios</th>
+                        <th>Estado comercial</th>
                         <th class="text-end">Núm. Servicio</th>
                     </tr>
                 </thead>
@@ -150,6 +151,25 @@ SICV - Buscar abonado
                                     {% endfor %}
                                 </td>
 
+                                <td>
+                                    {% if customer.onboarding_state.incomplete %}
+                                        <span class="badge text-bg-warning">Alta incompleta</span>
+                                        <div class="small text-muted mt-1">
+                                            {{ customer.onboarding_state.detail }}
+                                        </div>
+                                        <a href="{{ customer.onboarding_state.next_url }}"
+                                           class="small fw-semibold">
+                                            Continuar alta
+                                        </a>
+                                    {% elif customer.onboarding_state.stage == "PENDING_INSTALLATION" %}
+                                        <span class="badge text-bg-info">Pendiente de instalación</span>
+                                    {% elif customer.onboarding_state.stage == "ACTIVE" %}
+                                        <span class="badge text-bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="text-muted">{{ customer.onboarding_state.label }}</span>
+                                    {% endif %}
+                                </td>
+
                                 <td class="text-end tabular">
                                     {{ customer.operational_subscriptions|length }}
                                 </td>
@@ -159,7 +179,7 @@ SICV - Buscar abonado
                     {% empty %}
 
                         <tr>
-                            <td colspan="7" class="text-center py-5">
+                            <td colspan="8" class="text-center py-5">
 
                                 {% if current_query %}
                                     <p class="mb-2 fw-semibold">
