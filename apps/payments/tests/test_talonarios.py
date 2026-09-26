@@ -437,12 +437,18 @@ class FormularioDeCobroTests(PaymentsTestCase):
 
         self.assertNotIn('value="R001"', body)
 
-    def test_the_debt_table_shows_the_columns_of_the_window(self):
-        """Las columnas del sistema anterior, en su orden.
+    def marcada(self):
+        """La pantalla con el cargo marcado en el tablero."""
+        return self.client.get(
+            reverse("payments:register", args=[self.customer.pk]),
+            {"charges": self.charge.pk},
+        )
 
-        «Plan» y «Mes» iban antes en una sola celda -el plan con el periodo
-        debajo-, y el operador que compara con el papel tenía que leer dos
-        datos donde el papel tiene dos columnas.
+    def test_the_debt_table_shows_the_columns_of_the_board(self):
+        """Las columnas del tablero, más lo que se descuenta y lo que queda.
+
+        Cantidad, abonado y moneda salieron, como del tablero: siempre eran
+        1, este cliente y soles.
         """
         body = self.pantalla().content.decode()
         cabecera = body.split("<thead>")[1].split("</thead>")[0]
@@ -450,12 +456,60 @@ class FormularioDeCobroTests(PaymentsTestCase):
         columnas = [texto.strip() for texto in columnas]
 
         self.assertEqual(
-            columnas,
-            [
-                "Cantidad", "Abonado", "Plan", "Mes",
-                "Moneda", "Monto", "Desc", "Total",
-            ],
+            columnas, ["Detalle", "Periodo", "Monto", "Desc.", "A cobrar"]
         )
+
+    def test_a_marked_charge_keeps_the_name_it_had_on_the_board(self):
+        """El cajero reconoce lo que acaba de marcar."""
+        self.charge.description = "RECONEXION DEL SERVICIO - POR CORTE"
+        self.charge.save()
+
+        body = self.marcada().content.decode()
+
+        self.assertIn(">Reconexion servicio</td>", body)
+        self.assertIn('title="RECONEXION DEL SERVICIO - POR CORTE"', body)
+
+    def test_the_total_owed_faces_the_amount(self):
+        response = self.marcada()
+        body = response.content.decode()
+
+        self.assertIn("Total a cobrar", body)
+        self.assertIn('data-total="50.00"', body)
+
+    def test_the_screen_heads_without_the_blue_band(self):
+        """Como el tablero de deuda: la franja se retiró de las pantallas donde se actúa."""
+        self.assertNotIn(
+            'class="tc-section-head banner"', self.pantalla().content.decode()
+        )
+
+    def test_each_method_is_a_card_with_its_icon(self):
+        body = self.pantalla().content.decode()
+
+        self.assertIn('class="bi bi-cash"', body)
+        self.assertIn('class="bi bi-phone"', body)
+
+    def test_only_the_methods_that_need_it_ask_for_the_operation_number(self):
+        """La pantalla esconde el número para el efectivo con la regla del modelo."""
+        campo = self.pantalla().context["form"]["method"]
+
+        for radio in campo:
+            with self.subTest(medio=radio.data["value"]):
+                self.assertEqual(
+                    "data-referencia" in str(radio.tag()),
+                    radio.data["value"] in Payment.METHODS_REQUIRING_REFERENCE,
+                )
+
+    def test_cash_and_the_wallets_come_first(self):
+        medios = [
+            value for value, _ in
+            self.pantalla().context["form"].fields["method"].choices
+        ]
+
+        self.assertEqual(
+            medios[:3],
+            [Payment.Method.CASH, Payment.Method.YAPE, Payment.Method.PLIN],
+        )
+        self.assertEqual(sorted(medios), sorted(Payment.Method.values))
 
     def test_the_settled_choice_no_longer_carries_a_hint(self):
         """La ayuda salió: las dos opciones se llaman «Sí» y «No (Pendiente)»."""

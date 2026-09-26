@@ -6,6 +6,7 @@ confusión que haría perder dinero: si conceder un compromiso descontara el
 saldo, el abonado quedaría al día sin haber pagado nada.
 """
 
+import re
 from datetime import date, timedelta
 from functools import partial
 from io import BytesIO
@@ -13,10 +14,12 @@ from unittest.mock import patch
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.template.defaultfilters import date as format_date
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.customers.models import Customer
+from apps.payments.board import DATE_FORMAT
 from apps.payments.models import Charge, PaymentCommitment
 from apps.payments.services import (
     grant_commitment,
@@ -61,6 +64,17 @@ class CommitmentTestCase(PaymentsTestCase):
             user=self.cashier,
             **kwargs,
         )
+
+
+def row_of(body, charge):
+    """El renglón de la tabla de deuda que lleva la casilla de `charge`."""
+    casilla = re.search(
+        r'name="charges"\s+value="%s"' % charge.pk, body
+    )
+    assert casilla, f"la tabla no ofrece la casilla del cargo {charge.pk}"
+
+    inicio = body.rindex("<tr", 0, casilla.start())
+    return body[inicio : body.index("</tr>", casilla.end())]
 
 
 class CommitmentGrantTests(CommitmentTestCase):
@@ -330,7 +344,7 @@ class CommitmentWebTests(CommitmentTestCase):
         self.assertFalse(PaymentCommitment.objects.exists())
 
     def test_the_board_shows_the_active_commitment(self):
-        self.grant()
+        commitment = self.grant()
         self.login(self.granter)
 
         response = self.client.get(
@@ -338,14 +352,19 @@ class CommitmentWebTests(CommitmentTestCase):
         )
 
         self.assertEqual(len(response.context["active_commitments"]), 1)
-        self.assertContains(response, "Compromiso de pago pendiente")
+        self.assertContains(response, ">Compromiso</a>")
+        self.assertContains(
+            response, format_date(commitment.committed_date, DATE_FORMAT)
+        )
 
-    def test_the_commitment_is_read_before_deciding_what_to_collect(self):
-        """El aviso encabeza la pantalla, como la OT abierta en la de ordenes.
+    def test_the_commitment_is_read_in_the_row_being_marked(self):
+        """El compromiso se lee en la fila misma que se va a marcar.
 
-        Mientras el compromiso siga en pie cambia lo que el operador puede
-        decirle al abonado -esa deuda no empuja al corte hasta la fecha
-        acordada-, y al pie se leia despues de haber marcado que cobrar.
+        Mientras siga en pie cambia lo que el operador puede decirle al
+        abonado -esa deuda no empuja al corte hasta la fecha acordada-. Al pie
+        se leía después de haber marcado qué cobrar; en una tarjeta encima,
+        había que cruzarla a ojo con la fila. Como estado de la fila, se lee
+        junto a la casilla.
         """
         self.grant()
         self.login(self.granter)
@@ -354,10 +373,8 @@ class CommitmentWebTests(CommitmentTestCase):
             reverse("payments:debt", args=[self.customer.pk])
         ).content.decode()
 
-        self.assertLess(
-            body.index("Compromiso de pago pendiente"),
-            body.index('id="deudasForm"'),
-        )
+        self.assertIn("Compromiso ", row_of(body, self.overdue))
+        self.assertNotIn("Compromiso ", row_of(body, self.next_one))
 
     def test_cancelling_from_the_board_requires_the_permission(self):
         commitment = self.grant()
@@ -372,12 +389,13 @@ class CommitmentWebTests(CommitmentTestCase):
         self.assertEqual(commitment.status, PaymentCommitment.Status.ACTIVE)
 
 
-class AvisoDePendientesTests(CommitmentTestCase):
-    """El compromiso vigente se anuncia arriba, antes de decidir qué cobrar.
+class CompromisoEnLaTablaTests(CommitmentTestCase):
+    """El compromiso vigente es el estado de los cargos que protege.
 
-    Una cajita con un renglón por pendiente y no una tarjeta por compromiso:
-    ahí se van acumulando cosas, y con una tarjeta cada una tres pendientes
-    empujaban la primera deuda por debajo del pliegue.
+    Iba en una tarjeta encima de la tabla. Con varias acumuladas empujaban la
+    primera deuda por debajo del pliegue, y había que cruzar a ojo la tarjeta
+    con las filas que cubría. No tiene fila propia: repetiría el monto de los
+    cargos que cubre y la tabla parecería deber el doble.
     """
 
     def setUp(self):
@@ -392,76 +410,66 @@ class AvisoDePendientesTests(CommitmentTestCase):
     def board(self):
         return self.client.get(reverse("payments:debt", args=[self.customer.pk]))
 
-    def test_without_commitments_there_is_no_box(self):
-        """Sin nada pendiente la caja no se pinta.
-
-        Una caja vacía ocuparía sitio para decir que no hay nada que decir.
-        """
-        # Se ancla en el marcado y no en el nombre de la clase: «tc-pendientes»
-        # aparece antes en la hoja de estilos, y buscarlo a secas devolvía el
-        # CSS en vez de la caja.
-        self.assertNotContains(self.board(), 'class="tc-pendientes"')
-
-    def test_the_notice_names_the_commitment_and_opens_it(self):
-        """Qué es, cuándo paga y a dónde lleva."""
-        commitment = self.grant()
-        body = self.board().content.decode()
-
-        destino = reverse(
+    def detail_url(self, commitment):
+        return reverse(
             "payments:commitment_detail",
             kwargs={"pk": self.customer.pk, "commitment_pk": commitment.pk},
         )
 
-        inicio = body.index('class="tc-pendiente"')
-        tarjeta = body[inicio : body.index("</a>", inicio)]
+    def test_without_commitment_the_charge_shows_its_own_status(self):
+        body = self.board().content.decode()
 
-        self.assertIn("Compromiso de pago pendiente", tarjeta)
-        self.assertIn(str(commitment.pk), tarjeta)
-        self.assertIn(
-            commitment.committed_date.strftime("%d/%m/%Y"), tarjeta
-        )
-        self.assertIn(destino, tarjeta)
+        self.assertIn("Vencido", row_of(body, self.overdue))
+        self.assertIn("Pendiente", row_of(body, self.next_one))
 
-    def test_the_board_no_longer_repeats_the_commitment_in_the_table(self):
-        """Dicho arriba, no hace falta decirlo otra vez en cada fila.
+    def test_the_status_names_the_commitment_and_when_it_pays(self):
+        """Qué es, cuándo paga y cuál es."""
+        commitment = self.grant()
+        renglon = row_of(self.board().content.decode(), self.overdue)
+
+        # La etiqueta solo dice qué es; cuándo paga y cuál es van en el
+        # rótulo emergente, a un pase del cursor.
+        self.assertIn(">Compromiso</a>", renglon)
+        self.assertIn(f"Compromiso de pago {commitment.pk}", renglon)
+        self.assertIn(format_date(commitment.committed_date, DATE_FORMAT), renglon)
+
+    def test_the_commitment_takes_the_place_of_the_other_status(self):
+        """Un solo estado por fila, y no un segundo renglón.
 
         La columna de vencimiento llevaba una etiqueta «Compromiso dd/mm/aaaa»
-        debajo de la fecha. Repetía lo que la tarjeta de arriba ya dice, y al
-        ocupar un segundo renglón hacía esa fila más alta que las demás: en una
-        lista larga esa diferencia se lee como si fueran bloques distintos.
+        debajo de la fecha, y al ocupar otra línea hacía esa fila más alta que
+        las demás: en una lista larga esa diferencia se lee como si fueran
+        bloques distintos. Ahora el vencimiento solo trae su fecha y el
+        compromiso reemplaza al «Vencido» en la columna del estado.
         """
         self.grant()
-        body = self.board().content.decode()
+        renglon = row_of(self.board().content.decode(), self.overdue)
 
-        tabla = body[body.index('<table class="tc-table"') : body.index("</table>")]
+        self.assertNotIn("Vencido", renglon)
+        self.assertIn(
+            f'<td class="tc-date">{format_date(self.overdue.due_date, DATE_FORMAT)}</td>',
+            renglon,
+        )
 
-        self.assertNotIn("Compromiso ", tabla)
-        self.assertNotIn("Vencimiento", tabla)
+    def test_the_status_is_a_real_link_to_the_commitment(self):
+        """El estado lleva al compromiso con un enlace de verdad.
 
-    def test_the_notice_is_a_real_link(self):
-        """Sin la ventana, el aviso sigue llevando a alguna parte.
-
-        La ventana es una comodidad, no el único camino: si el navegador no
-        puede con ella, el clic va a la pantalla completa. Por eso es un enlace
-        con su `href` y no un botón que solo sabe abrir la ventana.
+        Es un `href` y no un guion: sin JavaScript, o con el teclado, sigue
+        llevando a la pantalla completa del compromiso.
         """
         commitment = self.grant()
-        body = self.board().content.decode()
+        renglon = row_of(self.board().content.decode(), self.overdue)
 
-        destino = reverse(
-            "payments:commitment_detail",
-            kwargs={"pk": self.customer.pk, "commitment_pk": commitment.pk},
-        )
-        inicio = body.index('class="tc-pendiente"')
-        renglon = body[inicio : body.index("</a>", inicio)]
-
-        self.assertIn(f'href="{destino}"', renglon)
+        self.assertIn(f'href="{self.detail_url(commitment)}"', renglon)
 
     def test_a_cancelled_commitment_stops_being_announced(self):
         commitment = self.grant()
         commitment.cancel(user=self.granter, reason="Se deja sin efecto.")
 
-        self.assertNotContains(self.board(), "Compromiso de pago pendiente")
+        renglon = row_of(self.board().content.decode(), self.overdue)
+
+        self.assertIn("Vencido", renglon)
+        self.assertNotIn(self.detail_url(commitment), renglon)
 
 
 class PantallaDelCompromisoTests(CommitmentTestCase):
@@ -680,14 +688,31 @@ class ObservacionesYRepresentanteTests(CommitmentTestCase):
 
 
 class LaFichaDelCompromisoTests(CommitmentTestCase):
-    """El alta y el compromiso concedido son la misma ficha.
+    """Lo que dicen el alta y el compromiso concedido.
 
-    Mismas etiquetas y mismo orden: el operador que abre un compromiso está
-    comprobando lo que se acordó, y una ficha distinta le obliga a traducir
-    entre las dos. Es el criterio del comprobante frente a la pantalla de
-    cobro.
+    El alta se rediseñó con la forma del cobro -deudas y datos a la
+    izquierda, el acuerdo a la derecha-, así que ya no es la ficha del
+    concedido campo por campo. Comparten los datos que se comprueban; el alta
+    no lleva «Anulado» -un compromiso no nace anulado- y nombra al DNI del
+    representante entero.
     """
 
+    #: Las del alta.
+    ETIQUETAS_ALTA = [
+        "Código",
+        "Fecha",
+        "Hora",
+        "Fecha de pago",
+        "Autoriza",
+        "Deuda",
+        "Total",
+        "Cuota 1",
+        "Representante",
+        "DNI del representante",
+        "Observaciones",
+    ]
+
+    #: Las del compromiso concedido.
     ETIQUETAS = [
         "Código",
         "Fecha",
@@ -712,25 +737,67 @@ class LaFichaDelCompromisoTests(CommitmentTestCase):
         )
         self.login(self.granter)
 
-    def test_the_creation_sheet_has_the_fields_of_the_old_system(self):
-        body = self.client.get(
+    def alta(self, **params):
+        return self.client.get(
             reverse("payments:commitment_create", args=[self.customer.pk]),
-            {"charges": [self.overdue.pk]},
-        ).content.decode()
+            {"charges": [self.overdue.pk], **params},
+        )
 
-        for etiqueta in self.ETIQUETAS:
+    def test_the_creation_sheet_has_the_fields_of_the_old_system(self):
+        body = self.alta().content.decode()
+
+        for etiqueta in self.ETIQUETAS_ALTA:
             with self.subTest(etiqueta=etiqueta):
                 self.assertIn(etiqueta, body)
 
+    def test_the_creation_sheet_is_not_born_cancelled(self):
+        self.assertNotIn("Anulado", self.alta().content.decode())
+
+    def test_the_creation_sheet_heads_without_the_blue_band(self):
+        self.assertNotIn(
+            'class="tc-section-head banner"', self.alta().content.decode()
+        )
+
     def test_the_creation_sheet_offers_fifteen_installments(self):
-        """Quince filas, como el formulario que el operador usa a diario."""
-        body = self.client.get(
-            reverse("payments:commitment_create", args=[self.customer.pk]),
-            {"charges": [self.overdue.pk]},
-        ).content.decode()
+        """Hasta quince, como el formulario que el operador usa a diario."""
+        body = self.alta().content.decode()
 
         self.assertIn("Cuota 15", body)
         self.assertNotIn("Cuota 16", body)
+
+    def test_the_installments_start_switched_off(self):
+        """Casi todo compromiso es un solo pago: las cuotas se piden aparte."""
+        form = self.alta().context["form"]
+
+        self.assertFalse(form["in_installments"].value())
+        self.assertIn('role="switch"', str(form["in_installments"]))
+
+    def test_only_three_rows_show_when_switched_on(self):
+        """Las demás se agregan de a una: quince de golpe eran una pared."""
+        body = self.alta().content.decode()
+
+        for numero in (1, 2, 3):
+            with self.subTest(cuota=numero):
+                self.assertIn(f'data-cuota="{numero}" >', body)
+        for numero in (4, 15):
+            with self.subTest(cuota=numero):
+                self.assertIn(f'data-cuota="{numero}" hidden>', body)
+
+    def test_a_row_written_further_down_comes_back_visible(self):
+        """Con un error, la cuota siete no puede quedar detrás de «Agregar»."""
+        respuesta = self.client.post(
+            reverse("payments:commitment_create", args=[self.customer.pk]),
+            {
+                "charges": [self.overdue.pk],
+                "committed_date": "",
+                "in_installments": "on",
+                "installment_7_amount": "20.00",
+            },
+        )
+        body = respuesta.content.decode()
+
+        self.assertIn('data-cuota="7" >', body)
+        self.assertIn('data-cuota="8" hidden>', body)
 
     def test_the_granted_sheet_repeats_the_same_labels(self):
         commitment = self.grant(
@@ -795,6 +862,7 @@ class LaFichaDelCompromisoTests(CommitmentTestCase):
                 "charges": [self.overdue.pk],
                 "committed_date": (self.today + timedelta(days=10)).isoformat(),
                 "amount": "60.00",
+                "in_installments": "on",
                 "installment_1_amount": "20.00",
                 "installment_1_date": (
                     self.today + timedelta(days=5)
@@ -815,6 +883,23 @@ class LaFichaDelCompromisoTests(CommitmentTestCase):
 
         self.assertEqual(commitment.installments.count(), 2)
         self.assertEqual(commitment.representative, "Rosa Ravichagua")
+
+    def test_switched_off_the_written_installments_are_not_saved(self):
+        """Lo que se acuerda es lo que se ve: apagado, un solo pago."""
+        respuesta = self.client.post(
+            reverse("payments:commitment_create", args=[self.customer.pk]),
+            {
+                "charges": [self.overdue.pk],
+                "committed_date": (self.today + timedelta(days=10)).isoformat(),
+                "installment_1_amount": "20.00",
+                "installment_1_date": (
+                    self.today + timedelta(days=5)
+                ).isoformat(),
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(PaymentCommitment.objects.get().installments.count(), 0)
 
 
 class ElPapelDelCompromisoTests(CommitmentTestCase):

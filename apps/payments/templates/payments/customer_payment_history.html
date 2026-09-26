@@ -7,12 +7,25 @@
 {% comment %}
 Historial de pagos.
 
-Lleva las mismas columnas que el tablero de deuda -abonado, fecha, cantidad,
-detalle, periodo, moneda, monto, documento y vencimiento- porque es la misma
-lista leída del otro lado: lo que ya se cobró. Un operador que salta de una
-pestaña a la otra encuentra las columnas donde las dejó, y el «Documento» es
-la única que cambia de significado: en deuda está casi siempre vacío y aquí
-siempre lleva el comprobante que cerró la fila.
+Las columnas del tablero de deuda, porque es la misma lista leída del otro
+lado: lo que ya se cobró. Sin abonado, cantidad ni moneda -como en el
+tablero, siempre eran este cliente, 1 y soles-, y con el nombre corto y el
+periodo que la deuda tenía allí.
+
+El estado va con los colores del tablero: pagado, pendiente -emitido pero sin
+que entre el dinero- y anulado. La nota del cobro y el motivo de la anulación,
+que llenaban una columna «Observación», quedan a un pase del cursor sobre el
+estado.
+
+El medio de pago va tras el periodo, con el ícono de la pantalla de cobro.
+
+La fila cierra con el comprobante en dos columnas: la serie y el número
+-«B001-0041316», como va impreso- abren la ficha con la que se registró el
+cobro, y el botón PDF abre la boleta o factura tal como se entregó, en la
+pestaña de al lado y en el visor del navegador, listo para imprimir o
+descargar.
+
+Sin la franja azul, como el tablero de deuda.
 
 Una fila por deuda pagada y no por pago. Es lo que el abonado pregunta -«¿mi
 mensualidad de octubre está pagada?»- y lo único que permite que el periodo y
@@ -28,7 +41,7 @@ periodos y tres vencimientos, y agrupado por pago no cabía ninguno.
 
     <section class="tc-card tc-section tc-full">
 
-        <div class="tc-section-head banner">
+        <div class="tc-section-head">
             <h2 class="tc-section-title">
                 <i class="bi bi-clock-history"></i>Pagos
             </h2>
@@ -40,66 +53,53 @@ periodos y tres vencimientos, y agrupado por pago no cabía ninguno.
                 <table class="tc-table">
                     <thead>
                         <tr>
-                            <th>Abonado</th>
                             <th>Fecha</th>
-                            <th class="num">Cantidad</th>
                             <th>Detalle</th>
                             <th>Periodo</th>
-                            <th>Moneda</th>
-                            <th class="num">Monto</th>
-                            <th>Documento</th>
+                            <th>Método</th>
+                            <th>Monto</th>
                             <th>Vencimiento</th>
-                            <th>Observación</th>
+                            <th>Estado</th>
+                            <th>Serie</th>
+                            <th>Comprobante</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in rows %}
-                            <tr {% if row.payment.status == "VOIDED" %}style="opacity:.62;"{% endif %}>
+                            <tr{% if row.payment.status == "VOIDED" %} class="is-voided"{% endif %}>
+                                <td class="tc-date">{{ row.date|date:"j M Y" }}</td>
+                                <td class="tc-detail" title="{{ row.full_detail }}">{{ row.detail }}</td>
+                                <td class="tc-date">{{ row.period|default:"—" }}</td>
+                                <td class="tc-method-cell"
+                                    {% if row.payment.reference %}title="Operación {{ row.payment.reference }}"{% endif %}>
+                                    <i class="bi {{ row.method_icon }}" aria-hidden="true"></i>{{ row.method }}
+                                </td>
+                                <td class="tabular">S/ {{ row.amount|floatformat:2 }}</td>
+                                <td class="tc-date">{{ row.due_date|date:"j M Y"|default:"—" }}</td>
                                 <td>
-                                    <a href="{% url 'customers:detail' pk=customer.pk %}">
-                                        {{ customer.code }}
-                                    </a>
+                                    <span class="status-{{ row.tone }}"
+                                          {% if row.status_title %}title="{{ row.status_title }}"{% endif %}>{{ row.status }}</span>
                                 </td>
-                                <td>{{ row.date|date:"d/m/Y" }}</td>
-                                <td class="num">
-                                    {% if row.quantity %}
-                                        {{ row.quantity|floatformat:5 }}
-                                    {% else %}
-                                        —
-                                    {% endif %}
-                                </td>
-                                <td>{{ row.detail }}</td>
-                                <td>{{ row.period|default:"—" }}</td>
-                                <td>{{ row.currency }}</td>
-                                <td class="num">S/ {{ row.amount|floatformat:2 }}</td>
                                 <td>
                                     {% if row.receipt %}
-                                        <a href="{% url 'payments:receipt_detail' pk=row.receipt.pk %}">
-                                            {{ row.receipt.full_number }}
-                                        </a>
+                                        <a href="{% url 'payments:receipt_detail' pk=row.receipt.pk %}"
+                                           class="tabular"
+                                           title="Ver cómo se registró el cobro">{{ row.receipt.full_number }}</a>
                                     {% else %}
                                         <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ row.due_date|date:"d/m/Y"|default:"—" }}</td>
-
-                                {% comment %}
-                                La observación del cobro, y el motivo cuando
-                                se anuló: es la misma columna -por qué esta
-                                fila dice lo que dice- y un pago anulado sin
-                                su motivo deja al operador sin nada que
-                                contestar cuando el abonado pregunta.
-                                {% endcomment %}
                                 <td>
-                                    {% if row.payment.status == "VOIDED" %}
-                                        <span class="tc-pill danger">Anulado</span>
-                                        <span class="tc-sub">{{ row.payment.void_reason }}</span>
-                                    {% elif row.payment.status == "PENDING" %}
-                                        <span class="tc-pill warning">Pendiente</span>
-                                        <span class="tc-sub">El dinero no ha entrado</span>
-                                    {% endif %}
-                                    {% if row.note %}
-                                        <span class="tc-sub">{{ row.note }}</span>
+                                    {% if row.receipt %}
+                                        <a href="{% url 'payments:receipt_pdf' pk=row.receipt.pk %}?ver=1"
+                                           target="_blank" rel="noopener"
+                                           class="tc-pdf-btn"
+                                           title="Ver el comprobante {{ row.receipt.full_number }} en PDF"
+                                           aria-label="Ver en PDF el comprobante {{ row.receipt.full_number }}">
+                                            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>PDF
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
                                     {% endif %}
                                 </td>
                             </tr>

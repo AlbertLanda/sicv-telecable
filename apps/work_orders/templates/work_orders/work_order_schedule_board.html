@@ -23,14 +23,14 @@
         padding: .9rem 1.1rem;
     }
     .board-week-eyebrow {
-        font-size: .7rem;
+        font-size: var(--tc-text-xs);
         font-weight: 700;
         letter-spacing: .06em;
         text-transform: uppercase;
         color: var(--sicv-tinta-tenue);
     }
     .board-week-range {
-        font-size: 1.05rem;
+        font-size: var(--tc-text-lg);
         font-weight: 700;
         color: var(--sicv-azul);
         margin: 0;
@@ -50,12 +50,12 @@
         padding: .7rem .9rem;
     }
     .stat-label {
-        font-size: .72rem;
+        font-size: var(--tc-text-sm);
         color: var(--sicv-tinta-tenue);
         margin: 0 0 .15rem;
     }
     .stat-value {
-        font-size: 1.6rem;
+        font-size: var(--tc-text-2xl);
         font-weight: 600;
         line-height: 1.1;
         color: var(--sicv-tinta);
@@ -109,17 +109,17 @@
     }
     .board-column-title {
         font-weight: 700;
-        font-size: .85rem;
+        font-size: var(--tc-text-md);
         color: var(--sicv-azul);
         line-height: 1.2;
     }
     .board-column-date {
-        font-size: .7rem;
+        font-size: var(--tc-text-xs);
         color: var(--sicv-tinta-tenue);
     }
     .board-column-count {
-        font-size: .72rem;
-        font-weight: 700;
+        font-size: var(--tc-text-xs);
+        font-weight: 600;
         color: var(--sicv-tinta-suave);
         background: var(--sicv-superficie);
         border: 1px solid var(--sicv-linea);
@@ -156,7 +156,7 @@
         border-left: 3px solid var(--sicv-tinta-tenue);
         border-radius: 8px;
         padding: .55rem .65rem;
-        font-size: .78rem;
+        font-size: var(--tc-text-md);
         box-shadow: 0 1px 2px rgba(31, 41, 55, .06);
         transition: box-shadow .12s ease, transform .12s ease;
     }
@@ -181,13 +181,13 @@
     }
     .board-card-number {
         font-weight: 700;
-        font-size: .76rem;
+        font-size: var(--tc-text-sm);
         color: var(--sicv-azul);
         text-decoration: none;
     }
     .board-card-number:hover { text-decoration: underline; }
     .board-card-time {
-        font-size: .7rem;
+        font-size: var(--tc-text-xs);
         font-weight: 600;
         color: var(--sicv-tinta-suave);
         font-variant-numeric: tabular-nums;
@@ -203,7 +203,7 @@
         line-height: 1.25;
     }
     .board-card-meta {
-        font-size: .7rem;
+        font-size: var(--tc-text-xs);
         color: var(--sicv-tinta-tenue);
         display: flex;
         flex-wrap: wrap;
@@ -226,7 +226,7 @@
         display: inline-flex;
         align-items: center;
         gap: .3rem;
-        font-size: .68rem;
+        font-size: var(--tc-text-xs);
         font-weight: 600;
         color: var(--sicv-tinta-suave);
     }
@@ -238,12 +238,12 @@
         display: inline-flex;
         align-items: center;
         gap: .2rem;
-        font-size: .66rem;
+        font-size: var(--tc-text-xs);
         font-weight: 700;
         color: var(--board-critical);
     }
     .board-empty {
-        font-size: .72rem;
+        font-size: var(--tc-text-sm);
         color: var(--sicv-tinta-tenue);
         text-align: center;
         padding: 1.2rem 0;
@@ -257,7 +257,7 @@
     {% csrf_token %}
 
     <div class="mb-3">
-        <h1 class="h4 mb-1">Programación de órdenes</h1>
+        <h1 class="h3 mb-1">Programación de órdenes</h1>
         <p class="text-muted mb-0 small">
             Órdenes abiertas de
             {% if board_branch %}{{ board_branch.name }}{% else %}todas las sedes{% endif %},

@@ -1,0 +1,122 @@
+{% comment %}
+Ventana «Nueva deuda», encima del tablero de deuda.
+
+Espera `charge_form` y `today`. Con `open_charge_modal` llega abierta: es
+como responde la emisión cuando vuelve con errores y como se entra desde el
+menú de las otras pestañas de la ficha.
+
+Va fuera del formulario del tablero -dos formularios no se anidan- y manda el
+suyo por POST a la emisión, que devuelve al tablero con el aviso.
+
+Dos columnas: arriba lo que pone el sistema -código y fecha, apagados para
+que el operador sepa con qué número y fecha sale la deuda-, después el
+concepto a todo el ancho, el monto con su fecha de pago y la descripción al
+final. Se lee de arriba abajo en el orden en que se decide.
+
+Sin la animación de entrada cuando llega abierta: la ventana ya estaba ahí
+antes de enviar, y que vuelva a aparecer desde arriba parecería otra.
+{% endcomment %}
+
+{% url 'payments:charge_create' pk=customer.pk as charge_create_url %}
+
+<div class="modal tc-modal{% if not open_charge_modal %} fade{% endif %}"
+     id="nuevaDeuda"
+     tabindex="-1"
+     aria-labelledby="nuevaDeudaTitulo"
+     aria-hidden="true"
+     data-url="{{ charge_create_url }}"
+     data-tablero="{% url 'payments:debt' pk=customer.pk %}"
+     {% if open_charge_modal %}data-abrir{% endif %}>
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <form method="post" action="{{ charge_create_url }}" class="modal-content" novalidate>
+
+            {% csrf_token %}
+
+            <div class="modal-header">
+                <div class="tc-modal-head">
+                    <span class="tc-modal-icon" aria-hidden="true">
+                        <i class="bi bi-cash-coin"></i>
+                    </span>
+                    <div>
+                        <h2 class="tc-modal-title" id="nuevaDeudaTitulo">Nueva deuda</h2>
+                        <p class="tc-modal-subtitle">{{ customer }}</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+
+            <div class="modal-body">
+
+                {% if charge_form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in charge_form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="tc-fields two">
+
+                    <div class="tc-field">
+                        <label class="tc-field-label" for="codigoDeuda">Código</label>
+                        <input type="text" id="codigoDeuda" class="tc-input" value="Automático" disabled>
+                    </div>
+
+                    <div class="tc-field">
+                        <label class="tc-field-label" for="fechaDeuda">Fecha</label>
+                        <input type="text" id="fechaDeuda" class="tc-input" value="{{ today|date:'j M Y' }}" disabled>
+                    </div>
+
+                    <div class="tc-field wide{% if charge_form.concept.errors %} has-error{% endif %}">
+                        <label class="tc-field-label" for="{{ charge_form.concept.id_for_label }}">Concepto</label>
+                        {{ charge_form.concept }}
+                        {% for error in charge_form.concept.errors %}
+                            <div class="tc-field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="tc-field{% if charge_form.amount.errors %} has-error{% endif %}">
+                        <label class="tc-field-label" for="{{ charge_form.amount.id_for_label }}">Monto</label>
+                        <div class="tc-money">
+                            <span class="tc-money-prefix" aria-hidden="true">S/</span>
+                            {{ charge_form.amount }}
+                        </div>
+                        {% for error in charge_form.amount.errors %}
+                            <div class="tc-field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="tc-field{% if charge_form.due_date.errors %} has-error{% endif %}">
+                        <label class="tc-field-label" for="{{ charge_form.due_date.id_for_label }}">Paga hasta</label>
+                        {{ charge_form.due_date }}
+                        {% for error in charge_form.due_date.errors %}
+                            <div class="tc-field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="tc-field wide{% if charge_form.description.errors %} has-error{% endif %}">
+                        <label class="tc-field-label" for="{{ charge_form.description.id_for_label }}">Descripción</label>
+                        {{ charge_form.description }}
+                        {% for error in charge_form.description.errors %}
+                            <div class="tc-field-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="tc-btn muted" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-check-lg"></i>Registrar deuda
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>

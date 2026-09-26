@@ -163,18 +163,37 @@ class SharedDesignTests(PaymentsTestCase):
             flags=re.DOTALL,
         )
 
-    def test_every_account_table_heads_with_the_blue_band(self):
-        """Las tres tablas de la cuenta encabezan igual.
+    def test_no_account_table_heads_with_the_blue_band(self):
+        """Deuda, historial y comprobantes encabezan igual entre sí.
 
-        Comprobantes se quedó con la cabecera blanca cuando deuda e historial
-        pasaron a la franja: puestas una al lado de otra, la que no la lleva
-        parece de otra pantalla y no otra cara del mismo abonado.
+        La franja salió primero de la deuda y después de las otras dos:
+        puestas una al lado de otra, la que la conservara parecería de otra
+        pantalla y no otra cara del mismo abonado.
         """
         for url in self.account_tables():
             with self.subTest(url=url):
                 body = self.client.get(url).content.decode()
 
-                self.assertIn('class="tc-section-head banner"', body)
+                self.assertNotIn('class="tc-section-head banner"', body)
+
+    def test_the_debt_table_heads_with_its_actions_instead_of_the_band(self):
+        """La deuda dejó la franja: su cabecera es donde se actúa.
+
+        Es la única tabla de la cuenta sobre la que se hace algo -cobrar,
+        comprometer-, y esos botones vivían al pie, lejos de las casillas y
+        fuera de la pantalla con una tabla larga. Arriba a la derecha quedan
+        pegados a lo que tocan, y la franja azul competía con ellos.
+        """
+        body = self.client.get(self.account_tables()[0]).content.decode()
+        head = self.section_heads(body)[0]
+
+        self.assertNotIn("banner", head)
+        self.assertIn(
+            reverse("payments:register", args=[self.customer.pk]), head
+        )
+        self.assertIn(
+            reverse("payments:commitment_create", args=[self.customer.pk]), head
+        )
 
     def test_no_account_table_counts_its_rows_in_the_head(self):
         """El conteo lo da el pie del paginador y solo él.

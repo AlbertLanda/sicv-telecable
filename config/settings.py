@@ -270,7 +270,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = "accounts.User"
 
 # Redirecciones de autenticación
-LOGIN_REDIRECT_URL = '/customers/search/'
+# Se entra al dashboard: la portada con las cifras del día de la sede.
+LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 

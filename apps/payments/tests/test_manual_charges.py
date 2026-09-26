@@ -1,5 +1,5 @@
 """
-Botón «Nuevo» del tablero de deuda y cobro desde una fila.
+Botón «Nueva deuda» del tablero de deuda y cobro desde una fila.
 
 Lo que se fija aquí es la frontera entre lo automático y lo manual: el ciclo
 emite la mensualidad solo desde el plan contratado, y la ventanilla puede
@@ -162,7 +162,7 @@ class ManualChargeWebTests(PaymentsTestCase):
         """
         self.login(self.issuer)
         response = self.client.get(self.url())
-        ofrecidos = response.context["form"].fields["concept"].queryset
+        ofrecidos = response.context["charge_form"].fields["concept"].queryset
 
         self.assertIn(concept("mensualidad"), ofrecidos)
         self.assertIn(concept("reconexion"), ofrecidos)
@@ -184,7 +184,7 @@ class ManualChargeWebTests(PaymentsTestCase):
         response = self.client.get(self.url())
 
         self.assertNotIn(
-            retirado, response.context["form"].fields["concept"].queryset
+            retirado, response.context["charge_form"].fields["concept"].queryset
         )
 
     def test_the_family_travels_with_each_option(self):
@@ -271,7 +271,7 @@ class ManualChargeWebTests(PaymentsTestCase):
 
         response = self.client.get(self.url())
 
-        self.assertNotIn("subscription", response.context["form"].fields)
+        self.assertNotIn("subscription", response.context["charge_form"].fields)
 
         self.client.post(
             self.url(),
@@ -513,7 +513,7 @@ class TheEarlyPaymentDiscountIsNotIssuedByHandTests(PaymentsTestCase):
 
     def test_the_screen_no_longer_asks_for_it(self):
         response = self.client.get(self.url())
-        form = response.context["form"]
+        form = response.context["charge_form"]
         body = response.content.decode()
 
         self.assertNotIn("early_discount", form.fields)
@@ -586,7 +586,7 @@ class TheScreenOpensReadyForTheUsualCaseTests(PaymentsTestCase):
             reverse("payments:charge_create", args=[self.customer.pk])
         )
 
-        return response.context["form"]
+        return response.context["charge_form"]
 
     def body(self):
         response = self.client.get(
@@ -631,9 +631,24 @@ class TheScreenOpensReadyForTheUsualCaseTests(PaymentsTestCase):
         self.assertNotIn("", ofrecidos)
         self.assertNotIn("---------", str(self.form()["concept"]))
 
-    def test_the_quantity_is_shown_as_a_whole_one(self):
-        """Un 1 pelado: los cinco decimales no dicen nada en un campo fijo."""
-        self.assertIn('value="1"', str(self.form()["quantity"]))
+    def test_the_fixed_fields_are_no_longer_asked_for(self):
+        """Cantidad, moneda, prorrateo y «Actualizar» salieron de la pantalla.
+
+        La cantidad es siempre 1 y la moneda siempre soles -va dentro de la
+        caja del monto-; si el cargo sigue al plan lo decide su concepto. Eran
+        filas que el operador miraba sin tocar.
+        """
+        body = self.body()
+
+        for campo in ("quantity", "auto_update"):
+            with self.subTest(campo=campo):
+                self.assertNotIn(campo, self.form().fields)
+        for texto in ("Cantidad", "Moneda", "Calcular días", "Recalcular si cambia"):
+            with self.subTest(texto=texto):
+                self.assertNotIn(texto, body)
+
+    def test_the_amount_carries_its_currency_inside(self):
+        self.assertIn('class="tc-money-prefix" aria-hidden="true">S/<', self.body())
 
     def test_the_description_carries_no_placeholder(self):
         self.assertNotIn("placeholder", str(self.form()["description"]))
@@ -666,11 +681,12 @@ class TheScreenOpensReadyForTheUsualCaseTests(PaymentsTestCase):
 
 
 class TheDailyProrationTests(PaymentsTestCase):
-    """El prorrateo del mes en días.
+    """El prorrateo del mes en días, como regla del servicio.
 
     Sirve para el periodo partido: un alta a mitad de mes o una reconexión
-    que no cubre el mes entero. El operador sabe cuántos días cobra, no cuánto
-    suman, y hasta ahora los calculaba aparte.
+    que no cubre el mes entero. La pantalla de nueva deuda ya no ofrece el
+    botón «Calcular días según monto», pero la regla queda donde vive el
+    cálculo de la deuda, con sus pruebas, para quien la necesite.
     """
 
     def setUp(self):
@@ -739,50 +755,133 @@ class TheDailyProrationTests(PaymentsTestCase):
         self.assertEqual(prorated_amount(Decimal("45.00"), 0), Decimal("0.00"))
         self.assertEqual(prorated_amount(Decimal("45.00"), -3), Decimal("0.00"))
 
-    def test_the_screen_carries_the_day_already_calculated(self):
-        """El valor del día lo divide el servidor, no el navegador.
+    def test_the_screen_no_longer_offers_the_proration(self):
+        self.assertNotIn('id="calcularDias"', self.screen().content.decode())
 
-        Si lo dividiera cada lado por su cuenta, la cifra que el operador lee
-        y la que guarda el servidor podrían no coincidir en el céntimo.
-        """
-        context = self.screen().context
 
-        self.assertEqual(
-            context["daily_rate"],
-            daily_rate(self.subscription.total_monthly_price),
+class TheConceptDecidesIfTheChargeFollowsThePlanTests(PaymentsTestCase):
+    """Sin la casilla «Actualizar», lo decide el concepto.
+
+    La mensualidad -y todo lo recurrente- acompaña al plan si la tarifa cambia
+    antes de que la paguen; un cargo fijo cuesta lo que se pactó. Es lo que el
+    operador marcaba casi siempre igual según el concepto, y lo que hace que
+    el tablero de deuda nombre el plan en la mensualidad.
+    """
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
         )
+        self.login(self.issuer)
 
-    def test_the_numbers_reach_the_script_with_a_decimal_point(self):
-        """Con el idioma en español, «2.63» se pinta «2,63».
-
-        `parseFloat("2,63")` corta en la coma y devuelve 2: el valor del día
-        llegaba al script hecho un entero y el prorrateo cobraba de menos.
-        """
-        html = self.screen().content.decode()
-        esperado = daily_rate(self.subscription.total_monthly_price)
-
-        self.assertIn('data-daily="%s"' % esperado, html)
-        self.assertNotIn(str(esperado).replace(".", ","), html)
-
-    def test_the_button_is_offered_on_the_monthly_fee(self):
-        """Y llega ya visible: no aparece un instante después de abrir."""
-        self.assertTrue(self.screen().context["es_mensualidad"])
-
-    def test_the_button_is_not_offered_on_another_concept(self):
-        """Una reconexión cuesta lo que cuesta, no medio mes."""
-        response = self.client.post(
+    def emit(self, code, amount="30.00"):
+        self.client.post(
             reverse("payments:charge_create", args=[self.customer.pk]),
             {
-                "concept": concept("reconexion").pk,
-                "description": "Reconexión",
-                "amount": "0",
+                "concept": concept(code).pk,
+                "description": "",
+                "amount": amount,
                 "due_date": self.today.isoformat(),
-                "early_discount": "",
-                "discount_deadline": "",
             },
         )
 
-        self.assertFalse(response.context["es_mensualidad"])
+        return Charge.objects.get()
+
+    def test_a_monthly_fee_follows_the_plan(self):
+        self.assertTrue(self.emit("mensualidad").auto_update)
+
+    def test_a_fixed_charge_does_not(self):
+        self.assertFalse(self.emit("reconexion").auto_update)
+
+    def test_the_post_cannot_turn_it_on_for_a_fixed_charge(self):
+        """Mandarlo por el POST no lo cuela: el campo ya no existe."""
+        self.client.post(
+            reverse("payments:charge_create", args=[self.customer.pk]),
+            {
+                "concept": concept("reconexion").pk,
+                "description": "",
+                "amount": "20.00",
+                "due_date": self.today.isoformat(),
+                "auto_update": "on",
+            },
+        )
+
+        self.assertFalse(Charge.objects.get().auto_update)
+
+
+class TheNewDebtOpensOverTheBoardTests(PaymentsTestCase):
+    """«Nueva deuda» es una ventana encima del tablero, no una pantalla.
+
+    Seis campos en una página entera quedaban perdidos en un rincón, y la
+    deuda sobre la que se emitía desaparecía de la vista.
+    """
+
+    #: La ventana, con la marca de llegar abierta entre sus atributos.
+    OPENED = re.compile(r'id="nuevaDeuda"[^>]*\sdata-abrir')
+
+    def setUp(self):
+        super().setUp()
+
+        self.today = timezone.localdate()
+        self.issuer = self.make_user(
+            "emisor1", permissions=["view_charge", "add_charge"]
+        )
+        self.login(self.issuer)
+
+    def issue_url(self):
+        return reverse("payments:charge_create", args=[self.customer.pk])
+
+    def board(self):
+        return self.client.get(reverse("payments:debt", args=[self.customer.pk]))
+
+    def test_the_board_carries_the_window_closed(self):
+        body = self.board().content.decode()
+
+        self.assertIn('id="nuevaDeuda"', body)
+        self.assertNotRegex(body, self.OPENED)
+
+    def test_the_window_sends_to_the_issue(self):
+        self.assertContains(self.board(), 'action="%s"' % self.issue_url())
+
+    def test_who_may_not_issue_gets_no_window(self):
+        self.login(self.make_user("consulta1", permissions=["view_charge"]))
+
+        self.assertNotContains(self.board(), 'id="nuevaDeuda"')
+
+    def test_its_address_opens_the_board_with_the_window_open(self):
+        """Así entra el menú de las otras pestañas de la ficha."""
+        response = self.client.get(self.issue_url())
+
+        self.assertTemplateUsed(response, "payments/customer_debt.html")
+        self.assertRegex(response.content.decode(), self.OPENED)
+
+    def test_a_rejected_issue_comes_back_with_the_window_open(self):
+        """Con lo escrito y el error en su campo, sobre el tablero."""
+        response = self.client.post(
+            self.issue_url(),
+            {
+                "concept": concept("otros").pk,
+                "description": "Cargo sin monto",
+                "amount": "0",
+                "due_date": self.today.isoformat(),
+            },
+        )
+        body = response.content.decode()
+
+        self.assertFalse(Charge.objects.exists())
+        self.assertRegex(body, self.OPENED)
+        self.assertIn('class="tc-field has-error"', body)
+        self.assertIn("Cargo sin monto", body)
+        self.assertIn("page_obj", response.context)
+
+    def test_issuing_needs_to_see_the_debt_too(self):
+        """La ventana vive sobre el tablero: sin verlo no hay dónde abrirla."""
+        self.login(self.make_user("solo_emite", permissions=["add_charge"]))
+
+        self.assertEqual(self.client.get(self.issue_url()).status_code, 403)
 
 
 class ADebtCannotBeNegativeTests(PaymentsTestCase):
@@ -829,7 +928,7 @@ class ADebtCannotBeNegativeTests(PaymentsTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Charge.objects.exists())
-        self.assertIn("amount", response.context["form"].errors)
+        self.assertIn("amount", response.context["charge_form"].errors)
 
     def test_the_screen_rejects_a_zero_amount(self):
         """Cero tampoco: una deuda de cero no reclama nada."""
@@ -841,15 +940,14 @@ class ADebtCannotBeNegativeTests(PaymentsTestCase):
         )
 
         self.assertFalse(Charge.objects.exists())
-        self.assertIn("amount", response.context["form"].errors)
+        self.assertIn("amount", response.context["charge_form"].errors)
 
     def test_the_quantity_stays_at_one_however_it_is_sent(self):
-        """La cantidad está bloqueada: se emite de a una.
+        """La cantidad no se pide: se emite de a una.
 
-        No basta con deshabilitar el campo en el HTML -eso se reescribe desde
-        el navegador-: el formulario lo declara `disabled`, así que Django
-        descarta lo que venga en el POST y toma el valor inicial. Antes un
-        negativo llegaba a validarse; ahora ni se lee.
+        El formulario ya no tiene el campo, así que lo que venga en el POST se
+        descarta y el servicio guarda 1. Antes un negativo llegaba a
+        validarse; ahora ni se lee.
         """
         self.login(self.issuer)
 

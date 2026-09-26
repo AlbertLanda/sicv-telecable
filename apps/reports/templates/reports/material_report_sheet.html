@@ -15,6 +15,7 @@ sale en su propia ventana limpia.
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ report.title }} - {{ report.date_from|date:"d/m/Y" }}</title>
+    {% include "_tc_type.html" %}
 
     <style>
         :root {
@@ -31,8 +32,8 @@ sale en su propia ventana limpia.
             padding: 26px 30px 40px;
             background: #fff;
             color: var(--tc-text);
-            font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            font-size: 13px;
+            font-family: var(--tc-font);
+            font-size: var(--tc-text-md);
         }
 
         /* La franja que identifica la hoja: hora a la izquierda, titulo al
@@ -49,9 +50,9 @@ sale en su propia ventana limpia.
             gap: 16px;
             margin-bottom: 20px;
         }
-        .sheet-stamp { font-size: .78rem; color: var(--tc-muted); }
-        .sheet-title { margin: 0; font-size: 1.12rem; font-weight: 800; text-align: center; }
-        .sheet-branch { font-size: .95rem; font-weight: 800; text-align: right; }
+        .sheet-stamp { font-size: var(--tc-text-sm); color: var(--tc-muted); }
+        .sheet-title { margin: 0; font-size: var(--tc-text-lg); font-weight: 700; text-align: center; }
+        .sheet-branch { font-size: var(--tc-text-base); font-weight: 700; text-align: right; }
 
         /* Trece columnas no caben en una pantalla estrecha. La tabla scrollea
            dentro de su caja en vez de estirar la pagina, y al imprimir el
@@ -67,7 +68,7 @@ sale en su propia ventana limpia.
         th {
             background: var(--tc-blue);
             color: #fff;
-            font-size: .68rem;
+            font-size: var(--tc-text-xs);
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: .02em;
@@ -77,7 +78,7 @@ sale en su propia ventana limpia.
         }
 
         td {
-            font-size: .75rem;
+            font-size: var(--tc-text-md);
             padding: 8px 10px;
             border-bottom: 1px solid #edf2f6;
             vertical-align: top;
@@ -95,8 +96,8 @@ sale en su propia ventana limpia.
             border-top: 2px solid var(--tc-border);
             border-bottom: 0;
             padding-top: 12px;
-            font-weight: 800;
-            font-size: .82rem;
+            font-weight: 700;
+            font-size: var(--tc-text-md);
             text-align: right;
         }
 
@@ -107,8 +108,8 @@ sale en su propia ventana limpia.
             display: inline-block;
             padding: 2px 8px;
             border-radius: 20px;
-            font-size: .66rem;
-            font-weight: 700;
+            font-size: var(--tc-text-xs);
+            font-weight: 600;
         }
         .chip.in { background: #e6f4ec; color: #0b6b3a; }
         .chip.out { background: #fdecec; color: #96281b; }
@@ -120,10 +121,10 @@ sale en su propia ventana limpia.
         }
 
         @media print {
-            body { padding: 0; font-size: 11px; }
+            body { padding: 0; font-size: var(--tc-text-xs); }
             .sheet-scroll { overflow: visible; }
             table { min-width: 0; }
-            th, td { padding: 4px 5px; font-size: .62rem; }
+            th, td { padding: 4px 5px; font-size: var(--tc-text-xs); }
             thead { display: table-header-group; }
             tr { page-break-inside: avoid; }
             @page { size: A4 landscape; margin: 10mm; }

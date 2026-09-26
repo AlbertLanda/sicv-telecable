@@ -2,16 +2,45 @@
 
 {% block title %}Compromiso de pago de {{ customer }} - SICV{% endblock %}
 
-{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* Las cuotas no se pintan hasta encender «Pagar en cuotas»: la mayoría de
+       compromisos son un solo pago, y quince filas vacías de entrada eran una
+       pared de campos que nadie iba a llenar. */
+    .tc-installments { display:none; flex-direction:column; gap:10px; }
+    .tc-commit:has(input[name="in_installments"]:checked) .tc-installments { display:flex; }
+
+    .tc-installment { display:grid; grid-template-columns:64px minmax(0, 1fr) minmax(0, 1.15fr); gap:8px; align-items:center; }
+    .tc-installment[hidden] { display:none; }
+    .tc-installment-number { font-size:var(--tc-text-md); font-weight:600; color:#42607f; }
+    .tc-installment-head { font-size:var(--tc-text-xs); font-weight:700; text-transform:uppercase; color:#52687f; }
+    .tc-installment-errors { grid-column:2 / -1; }
+    /* Sin las flechas del campo numérico: en una caja angosta tapaban el monto. */
+    .tc-installment input[type="number"] { -moz-appearance:textfield; appearance:textfield; }
+    .tc-installment input[type="number"]::-webkit-inner-spin-button,
+    .tc-installment input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    .tc-installments-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+    .tc-link-btn { display:inline-flex; align-items:center; gap:6px; padding:0; border:0; background:none; color:#1564c0; font-size:var(--tc-text-md); font-weight:600; cursor:pointer; }
+    .tc-link-btn:hover { color:#0c4f9e; text-decoration:underline; }
+    .tc-link-btn[hidden] { display:none; }
+
+    .tc-commit .tc-split-side textarea.form-control,
+    .tc-commit .tc-split-main textarea.form-control { min-height:64px; }
+</style>
+{% endblock %}
 
 {% comment %}
-La pantalla completa del compromiso.
+Alta de un compromiso de pago, desde el botón «Compromiso» del tablero.
 
-Desde el tablero de deuda esto se abre en una ventana emergente, que es más
-manejable: el operador no pierde de vista lo que había marcado. Esta pantalla
-sigue existiendo y sigue siendo la que manda -es a donde va el formulario si el
-navegador no puede con la ventana, y la que se ve al entrar por la URL-, y las
-dos pintan las mismas piezas para que no se separen.
+Con la forma del cobro: a la izquierda sobre qué se compromete -las deudas
+marcadas y los datos del papel que se firma- y a la derecha el acuerdo: hasta
+cuándo, por cuánto, quién lo autoriza y, si hace falta, en qué cuotas.
+
+Antes era una sola ficha larga con las quince filas de cuota siempre a la
+vista y un «Anulado» apagado: un compromiso no nace anulado. Las cuotas
+aparecen al encender «Pagar en cuotas», de tres en tres filas visibles y con
+«Agregar cuota» para las demás.
 {% endcomment %}
 
 {% block content %}
@@ -20,7 +49,7 @@ dos pintan las mismas piezas para que no se separen.
 
     {% include "_customer_record_header.html" with active_tab="debt" record_title="Compromiso de pago" %}
 
-    <form method="post" novalidate>
+    <form method="post" class="tc-commit" novalidate>
 
         {% csrf_token %}
 
@@ -41,33 +70,349 @@ dos pintan las mismas piezas para que no se separen.
             </div>
         {% endif %}
 
-        <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-split">
 
-            <div class="tc-section-head banner">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-hand-thumbs-up"></i>Compromiso de pago
-                </h2>
+            <div class="tc-split-main">
+
+                {% comment %}
+                Con el mismo nombre y periodo que en el tablero, para que se
+                reconozca lo que se acaba de marcar. Se lee, no se elige: volver
+                a ofrecerlas serían dos sitios para decidir lo mismo.
+                {% endcomment %}
+                <section class="tc-card tc-section">
+
+                    <div class="tc-section-head">
+                        <h2 class="tc-section-title">
+                            <i class="bi bi-receipt"></i>Deudas del compromiso
+                        </h2>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="tc-table">
+                            <thead>
+                                <tr>
+                                    <th>Detalle</th>
+                                    <th>Periodo</th>
+                                    <th>Vencimiento</th>
+                                    <th class="num">Saldo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for line in selected_lines %}
+                                    <tr>
+                                        <td class="tc-detail" title="{{ line.charge.description }}">{{ line.detail }}</td>
+                                        <td class="tc-date">{{ line.period|default:"—" }}</td>
+                                        <td class="tc-date">{{ line.charge.due_date|date:"j M Y"|default:"—" }}</td>
+                                        <td class="num"><strong>S/ {{ line.charge.balance|floatformat:2 }}</strong></td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="4" class="tc-empty">
+                                            No se marcó ninguna deuda en el tablero. Vuelva a la
+                                            pestaña Deuda y marque las que entran en el compromiso.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if selected_lines %}
+                        <div class="tc-total-row">
+                            <span>Total de la deuda</span>
+                            <strong class="tabular">S/ {{ selected_total|floatformat:2 }}</strong>
+                        </div>
+                    {% endif %}
+
+                </section>
+
+                {% comment %}
+                Lo que va al papel además del acuerdo. Código, fecha y hora los
+                pone el sistema y se muestran apagados.
+                {% endcomment %}
+                <section class="tc-card tc-section">
+
+                    <div class="tc-section-head">
+                        <h2 class="tc-section-title">
+                            <i class="bi bi-file-earmark-text"></i>Datos del compromiso
+                        </h2>
+                    </div>
+
+                    <div class="tc-section-body">
+                        <div class="tc-fields three">
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="codigoCompromiso">Código</label>
+                                <input type="text" id="codigoCompromiso" class="tc-input" value="Automático" disabled>
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="fechaCompromiso">Fecha</label>
+                                <input type="text" id="fechaCompromiso" class="tc-input" value="{{ now|date:'j M Y' }}" disabled>
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="horaCompromiso">Hora</label>
+                                <input type="text" id="horaCompromiso" class="tc-input" value="{{ now|date:'H:i' }}" disabled>
+                            </div>
+
+                            <div class="tc-field span-2{% if form.representative.errors %} has-error{% endif %}">
+                                <label class="tc-field-label" for="{{ form.representative.id_for_label }}">Representante</label>
+                                {{ form.representative }}
+                                <div class="tc-field-hint">Quien firma por el abonado, si no es él.</div>
+                                {% for error in form.representative.errors %}
+                                    <div class="tc-field-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="tc-field{% if form.representative_document.errors %} has-error{% endif %}">
+                                <label class="tc-field-label" for="{{ form.representative_document.id_for_label }}">DNI del representante</label>
+                                {{ form.representative_document }}
+                                {% for error in form.representative_document.errors %}
+                                    <div class="tc-field-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="tc-field wide{% if form.reason.errors %} has-error{% endif %}">
+                                <label class="tc-field-label" for="{{ form.reason.id_for_label }}">Observaciones</label>
+                                {{ form.reason }}
+                                {% for error in form.reason.errors %}
+                                    <div class="tc-field-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                        </div>
+                    </div>
+
+                </section>
+
             </div>
 
-            <div class="tc-section-body">
-                {% include "payments/_commitment_fields.html" %}
-            </div>
+            <section class="tc-card tc-section tc-split-side">
 
-        </section>
+                <div class="tc-section-head">
+                    <h2 class="tc-section-title">
+                        <i class="bi bi-calendar-check"></i>Acuerdo de pago
+                    </h2>
+                </div>
 
-        {% if selected_charges %}
-            <div class="tc-actions">
-                <button type="submit" class="tc-btn primary">
-                    <i class="bi bi-check-lg"></i>Aceptar
-                </button>
-                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
-                    Cancelar
-                </a>
-            </div>
-        {% endif %}
+                <div class="tc-section-body">
+                    <div class="tc-fields stack">
+
+                        <div class="tc-field{% if form.committed_date.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.committed_date.id_for_label }}">Fecha de pago</label>
+                            {{ form.committed_date }}
+                            <div class="tc-field-hint">Hasta este día, lo marcado no entra al corte.</div>
+                            {% for error in form.committed_date.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field{% if form.amount.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.amount.id_for_label }}">Monto comprometido</label>
+                            <div class="tc-money">
+                                <span class="tc-money-prefix" aria-hidden="true">S/</span>
+                                {{ form.amount }}
+                            </div>
+                            <div class="tc-field-hint">
+                                En blanco, el saldo completo{% if selected_lines %} (S/ {{ selected_total|floatformat:2 }}){% endif %}. Puede ser menor, nunca mayor.
+                            </div>
+                            {% for error in form.amount.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field{% if form.authorized_by.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.authorized_by.id_for_label }}">Autoriza</label>
+                            {{ form.authorized_by }}
+                            <div class="tc-field-hint">Quien responde por aplazar el corte.</div>
+                            {% for error in form.authorized_by.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <label class="tc-switch" for="{{ form.in_installments.id_for_label }}">
+                            {{ form.in_installments }}
+                            <span class="tc-switch-text">
+                                <strong>Pagar en cuotas</strong>
+                                <small>Reparte lo comprometido en pagos con su fecha.</small>
+                            </span>
+                        </label>
+
+                        {% comment %}
+                        Las cuotas dicen cómo se piensa pagar, no son otra promesa:
+                        la fecha que aplaza el corte sigue siendo la de arriba.
+                        Las pinta un bucle sobre el formulario, que dice cuántas
+                        hay y cuáles arrancan escondidas.
+                        {% endcomment %}
+                        <div class="tc-installments" id="cuotas"
+                             data-total="{{ selected_total|stringformat:'.2f' }}">
+
+                            <div class="tc-installment" aria-hidden="true">
+                                <span></span>
+                                <span class="tc-installment-head">Monto</span>
+                                <span class="tc-installment-head">Fecha</span>
+                            </div>
+
+                            {% for numero, monto, fecha, escondida in form.installment_rows %}
+                                <div class="tc-installment" data-cuota="{{ numero }}" {% if escondida %}hidden{% endif %}>
+                                    <label class="tc-installment-number" for="{{ monto.id_for_label }}">Cuota {{ numero }}</label>
+                                    <div class="tc-field">
+                                        <div class="tc-money">
+                                            <span class="tc-money-prefix" aria-hidden="true">S/</span>
+                                            {{ monto }}
+                                        </div>
+                                    </div>
+                                    <div class="tc-field">{{ fecha }}</div>
+                                    {% if monto.errors or fecha.errors %}
+                                        <div class="tc-installment-errors">
+                                            {% for error in monto.errors %}
+                                                <div class="tc-field-error">{{ error }}</div>
+                                            {% endfor %}
+                                            {% for error in fecha.errors %}
+                                                <div class="tc-field-error">{{ error }}</div>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+
+                            <div class="tc-installments-foot">
+                                <button type="button" class="tc-link-btn" id="agregarCuota">
+                                    <i class="bi bi-plus-lg"></i>Agregar cuota
+                                </button>
+                                <div class="tc-feedback" id="avisoCuotas" aria-live="polite"></div>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="tc-card-footer">
+                    <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                        Cancelar
+                    </a>
+                    {% if selected_charges %}
+                        <button type="submit" class="tc-btn primary" id="botonCompromiso">
+                            <i class="bi bi-check-lg"></i>Registrar compromiso
+                        </button>
+                    {% endif %}
+                </div>
+
+            </section>
+
+        </div>
 
     </form>
 
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // «Agregar cuota» descubre la siguiente fila escondida; al llegar a la
+    // última se retira. Las filas ya vienen en la página -el servidor dice
+    // cuáles arrancan escondidas-, así que no se inventa ningún campo aquí.
+    //
+    // El aviso suma las cuotas y las compara con lo comprometido -lo escrito
+    // en «Monto comprometido» o, en blanco, el saldo de lo marcado-: pasarse
+    // lo rechazaría el servidor, y quedarse corto se permite pero conviene
+    // verlo.
+    (function () {
+        var cuotas = document.getElementById("cuotas");
+
+        if (!cuotas) {
+            return;
+        }
+
+        var agregar = document.getElementById("agregarCuota");
+        var aviso = document.getElementById("avisoCuotas");
+        var monto = document.getElementById("{{ form.amount.auto_id }}");
+        var interruptor = document.getElementById("{{ form.in_installments.auto_id }}");
+        var filas = Array.prototype.slice.call(cuotas.querySelectorAll("[data-cuota]"));
+
+        function soles(valor) {
+            return "S/ " + valor.toFixed(2).replace(".", ",");
+        }
+
+        function escondidas() {
+            return filas.filter(function (fila) {
+                return fila.hidden;
+            });
+        }
+
+        function refrescar() {
+            agregar.hidden = escondidas().length === 0;
+
+            var comprometido = parseFloat(monto.value);
+
+            if (isNaN(comprometido) || comprometido <= 0) {
+                comprometido = parseFloat(cuotas.dataset.total);
+            }
+
+            var suma = filas.reduce(function (total, fila) {
+                var valor = parseFloat(fila.querySelector('input[name$="_amount"]').value);
+
+                return total + (isNaN(valor) ? 0 : valor);
+            }, 0);
+            var diferencia = Math.round((suma - comprometido) * 100) / 100;
+
+            aviso.className = "tc-feedback";
+
+            if (suma === 0) {
+                aviso.textContent = "";
+            } else if (diferencia === 0) {
+                aviso.textContent = "Las cuotas cubren lo comprometido.";
+                aviso.classList.add("ok");
+            } else if (diferencia > 0) {
+                aviso.textContent = "Suman " + soles(suma) + ": pasan lo comprometido (" + soles(comprometido) + ").";
+                aviso.classList.add("bad");
+            } else {
+                aviso.textContent = "Suman " + soles(suma) + " de " + soles(comprometido) + ".";
+                aviso.classList.add("warn");
+            }
+        }
+
+        agregar.addEventListener("click", function () {
+            var siguiente = escondidas()[0];
+
+            if (siguiente) {
+                siguiente.hidden = false;
+                siguiente.querySelector("input").focus();
+            }
+
+            refrescar();
+        });
+
+        // Al encender el interruptor, el cursor va a la primera cuota.
+        interruptor.addEventListener("change", function () {
+            if (interruptor.checked) {
+                filas[0].querySelector("input").focus();
+            }
+        });
+
+        cuotas.addEventListener("input", refrescar);
+        monto.addEventListener("input", refrescar);
+        refrescar();
+    })();
+
+    // Un solo envío: con un doble clic saldrían dos compromisos.
+    (function () {
+        var boton = document.getElementById("botonCompromiso");
+
+        if (!boton) {
+            return;
+        }
+
+        boton.form.addEventListener("submit", function () {
+            boton.disabled = true;
+        });
+
+        window.addEventListener("pageshow", function () {
+            boton.disabled = false;
+        });
+    })();
+</script>
 {% endblock %}

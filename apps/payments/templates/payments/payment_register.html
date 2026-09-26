@@ -5,28 +5,52 @@
 {% block extra_css %}
 {% include "_tc_design.html" %}
 <style>
-    .tc-sheet .tc-form { gap:18px 22px; }
-    .tc-sheet .tc-field-row { gap:12px; }
+    /* Las dos columnas, el total y el aviso viven en _tc_design.html
+       (`.tc-split`, `.tc-total-row`, `.tc-feedback`): los comparte el
+       compromiso de pago. Aquí queda lo que es solo del cobro. */
 
-    /* La deuda es una fila más de la ficha, no una tarjeta aparte. Se le
-       quita el margen que la tabla trae para vivir suelta, y se le deja el
-       borde para que siga leyéndose como una tabla. */
-    .tc-debt-block { border:1px solid var(--tc-border); border-radius:6px; overflow:hidden; }
-    .tc-debt-block .tc-table { margin:0; }
+    /* El monto es la cifra de la pantalla: más grande que los demás campos. */
+    .tc-pay .tc-field .tc-money.big .form-control { height:52px; font-size:var(--tc-text-xl); font-weight:700; padding-left:44px; font-variant-numeric:tabular-nums; }
+    .tc-pay .tc-money.big .tc-money-prefix { font-size:var(--tc-text-lg); }
+    /* Sin las flechas del campo numérico: en una cifra grande tapaban el
+       final del monto y subían o bajaban de a céntimo. */
+    .tc-pay .tc-money.big .form-control { -moz-appearance:textfield; appearance:textfield; }
+    .tc-pay .tc-money.big .form-control::-webkit-inner-spin-button,
+    .tc-pay .tc-money.big .form-control::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+
+    /* La serie lleva el nombre del talonario, que es largo: más ancho que el
+       número y el lugar. */
+    .tc-pay .tc-fields.three { grid-template-columns:minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.2fr); }
+    .tc-pay .tc-split-side .tc-fields.stack { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px 12px; }
+    .tc-pay .tc-split-side textarea.form-control { min-height:64px; }
+
+    /* Número de operación solo para los medios que lo exigen, y el
+       vencimiento solo para un comprobante pendiente. Sin elegir medio, el
+       número se muestra: todavía puede hacer falta. */
+    .tc-pay:has(input[name="method"]:checked:not([data-referencia])) .tc-only-reference { display:none; }
+    .tc-pay:has(input[name="settled"][value="1"]:checked) .tc-only-pending { display:none; }
+
+    @media (max-width: 900px) {
+        .tc-pay .tc-fields.three { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+        .tc-pay .tc-fields.three,
+        .tc-pay .tc-split-side .tc-fields.stack { grid-template-columns:minmax(0, 1fr); }
+    }
 </style>
 {% endblock %}
 
 {% comment %}
 Cobro en ventanilla.
 
-Todo en una sola ficha -comprobante, deuda que se cobra y forma de pago-
-porque es una sola decisión: el cajero mira lo que el abonado debe y escribe
-encima cuánto entrega y cómo. Repartido en tres tarjetas obligaba a bajar y
-subir para contrastar el total que se escribe con el total que se debe, que
-están a dos pantallas de distancia.
+A la izquierda lo que se cobra -las deudas marcadas en el tablero y el
+comprobante que va a salir-; a la derecha cómo se paga. Antes era una sola
+ficha larga con la etiqueta a la izquierda de cada campo: la tabla de deudas
+quedaba entre la serie y el medio de pago, y el total que se debe y el que se
+escribe no se distinguían de un vistazo. Ahora cada lado responde una
+pregunta y los dos totales quedan uno frente al otro.
 
-La deuda va como una fila más de la ficha, con su etiqueta a la izquierda
-igual que los demás campos, que es como la muestra el sistema anterior.
+Sin la franja azul, como el tablero de deuda.
 {% endcomment %}
 
 {% block content %}
@@ -35,7 +59,7 @@ igual que los demás campos, que es como la muestra el sistema anterior.
 
     {% include "_customer_record_header.html" with active_tab="debt" record_title="Cobrar" %}
 
-    <form method="post" novalidate>
+    <form method="post" class="tc-pay" novalidate>
 
         {% csrf_token %}
 
@@ -56,227 +80,248 @@ igual que los demás campos, que es como la muestra el sistema anterior.
             </div>
         {% endif %}
 
-        <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-split">
 
-            <div class="tc-section-head banner">
-                <h2 class="tc-section-title">
-                    <i class="bi bi-cash-coin"></i>Cobrar
-                </h2>
-            </div>
+            <div class="tc-split-main">
 
-            <div class="tc-section-body">
-                <div class="tc-form">
+                {% comment %}
+                Con el mismo nombre y periodo que en el tablero, para que el
+                cajero reconozca lo que acaba de marcar. Sin cantidad, abonado
+                ni moneda: siempre eran 1, este cliente y soles.
+                {% endcomment %}
+                <section class="tc-card tc-section">
 
-                    {% comment %}
-                    Código, fecha, hora, número y usuario los pone el sistema.
-                    Se muestran para que el operador reconozca la pantalla, no
-                    para editarlos.
-                    {% endcomment %}
-                    <div class="tc-form-label">Código</div>
-                    <div class="tc-form-field">
-                        <input type="text" class="tc-input tc-readonly tc-w-sm" value="0" disabled>
+                    <div class="tc-section-head">
+                        <h2 class="tc-section-title">
+                            <i class="bi bi-receipt"></i>Deudas a cobrar
+                        </h2>
                     </div>
 
-                    <div class="tc-form-label">Fecha y hora</div>
-                    <div class="tc-form-field">
-                        <div class="tc-field-row">
-                            <input type="text" class="tc-input tc-readonly tc-w-md"
-                                   value="{{ today|date:'d/m/Y' }}" disabled>
-                            <input type="text" class="tc-input tc-readonly tc-w-sm"
-                                   value="{{ now|date:'H:i' }}" disabled>
-                        </div>
-                    </div>
-
-                    {% comment %}
-                    La serie va con el lugar de cobro al lado, como la fecha
-                    va con la hora: son los dos datos que dicen de qué
-                    talonario sale el comprobante y en qué caja entró el
-                    dinero.
-
-                    El lugar se muestra pero no se pregunta. Lo elige la barra
-                    superior -ahí están las ventanillas de la sede y su
-                    depósito, que es donde cae lo que llega por banco- y aquí
-                    solo se lee. Preguntarlo otra vez eran dos sitios para
-                    decidir lo mismo, y el que se quedaba sin mirar seguía
-                    gobernando el resto de la sesión.
-                    {% endcomment %}
-                    <label class="tc-form-label" for="{{ form.series.id_for_label }}">
-                        Serie
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-field-row">
-                            <div class="tc-w-md">{{ form.series }}</div>
-                            <input type="text" class="tc-input tc-readonly tc-w-md"
-                                   value="{{ active_office|default:'Sin lugar elegido' }}"
-                                   aria-label="Lugar de cobro" disabled>
-                        </div>
-                        {% for error in form.series.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    {% comment %}
-                    El número es su propio campo y no una ayuda colgada de la
-                    serie: es un dato del comprobante, como en el sistema
-                    anterior. Lo propone el talonario elegido y se puede
-                    escribir encima, porque los blocks de un cobrador vienen
-                    numerados de papel y hay que poner el que toca.
-                    {% endcomment %}
-                    <label class="tc-form-label" for="{{ form.number.id_for_label }}">
-                        Número
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-sm">{{ form.number }}</div>
-                        {% for error in form.number.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <div class="tc-form-label">Usuario</div>
-                    <div class="tc-form-field">
-                        <input type="text" class="tc-input tc-readonly tc-w-md"
-                               value="{{ request.user.username }}" disabled>
-                    </div>
-
-                    <div class="tc-form-label top">Deuda</div>
-                    <div class="tc-form-field">
-                        <div class="tc-debt-block table-responsive">
-                            <table class="tc-table">
-                                <thead>
+                    <div class="table-responsive">
+                        <table class="tc-table">
+                            <thead>
+                                <tr>
+                                    <th>Detalle</th>
+                                    <th>Periodo</th>
+                                    <th class="num">Monto</th>
+                                    <th class="num">Desc.</th>
+                                    <th class="num">A cobrar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for line in selected_lines %}
                                     <tr>
-                                        <th class="num">Cantidad</th>
-                                        <th>Abonado</th>
-                                        <th>Plan</th>
-                                        <th>Mes</th>
-                                        <th>Moneda</th>
-                                        <th class="num">Monto</th>
-                                        <th class="num">Desc</th>
-                                        <th class="num">Total</th>
+                                        <td class="tc-detail" title="{{ line.charge.description }}">{{ line.detail }}</td>
+                                        <td class="tc-date">{{ line.period|default:"—" }}</td>
+                                        <td class="num">S/ {{ line.charge.amount|floatformat:2 }}</td>
+                                        <td class="num">
+                                            {% if line.charge.current_discount %}
+                                                − S/ {{ line.charge.current_discount|floatformat:2 }}
+                                            {% else %}
+                                                <span class="tc-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="num"><strong>S/ {{ line.charge.balance|floatformat:2 }}</strong></td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {% for charge in selected_charges %}
-                                        <tr>
-                                            <td class="num">{{ charge.quantity|floatformat:0 }}</td>
-                                            <td>{{ customer.code }}</td>
-                                            <td>{{ charge.description }}</td>
-                                            <td>{{ charge.period_label|default:"—" }}</td>
-                                            <td>{{ charge.currency }}</td>
-                                            <td class="num">S/ {{ charge.amount|floatformat:2 }}</td>
-                                            <td class="num">S/ {{ charge.current_discount|floatformat:2 }}</td>
-                                            <td class="num">S/ {{ charge.balance|floatformat:2 }}</td>
-                                        </tr>
-                                    {% empty %}
-                                        <tr>
-                                            <td colspan="8" class="tc-empty" style="padding:14px 9px;">
-                                                No se marcó ninguna deuda en el tablero.
-                                                El cobro quedará como saldo a favor del abonado.
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                                {% if selected_charges %}
-                                    <tfoot>
-                                        <tr>
-                                            <th colspan="5" class="num">Totales</th>
-                                            <th class="num">S/ {{ selected_gross|floatformat:2 }}</th>
-                                            <th class="num">S/ {{ selected_discount|floatformat:2 }}</th>
-                                            <th class="num">S/ {{ selected_total|floatformat:2 }}</th>
-                                        </tr>
-                                    </tfoot>
-                                {% endif %}
-                            </table>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="tc-empty">
+                                            No se marcó ninguna deuda en el tablero. El cobro se
+                                            aplica a la deuda más antigua y lo que sobre queda como
+                                            saldo a favor del abonado.
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if selected_lines %}
+                        <div class="tc-total-row">
+                            <span>Total a cobrar</span>
+                            <strong class="tabular">S/ {{ selected_total|floatformat:2 }}</strong>
+                        </div>
+                    {% endif %}
+
+                </section>
+
+                {% comment %}
+                El comprobante que va a salir. Serie y número se eligen; lo
+                demás lo pone el sistema y se muestra apagado.
+
+                El lugar de cobro se muestra pero no se pregunta: lo elige la
+                barra superior, y preguntarlo otra vez eran dos sitios para
+                decidir lo mismo.
+
+                El número lo propone el talonario y se puede escribir encima,
+                porque los blocks de un cobrador vienen numerados de papel.
+                {% endcomment %}
+                <section class="tc-card tc-section">
+
+                    <div class="tc-section-head">
+                        <h2 class="tc-section-title">
+                            <i class="bi bi-file-earmark-text"></i>Comprobante
+                        </h2>
+                    </div>
+
+                    <div class="tc-section-body">
+                        <div class="tc-fields three">
+
+                            <div class="tc-field{% if form.series.errors %} has-error{% endif %}">
+                                <label class="tc-field-label" for="{{ form.series.id_for_label }}">Serie</label>
+                                {{ form.series }}
+                                {% for error in form.series.errors %}
+                                    <div class="tc-field-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="tc-field{% if form.number.errors %} has-error{% endif %}">
+                                <label class="tc-field-label" for="{{ form.number.id_for_label }}">Número</label>
+                                {{ form.number }}
+                                {% for error in form.number.errors %}
+                                    <div class="tc-field-error">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="lugarCobro">Lugar de cobro</label>
+                                <input type="text" id="lugarCobro" class="tc-input"
+                                       value="{{ active_office|default:'Sin lugar elegido' }}" disabled>
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="codigoCobro">Código</label>
+                                <input type="text" id="codigoCobro" class="tc-input" value="Automático" disabled>
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="fechaCobro">Fecha y hora</label>
+                                <input type="text" id="fechaCobro" class="tc-input"
+                                       value="{{ today|date:'j M Y' }} · {{ now|date:'H:i' }}" disabled>
+                            </div>
+
+                            <div class="tc-field">
+                                <label class="tc-field-label" for="usuarioCobro">Usuario</label>
+                                <input type="text" id="usuarioCobro" class="tc-input"
+                                       value="{{ request.user.username }}" disabled>
+                            </div>
+
                         </div>
                     </div>
 
-                    <label class="tc-form-label" for="{{ form.amount.id_for_label }}">
-                        Total
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-sm">{{ form.amount }}</div>
-                        {% for error in form.amount.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
+                </section>
 
-                    <div class="tc-form-label">Cancelado</div>
-                    <div class="tc-form-field">
-                        <div class="tc-choices">
-                            {% for radio in form.settled %}
-                                <label class="tc-choice" for="{{ radio.id_for_label }}">
-                                    {{ radio.tag }}<span>{{ radio.choice_label }}</span>
-                                </label>
-                            {% endfor %}
-                        </div>
-                    </div>
+            </div>
 
-                    <div class="tc-form-label">Medio de pago</div>
-                    <div class="tc-form-field">
-                        <div class="tc-choices">
-                            {% for radio in form.method %}
-                                <label class="tc-choice" for="{{ radio.id_for_label }}">
-                                    {{ radio.tag }}<span>{{ radio.choice_label }}</span>
-                                </label>
-                            {% endfor %}
-                        </div>
-                        {% for error in form.method.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
+            <section class="tc-card tc-section tc-split-side">
 
-                    <label class="tc-form-label" for="{{ form.reference.id_for_label }}">
-                        Número de operación
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-lg">{{ form.reference }}</div>
-                        {% for error in form.reference.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label" for="{{ form.collector.id_for_label }}">
-                        Cobrador
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-lg">{{ form.collector }}</div>
-                        {% for error in form.collector.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label" for="{{ form.due_date.id_for_label }}">
-                        Fecha de vencimiento
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-md">{{ form.due_date }}</div>
-                        {% for error in form.due_date.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <label class="tc-form-label top" for="{{ form.note.id_for_label }}">
-                        Observaciones
-                    </label>
-                    <div class="tc-form-field">
-                        <div class="tc-w-xl">{{ form.note }}</div>
-                        {% for error in form.note.errors %}
-                            <div class="tc-form-error">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
+                <div class="tc-section-head">
+                    <h2 class="tc-section-title">
+                        <i class="bi bi-wallet2"></i>Pago
+                    </h2>
                 </div>
-            </div>
 
-            <div class="tc-card-footer">
-                <button type="submit" class="tc-btn primary">
-                    <i class="bi bi-check-lg"></i>Aceptar
-                </button>
-                <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
-                    Cancelar
-                </a>
-            </div>
+                <div class="tc-section-body">
+                    <div class="tc-fields stack">
 
-        </section>
+                        {% comment %}
+                        «Monto a cobrar» y no «recibido»: si el abonado entrega
+                        un billete mayor, lo que se escribe es lo que se cobra y
+                        el resto es vuelto. Lo que pase del total queda como
+                        saldo a favor, y el aviso de abajo lo dice antes de
+                        enviar.
+                        {% endcomment %}
+                        <div class="tc-field wide{% if form.amount.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.amount.id_for_label }}">Monto a cobrar</label>
+                            <div class="tc-money big">
+                                <span class="tc-money-prefix" aria-hidden="true">S/</span>
+                                {{ form.amount }}
+                            </div>
+                            {% for error in form.amount.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                            {% if selected_lines %}
+                                <div class="tc-feedback" id="avisoMonto" aria-live="polite"
+                                     data-total="{{ selected_total|stringformat:'.2f' }}"></div>
+                            {% endif %}
+                        </div>
+
+                        <div class="tc-field wide{% if form.method.errors %} has-error{% endif %}">
+                            <span class="tc-field-label" id="medioPagoEtiqueta">Medio de pago</span>
+                            <div class="tc-methods" role="radiogroup" aria-labelledby="medioPagoEtiqueta">
+                                {% for radio in form.method %}
+                                    <label class="tc-method" for="{{ radio.id_for_label }}">
+                                        {{ radio.tag }}
+                                        <span class="tc-method-card">
+                                            <i class="bi {{ radio.data.icon }}" aria-hidden="true"></i>
+                                            <span>{{ radio.choice_label }}</span>
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                            {% for error in form.method.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field wide tc-only-reference{% if form.reference.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.reference.id_for_label }}">Número de operación</label>
+                            {{ form.reference }}
+                            {% for error in form.reference.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field">
+                            <span class="tc-field-label" id="canceladoEtiqueta">Cancelado</span>
+                            <div class="tc-segment" role="radiogroup" aria-labelledby="canceladoEtiqueta">
+                                {% for radio in form.settled %}
+                                    <label for="{{ radio.id_for_label }}">
+                                        {{ radio.tag }}<span>{{ radio.choice_label }}</span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="tc-field{% if form.collector.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.collector.id_for_label }}">Cobrador</label>
+                            {{ form.collector }}
+                            {% for error in form.collector.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field tc-only-pending{% if form.due_date.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.due_date.id_for_label }}">Vence el</label>
+                            {{ form.due_date }}
+                            {% for error in form.due_date.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="tc-field wide{% if form.note.errors %} has-error{% endif %}">
+                            <label class="tc-field-label" for="{{ form.note.id_for_label }}">Observaciones</label>
+                            {{ form.note }}
+                            {% for error in form.note.errors %}
+                                <div class="tc-field-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="tc-card-footer">
+                    <a href="{% url 'payments:debt' pk=customer.pk %}" class="tc-btn muted">
+                        Cancelar
+                    </a>
+                    <button type="submit" class="tc-btn success" id="botonCobrar">
+                        <i class="bi bi-check-lg"></i><span>Cobrar</span>
+                    </button>
+                </div>
+
+            </section>
+
+        </div>
 
     </form>
 
@@ -309,6 +354,62 @@ igual que los demás campos, que es como la muestra el sistema anterior.
             var elegida = serie.options[serie.selectedIndex];
 
             numero.value = elegida ? (elegida.dataset.numero || "") : "";
+        });
+    })();
+
+    // El botón dice cuánto se cobra, y el aviso bajo el monto compara lo
+    // escrito con lo marcado antes de enviar: menos no alcanza para las
+    // deudas marcadas -el servidor lo rechazaría- y más queda como saldo a
+    // favor. Así el cajero lo ve antes de pulsar y no después.
+    (function () {
+        var monto = document.getElementById("{{ form.amount.auto_id }}");
+        var boton = document.getElementById("botonCobrar");
+        var aviso = document.getElementById("avisoMonto");
+        var etiqueta = boton.querySelector("span");
+
+        function soles(valor) {
+            return "S/ " + valor.toFixed(2).replace(".", ",");
+        }
+
+        function refrescar() {
+            var escrito = parseFloat(monto.value);
+            var valido = !isNaN(escrito) && escrito > 0;
+
+            etiqueta.textContent = valido ? "Cobrar " + soles(escrito) : "Cobrar";
+
+            if (!aviso) {
+                return;
+            }
+
+            var total = parseFloat(aviso.dataset.total);
+            var diferencia = Math.round((escrito - total) * 100) / 100;
+
+            aviso.className = "tc-feedback";
+
+            if (!valido) {
+                aviso.textContent = "";
+            } else if (diferencia === 0) {
+                aviso.textContent = "Cubre las deudas marcadas.";
+                aviso.classList.add("ok");
+            } else if (diferencia < 0) {
+                aviso.textContent = "Faltan " + soles(-diferencia) + " para cubrir las deudas marcadas.";
+                aviso.classList.add("bad");
+            } else {
+                aviso.textContent = soles(diferencia) + " quedarán como saldo a favor del abonado.";
+                aviso.classList.add("warn");
+            }
+        }
+
+        monto.addEventListener("input", refrescar);
+        refrescar();
+
+        // Un solo envío: con un doble clic saldrían dos cobros.
+        boton.form.addEventListener("submit", function () {
+            boton.disabled = true;
+        });
+
+        window.addEventListener("pageshow", function () {
+            boton.disabled = false;
         });
     })();
 </script>

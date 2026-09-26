@@ -78,6 +78,61 @@ class SeriesSelect(forms.Select):
         return option
 
 
+class PaymentMethodSelect(forms.RadioSelect):
+    """Medios de pago como tarjetas con ícono: se reconocen sin leer.
+
+    Cada opción dice además si el medio exige número de operación. La
+    pantalla pide ese número solo cuando hace falta, y la regla es la del
+    modelo, no una lista repetida en la plantilla.
+    """
+
+    ICONS = {
+        Payment.Method.CASH: "bi-cash",
+        Payment.Method.DEPOSIT: "bi-bank",
+        Payment.Method.TRANSFER: "bi-arrow-left-right",
+        Payment.Method.CARD: "bi-credit-card",
+        Payment.Method.CHEQUE: "bi-journal-text",
+        Payment.Method.YAPE: "bi-phone",
+        Payment.Method.PLIN: "bi-phone",
+    }
+
+    def create_option(self, name, value, label, selected, index, **kwargs):
+        option = super().create_option(
+            name, value, label, selected, index, **kwargs
+        )
+
+        option["icon"] = self.ICONS.get(value, "bi-wallet2")
+
+        if value in Payment.METHODS_REQUIRING_REFERENCE:
+            option["attrs"]["data-referencia"] = ""
+
+        return option
+
+
+#: El orden en que se eligen en ventanilla, no el del modelo: el efectivo y
+#: las dos billeteras primero y juntas, el cheque al final.
+METHOD_ORDER = (
+    Payment.Method.CASH,
+    Payment.Method.YAPE,
+    Payment.Method.PLIN,
+    Payment.Method.TRANSFER,
+    Payment.Method.DEPOSIT,
+    Payment.Method.CARD,
+    Payment.Method.CHEQUE,
+)
+
+
+def _method_choices():
+    """Los medios de pago en `METHOD_ORDER`; uno nuevo del modelo, al final."""
+    first = [(method.value, method.label) for method in METHOD_ORDER]
+    rest = [
+        choice for choice in Payment.Method.choices
+        if choice[0] not in METHOD_ORDER
+    ]
+
+    return first + rest
+
+
 def _style_widgets(form):
     """Aplica al formulario el trazo del sistema visual compartido.
 
@@ -136,8 +191,8 @@ class PaymentRegisterForm(forms.Form):
 
     method = forms.ChoiceField(
         label="Medio de pago",
-        choices=Payment.Method.choices,
-        widget=forms.RadioSelect,
+        choices=_method_choices,
+        widget=PaymentMethodSelect,
     )
 
     # «Cancelado: Si / No (Pendiente)» del comprobante. Un pendiente queda
@@ -158,11 +213,14 @@ class PaymentRegisterForm(forms.Form):
         required=False,
     )
 
+    # Vacío es lo normal -se cobró en ventanilla-, y la opción lo dice.
+    # «Seleccione un vendedor» sonaba a campo obligatorio y no cabía en la
+    # media columna del panel de pago.
     collector = forms.ModelChoiceField(
         label="Cobrador",
         queryset=None,
         required=False,
-        empty_label="Seleccione un vendedor",
+        empty_label="Sin cobrador",
     )
 
     due_date = forms.DateField(
@@ -288,12 +346,14 @@ class ChargeCreateForm(forms.ModelForm):
 
     class Meta:
         model = Charge
+        # Sin cantidad, moneda ni «Actualizar»: la cantidad es siempre 1, la
+        # moneda siempre soles, y si el cargo sigue al plan lo decide su
+        # concepto (ver `clean`). Eran campos que el operador miraba y no
+        # tocaba, y alargaban la pantalla sin decir nada nuevo.
         fields = [
-            "quantity",
             "description",
             "amount",
             "due_date",
-            "auto_update",
         ]
         widgets = {
             # `format` explicito: un <input type="date"> solo entiende
@@ -302,18 +362,11 @@ class ChargeCreateForm(forms.ModelForm):
             "due_date": forms.DateInput(
                 attrs={"type": "date"}, format="%Y-%m-%d"
             ),
-            "description": forms.Textarea(attrs={"rows": 6}),
+            "description": forms.Textarea(attrs={"rows": 3}),
             # `min` frena tambien la flecha del spinner, que es por donde se
             # llega al negativo sin darse cuenta: se baja de 1 a 0 y de 0 a
             # -1 sin escribir nada.
             "amount": forms.NumberInput(attrs={"min": "0.01", "step": "0.01"}),
-            # Cantidad bloqueada en 1. La deuda se emite de a una: lo que
-            # varia entre un caso y otro es el monto, no cuantas veces se
-            # cobra el mismo concepto. Se muestra porque es la pantalla que el
-            # operador tiene aprendida, no para que la escriba.
-            "quantity": forms.NumberInput(
-                attrs={"class": "tc-input tc-readonly tc-w-sm"}
-            ),
         }
         labels = {
             "due_date": "Paga hasta",
@@ -343,23 +396,8 @@ class ChargeCreateForm(forms.ModelForm):
         self.fields["amount"].validators.append(
             MinValueValidator(Decimal("0.01"))
         )
-        self.fields["quantity"].validators.append(
-            MinValueValidator(Decimal("0.00001"))
-        )
 
         self.fields["description"].required = False
-
-        # `disabled` y no solo el atributo del widget: un campo deshabilitado
-        # no viaja en el POST, y sin esto Django lo leeria como vacio. Asi toma
-        # siempre el valor inicial, aunque alguien reescriba el formulario
-        # desde el navegador.
-        self.fields["quantity"].required = False
-        self.fields["quantity"].disabled = True
-
-        # Un 1 pelado y no 1.00000: los cinco decimales existen para repartir
-        # consumos, no para leerse en un campo que siempre dice lo mismo. En
-        # la base sigue guardandose con la escala de la columna.
-        self.fields["quantity"].initial = Decimal("1")
 
         # El catálogo se resuelve al construir el formulario y no en el
         # módulo: una lista fijada al importar no vería un concepto dado de
@@ -377,12 +415,6 @@ class ChargeCreateForm(forms.ModelForm):
         # que el operador mueve, no una que tenga que escribir desde cero.
         self.fields["due_date"].initial = timezone.localdate()
 
-        # Marcado por defecto ahora que la pantalla abre en mensualidad: esa
-        # si sigue al plan, y si la tarifa cambia antes de que la paguen, el
-        # cargo tiene que acompañarla. Para un cargo fijo -una reconexion- el
-        # operador lo desmarca.
-        self.fields["auto_update"].initial = True
-
         # El monto llega escrito con la mensualidad del abonado, que es el
         # caso normal, y queda editable: un prorrateo o un acuerdo de
         # ventanilla se escriben encima.
@@ -393,9 +425,6 @@ class ChargeCreateForm(forms.ModelForm):
                 self.fields["amount"].initial = reference
 
         _style_widgets(self)
-
-    def clean_quantity(self):
-        return self.cleaned_data.get("quantity") or Decimal("1.00000")
 
     def clean(self):
         """El pronto pago no se emite a mano.
@@ -408,6 +437,14 @@ class ChargeCreateForm(forms.ModelForm):
 
         cleaned["early_discount"] = ZERO
         cleaned["discount_deadline"] = None
+
+        # Si el cargo sigue al plan lo dice su concepto y no una casilla. La
+        # mensualidad -y todo lo recurrente, un plan o un alquiler- acompaña
+        # al plan si la tarifa cambia antes de que la paguen; un cargo fijo
+        # -una reconexión, unos materiales- cuesta lo que se pactó. Era lo
+        # que el operador marcaba casi siempre igual según el concepto.
+        concept = cleaned.get("concept")
+        cleaned["auto_update"] = bool(concept and concept.is_monthly)
 
         # Sin descripción se usa el nombre del concepto. La pantalla de deudas
         # muestra el detalle en su propia columna: dejarla vacía daría una fila
@@ -436,10 +473,12 @@ class PaymentCommitmentForm(forms.Form):
     reconozca la pantalla que usa a diario.
     """
 
-    # Quince filas de cuota, como el formulario del sistema anterior. Son las
-    # que el operador espera ver: lo normal es llenar dos o tres, y las que
-    # queden en blanco no se guardan.
+    # Hasta quince cuotas, como el formulario del sistema anterior. Lo normal
+    # es llenar dos o tres, así que al encender «Pagar en cuotas» se ven tres
+    # y las demás se agregan de a una: las quince de golpe eran una pared de
+    # campos vacíos. Las que queden en blanco no se guardan.
     INSTALLMENTS = 15
+    VISIBLE_INSTALLMENTS = 3
 
     committed_date = forms.DateField(
         label="Fecha de pago",
@@ -455,11 +494,14 @@ class PaymentCommitmentForm(forms.Form):
         help_text="En blanco se compromete el saldo completo de lo elegido.",
     )
 
+    # En blanco lo autoriza quien lo registra: es lo que muestra después la
+    # ficha del compromiso. La opción vacía lo dice en vez de ser una caja
+    # en blanco que no se sabe si falta llenar.
     authorized_by = forms.ModelChoiceField(
         label="Autoriza",
         queryset=None,
         required=False,
-        empty_label="",
+        empty_label="Quien lo registra",
     )
 
     representative = forms.CharField(
@@ -479,6 +521,15 @@ class PaymentCommitmentForm(forms.Form):
         max_length=200,
         required=False,
         widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    # Apagado, el compromiso es un solo pago en la fecha de arriba y las
+    # cuotas no se guardan aunque se hubieran escrito antes de apagarlo: lo
+    # que el operador ve es lo que se acuerda.
+    in_installments = forms.BooleanField(
+        label="Pagar en cuotas",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"role": "switch"}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -517,14 +568,35 @@ class PaymentCommitmentForm(forms.Form):
 
         La plantilla no sabe cuantas hay ni como se llaman los campos: los pide
         aqui. Escribir las quince filas en el HTML dejaba el numero de cuotas
-        dicho en dos sitios.
+        dicho en dos sitios. Cada fila dice ademas si arranca escondida.
         """
+        shown = self.shown_installments()
+
         for numero in self.installment_numbers():
             yield (
                 numero,
                 self[f"installment_{numero}_amount"],
                 self[f"installment_{numero}_date"],
+                numero > shown,
             )
+
+    def shown_installments(self):
+        """Cuántas filas se ven: tres, o hasta la última que traiga algo.
+
+        Al volver con un error, una cuota escrita en la fila siete no puede
+        quedar escondida detrás de «Agregar cuota».
+        """
+        last = 0
+
+        if self.is_bound:
+            for numero in self.installment_numbers():
+                if any(
+                    self.data.get(self.add_prefix(f"installment_{numero}_{part}"))
+                    for part in ("amount", "date")
+                ):
+                    last = numero
+
+        return max(self.VISIBLE_INSTALLMENTS, last)
 
     def installments(self):
         """El plan tal como se tecleo: (numero, monto, fecha) por fila.
@@ -532,8 +604,13 @@ class PaymentCommitmentForm(forms.Form):
         Se devuelven tambien las filas a medias -monto sin fecha o al reves-
         para que el servicio pueda rechazarlas diciendo cual: filtrarlas aqui
         dejaria pasar en silencio una cuota que el operador creia haber puesto.
+
+        Sin «Pagar en cuotas» no hay plan, aunque viajen filas escritas.
         """
         datos = getattr(self, "cleaned_data", {})
+
+        if not datos.get("in_installments"):
+            return []
 
         return [
             (

@@ -11,6 +11,7 @@ deuda pagada y no un cobro, y que el comprobante no ofrezca ningún campo que
 se pueda escribir.
 """
 
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -56,60 +57,117 @@ class HistorialBase(PaymentsTestCase):
 
 
 class ColumnasDelHistorialTests(HistorialBase):
-    """Las columnas del sistema anterior, en su orden."""
+    """Las columnas del tablero de deuda, más el comprobante."""
+
+    def pay_october(self, **overrides):
+        datos = dict(
+            customer=self.customer,
+            amount=Decimal("65.00"),
+            method=Payment.Method.CASH,
+            branch=self.branch,
+            user=self.cashier,
+            allocations=[(self.octubre, Decimal("65.00"))],
+        )
+        datos.update(overrides)
+
+        return register_payment(**datos)
+
+    def body(self):
+        self.login(self.viewer)
+
+        return self.client.get(self.url()).content.decode()
 
     def test_it_carries_the_columns_of_the_debt_board(self):
-        """Mismas columnas que la deuda: es la misma lista ya cobrada.
+        """Las del tablero, en su orden, y el comprobante al final.
 
         El operador salta entre las dos pestañas comparando lo que se debe
-        con lo que se pagó, y encontrarse las columnas en otro orden -o con
-        otros nombres- le obliga a releer la cabecera cada vez.
+        con lo que se pagó. Abonado, cantidad y moneda salieron como del
+        tablero -siempre eran este cliente, 1 y soles-; el medio de pago va
+        tras el periodo, y el comprobante se lee en dos: su serie y número,
+        que abren la ficha, y el PDF.
         """
-        register_payment(
-            customer=self.customer,
-            amount=Decimal("65.00"),
-            method=Payment.Method.CASH,
-            branch=self.branch,
-            user=self.cashier,
-            allocations=[(self.octubre, Decimal("65.00"))],
+        self.pay_october()
+
+        cabecera = self.body().split("<thead>")[1].split("</thead>")[0]
+        columnas = [
+            texto.strip()
+            for texto in re.findall(r"<th[^>]*>(.*?)</th>", cabecera, re.S)
+        ]
+
+        self.assertEqual(
+            columnas,
+            [
+                "Fecha", "Detalle", "Periodo", "Método", "Monto",
+                "Vencimiento", "Estado", "Serie", "Comprobante",
+            ],
         )
 
-        self.login(self.viewer)
-        body = self.client.get(self.url()).content.decode()
+    def test_the_row_reads_like_the_board(self):
+        """Nombre corto, periodo en letras y fechas como las del tablero."""
+        self.pay_october()
 
-        for columna in (
-            "Abonado",
-            "Fecha",
-            "Cantidad",
-            "Detalle",
-            "Periodo",
-            "Moneda",
-            "Monto",
-            "Documento",
-            "Vencimiento",
-            "Observación",
-        ):
-            with self.subTest(columna=columna):
-                self.assertIn(f"<th>{columna}</th>", body.replace(
-                    '<th class="num">', "<th>"
-                ))
+        body = self.body()
 
-    def test_the_row_carries_the_period_and_the_due_date_of_the_charge(self):
-        register_payment(
-            customer=self.customer,
-            amount=Decimal("65.00"),
-            method=Payment.Method.CASH,
-            branch=self.branch,
-            user=self.cashier,
-            allocations=[(self.octubre, Decimal("65.00"))],
+        self.assertIn(">Internet 300MG</td>", body)
+        self.assertIn('title="INTERNET 300MG"', body)
+        self.assertIn(">Oct 2025</td>", body)
+        self.assertIn(">31 Oct 2025</td>", body)
+
+    def test_the_pdf_opens_the_receipt_as_it_was_handed_over(self):
+        """En la pestaña de al lado y en el visor, no como descarga."""
+        _, receipt = self.pay_october()
+        pdf = reverse("payments:receipt_pdf", args=[receipt.pk])
+
+        body = self.body()
+
+        self.assertRegex(
+            body,
+            rf'href="{re.escape(pdf)}\?ver=1"\s+target="_blank"',
         )
 
-        self.login(self.viewer)
-        body = self.client.get(self.url()).content.decode()
+    def test_the_method_is_the_one_registered(self):
+        self.pay_october(method=Payment.Method.YAPE, reference="778899")
 
-        self.assertIn("01/10/2025 - 31/10/2025", body)
-        self.assertIn("31/10/2025", body)
-        self.assertIn("INTERNET 300MG", body)
+        body = self.body()
+
+        self.assertIn('<i class="bi bi-phone" aria-hidden="true"></i>Yape', body)
+        self.assertIn('title="Operación 778899"', body)
+
+    def test_the_series_opens_how_the_collection_was_registered(self):
+        """Serie y número como van impresos, hacia la ficha del cobro."""
+        _, receipt = self.pay_october()
+        ficha = reverse("payments:receipt_detail", args=[receipt.pk])
+
+        self.assertRegex(
+            self.body(),
+            rf'href="{re.escape(ficha)}"[^>]*>{re.escape(receipt.full_number)}</a>',
+        )
+
+    def test_the_history_heads_without_the_blue_band(self):
+        self.assertNotIn('class="tc-section-head banner"', self.body())
+
+    def test_a_paid_row_says_so(self):
+        self.pay_october()
+
+        self.assertIn('class="status-success"', self.body())
+
+    def test_a_voided_row_keeps_its_reason_on_the_status(self):
+        """El motivo que llenaba «Observación», a un pase del cursor."""
+        payment, _ = self.pay_october()
+        payment.void(user=self.cashier, reason="Cobro duplicado.")
+
+        body = self.body()
+
+        self.assertIn('class="is-voided"', body)
+        self.assertIn('title="Anulado: Cobro duplicado."', body)
+
+    def test_a_pending_row_says_the_money_has_not_come_in(self):
+        self.pay_october(settled=False)
+
+        body = self.body()
+
+        self.assertIn('class="status-warning"', body)
+        self.assertIn("el dinero todavía no entra", body)
 
 
 class UnaFilaPorDeudaPagadaTests(HistorialBase):
@@ -215,11 +273,12 @@ class DocumentoAbreElComprobanteTests(HistorialBase):
         return reverse("payments:receipt_detail", args=[self.receipt.pk])
 
     def test_the_history_links_the_document_to_its_receipt(self):
+        """La serie lleva a la ficha y el PDF nombra el comprobante."""
         self.login(self.viewer)
         body = self.client.get(self.url()).content.decode()
 
-        self.assertIn(self.receipt.full_number, body)
         self.assertIn(self.receipt_url(), body)
+        self.assertIn(f"el comprobante {self.receipt.full_number}", body)
 
     def test_the_receipt_shows_the_sheet_of_the_collection(self):
         """Las mismas etiquetas que la pantalla de cobro."""

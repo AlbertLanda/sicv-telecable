@@ -23,6 +23,9 @@ from django.views.generic import FormView, TemplateView
 
 from apps.organization.context_processors import get_active_branch
 
+from django.utils import timezone
+
+from .dashboard import build_dashboard
 from .exporters import CONTENT_TYPES, render
 from .forms import VIEWED_FORMATS, MaterialReportForm, SalesReportForm
 from .materials import build_report
@@ -142,3 +145,24 @@ class SalesReportView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView)
 
         return context
 
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """La portada del SICV: cómo está hoy la sede, en cifras.
+
+    No pide un permiso propio: cada bloque pide el de su módulo (ver
+    `dashboard.build_dashboard`). Quien no puede ver ninguno entra igual y
+    se le dice, en vez de un 403 en la primera pantalla después del login.
+    """
+
+    template_name = "reports/dashboard.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        branch = get_active_branch(self.request)
+        today = timezone.localdate()
+
+        context["branch"] = branch
+        context["today"] = today
+        context["sections"] = build_dashboard(self.request.user, branch, today)
+
+        return context

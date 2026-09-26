@@ -32,6 +32,7 @@ from apps.organization.context_processors import (
 
 from .forms import (
     ChargeCreateForm,
+    PaymentMethodSelect,
     PaymentCommitmentForm,
     PaymentRegisterForm,
     PaymentVoidForm,
@@ -40,7 +41,6 @@ from .forms import (
 )
 from .models import (
     Charge,
-    ChargeConcept,
     Payment,
     PaymentCommitment,
     ProposedCharge,
@@ -48,6 +48,7 @@ from .models import (
     ZERO,
     format_receipt_number,
 )
+from .board import charge_lines, debt_rows
 from .pdf import render_receipt
 from .proposals import (
     accept_proposed_charge,
@@ -56,16 +57,13 @@ from .proposals import (
     suggested_proposed_charge_amount,
 )
 from .services import (
-    BILLING_MONTH_DAYS,
     DEFAULT_RECEIPT_SERIES,
     authorizer_options,
     collector_options,
     create_manual_charge,
     customer_commitments,
     customer_debt,
-    daily_rate,
     grant_commitment,
-    monthly_reference,
     outstanding_charges,
     receipt_series_options,
     register_payment,
@@ -153,15 +151,6 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         context["page_sizes"] = self.PAGE_SIZES
         context["page_size"] = page_size
 
-        # Solo la tabla se pagina. Los totales siguen saliendo de `debt`, que
-        # cuenta la deuda entera: si leyeran de la pagina, dirian "15 deudas
-        # abiertas" cuando el abonado tiene 30.
-        paginator = Paginator(context["debt"]["charges"], page_size)
-        page_obj = paginator.get_page(self.request.GET.get("page"))
-        context["paginator"] = paginator
-        context["page_obj"] = page_obj
-        context["is_paginated"] = page_obj.has_other_pages()
-
         # Cada boton del tablero responde a su propio permiso: emitir deuda,
         # cobrarla y aplazar su corte son tres decisiones distintas.
         context["can_create_charge"] = user.has_perm("payments.add_charge")
@@ -170,15 +159,23 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
             "payments.grant_paymentcommitment"
         )
 
+        # «Nueva deuda» se abre en una ventana encima del tablero, así que su
+        # formulario viaja con él. Va en blanco salvo que la emisión lo haya
+        # devuelto con errores (ver ChargeCreateView).
+        if context["can_create_charge"]:
+            if "charge_form" not in context:
+                context["charge_form"] = ChargeCreateForm(customer=self.customer)
+            context["today"] = timezone.localdate()
+
         context["active_commitments"] = [
             commitment
             for commitment in customer_commitments(self.customer)
             if commitment.status == PaymentCommitment.Status.ACTIVE
         ]
 
-        # Deuda que una orden propuso y nadie ha resuelto. Va con los
-        # compromisos, encima de la tabla y fuera de ella: todavia no es un
-        # cargo, no suma al saldo y no se puede cobrar.
+        # Deuda que una orden propuso y nadie ha resuelto. Sale en la tabla,
+        # como pendiente y sin casilla: todavia no es un cargo, no suma al
+        # saldo y no se puede cobrar.
         context["pending_proposals"] = list(pending_proposals(self.customer))
         context["can_resolve_proposal"] = user.has_perm(
             "payments.resolve_proposedcharge"
@@ -208,6 +205,29 @@ class CustomerDebtView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         context["can_resolve_transfer_reconciliation"] = user.has_perm(
             "work_orders.resolve_transfer_reconciliation"
         )
+
+        rows = debt_rows(
+            customer=self.customer,
+            charges=context["debt"]["charges"],
+            proposals=context["pending_proposals"],
+            transfers=context["pending_transfer_reconciliations"],
+            commitments=context["active_commitments"],
+            can_view_order=user.has_perm("work_orders.view_workorder"),
+            can_resolve_proposal=context["can_resolve_proposal"],
+            can_resolve_transfer=context["can_resolve_transfer_reconciliation"],
+        )
+
+        # Solo la tabla se pagina. Los totales siguen saliendo de `debt`, que
+        # cuenta la deuda entera: si leyeran de la pagina, dirian "15 deudas
+        # abiertas" cuando el abonado tiene 30. Lo pendiente entra en la cuenta
+        # de filas del pie porque ocupa filas: sin contarlo, el pie diria «1
+        # registro» encima de una tabla de tres.
+        paginator = Paginator(rows, page_size)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
+        context["paginator"] = paginator
+        context["page_obj"] = page_obj
+        context["is_paginated"] = page_obj.has_other_pages()
+        context["page_has_charges"] = any(row.charge for row in page_obj)
 
         return context
 
@@ -249,7 +269,7 @@ class CustomerPaymentHistoryView(
             .prefetch_related("allocations__charge")
         )
 
-        rows = []
+        pairs = []
 
         for payment in payments:
             allocations = list(payment.allocations.all())
@@ -259,17 +279,47 @@ class CustomerPaymentHistoryView(
             # listaran las aplicaciones, el dinero que el abonado entregó a
             # cuenta desapareceria del historial.
             if not allocations:
-                rows.append(self._row(payment, None))
+                pairs.append((payment, None))
                 continue
 
             for allocation in allocations:
-                rows.append(self._row(payment, allocation))
+                pairs.append((payment, allocation))
 
-        return rows
+        # Cada deuda con el nombre y el periodo que tenía en el tablero: es la
+        # misma fila, ya cobrada.
+        lines = {
+            line.charge.pk: line
+            for line in charge_lines(
+                self.customer,
+                [allocation.charge for _, allocation in pairs if allocation],
+            )
+        }
 
-    def _row(self, payment, allocation):
+        return [
+            self._row(payment, allocation, lines) for payment, allocation in pairs
+        ]
+
+    #: El estado del cobro, con el color de los estados del tablero.
+    STATUS = {
+        Payment.Status.REGISTERED: ("Pagado", "success", ""),
+        Payment.Status.PENDING: (
+            "Pendiente",
+            "warning",
+            "Emitido como pendiente: el dinero todavía no entra.",
+        ),
+        Payment.Status.VOIDED: ("Anulado", "danger", "Anulado"),
+    }
+
+    def _row(self, payment, allocation, lines):
         """Una fila de la tabla, con las columnas de la deuda que cubrió."""
         charge = allocation.charge if allocation else None
+        line = lines.get(charge.pk) if charge else None
+        status, tone, explanation = self.STATUS[payment.status]
+
+        # Lo que antes iba en «Observación» -el motivo de la anulación, la
+        # nota del cobro- queda a un pase del cursor sobre el estado.
+        if payment.status == Payment.Status.VOIDED and payment.void_reason:
+            explanation = f"Anulado: {payment.void_reason}"
 
         return {
             "payment": payment,
@@ -277,10 +327,9 @@ class CustomerPaymentHistoryView(
             # La fecha del pago, no la de emisión del cargo: lo que esta
             # pantalla cuenta es cuándo entró el dinero.
             "date": payment.paid_at or payment.received_at,
-            "quantity": charge.quantity if charge else None,
-            "detail": charge.description if charge else "Pago a cuenta",
-            "period": charge.period_label if charge else "",
-            "currency": charge.currency if charge else "PEN",
+            "detail": line.detail if line else "Pago a cuenta",
+            "full_detail": charge.description if charge else "Pago a cuenta",
+            "period": line.period if line else "",
             # El monto emitido, antes del descuento, para que «Monto» quiera
             # decir lo mismo aquí que en el tablero de deuda y en el cobro.
             "amount": (
@@ -289,6 +338,14 @@ class CustomerPaymentHistoryView(
             "receipt": getattr(payment, "receipt", None),
             "due_date": charge.due_date if charge else payment.due_date,
             "note": payment.note,
+            # Con el ícono de la pantalla de cobro, para reconocerlo igual.
+            "method": payment.get_method_display(),
+            "method_icon": PaymentMethodSelect.ICONS.get(payment.method, "bi-wallet2"),
+            "status": status,
+            "tone": tone,
+            "status_title": " · ".join(
+                part for part in (explanation, payment.note) if part
+            ),
         }
 
     def get_context_data(self, **kwargs):
@@ -399,6 +456,8 @@ class PaymentRegisterView(
         )
         context["charges"] = charges
         context["selected_charges"] = selected
+        # Con el nombre y el periodo del tablero, que es donde se marcaron.
+        context["selected_lines"] = charge_lines(self.customer, selected)
         context["selected_ids"] = [charge.pk for charge in selected]
         context["selected_total"] = sum(
             (charge.balance for charge in selected), ZERO
@@ -671,52 +730,25 @@ class PaymentVoidView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return redirect("payments:history", pk=payment.customer_id)
 
 
-class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateView):
+class ChargeCreateView(CustomerDebtView):
     """
-    Botón «Nuevo» del tablero de deuda: emite un cargo a mano.
+    Botón «Nueva deuda» del tablero de deuda: emite un cargo a mano.
 
-    La mensualidad no se ofrece aquí. La emite el ciclo automático desde el
-    plan contratado, y crearla a mano competiría con ese ciclo hasta
-    duplicarle el mes al abonado.
+    El formulario es una ventana encima del tablero y no una pantalla propia:
+    son seis campos, y en una página entera quedaban perdidos en un rincón
+    mientras la deuda sobre la que se emite desaparecía de la vista. Por eso
+    esta vista responde con el tablero entero y la ventana ya abierta, tanto
+    si se llega por su dirección -el menú de las otras pestañas de la ficha-
+    como si la emisión vuelve con errores.
+
+    Pide ver la deuda además de emitirla: la ventana vive sobre el tablero.
     """
 
-    template_name = "payments/charge_create.html"
-    permission_required = "payments.add_charge"
+    permission_required = ("payments.view_charge", "payments.add_charge")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.setdefault("form", ChargeCreateForm(customer=self.customer))
-        context["today"] = timezone.localdate()
-
-        # Mensualidad con la que "Calcular dias segun monto" prorratea, y lo
-        # que sale de dividirla. Se calculan aqui y no en el navegador para
-        # que la cifra que el operador ve sea la misma que la del servidor:
-        # dos redondeos distintos sobre el mismo plan darian dos deudas.
-        reference = monthly_reference(self.customer)
-
-        context["monthly_reference"] = reference
-        context["daily_rate"] = daily_rate(reference)
-        context["billing_month_days"] = BILLING_MONTH_DAYS
-        context["monthly_concept"] = Charge.Concept.MONTHLY
-
-        # Si el boton de prorrateo nace visible o escondido. Lo decide el
-        # servidor y no el navegador para que la pantalla llegue ya pintada:
-        # en el caso normal -mensualidad- el boton no debe aparecer un
-        # instante despues, ni asomar y esconderse en un formulario que
-        # vuelve con errores sobre otro concepto.
-        #
-        # Con el catalogo en la base, quien manda es la familia del concepto
-        # elegido: mensualidad es una de doscientas y pico opciones, y son
-        # todas las recurrentes -un plan, un alquiler, un enlace- las que se
-        # reparten en dias.
-        form = context["form"]
-        selected = form["concept"].value()
-        concept = None
-
-        if selected:
-            concept = ChargeConcept.objects.filter(pk=selected).first()
-
-        context["es_mensualidad"] = bool(concept and concept.is_monthly)
+        context["open_charge_modal"] = True
 
         return context
 
@@ -724,7 +756,7 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
         form = ChargeCreateForm(request.POST, customer=self.customer)
 
         if not form.is_valid():
-            return self.render_to_response(self.get_context_data(form=form))
+            return self.render_to_response(self.get_context_data(charge_form=form))
 
         try:
             concept = form.cleaned_data["concept"]
@@ -739,14 +771,13 @@ class ChargeCreateView(PermissionRequiredMixin, CustomerScopedMixin, TemplateVie
                 amount=form.cleaned_data["amount"],
                 due_date=form.cleaned_data["due_date"],
                 subscription=form.cleaned_data.get("subscription"),
-                quantity=form.cleaned_data.get("quantity"),
-                auto_update=form.cleaned_data.get("auto_update", False),
+                auto_update=form.cleaned_data["auto_update"],
                 early_discount=form.cleaned_data.get("early_discount"),
                 discount_deadline=form.cleaned_data.get("discount_deadline"),
             )
         except ValidationError as exc:
             form.add_error(None, exc)
-            return self.render_to_response(self.get_context_data(form=form))
+            return self.render_to_response(self.get_context_data(charge_form=form))
 
         messages.success(
             request,
@@ -855,6 +886,8 @@ class PaymentCommitmentCreateView(
         context.setdefault("form", PaymentCommitmentForm())
         context["charges"] = charges
         context["selected_charges"] = selected
+        # Con el nombre y el periodo del tablero, que es donde se marcaron.
+        context["selected_lines"] = charge_lines(self.customer, selected)
         context["selected_ids"] = [charge.pk for charge in selected]
         context["selected_total"] = sum(
             (charge.balance for charge in selected), ZERO

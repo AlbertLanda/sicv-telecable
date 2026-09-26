@@ -12,6 +12,22 @@ from django.db.models import Q
 from apps.services.models import Subscription
 
 
+def in_branch(subscriptions, branch):
+    """Las suscripciones de una sede: la de su zona, o la del abonado si la
+    dirección no tiene zona. La comparten este reporte y el dashboard, para
+    que las ventas cuenten lo mismo en los dos."""
+    if branch is None:
+        return subscriptions
+
+    return subscriptions.filter(
+        Q(address__zone__branch=branch)
+        | Q(
+            address__zone__isnull=True,
+            customer__branch=branch,
+        )
+    )
+
+
 def sales_for_day(*, day, branch=None, seller=None):
     queryset = (
         Subscription.objects
@@ -36,14 +52,7 @@ def sales_for_day(*, day, branch=None, seller=None):
         )
     )
 
-    if branch is not None:
-        queryset = queryset.filter(
-            Q(address__zone__branch=branch)
-            | Q(
-                address__zone__isnull=True,
-                customer__branch=branch,
-            )
-        )
+    queryset = in_branch(queryset, branch)
 
     if seller is not None:
         queryset = queryset.filter(seller=seller)

@@ -1,0 +1,114 @@
+{% comment %}
+Tipografía del SICV: la fuente, su escala y cómo se la aplica a Bootstrap.
+
+Vive en un parcial propio, y no dentro de base.html, porque la necesitan
+también las hojas que se imprimen sin el marco de la aplicación (el reporte de
+materiales no hereda de base). Con una sola definición, la pantalla y el papel
+no pueden separarse.
+
+Hasta aquí cada plantilla elegía su tamaño: se habían juntado 55 valores entre
+9px y 42px, y una misma ficha mostraba veinte a la vez. La escala son siete
+pasos -más uno de portada- y ninguna pantalla debe salirse de ellos. Si algo no encaja en ninguno,
+lo que falta es un paso en la escala y no un valor suelto en la plantilla.
+
+    xs    11px  rótulos en mayúsculas, píldoras, líneas secundarias de tabla
+    sm    12px  etiquetas de dato, ayudas, errores, metadatos, breadcrumb
+    md    13px  celdas de tabla, valores, pestañas, menús, botones chicos
+    base  14px  texto corrido, campos de formulario, botones
+    lg    16px  títulos de tarjeta, nombre del abonado
+    xl    20px  título de página, cifras de resumen
+    2xl   24px  cifras destacadas de tablero, encabezado de la orden
+
+    display 42px  solo el titular de la portada del login. Es la única
+                  pantalla que no es de trabajo: se mira una vez al entrar y
+                  su trabajo es presentar la marca, no dejarse leer rápido.
+
+Los pesos son cuatro: 400 texto, 500 interfaz, 600 énfasis y botones, 700
+títulos. La fuente se carga solo en ese rango; pedir 800 dibujaría 700 igual.
+{% endcomment %}
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+{% comment %}
+Inter variable con eje de tamaño óptico: a 11px abre las letras para que se
+lean y a 24px las cierra para que el título no se vea flojo, sin cargar un
+archivo por peso.
+{% endcomment %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --tc-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+        /* En rem para respetar el tamaño de letra que el operador haya
+           elegido en su navegador; el comentario da el valor por defecto. */
+        --tc-text-xs: .6875rem;   /* 11px */
+        --tc-text-sm: .75rem;     /* 12px */
+        --tc-text-md: .8125rem;   /* 13px */
+        --tc-text-base: .875rem;  /* 14px */
+        --tc-text-lg: 1rem;       /* 16px */
+        --tc-text-xl: 1.25rem;    /* 20px */
+        --tc-text-2xl: 1.5rem;    /* 24px */
+        --tc-text-display: 2.625rem; /* 42px, solo portada del login */
+
+        --bs-font-sans-serif: var(--tc-font);
+        --bs-body-font-family: var(--tc-font);
+        --bs-body-font-size: var(--tc-text-base);
+    }
+
+    body {
+        font-family: var(--tc-font);
+        font-size: var(--tc-text-base);
+    }
+
+    /* Cifras de ancho fijo donde se leen en columna. Con cifras
+       proporcionales un S/ 111.10 queda más angosto que un S/ 800.00 y los
+       montos de una tabla no se alinean.
+
+       Solo en las columnas numéricas -las plantillas ya las marcan con `num`
+       o `text-end`- y no en toda la tabla ni en el cuerpo: Inter hace tabular
+       también el guion, y «OT-2026-000032» o «Huancayo - Of. El Tambo» se
+       abrían como si llevaran espacios. */
+    td.num, th.num,
+    td.text-end, th.text-end,
+    .tabular,
+    .tc-debt-line-monto,
+    .tc-stat .metric { font-variant-numeric: tabular-nums; }
+
+    /* ---------- Bootstrap sobre la escala ----------
+       Bootstrap trae su propia escala en rem sobre 16px, mientras que el
+       cuerpo va a 14: sus campos y botones salían más grandes que el texto
+       que los rodea, y sus títulos a 28-40px. Aquí se los devuelve a la
+       escala para que una pantalla hecha con Bootstrap y otra con las piezas
+       tc se lean como la misma aplicación. */
+
+    h1, .h1 { font-size: var(--tc-text-2xl); }
+    h2, .h2, h3, .h3 { font-size: var(--tc-text-xl); }
+    h4, .h4, h5, .h5 { font-size: var(--tc-text-lg); }
+    h6, .h6 { font-size: var(--tc-text-base); }
+
+    /* Bootstrap pone 500 a las clases .h1-.h6: un h1 con la clase .h3 salía
+       más delgado que un h2 a secas y cada título de página pesaba distinto
+       según cómo se hubiera escrito. */
+    h1, h2, h3, h4, h5, h6,
+    .h1, .h2, .h3, .h4, .h5, .h6 { font-weight: 700; }
+
+    small, .small,
+    .form-text { font-size: var(--tc-text-sm); }
+
+    .form-label { font-size: var(--tc-text-md); }
+    .form-control,
+    .form-select,
+    .input-group-text { font-size: var(--tc-text-base); }
+
+    /* `.btn-sm` se repite después de `.btn`: los dos tienen la misma
+       especificidad, y declarado solo arriba el tamaño general lo pisaba. */
+    .btn { --bs-btn-font-size: var(--tc-text-base); --bs-btn-font-weight: 600; }
+    .btn-sm,
+    .btn-group-sm > .btn { --bs-btn-font-size: var(--tc-text-md); }
+
+    .dropdown-menu { --bs-dropdown-font-size: var(--tc-text-md); }
+    .nav-link { font-size: var(--tc-text-md); }
+    .pagination { --bs-pagination-font-size: var(--tc-text-md); }
+    .table { font-size: var(--tc-text-md); }
+    .badge { font-size: var(--tc-text-xs); font-weight: 600; }
+</style>

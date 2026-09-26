@@ -87,15 +87,19 @@
         background: rgba(255, 255, 255, 0.13);
         border: 1px solid rgba(255, 255, 255, 0.2);
         backdrop-filter: blur(10px);
-        font-size: 28px;
-        font-weight: 800;
+        font-size: var(--tc-text-2xl);
+        font-weight: 700;
     }
 
+    /* Hereda el blanco del panel. Sin esto le gana el azul tinta que base.html
+       da a todos los titulos, y el «SICV» quedaba oscuro sobre el fondo
+       oscuro: solo se veia el punto. */
     .brand-content h1 {
+        color: inherit;
         margin: 0 0 15px;
-        font-size: 42px;
+        font-size: var(--tc-text-display);
         line-height: 1.1;
-        font-weight: 800;
+        font-weight: 700;
         letter-spacing: -1px;
     }
 
@@ -107,7 +111,7 @@
         max-width: 390px;
         margin: 0;
         color: rgba(255, 255, 255, 0.78);
-        font-size: 16px;
+        font-size: var(--tc-text-lg);
         line-height: 1.7;
     }
 
@@ -122,7 +126,7 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        font-size: 14px;
+        font-size: var(--tc-text-base);
         color: rgba(255, 255, 255, 0.88);
     }
 
@@ -139,7 +143,7 @@
 
     .brand-footer {
         color: rgba(255, 255, 255, 0.5);
-        font-size: 12px;
+        font-size: var(--tc-text-sm);
     }
 
     /* PANEL DERECHO */
@@ -164,22 +168,22 @@
     .login-header .welcome {
         margin-bottom: 8px;
         color: var(--sicv-tinta-suave);
-        font-size: 14px;
+        font-size: var(--tc-text-base);
         font-weight: 500;
     }
 
     .login-header h2 {
         margin: 0 0 8px;
         color: var(--sicv-tinta);
-        font-size: 30px;
-        font-weight: 750;
+        font-size: var(--tc-text-2xl);
+        font-weight: 700;
         letter-spacing: -0.5px;
     }
 
     .login-header p {
         margin: 0;
         color: var(--sicv-tinta-suave);
-        font-size: 14px;
+        font-size: var(--tc-text-base);
     }
 
     /* ERROR */
@@ -194,13 +198,13 @@
         border-radius: 12px;
         background: #fef2f2;
         color: #b91c1c;
-        font-size: 13px;
+        font-size: var(--tc-text-md);
         line-height: 1.5;
     }
 
     .error-icon {
         flex-shrink: 0;
-        font-weight: bold;
+        font-weight: 700;
     }
 
     /* CAMPOS */
@@ -213,8 +217,8 @@
         display: block;
         margin-bottom: 8px;
         color: var(--sicv-tinta);
-        font-size: 13px;
-        font-weight: 650;
+        font-size: var(--tc-text-md);
+        font-weight: 600;
     }
 
     .input-wrapper {
@@ -242,7 +246,7 @@
         outline: none;
         background: #ffffff;
         color: var(--sicv-tinta);
-        font-size: 14px;
+        font-size: var(--tc-text-base);
         transition:
             border-color 0.2s ease,
             box-shadow 0.2s ease;
@@ -289,7 +293,7 @@
         justify-content: space-between;
         align-items: center;
         margin: 4px 0 25px;
-        font-size: 13px;
+        font-size: var(--tc-text-md);
     }
 
     .remember-user {
@@ -321,8 +325,8 @@
         background: var(--sicv-azul);
         color: #ffffff;
         cursor: pointer;
-        font-size: 14px;
-        font-weight: 700;
+        font-size: var(--tc-text-base);
+        font-weight: 600;
         box-shadow: 0 8px 18px rgba(27, 58, 92, 0.28);
         transition:
             transform 0.2s ease,
@@ -369,7 +373,7 @@
         gap: 7px;
         margin-top: 28px;
         color: #9ca3af;
-        font-size: 11px;
+        font-size: var(--tc-text-xs);
         text-align: center;
     }
 
@@ -402,10 +406,6 @@
 
         .login-form-section {
             padding: 35px 24px;
-        }
-
-        .login-header h2 {
-            font-size: 26px;
         }
     }
 </style>

@@ -21,6 +21,11 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
         --tc-warning: #f6b700;
         --tc-warning-bg: #fff9e8;
         --tc-success: #0b9a52;
+        /* Verde de boton: algo mas oscuro que --tc-success para que la letra
+           blanca se lea (4.8:1). Bajo el cursor se aviva, como el azul. */
+        --tc-green: #0a8445;
+        --tc-green-hover: #0c9150;
+        --tc-green-dark: #086b38;
 
         /* Margen lateral de las tarjetas. Lo comparten la cabecera, el
            cuerpo, las celdas de los bordes de la tabla y el paginador: las
@@ -52,14 +57,17 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     body { color: var(--tc-text); }
 
     .tc-content { min-width:0; }
-    .tc-breadcrumb { font-size:.77rem; color:#6f8197; margin-bottom:18px; }
+    .tc-breadcrumb { font-size:var(--tc-text-sm); color:#6f8197; margin-bottom:18px; }
     .tc-breadcrumb strong { color:#24486f; }
     .tc-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
     .tc-toolbar-actions { display:flex; gap:10px; flex-wrap:wrap; }
 
-    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:.79rem; font-weight:700; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
+    .tc-btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:38px; border-radius:5px; padding:8px 14px; font-size:var(--tc-text-base); font-weight:600; text-decoration:none; border:1px solid #2374d8; background:#fff; color:#1564c0; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
     .tc-btn.primary { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
     .tc-btn.muted { border-color:#afc0d1; color:#31516f; }
+    /* Verde para lo que entra dinero -cobrar-: se distingue del azul de las
+       demas acciones sin tener que leer la etiqueta. */
+    .tc-btn.success { background:var(--tc-green); border-color:var(--tc-green); color:#fff; }
     .tc-btn.square { width:38px; padding:0; }
 
     /* El hover va DESPUES de las variantes, no antes. Declarado arriba tenia
@@ -74,11 +82,13 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-btn:hover { color:#0c4f9e; background:var(--tc-blue-soft); border-color:#1565c8; box-shadow:0 2px 6px rgba(15, 76, 127, .16); }
     .tc-btn.primary:hover { background:var(--tc-blue-hover); border-color:var(--tc-blue-hover); color:#fff; box-shadow:0 3px 9px rgba(26, 104, 173, .32); }
     .tc-btn.muted:hover { background:#eef2f7; border-color:#8fa3b8; color:#1f3b57; box-shadow:0 2px 6px rgba(35, 74, 112, .14); }
+    .tc-btn.success:hover { background:var(--tc-green-hover); border-color:var(--tc-green-hover); color:#fff; box-shadow:0 3px 9px rgba(10, 132, 69, .32); }
 
     /* Al pulsar se hunde y vuelve al azul de tinta, para que el clic se note
        aun cuando la pantalla tarde en responder. */
     .tc-btn:active { box-shadow:inset 0 1px 3px rgba(10, 59, 102, .25); }
     .tc-btn.primary:active { background:var(--tc-blue-dark); border-color:var(--tc-blue-dark); }
+    .tc-btn.success:active { background:var(--tc-green-dark); border-color:var(--tc-green-dark); }
     .tc-btn:focus-visible { outline:2px solid #2f7df6; outline-offset:2px; }
 
     .tc-card { background:#fff; border:1px solid var(--tc-border); border-radius:8px; box-shadow:0 4px 14px rgba(35, 74, 112, .05); }
@@ -89,17 +99,17 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     .tc-order { margin-top:12px; padding:14px 16px; background:linear-gradient(90deg,#fff9e7 0%,#fffefa 100%); border:1px solid #f2ce63; border-left:6px solid var(--tc-warning); display:grid; grid-template-columns:70px minmax(0,1fr) 360px; gap:16px; align-items:center; }
     .tc-order-icon { width:56px; height:56px; border-radius:50%; background:#ffbd22; color:#111; display:flex; align-items:center; justify-content:center; font-size:1.65rem; }
-    .tc-order-title { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:.9rem; font-weight:800; color:#173d68; }
-    .tc-order-number { font-size:1.17rem; font-weight:800; color:#123c6d; margin-top:2px; }
-    .tc-pill { display:inline-flex; align-items:center; padding:3px 11px; border-radius:5px; background:#e7edf3; color:#284c70; font-size:.7rem; font-weight:700; border:1px solid #d2dde8; }
+    .tc-order-title { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-size:var(--tc-text-base); font-weight:700; color:#173d68; }
+    .tc-order-number { font-size:var(--tc-text-lg); font-weight:700; color:#123c6d; margin-top:2px; }
+    .tc-pill { display:inline-flex; align-items:center; padding:3px 11px; border-radius:5px; background:#e7edf3; color:#284c70; font-size:var(--tc-text-xs); font-weight:600; border:1px solid #d2dde8; }
     .tc-pill.warning { background:#ffc928; color:#2e2600; border-color:#eeb90a; }
-    .tc-order-meta { font-size:.77rem; color:#2e4763; margin-top:7px; }
+    .tc-order-meta { font-size:var(--tc-text-sm); color:#2e4763; margin-top:7px; }
     .tc-order-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
     .tc-tabs { display:grid; grid-template-columns:repeat(6,1fr); margin-top:12px; background:#fff; border:1px solid var(--tc-border); border-radius:7px; overflow:hidden; }
-    .tc-tabs a { text-decoration:none; color:#345a80; padding:13px 10px; text-align:center; font-size:.77rem; border-right:1px solid #e5edf4; display:flex; gap:8px; justify-content:center; align-items:center; }
+    .tc-tabs a { text-decoration:none; color:#345a80; padding:13px 10px; text-align:center; font-size:var(--tc-text-md); border-right:1px solid #e5edf4; display:flex; gap:8px; justify-content:center; align-items:center; }
     .tc-tabs a:last-child { border-right:0; }
-    .tc-tabs a.active { color:#1766c2; font-weight:700; background:#f4f9ff; box-shadow:inset 0 -3px 0 #2f7df6; }
+    .tc-tabs a.active { color:#1766c2; font-weight:600; background:#f4f9ff; box-shadow:inset 0 -3px 0 #2f7df6; }
 
     .tc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
     .tc-section { overflow:hidden; }
@@ -113,24 +123,24 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-section-head.banner { background:var(--tc-blue); border-radius:7px 7px 0 0; padding:14px var(--tc-pad-x); }
     .tc-section-head.banner .tc-section-title { color:#fff; }
     .tc-section-head.banner .tc-section-title i { color:#cfe4f7; }
-    .tc-section-title { margin:0; font-size:.9rem; font-weight:800; color:#153e6b; display:flex; align-items:center; gap:9px; }
+    .tc-section-title { margin:0; font-size:var(--tc-text-base); font-weight:700; color:#153e6b; display:flex; align-items:center; gap:9px; }
     .tc-section-title i { color:#0d4e86; font-size:1.05rem; }
     .tc-section-body { padding:0 var(--tc-pad-x) 16px; }
     .tc-data-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px 28px; }
-    .tc-data-label { font-size:.69rem; color:#74859a; margin-bottom:2px; }
-    .tc-data-value { font-size:.78rem; color:#1b385d; font-weight:500; }
+    .tc-data-label { font-size:var(--tc-text-sm); color:#74859a; margin-bottom:2px; }
+    .tc-data-value { font-size:var(--tc-text-md); color:#1b385d; font-weight:500; }
     .tc-map-layout { display:grid; grid-template-columns:minmax(0,1fr) 185px; gap:12px; align-items:stretch; }
     .tc-map { height:150px; border-radius:6px; border:1px solid #d9e4ef; overflow:hidden; background:#edf2f7; position:relative; }
     .tc-map iframe { width:100%; height:100%; border:0; }
-    .tc-map-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#718096; font-size:.72rem; padding:12px; }
+    .tc-map-empty { height:100%; display:flex; align-items:center; justify-content:center; text-align:center; color:#718096; font-size:var(--tc-text-sm); padding:12px; }
     .tc-map-btn { margin-top:8px; width:100%; }
 
     .tc-table { width:100%; margin:0; border-collapse:collapse; }
     /* La cabecera de columnas respira mas por arriba que por abajo: encima
        tiene la franja de la tarjeta, y pegada a ella los titulos parecian
        parte del titulo de la seccion en vez del encabezado de la tabla. */
-    .tc-table th { background:#f7fafc; color:#52687f; font-size:.63rem; text-transform:uppercase; font-weight:800; padding:16px 12px 11px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
-    .tc-table td { color:#334f6b; font-size:.69rem; padding:12px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
+    .tc-table th { background:#f7fafc; color:#52687f; font-size:var(--tc-text-xs); text-transform:uppercase; font-weight:700; padding:16px 12px 11px; border-bottom:1px solid var(--tc-border); white-space:nowrap; }
+    .tc-table td { color:#334f6b; font-size:var(--tc-text-md); padding:12px; border-bottom:1px solid #edf2f6; vertical-align:middle; }
     .tc-table tr:last-child td { border-bottom:0; }
 
     /* Las celdas de los extremos se alinean con la cabecera de la tarjeta.
@@ -138,13 +148,52 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
        y la ultima quedaba sin aire contra el filo. */
     .tc-table th:first-child, .tc-table td:first-child { padding-left:var(--tc-pad-x); }
     .tc-table th:last-child, .tc-table td:last-child { padding-right:var(--tc-pad-x); }
-    .tc-table a { color:#1473d4; text-decoration:none; font-weight:700; }
-    .tc-table .status-warning { display:inline-block; padding:2px 7px; border-radius:5px; background:#ffc928; color:#332900; font-weight:700; }
-    .tc-table .status-success { display:inline-block; padding:2px 7px; border-radius:4px; background:#0aa25c; color:#fff; font-weight:700; }
+    .tc-table a { color:#1473d4; text-decoration:none; font-weight:600; }
+    /* Estado de una fila, en color pleno y con pocos colores: ambar es lo
+       que sigue abierto -pendiente de pago o de decidir-, morado lo que ya se
+       acordo -un compromiso de pago- y rojo lo que vencio. Con un tono por
+       idea y no por estado lo urgente salta de reojo sin leer la etiqueta.
+       Ambar es «pendiente» en toda la aplicacion, en ordenes igual que en
+       deuda. */
+    .tc-table .status-warning,
+    .tc-table .status-success,
+    .tc-table .status-violet,
+    .tc-table .status-danger { display:inline-block; padding:3px 8px; border-radius:5px; font-size:var(--tc-text-xs); font-weight:600; line-height:1.35; white-space:nowrap; text-decoration:none; }
+    .tc-table .status-warning { background:#ffc928; color:#332900; }
+    .tc-table .status-success { background:#0aa25c; color:#fff; }
+    .tc-table .status-danger { background:#d93a2b; color:#fff; }
+    .tc-table .status-violet { background:#7c3aed; color:#fff; }
+    /* El estado que lleva a algun sitio se oscurece bajo la mano: dice que
+       responde antes del clic. */
+    .tc-table a.status-warning:hover { background:#f2b705; color:#332900; }
+    .tc-table a.status-danger:hover { background:#b92d20; color:#fff; }
+    .tc-table a.status-success:hover { background:#08864b; color:#fff; }
+    .tc-table a.status-violet:hover { background:#6527d1; color:#fff; }
+    .tc-table a[class^="status-"]:focus-visible { outline:2px solid #2f7df6; outline-offset:2px; }
+    /* El detalle en una sola linea: son dos palabras y todas las filas
+       miden lo mismo. */
+    .tc-table .tc-detail { white-space:nowrap; }
+    /* Una fila anulada sigue a la vista -hubo un cobro y se deshizo- pero
+       apagada, para que no se sume de un vistazo con las demas. */
+    .tc-table tr.is-voided td { color:#8a9bad; }
+    .tc-table tr.is-voided td .tc-amount,
+    .tc-table tr.is-voided td.tabular { text-decoration:line-through; }
+
+    /* El medio de pago con el icono de la pantalla de cobro. */
+    .tc-table .tc-method-cell { white-space:nowrap; }
+    .tc-table .tc-method-cell i { margin-right:7px; color:#5b7391; }
+
+    /* El comprobante como papel: rojo de PDF para reconocerlo sin leer. */
+    .tc-pdf-btn,
+    .tc-table .tc-pdf-btn { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border:1px solid #f0c7c1; border-radius:5px; background:#fff6f5; color:#c0392b; font-size:var(--tc-text-xs); font-weight:700; line-height:1.35; text-decoration:none; transition:background-color .12s ease, border-color .12s ease; }
+    .tc-pdf-btn i { font-size:.9rem; }
+    .tc-pdf-btn:hover,
+    .tc-table .tc-pdf-btn:hover { background:#fde9e6; border-color:#e3a79f; color:#a93226; }
+    .tc-pdf-btn:focus-visible { outline:2px solid #2f7df6; outline-offset:2px; }
     .tc-icon-btn { width:31px; height:31px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #aebfd0; border-radius:5px; color:#516a84; background:#fff; text-decoration:none; }
 
     .tc-full { margin-top:14px; }
-    .tc-footer { display:flex; justify-content:space-between; font-size:.66rem; color:#8897a8; margin-top:18px; padding:0 2px 8px; }
+    .tc-footer { display:flex; justify-content:space-between; font-size:var(--tc-text-xs); color:#8897a8; margin-top:18px; padding:0 2px 8px; }
 
     @media (max-width: 1200px) {
         .tc-order { grid-template-columns:60px minmax(0,1fr); }
@@ -182,34 +231,44 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
        operador tiene que ver de un vistazo que lo que mira es una pagina y
        no todo lo que hay. */
     .tc-pager { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:13px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#fbfdff; }
-    .tc-pager-count { font-size:.72rem; color:#6a809a; }
+    .tc-pager-count { font-size:var(--tc-text-sm); color:#6a809a; }
     .tc-pager-actions { display:flex; gap:8px; }
-    .tc-pager .tc-btn { min-height:32px; padding:5px 12px; font-size:.73rem; }
-    .tc-pager-page { min-width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; padding:0 7px; border:1px solid var(--tc-border); border-radius:5px; background:#fff; color:#42607f; font-size:.73rem; font-weight:700; text-decoration:none; }
+    .tc-pager .tc-btn { min-height:32px; padding:5px 12px; font-size:var(--tc-text-md); }
+    .tc-pager-page { min-width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; padding:0 7px; border:1px solid var(--tc-border); border-radius:5px; background:#fff; color:#42607f; font-size:var(--tc-text-md); font-weight:600; text-decoration:none; }
     .tc-pager-page:hover { background:#f4f9ff; border-color:#9fc4ea; color:#1766c2; }
     .tc-pager-page.active { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
-    .tc-pager-size { min-height:32px; padding:4px 8px; font-size:.73rem; width:auto; }
+    /* Con `.tc-pager` delante: el selector lleva tambien `tc-input`, que se
+       declara mas abajo y le imponia 14px y todo el ancho. En la fila del
+       paginador eso lo encogia hasta cortar el texto («15 fil…»). */
+    .tc-pager .tc-pager-size { min-height:32px; padding:4px 8px; font-size:var(--tc-text-md); width:auto; flex-shrink:0; }
     .tc-btn.disabled { opacity:.45; pointer-events:none; }
 
     @media (max-width: 700px) {
         .tc-tabs.auto { grid-auto-flow:row; grid-auto-columns:auto; grid-template-columns:repeat(2,1fr); }
+
+        /* En un telefono el selector de filas, los dos saltos y los numeros
+           no caben en una sola linea. El selector baja a la suya y los
+           controles de pagina quedan juntos debajo, en vez de salirse por el
+           borde de la tarjeta. */
+        .tc-pager-actions { flex-wrap:wrap; }
+        .tc-pager .tc-pager-size { width:100%; }
     }
 
     /* Formulario en filas etiqueta / campo, como el sistema anterior. */
     .tc-form { display:grid; grid-template-columns:190px minmax(0,1fr); gap:12px 18px; align-items:center; }
-    .tc-form-label { font-size:.75rem; font-weight:700; color:#42607f; text-align:right; }
+    .tc-form-label { font-size:var(--tc-text-md); font-weight:600; color:#42607f; text-align:right; }
     .tc-form-label.top { align-self:start; padding-top:9px; }
     .tc-form-field { min-width:0; }
     .tc-form-wide { grid-column:1/-1; }
-    .tc-form-hint { font-size:.68rem; color:#74859a; margin-top:4px; }
-    .tc-form-error { font-size:.7rem; color:#c0392b; margin-top:4px; font-weight:600; }
+    .tc-form-hint { font-size:var(--tc-text-sm); color:#74859a; margin-top:4px; }
+    .tc-form-error { font-size:var(--tc-text-sm); color:#c0392b; margin-top:4px; font-weight:600; }
 
     /* Campos: mismo trazo que las tarjetas, sin el look por defecto de
        Bootstrap, para que el formulario no parezca de otra aplicacion. */
     .tc-input,
     .tc-form-field .form-control,
     .tc-form-field .form-select {
-        font-size:.78rem;
+        font-size:var(--tc-text-base);
         border:1px solid var(--tc-border);
         border-radius:5px;
         padding:7px 10px;
@@ -233,15 +292,15 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     /* Opciones en linea: medio de pago, cancelado. */
     .tc-choices { display:flex; flex-wrap:wrap; gap:8px 18px; }
-    .tc-choice { display:inline-flex; align-items:center; gap:6px; font-size:.76rem; color:#2e4763; }
+    .tc-choice { display:inline-flex; align-items:center; gap:6px; font-size:var(--tc-text-md); color:#2e4763; }
 
-    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:.72rem; padding:12px; border-top:1px solid var(--tc-border); }
+    .tc-table tfoot th { background:#f4f8fc; color:#1b3f6b; font-size:var(--tc-text-md); padding:12px; border-top:1px solid var(--tc-border); }
     .tc-table td.num, .tc-table th.num { text-align:right; white-space:nowrap; }
-    .tc-table .tc-sub { display:block; font-size:.64rem; color:#7c8fa4; margin-top:5px; }
+    .tc-table .tc-sub { display:block; font-size:var(--tc-text-xs); color:#7c8fa4; margin-top:5px; }
 
     .tc-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
 
-    .tc-empty { padding:26px var(--tc-pad-x); font-size:.78rem; color:#5c7590; }
+    .tc-empty { padding:26px var(--tc-pad-x); font-size:var(--tc-text-md); color:#5c7590; }
 
     .tc-metric-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
 
@@ -261,6 +320,161 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     /* Campos compuestos: moneda + monto + boton, en una sola fila. */
     .tc-field-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 
+    /* Formulario con la etiqueta encima del campo.
+
+       Una rejilla de cuatro columnas iguales: los campos cortos -un codigo,
+       una fecha, un monto- ocupan una, y los que necesitan ancho -un concepto
+       del catalogo, una descripcion- la fila entera. Todas las cajas miden
+       lo mismo de alto y arrancan en la misma linea, asi que la pantalla se
+       lee por filas y no campo por campo.
+
+       La etiqueta va encima y no a la izquierda: con etiquetas de largo
+       distinto -«Paga hasta», «Descripcion»- la columna de la izquierda se
+       comia el ancho que necesitan los campos, y cada fila empezaba en otro
+       sitio. */
+    .tc-fields { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:20px; }
+    .tc-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .tc-field.wide { grid-column:1 / -1; }
+    .tc-field-label { font-size:var(--tc-text-md); font-weight:600; color:#2e4763; }
+    .tc-field .form-control,
+    .tc-field .form-select,
+    .tc-field .tc-input { width:100%; height:40px; border:1px solid var(--tc-border); border-radius:7px; padding:8px 12px; font-size:var(--tc-text-base); color:var(--tc-text); background-color:#fff; }
+    /* El selector deja sitio a su flecha. */
+    .tc-field .form-select { padding-right:36px; }
+    .tc-field textarea.form-control { height:auto; min-height:104px; resize:vertical; }
+    .tc-field .form-control:focus,
+    .tc-field .form-select:focus { border-color:#7fb2f0; box-shadow:0 0 0 3px rgba(47,125,246,.14); outline:0; }
+    /* Lo que pone el sistema se lee, no se escribe: apagado y sin foco. */
+    .tc-field .tc-input:disabled { background-color:#f2f5f9; color:#5b7391; cursor:default; }
+    .tc-field-error { font-size:var(--tc-text-sm); color:#c0392b; font-weight:600; }
+
+    /* El monto lleva la moneda dentro de la caja. Un campo aparte bloqueado
+       en PEN era una fila entera para decir siempre lo mismo. */
+    .tc-money { position:relative; }
+    .tc-money-prefix { position:absolute; left:12px; top:50%; transform:translateY(-50%); font-weight:600; color:#64748b; pointer-events:none; }
+    .tc-field .tc-money .form-control { padding-left:38px; }
+
+    /* Pie con los botones a la derecha: donde termina la lectura del
+       formulario, y con la accion principal al final. */
+    .tc-card-footer.end { justify-content:flex-end; }
+
+    /* Dos columnas, para un formulario corto dentro de una ventana: a cuatro
+       las cajas quedaban demasiado estrechas para una fecha. */
+    .tc-fields.two { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    /* Un campo con error se ve antes de leer el mensaje. */
+    .tc-field.has-error .form-control,
+    .tc-field.has-error .form-select { border-color:#e0786c; }
+
+    /* Ventana modal del sistema. Un formulario corto -una deuda, seis campos-
+       se llena encima de la pantalla que lo pide y no en una pagina propia,
+       donde quedaba perdido en un rincon. El fondo se oscurece en el azul de
+       la marca y no en negro, que sobre este gris se veia sucio. */
+    .modal-backdrop { --bs-backdrop-bg:#0a2540; --bs-backdrop-opacity:.45; }
+    .tc-modal .modal-dialog { max-width:600px; }
+    .tc-modal .modal-content { border:0; border-radius:12px; box-shadow:0 24px 60px rgba(10, 37, 64, .28); overflow:hidden; }
+    .tc-modal .modal-header { align-items:flex-start; padding:20px 24px 18px; border-bottom:1px solid var(--tc-border); }
+    .tc-modal-head { display:flex; align-items:center; gap:14px; min-width:0; }
+    .tc-modal-icon { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:var(--tc-blue-soft); color:var(--tc-blue); font-size:1.15rem; }
+    .tc-modal-title { margin:0; font-size:var(--tc-text-lg); font-weight:700; color:#153e6b; }
+    .tc-modal-subtitle { margin:2px 0 0; font-size:var(--tc-text-md); color:var(--tc-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tc-modal .modal-body { padding:22px 24px 24px; }
+    .tc-modal .modal-footer { gap:10px; padding:14px 24px; border-top:1px solid var(--tc-border); background:#fbfdff; }
+    .tc-modal .modal-footer > * { margin:0; }
+
+    /* De a tres: los datos de un comprobante -serie, numero, lugar-. */
+    .tc-fields.three { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    .tc-field.span-2 { grid-column:span 2; }
+    /* Una linea de ayuda bajo el campo: que pasa con lo que se escribe. */
+    .tc-field-hint { font-size:var(--tc-text-sm); color:#74859a; line-height:1.4; }
+
+    /* Pantalla de accion en dos columnas: a la izquierda sobre que se actua
+       -las deudas marcadas- y a la derecha el panel donde se decide. Van
+       separadas -son dos preguntas, «que» y «como»- pero a la misma altura:
+       el total que se debe y lo que se escribe quedan uno frente al otro.
+       La usan el cobro y el compromiso de pago. */
+    .tc-split { display:grid; grid-template-columns:minmax(0, 1fr) minmax(340px, 420px); gap:20px; align-items:start; margin-top:14px; }
+    .tc-split-main { display:flex; flex-direction:column; gap:20px; min-width:0; }
+    .tc-split .tc-section-body { padding:4px var(--tc-pad-x) 20px; }
+    .tc-split .tc-table .tc-muted { color:#8a9bad; }
+    .tc-split-side .tc-card-footer { gap:10px; }
+    .tc-split-side .tc-card-footer .tc-btn:last-child { flex:1; min-height:44px; }
+    /* El total de la tabla, al pie y en grande: es la cifra que se compara. */
+    .tc-total-row { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:14px var(--tc-pad-x); border-top:1px solid var(--tc-border); background:#f7fafc; }
+    .tc-total-row span { font-size:var(--tc-text-md); font-weight:600; color:#42607f; }
+    .tc-total-row strong { font-size:var(--tc-text-xl); font-weight:700; color:var(--tc-text); }
+
+    /* Aviso que cambia mientras se escribe: dice antes de enviar si la cifra
+       cuadra, sobra o no alcanza. */
+    .tc-feedback { font-size:var(--tc-text-sm); font-weight:600; color:#42607f; }
+    .tc-feedback:empty { display:none; }
+    .tc-feedback.ok { color:var(--tc-green); }
+    .tc-feedback.bad { color:#b3261e; }
+    .tc-feedback.warn { color:#8a5a00; }
+
+    /* Interruptor que abre una parte opcional del formulario -«Pagar en
+       cuotas»-. Lo que abre no se pinta hasta que se enciende. */
+    .tc-switch { display:flex; align-items:flex-start; gap:12px; margin:0; padding:12px 14px; border:1px solid var(--tc-border); border-radius:8px; background:#fbfdff; cursor:pointer; }
+    /* La bolita es un circulo de fondo que se corre de izquierda a derecha;
+       sin esto Bootstrap pintaba la palomita de una casilla dentro de la
+       pastilla. */
+    .tc-switch .form-check-input { flex-shrink:0; width:38px; height:22px; margin:1px 0 0; border:0; border-radius:999px; background-color:#c5d1de; background-image:radial-gradient(circle, #fff 7px, transparent 7.5px); background-size:22px 22px; background-repeat:no-repeat; background-position:left center; cursor:pointer; transition:background-color .15s ease, background-position .15s ease; }
+    .tc-switch .form-check-input:checked { background-color:var(--tc-blue); background-image:radial-gradient(circle, #fff 7px, transparent 7.5px); background-position:right center; }
+    .tc-switch .form-check-input:focus { box-shadow:0 0 0 3px rgba(47,125,246,.18); }
+    .tc-switch-text { display:flex; flex-direction:column; gap:2px; }
+    .tc-switch-text strong { font-size:var(--tc-text-base); font-weight:600; color:var(--tc-text); }
+    .tc-switch-text small { font-size:var(--tc-text-sm); color:#74859a; }
+    .tc-switch:has(.form-check-input:checked) { border-color:#9cc0e6; background:var(--tc-blue-soft); }
+    /* Uno debajo de otro: una columna angosta, como el panel de pago. */
+    .tc-fields.stack { grid-template-columns:minmax(0, 1fr); gap:16px; }
+
+    /* Opciones como tarjetas, para elegir de un vistazo -el medio de pago-.
+       El radio sigue ahi para el teclado y el lector de pantalla; lo que se
+       ve y se pulsa es la tarjeta. */
+    .tc-methods { display:grid; grid-template-columns:repeat(auto-fill, minmax(112px, 1fr)); gap:8px; }
+    .tc-method { position:relative; margin:0; cursor:pointer; }
+    .tc-method input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+    .tc-method-card { display:flex; align-items:center; gap:8px; min-height:42px; height:100%; padding:6px 10px; border:1px solid var(--tc-border); border-radius:8px; background:#fff; color:#2e4763; font-size:var(--tc-text-sm); font-weight:600; line-height:1.15; transition:border-color .12s ease, background-color .12s ease, box-shadow .12s ease; }
+    .tc-method-card i { flex-shrink:0; font-size:1.05rem; color:#5b7391; }
+    .tc-method:hover .tc-method-card { border-color:#9fb3c8; background:#f8fbfe; }
+    .tc-method input:checked + .tc-method-card { border-color:var(--tc-blue); background:var(--tc-blue-soft); color:var(--tc-blue); box-shadow:inset 0 0 0 1px var(--tc-blue); }
+    .tc-method input:checked + .tc-method-card i { color:var(--tc-blue); }
+    .tc-method input:focus-visible + .tc-method-card { outline:2px solid #2f7df6; outline-offset:2px; }
+    .tc-field.has-error .tc-method-card { border-color:#e0786c; }
+
+    /* Dos o tres opciones cortas en una sola pieza: Si / No. */
+    .tc-segment { display:flex; gap:3px; height:40px; padding:3px; border:1px solid var(--tc-border); border-radius:8px; background:#f2f5f9; }
+    .tc-segment label { position:relative; flex:1; margin:0; cursor:pointer; }
+    .tc-segment input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+    .tc-segment span { display:flex; align-items:center; justify-content:center; height:100%; padding:0 10px; border-radius:6px; font-size:var(--tc-text-md); font-weight:600; color:#5b7391; white-space:nowrap; transition:background-color .12s ease, color .12s ease, box-shadow .12s ease; }
+    .tc-segment label:hover span { color:#2e4763; }
+    /* La elegida con el mismo trazo que el medio de pago elegido: el blanco
+       sobre gris de otros sistemas se confundia con la opcion de al lado. */
+    .tc-segment input:checked + span { background:var(--tc-blue-soft); color:var(--tc-blue); box-shadow:inset 0 0 0 1px var(--tc-blue); }
+    .tc-segment input:focus-visible + span { outline:2px solid #2f7df6; outline-offset:1px; }
+
+    @media (max-width: 1100px) {
+        .tc-split { grid-template-columns:minmax(0, 1fr); }
+    }
+    @media (max-width: 900px) {
+        .tc-fields,
+        .tc-fields.three { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+        .tc-fields,
+        .tc-fields.three { grid-template-columns:1fr; }
+        .tc-field.span-2 { grid-column:auto; }
+        /* En la ventana, los pares cortos -codigo y fecha, monto y fecha de
+           pago- siguen de a dos: caben, y la ventana no pasa del alto de la
+           pantalla. */
+        .tc-fields.two { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px 12px; }
+        .tc-modal .modal-header,
+        .tc-modal .modal-body,
+        .tc-modal .modal-footer { padding-left:18px; padding-right:18px; }
+    }
+    @media (max-width: 360px) {
+        .tc-fields.two { grid-template-columns:1fr; }
+    }
+
     /* Nota de contexto de una pantalla. Mas discreta que un alert de
        Bootstrap, que ocupaba el ancho entero y competia con los campos. */
     /* Avisos flotantes. Arriba a la derecha, del tamano de una fila de tabla
@@ -279,7 +493,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
        La barra del pie es ese reloj: se encoge durante los segundos que dura
        el aviso, asi que se ve cuanto queda en vez de desaparecer de golpe. */
     .tc-toast-zone { position:fixed; top:16px; right:16px; z-index:1080; display:flex; flex-direction:column; gap:9px; pointer-events:none; }
-    .tc-toast { pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:center; gap:10px; min-width:240px; max-width:360px; padding:11px 14px 13px; border-radius:8px; color:#fff; font-size:.76rem; font-weight:600; line-height:1.45; cursor:pointer; animation:tc-toast-in .18s ease-out; }
+    .tc-toast { pointer-events:auto; position:relative; overflow:hidden; display:flex; align-items:center; gap:10px; min-width:240px; max-width:360px; padding:11px 14px 13px; border-radius:8px; color:#fff; font-size:var(--tc-text-md); font-weight:600; line-height:1.45; cursor:pointer; animation:tc-toast-in .18s ease-out; }
     .tc-toast i { flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:rgba(255, 255, 255, .22); font-size:.88rem; color:inherit; }
     .tc-toast.danger { background:linear-gradient(135deg, #f0564a 0%, #d32f2f 100%); box-shadow:0 8px 22px rgba(211, 47, 47, .34); }
     .tc-toast.warning { background:linear-gradient(135deg, #ffb524 0%, #f08c00 100%); box-shadow:0 8px 22px rgba(240, 140, 0, .34); color:#3b2700; }
@@ -292,7 +506,7 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     @keyframes tc-toast-out { to { opacity:0; transform:translateX(14px); } }
     @keyframes tc-toast-bar { from { transform:scaleX(1); } to { transform:scaleX(0); } }
 
-    .tc-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; margin-bottom:16px; border:1px solid #bfe0f5; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f2f9ff; color:#2a4d70; font-size:.73rem; line-height:1.5; }
+    .tc-note { display:flex; gap:9px; align-items:flex-start; padding:10px 12px; margin-bottom:16px; border:1px solid #bfe0f5; border-left:3px solid var(--tc-blue); border-radius:6px; background:#f2f9ff; color:#2a4d70; font-size:var(--tc-text-md); line-height:1.5; }
     .tc-note i { color:var(--tc-blue); font-size:.95rem; line-height:1.3; }
     .tc-note.danger { border-color:#f2b8b1; border-left-color:#c0392b; background:#fdf3f2; color:#8f2b1f; }
     .tc-note.danger i { color:#c0392b; }
@@ -304,10 +518,10 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
        solo se lee. Volver a ofrecerla para elegir serian dos sitios para
        decidir lo mismo, y el que se quedara sin mirar mandaria igual. */
     .tc-debt-list { border:1px solid var(--tc-border); border-radius:6px; background:#fbfdff; padding:4px 0; max-height:150px; overflow-y:auto; }
-    .tc-debt-line { display:flex; align-items:baseline; gap:12px; padding:5px 11px; font-size:.76rem; color:#2e4763; }
+    .tc-debt-line { display:flex; align-items:baseline; gap:12px; padding:5px 11px; font-size:var(--tc-text-md); color:#2e4763; }
     .tc-debt-line + .tc-debt-line { border-top:1px solid #eef3f8; }
     .tc-debt-line > span:first-child { min-width:0; }
-    .tc-debt-line-monto { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .tc-debt-line-monto { margin-left:auto; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
 
     /* La linea que ademas se decide: lleva casilla y el monto se escribe.
        Centrada y no por linea base, que es lo que alinea texto con texto pero
@@ -317,47 +531,60 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
     .tc-debt-line.editable .form-check-input { margin:0; flex:0 0 auto; }
     .tc-debt-line.editable .form-control { width:7.5rem; text-align:right; padding:5px 9px; }
 
-    /* Lo que esta pendiente sobre este registro, justo encima de su tabla.
+    /* Tabla que se marca y se abre.
 
-       Una tarjeta por aviso, en rejilla: aqui se van acumulando cosas -hoy los
-       compromisos de pago, manana lo que venga- y puestas en fila caben varias
-       sin empujar la primera deuda por debajo del pliegue. `auto-fill` las
-       reparte solas: una ocupa lo suyo y cuatro se reparten el ancho.
+       La primera columna es la casilla: lo que se marca es lo que «Cobrar» y
+       «Compromiso» van a tocar, y a la izquierda se ve antes de leer la fila.
+       Una fila que no se puede marcar -lo pendiente, que todavia no es deuda-
+       lleva la casilla apagada y no un hueco: el hueco se lee como un fallo
+       de la pantalla, la casilla apagada como «esta no».
 
-       El trazo es el de una tarjeta de cifra: rotulo pequeño arriba, el dato
-       que importa en grande debajo, el icono en su cuadro de color y una linea
-       de contexto al pie. Es lo mismo que se hace al resumir un numero, y esto
-       tambien es un numero que hay que leer de un vistazo antes de decidir.
+       La fila se sombrea bajo el cursor para que el ojo no salte de renglon
+       entre la casilla y el monto, y la marcada queda tenida: con diez filas
+       marcadas se ve de un vistazo cuales son sin ir casilla por casilla.
 
-       Toda la tarjeta es el enlace, no un «ver» dentro de ella: el destino es
-       uno solo y un area grande se acierta sin apuntar. */
-    /* Separada de las pestañas por los mismos 14px que `tc-full`, que es lo
-       que hay entre las pestañas y cualquier otra tarjeta. Sin margen arriba
-       quedaba pegada al filo de la pestaña activa y las dos se leian como una
-       sola pieza. Por abajo no lleva nada: el hueco lo pone la tarjeta
-       siguiente con su propio margen, y sumar los dos abriria debajo el doble
-       de lo que hay encima. */
-    .tc-pendientes { display:grid; grid-template-columns:repeat(auto-fill, minmax(255px, 1fr)); gap:12px; margin:14px 0 0; }
-    /* El color va en el filo y en el icono, no en el fondo ni en las letras.
+       La fila no se abre: lo que lleva a otra pantalla es su estado, que es
+       un enlace de verdad -el compromiso, la orden, lo que falta resolver- y
+       bajo el cursor se vuelve la mano. Una fila entera que saltaba de
+       pantalla se llevaba al operador cuando solo queria marcarla. */
+    /* La casilla a 18px y no al 1em de Bootstrap: con la celda a 13px quedaba
+       en un cuadro de 13, que hay que apuntar con cuidado, y es el control que
+       mas veces se pulsa en la pantalla. Marcada se llena del azul del sistema;
+       el halo del foco dice cual es la que recibe la barra espaciadora. */
+    .tc-table .tc-col-check { width:50px; }
+    /* Fondo blanco explicito: Bootstrap le pone el de la pagina, que en el
+       SICV es gris, y la casilla libre parecia apagada. */
+    .tc-table .tc-col-check .form-check-input { width:18px; height:18px; margin:0; vertical-align:middle; background-color:#fff; border:1.5px solid #9fb3c8; border-radius:5px; cursor:pointer; transition:border-color .12s ease, background-color .12s ease, box-shadow .12s ease; }
+    .tc-table .tc-col-check .form-check-input:hover:not(:disabled) { border-color:var(--tc-blue); }
+    .tc-table .tc-col-check .form-check-input:checked,
+    .tc-table .tc-col-check .form-check-input:indeterminate { background-color:var(--tc-blue); border-color:var(--tc-blue); }
+    .tc-table .tc-col-check .form-check-input:focus { border-color:var(--tc-blue); box-shadow:0 0 0 3px rgba(15, 76, 127, .18); }
+    .tc-table .tc-col-check .form-check-input:disabled { background-color:#eef2f6; border-color:#d3dde7; opacity:1; cursor:not-allowed; }
+    .tc-table.selectable tbody tr { transition:background-color .12s ease; }
+    .tc-table.selectable tbody tr:hover { background:#f5f9fd; }
+    .tc-table.selectable tbody tr.is-selected { background:#eaf3fc; }
+    /* «14 Sep 2026» en una sola linea: partida en dos, la columna de fechas
+       se leeria a saltos. */
+    .tc-table .tc-date { white-space:nowrap; }
 
-       La tarjeta se tiene que ver de reojo -esto se mira antes de decidir que
-       cobrar, no se estudia- y para eso basta el filo izquierdo con el cuadro
-       del icono en color pleno: los dos se ven juntos desde lejos aunque no se
-       lea ni una palabra. El fondo blanco y el texto en el azul del sistema se
-       quedan, que es lo que hace que siga siendo legible y que no parezca de
-       otra aplicacion.
+    /* El monto de lo pendiente es el sugerido, no uno que se deba: se pinta
+       apagado para que no se sume a ojo con los de arriba y abajo. */
+    .tc-table .tc-amount { font-weight:600; color:var(--tc-text); }
+    .tc-table .tc-amount.pending { font-weight:400; color:#7c8fa4; }
 
-       Ambar y no rojo: un compromiso vigente no es una alarma. Es un acuerdo
-       que cambia lo que se le puede decir al abonado, y en rojo competiria con
-       los avisos de algo que ha ido mal. */
-    .tc-pendiente { display:block; padding:14px 16px 15px; border:1px solid #f0cf88; border-left:4px solid #e0890c; border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(35, 74, 112, .05); text-decoration:none; transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-    .tc-pendiente:hover, .tc-pendiente:focus-visible { border-color:#e5ae3e; border-left-color:#c67405; box-shadow:0 9px 22px rgba(176, 116, 12, .24); transform:translateY(-1px); }
-    .tc-pendiente-cab { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-    .tc-pendiente-rotulo { font-size:.74rem; font-weight:700; color:var(--tc-muted); line-height:1.35; letter-spacing:.01em; }
-    .tc-pendiente-icono { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg, #ffc12e 0%, #ef8d08 100%); color:#fff; font-size:1rem; box-shadow:0 3px 9px rgba(224, 137, 12, .38); }
-    .tc-pendiente-dato { margin-top:7px; font-size:1.16rem; font-weight:800; letter-spacing:-.01em; color:var(--tc-text); line-height:1.25; }
-    .tc-pendiente-pie { margin-top:8px; display:flex; align-items:center; gap:6px; font-size:.73rem; font-weight:700; color:#5f7893; }
-    .tc-pendiente-pie .bi { color:#e0890c; font-size:.8rem; }
+    /* Cabecera de una tabla con acciones: el titulo a la izquierda y lo que
+       se hace con las filas marcadas arriba a la derecha, pegado a la tabla
+       sobre la que actua y no al pie, donde con una tabla larga quedaba
+       fuera de la pantalla. */
+    .tc-board-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; }
+    /* Apagado mientras no hay nada marcado, y quieto bajo el cursor: si se
+       encendiera al pasar por encima prometeria un clic que no hace nada. */
+    .tc-btn:disabled,
+    .tc-btn:disabled:hover { opacity:.45; cursor:not-allowed; box-shadow:none; background:#fff; border-color:#2374d8; color:#1564c0; }
+    .tc-btn.primary:disabled,
+    .tc-btn.primary:disabled:hover { background:var(--tc-blue); border-color:var(--tc-blue); color:#fff; }
+    .tc-btn.success:disabled,
+    .tc-btn.success:disabled:hover { background:var(--tc-green); border-color:var(--tc-green); color:#fff; }
 
 
     /* Pie de tarjeta: donde se confirma o se abandona. Mismo trazo que el pie
@@ -366,8 +593,8 @@ ajuste. Las pantallas lo cargan desde su bloque extra_css.
 
     /* Menu de desbordamiento de la ficha. Hereda de Bootstrap la
        mecanica y de aqui el trazo, para que no parezca de otra app. */
-    .tc-menu { font-size:.78rem; border:1px solid var(--tc-border); border-radius:7px; padding:6px; box-shadow:0 8px 24px rgba(20,52,88,.12); }
-    .tc-menu .dropdown-item { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:5px; color:#2e4763; font-weight:600; }
+    .tc-menu { font-size:var(--tc-text-md); border:1px solid var(--tc-border); border-radius:7px; padding:6px; box-shadow:0 8px 24px rgba(20,52,88,.12); }
+    .tc-menu .dropdown-item { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:5px; color:#2e4763; font-weight:500; }
     .tc-menu .dropdown-item i { color:#1564c0; font-size:.95rem; }
     .tc-menu .dropdown-item:hover { background:#f4f9ff; color:#1766c2; }
 

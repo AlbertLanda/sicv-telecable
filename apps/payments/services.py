@@ -547,6 +547,22 @@ def default_concept():
     )
 
 
+def active_subscription(customer):
+    """La suscripción activa que representa al abonado en cobranza.
+
+    La primera activa, por orden de alta. Es la que da la mensualidad de
+    referencia y el plan que se nombra en una mensualidad puesta a mano: las
+    dos preguntas tienen que mirar la misma suscripción, o el monto diría un
+    plan y el detalle otro.
+    """
+    return (
+        customer.subscriptions.filter(status=Subscription.Status.ACTIVE)
+        .select_related("plan")
+        .order_by("pk")
+        .first()
+    )
+
+
 def monthly_reference(customer):
     """Mensualidad del abonado, la base de todo prorrateo.
 
@@ -555,11 +571,7 @@ def monthly_reference(customer):
     suscripcion activa devuelve cero, y la pantalla lo dice en vez de
     calcular sobre esa nada.
     """
-    active = (
-        customer.subscriptions.filter(status=Subscription.Status.ACTIVE)
-        .order_by("pk")
-        .first()
-    )
+    active = active_subscription(customer)
 
     return active.total_monthly_price if active else ZERO
 

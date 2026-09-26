@@ -39,8 +39,8 @@
         margin-bottom: 5px;
 
         color: #64748b;
-        font-size: .68rem;
-        font-weight: 800;
+        font-size: var(--tc-text-xs);
+        font-weight: 700;
         letter-spacing: .09em;
         text-transform: uppercase;
     }
@@ -56,8 +56,8 @@
         margin: 0;
 
         color: #17355f;
-        font-size: 1.55rem;
-        font-weight: 800;
+        font-size: var(--tc-text-2xl);
+        font-weight: 700;
         line-height: 1.15;
     }
 
@@ -65,7 +65,7 @@
         margin-top: 5px;
 
         color: #64748b;
-        font-size: .82rem;
+        font-size: var(--tc-text-md);
     }
 
     .tc-order-brand-identification {
@@ -75,8 +75,8 @@
 
     .tc-order-brand-number-label {
         color: #7a8ba0;
-        font-size: .62rem;
-        font-weight: 800;
+        font-size: var(--tc-text-xs);
+        font-weight: 700;
         letter-spacing: .08em;
     }
 
@@ -84,8 +84,8 @@
         margin: 2px 0 6px;
 
         color: #0f4c7f;
-        font-size: 1.22rem;
-        font-weight: 800;
+        font-size: var(--tc-text-xl);
+        font-weight: 700;
         white-space: nowrap;
     }
 
@@ -100,7 +100,7 @@
         border-top: 1px solid #edf2f7;
 
         color: #45627f;
-        font-size: .74rem;
+        font-size: var(--tc-text-sm);
     }
 
     .tc-order-brand-meta span {
@@ -168,7 +168,7 @@
     }
 
     .tc-order-toolbar .dropdown-menu {
-        font-size: .78rem;
+        font-size: var(--tc-text-md);
         border: 1px solid #d9e4ef;
         box-shadow: 0 8px 20px rgba(35, 74, 112, .12);
     }
@@ -206,8 +206,8 @@
     border-radius: 6px;
 
     color: #1564c0;
-    font-size: .78rem;
-    font-weight: 700;
+    font-size: var(--tc-text-base);
+    font-weight: 600;
     line-height: 1.2;
 
     text-decoration: none;

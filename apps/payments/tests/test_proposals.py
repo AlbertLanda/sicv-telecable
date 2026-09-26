@@ -260,7 +260,14 @@ class ProposalWebTests(TransferProposalTestCase):
 
         return self.client.post(self.resolve_url(), data)
 
-    def test_la_propuesta_sale_encima_de_la_tabla_y_no_dentro(self):
+    def test_la_propuesta_sale_en_la_tabla_como_pendiente_y_no_como_deuda(self):
+        """Una fila más de la tabla, pero no un cargo.
+
+        Iba en una tarjeta encima de la tabla; con varias acumuladas la
+        primera deuda quedaba por debajo del pliegue. En la tabla sale en
+        ámbar, «Pendiente», y sin casilla que se pueda marcar: hasta que
+        alguien la acepte con su monto no suma al saldo ni se cobra.
+        """
         self.login(self.resolver)
 
         response = self.client.get(self.debt_url())
@@ -269,6 +276,14 @@ class ProposalWebTests(TransferProposalTestCase):
         self.assertContains(response, "Deuda traslado")
         self.assertIn(self.proposal, response.context["pending_proposals"])
         self.assertEqual(list(response.context["debt"]["charges"]), [])
+
+        [fila] = response.context["page_obj"]
+        self.assertEqual(fila.status, "Pendiente")
+        self.assertIsNone(fila.charge)
+        self.assertNotRegex(
+            response.content.decode(), r'name="charges"\s+value='
+        )
+        self.assertContains(response, f'href="{self.resolve_url()}"')
 
     def test_la_pantalla_muestra_el_traslado_como_linea_de_deuda(self):
         self.login(self.resolver)
