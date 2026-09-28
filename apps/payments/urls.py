@@ -43,6 +43,13 @@ urlpatterns = [
         name="charge_create",
     ),
 
+    # Venta de equipo: genera deuda inmediata y OT de instalación.
+    path(
+        "clientes/<int:pk>/equipos/nuevo/",
+        views.EquipmentSaleCreateView.as_view(),
+        name="equipment_sale_create",
+    ),
+
     # Boton "Compromiso": aplazar el corte de cargos concretos.
     path(
         "clientes/<int:pk>/compromiso/",
