@@ -32,6 +32,7 @@ from apps.organization.context_processors import (
 
 from .forms import (
     ChargeCreateForm,
+    EquipmentSaleForm,
     PaymentMethodSelect,
     PaymentCommitmentForm,
     PaymentRegisterForm,
@@ -41,6 +42,7 @@ from .forms import (
 )
 from .models import (
     Charge,
+    EquipmentSale,
     Payment,
     PaymentCommitment,
     ProposedCharge,
@@ -56,6 +58,7 @@ from .proposals import (
     pending_proposals,
     suggested_proposed_charge_amount,
 )
+from .equipment_sales import create_equipment_sale
 from .services import (
     DEFAULT_RECEIPT_SERIES,
     authorizer_options,
@@ -784,6 +787,75 @@ class ChargeCreateView(CustomerDebtView):
             f"Cargo emitido: {charge.description} por S/ {charge.amount}.",
         )
 
+        return redirect("payments:debt", pk=self.customer.pk)
+
+
+class EquipmentSaleCreateView(
+    PermissionRequiredMixin,
+    CustomerScopedMixin,
+    TemplateView,
+):
+    """Venta puntual de repetidor/Mesh con deuda y OT en una sola acción."""
+
+    template_name = "payments/equipment_sale_create.html"
+    permission_required = (
+        "payments.add_charge",
+        "work_orders.add_workorder",
+    )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.setdefault(
+            "form",
+            EquipmentSaleForm(customer=self.customer),
+        )
+        context["recent_sales"] = (
+            EquipmentSale.objects
+            .filter(customer=self.customer)
+            .select_related(
+                "product",
+                "subscription",
+                "subscription__service_type",
+                "charge",
+                "work_order",
+                "registered_by",
+            )
+            .order_by("-created_at", "-pk")[:10]
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = EquipmentSaleForm(
+            request.POST,
+            customer=self.customer,
+        )
+
+        if not form.is_valid():
+            return self.render_to_response(
+                self.get_context_data(form=form)
+            )
+
+        try:
+            sale = create_equipment_sale(
+                customer=self.customer,
+                subscription=form.cleaned_data["subscription"],
+                product=form.cleaned_data["product"],
+                user=request.user,
+            )
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.render_to_response(
+                self.get_context_data(form=form)
+            )
+
+        messages.success(
+            request,
+            (
+                f"Venta registrada: {sale.product.name} por "
+                f"S/ {sale.price_snapshot:.2f}. "
+                f"Se generó la deuda y la OT {sale.work_order.order_number}."
+            ),
+        )
         return redirect("payments:debt", pk=self.customer.pk)
 
 
