@@ -47,6 +47,41 @@ jobs:
       - name: Verificar que no falten migraciones
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Validar perfil de configuracion Azure
+        env:
+          DJANGO_SECRET_KEY: azure-ci-only-long-secret-key-not-for-production-123456789
+          DJANGO_DEBUG: "False"
+          DJANGO_PRODUCTION: "True"
+          DJANGO_ALLOWED_HOSTS: sicv-pilot.azurewebsites.net
+          DJANGO_CSRF_TRUSTED_ORIGINS: https://sicv-pilot.azurewebsites.net
+          DJANGO_DB_ENGINE: postgresql
+          DJANGO_DB_NAME: sicv_ci
+          DJANGO_DB_USER: sicv_ci_user
+          DJANGO_DB_PASSWORD: ci-only-password
+          DJANGO_DB_HOST: sicv-ci.postgres.database.azure.com
+          DJANGO_DB_PORT: "5432"
+          DJANGO_DB_SSLMODE: require
+        run: |
+          python - <<'PY'
+          import django
+          django.setup()
+
+          from django.conf import settings
+
+          assert settings.PRODUCTION is True
+          assert settings.DEBUG is False
+          assert settings.SECURE_SSL_REDIRECT is True
+          assert settings.SESSION_COOKIE_SECURE is True
+          assert settings.CSRF_COOKIE_SECURE is True
+          assert settings.DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql"
+          assert settings.DATABASES["default"]["OPTIONS"]["sslmode"] == "require"
+          assert (
+              settings.STORAGES["staticfiles"]["BACKEND"]
+              == "whitenoise.storage.CompressedManifestStaticFilesStorage"
+          )
+          print("Perfil Azure cargado correctamente")
+          PY
+
       - name: Ejecutar la suite de pruebas
         run: python manage.py test --verbosity 2
 
