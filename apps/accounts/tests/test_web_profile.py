@@ -2,22 +2,18 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.audit.models import AuditEvent
 
 
 class ProfileViewTests(TestCase):
-    """
-    Mi perfil: identidad de solo lectura, contacto editable.
-
-    El foco de estas pruebas es de seguridad, no de formato: verificar
-    que ningún valor enviado por el cliente distinto de phone/email
-    puede cambiar identidad ni rol, y que la vista siempre opera sobre
-    el propio usuario autenticado.
-    """
+    """El propio usuario mantiene su identidad/contacto, no sus permisos."""
 
     def setUp(self):
         self.user = User.objects.create_user(
             username="tecnico1",
             password="ClaveSegura123",
+            first_name="Técnico",
+            last_name="Uno",
             role=User.Role.TECHNICIAN,
             email="viejo@telecable.pe",
         )
@@ -28,6 +24,17 @@ class ProfileViewTests(TestCase):
         )
         self.client.login(username="tecnico1", password="ClaveSegura123")
         self.url = reverse("accounts:profile")
+
+    def profile_payload(self, **overrides):
+        payload = {
+            "username": self.user.username,
+            "first_name": self.user.first_name,
+            "last_name": self.user.last_name,
+            "phone": self.user.phone,
+            "email": self.user.email,
+        }
+        payload.update(overrides)
+        return payload
 
     def test_anonymous_user_is_redirected_to_login(self):
         self.client.logout()
@@ -44,48 +51,91 @@ class ProfileViewTests(TestCase):
         self.assertContains(response, "tecnico1")
         self.assertNotContains(response, "tecnico2")
 
-    def test_contact_fields_are_updated(self):
-        response = self.client.post(self.url, {
-            "phone": "987654321",
-            "email": "nuevo@telecable.pe",
-        })
+    def test_identity_and_contact_fields_are_updated(self):
+        response = self.client.post(
+            self.url,
+            self.profile_payload(
+                username="tecnico.uno",
+                first_name="Kevin",
+                last_name="Rivera",
+                phone="987654321",
+                email="nuevo@telecable.pe",
+            ),
+        )
 
         self.assertEqual(response.status_code, 302)
 
         self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "tecnico.uno")
+        self.assertEqual(self.user.first_name, "Kevin")
+        self.assertEqual(self.user.last_name, "Rivera")
         self.assertEqual(self.user.phone, "987654321")
         self.assertEqual(self.user.email, "nuevo@telecable.pe")
 
-    def test_identity_fields_cannot_be_changed_through_a_manipulated_post(self):
-        response = self.client.post(self.url, {
-            "phone": "987654321",
-            "email": "nuevo@telecable.pe",
-            "username": "otro_nombre",
-            "role": User.Role.ADMIN,
-            "is_superuser": "on",
-        })
+    def test_privilege_fields_cannot_be_changed_through_a_manipulated_post(self):
+        response = self.client.post(
+            self.url,
+            self.profile_payload(
+                role=User.Role.ADMIN,
+                is_superuser="on",
+                is_staff="on",
+                branch="999",
+                office="999",
+            ),
+        )
 
         self.assertEqual(response.status_code, 302)
 
         self.user.refresh_from_db()
-        self.assertEqual(self.user.username, "tecnico1")
         self.assertEqual(self.user.role, User.Role.TECHNICIAN)
         self.assertFalse(self.user.is_superuser)
+        self.assertFalse(self.user.is_staff)
+        self.assertIsNone(self.user.branch_id)
+        self.assertIsNone(self.user.office_id)
 
     def test_profile_always_operates_on_the_authenticated_user(self):
-        """
-        No hay parámetro de OT ni de pk en esta URL: no existe forma de
-        pedir el perfil de otro usuario. Esta prueba fija ese contrato.
-        """
-        response = self.client.post(self.url, {
-            "phone": "000",
-            "email": "atacante@telecable.pe",
-        })
+        response = self.client.post(
+            self.url,
+            self.profile_payload(
+                phone="000",
+                email="atacante@telecable.pe",
+            ),
+        )
 
         self.assertEqual(response.status_code, 302)
 
         self.other_user.refresh_from_db()
         self.assertNotEqual(self.other_user.email, "atacante@telecable.pe")
+
+    def test_profile_changes_are_audited_with_before_and_after_values(self):
+        response = self.client.post(
+            self.url,
+            self.profile_payload(
+                phone="999888777",
+                email="auditado@telecable.pe",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = AuditEvent.objects.get(
+            actor=self.user,
+            route_name="accounts:profile",
+        )
+        self.assertEqual(event.description, "Actualizó su perfil")
+        self.assertEqual(
+            event.changes["Correo"],
+            {
+                "before": "viejo@telecable.pe",
+                "after": "auditado@telecable.pe",
+            },
+        )
+        self.assertEqual(
+            event.changes["Teléfono"],
+            {
+                "before": "—",
+                "after": "999888777",
+            },
+        )
 
 
 class PasswordChangeViewTests(TestCase):
