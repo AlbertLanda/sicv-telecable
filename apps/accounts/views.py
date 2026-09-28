@@ -30,10 +30,14 @@ class ProfileView(LoginRequiredMixin, UpdateView):
     )
 
     def dispatch(self, request, *args, **kwargs):
-        self.profile_before = {
-            field: getattr(request.user, field)
-            for field, _label in self.audited_fields
-        }
+        # LoginRequiredMixin debe poder redirigir a un usuario anónimo antes
+        # de que intentemos leer atributos propios del modelo User.
+        self.profile_before = {}
+        if request.user.is_authenticated:
+            self.profile_before = {
+                field: getattr(request.user, field)
+                for field, _label in self.audited_fields
+            }
         return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
