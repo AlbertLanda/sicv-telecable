@@ -24,6 +24,12 @@ class AuditEvent(models.Model):
     path = models.CharField(max_length=500, verbose_name="Ruta")
     status_code = models.PositiveSmallIntegerField(default=200, verbose_name="Estado HTTP")
     description = models.CharField(max_length=240, verbose_name="Actividad")
+    changes = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Cambios",
+        help_text="Valores anterior y nuevo de los campos modificados.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha y hora")
 
     class Meta:
