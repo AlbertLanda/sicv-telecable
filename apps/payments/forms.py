@@ -6,11 +6,13 @@ from django import forms
 from django.core.validators import MinValueValidator
 from django.utils import timezone
 
+from apps.services.models import Subscription
 from apps.work_orders.models import TransferDetail
 
 from .models import (
     Charge,
     ChargeConcept,
+    EquipmentProduct,
     Payment,
     ZERO,
     RECEIPT_NUMBER_WIDTH,
@@ -749,4 +751,68 @@ class TransferReconciliationForm(forms.Form):
                 "Indique el sustento de la decisión de regularización."
             )
         return note
+
+class EquipmentSaleForm(forms.Form):
+    """Venta puntual de un equipo con deuda inmediata e instalación posterior."""
+
+    subscription = forms.ModelChoiceField(
+        label="Servicio donde se instalará",
+        queryset=Subscription.objects.none(),
+        empty_label="Seleccione el servicio...",
+    )
+    product = forms.ModelChoiceField(
+        label="Equipo",
+        queryset=EquipmentProduct.objects.none(),
+        empty_label="Seleccione el equipo...",
+    )
+
+    def __init__(self, *args, customer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.customer = customer
+
+        self.fields["product"].queryset = (
+            EquipmentProduct.objects
+            .filter(is_active=True)
+            .order_by("name")
+        )
+
+        if customer is None:
+            self.fields["subscription"].queryset = Subscription.objects.none()
+        else:
+            self.fields["subscription"].queryset = (
+                Subscription.objects
+                .filter(
+                    customer=customer,
+                    is_active=True,
+                    status=Subscription.Status.ACTIVE,
+                    service_type__code__in=("INTERNET", "DUO"),
+                )
+                .select_related("service_type", "plan", "address")
+                .order_by("service_number")
+            )
+
+        _style_widgets(self)
+
+    def clean_subscription(self):
+        subscription = self.cleaned_data.get("subscription")
+
+        if subscription is None:
+            return subscription
+
+        if self.customer is None or subscription.customer_id != self.customer.pk:
+            raise forms.ValidationError(
+                "El servicio seleccionado no pertenece al abonado."
+            )
+
+        if subscription.status != Subscription.Status.ACTIVE:
+            raise forms.ValidationError(
+                "El servicio debe estar activo para instalar el equipo."
+            )
+
+        if subscription.service_type.code not in ("INTERNET", "DUO"):
+            raise forms.ValidationError(
+                "El equipo solo puede instalarse sobre Internet o Dúo."
+            )
+
+        return subscription
 
