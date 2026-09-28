@@ -63,6 +63,9 @@ jobs:
           DJANGO_DB_SSLMODE: require
         run: |
           python - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
           import django
           django.setup()
 
