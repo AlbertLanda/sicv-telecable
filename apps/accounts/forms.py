@@ -23,28 +23,45 @@ class StyledPasswordChangeForm(PasswordChangeForm):
 
 
 class ProfileContactForm(forms.ModelForm):
-    """
-    Edición del propio perfil, acotada a datos de contacto.
+    """Datos personales que cada usuario puede mantener en su propia cuenta.
 
-    Identidad (username, nombres, apellidos, rol, sede, oficina) no
-    forma parte de este formulario a propósito: no es que se muestre
-    de solo lectura en la plantilla, es que el campo no existe aquí,
-    así que un POST manipulado con esas claves no tiene dónde
-    aterrizar. Quien necesite corregir un dato de identidad lo hace
-    desde la gestión de Personal.
+    Rol, sede y oficina no son datos de perfil: definen alcance operativo y
+    permisos de caja. Permanecen administrados desde Personal para evitar que
+    una edición de perfil altere autorizaciones del SICV.
     """
 
     class Meta:
         model = User
-        fields = ["phone", "email"]
+        fields = [
+            "username",
+            "first_name",
+            "last_name",
+            "phone",
+            "email",
+        ]
         widgets = {
+            "username": forms.TextInput(
+                attrs={"class": "form-control", "autocomplete": "username"}
+            ),
+            "first_name": forms.TextInput(attrs={"class": "form-control"}),
+            "last_name": forms.TextInput(attrs={"class": "form-control"}),
             "phone": forms.TextInput(attrs={"class": "form-control"}),
             "email": forms.EmailInput(attrs={"class": "form-control"}),
         }
         labels = {
+            "username": "Usuario",
+            "first_name": "Nombres",
+            "last_name": "Apellidos",
             "phone": "Teléfono",
             "email": "Correo",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["first_name"].required = False
+        self.fields["last_name"].required = False
+        self.fields["phone"].required = False
+        self.fields["email"].required = False
 
 
 class OfficeSelect(forms.Select):
