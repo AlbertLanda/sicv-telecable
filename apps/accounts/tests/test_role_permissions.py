@@ -73,9 +73,13 @@ class PersonnelManagerRoleBaselinePermissionTests(TestCase):
         self.assertTrue(user.has_perm("work_orders.schedule_workorder"))
         self.assertTrue(user.has_perm("work_orders.cancel_workorder"))
         self.assertTrue(user.has_perm("work_orders.withdraw_installation"))
-        # Administrador puede atender al abonado sin convertirse en NOC/PEX.
-        self.assertFalse(user.has_perm("work_orders.view_incident"))
-        self.assertFalse(user.has_perm("work_orders.view_outsideplant"))
+        # Administrador hereda la atención de ATC. Que pueda registrar/ver
+        # incidencias o PEX desde la ficha no lo convierte en NOC: no recibe
+        # permisos de tomar/cerrar la atención especializada.
+        self.assertTrue(user.has_perm("work_orders.view_incident"))
+        self.assertTrue(user.has_perm("work_orders.view_outsideplant"))
+        self.assertFalse(user.has_perm("work_orders.start_incident"))
+        self.assertFalse(user.has_perm("work_orders.close_incident"))
 
     def test_admin_inherits_every_atc_baseline_capability(self):
         admin = User.objects.create_user(
