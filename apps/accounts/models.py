@@ -56,6 +56,14 @@ class User(AbstractUser):
                 "payments.view_paymentcommitment",
                 "inventory.view_workordermaterialmovement",
                 "audit.view_auditevent",
+                # Administración también atiende abonados desde su ficha:
+                # puede emitir, consultar, reprogramar y anular OTs, pero no
+                # recibe las capacidades operativas de NOC/Planta Externa.
+                "work_orders.add_workorder",
+                "work_orders.view_workorder",
+                "work_orders.schedule_workorder",
+                "work_orders.cancel_workorder",
+                "work_orders.withdraw_installation",
             }
         ),
         Role.ATC: frozenset(
