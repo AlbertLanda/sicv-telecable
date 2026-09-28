@@ -29,7 +29,7 @@ urlpatterns = [
         name="personnel_edit",
     ),
 
-    # Mi perfil: identidad de solo lectura + contacto editable.
+    # Mi perfil: identidad/contacto editables; asignación operativa separada.
     path(
         "perfil/",
         views.ProfileView.as_view(),
