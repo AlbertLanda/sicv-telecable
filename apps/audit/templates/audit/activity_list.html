@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Actividad reciente - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb">Reportes &rsaquo; <strong>Actividad reciente</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner"><h2 class="tc-section-title"><i class="bi bi-clock-history"></i>Actividad reciente</h2></div>
+        <div class="tc-section-body">
+            <p class="text-muted mb-3">Registra acciones que modifican información desde esta versión. No almacena el contenido de formularios ni contraseñas.</p>
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                <div><label class="tc-form-label" for="q">Buscar</label><input class="form-control" id="q" name="q" value="{{ query }}" placeholder="Usuario o actividad"></div>
+                <div>
+                    <label class="tc-form-label" for="actor">Usuario</label>
+                    <select class="form-select" id="actor" name="actor">
+                        <option value="">Todos</option>
+                        {% for item in users %}<option value="{{ item.pk }}"{% if current_actor == item.pk|stringformat:"s" %} selected{% endif %}>{{ item }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div><label class="tc-form-label" for="day">Fecha</label><input class="form-control" id="day" name="day" type="date" value="{{ selected_day }}"></div>
+                <button class="tc-btn primary" type="submit"><i class="bi bi-search"></i>Filtrar</button>
+            </form>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Actividad</th><th>Ruta</th><th>Resultado</th></tr></thead>
+                <tbody>
+                    {% for event in events %}
+                    <tr>
+                        <td>{{ event.created_at|date:"d/m/Y H:i:s" }}</td>
+                        <td><strong>{{ event.actor }}</strong></td>
+                        <td>{{ event.description }}</td>
+                        <td><code>{{ event.route_name|default:event.path }}</code></td>
+                        <td>{% if event.status_code < 400 %}<span class="badge text-bg-success">{{ event.status_code }}</span>{% else %}<span class="badge text-bg-warning">{{ event.status_code }}</span>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="tc-empty">Todavía no hay actividad registrada con estos filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "_pager.html" %}
+    </section>
+</div>
+{% endblock %}

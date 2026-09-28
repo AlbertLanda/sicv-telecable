@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Compromisos de pago - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb">Cobranza &rsaquo; <strong>Compromisos de pago</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner"><h2 class="tc-section-title"><i class="bi bi-calendar-check"></i>Compromisos de pago</h2></div>
+        <div class="tc-section-body">
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                <div><label class="tc-form-label" for="q">Buscar abonado</label><input class="form-control" id="q" name="q" value="{{ query }}" placeholder="Código, DNI o nombre"></div>
+                <div>
+                    <label class="tc-form-label" for="status">Estado</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">Todos</option>
+                        {% for value, label in status_choices %}<option value="{{ value }}"{% if current_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button class="tc-btn primary" type="submit"><i class="bi bi-search"></i>Filtrar</button>
+            </form>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Abonado</th><th>Monto</th><th>Fecha compromiso</th><th>Estado</th><th>Registrado por</th><th>Autoriza</th><th></th></tr></thead>
+                <tbody>
+                    {% for commitment in commitments %}
+                    <tr>
+                        <td><a href="{% url 'customers:detail' commitment.customer_id %}">{{ commitment.customer }}</a></td>
+                        <td>S/ {{ commitment.amount|floatformat:2 }}</td>
+                        <td>{{ commitment.committed_date|date:"d/m/Y" }}</td>
+                        <td>{{ commitment.get_status_display }}</td>
+                        <td>{{ commitment.granted_by|default:"—" }}</td>
+                        <td>{{ commitment.authorized_by|default:"—" }}</td>
+                        <td><a class="tc-btn small" href="{% url 'payments:commitment_detail' pk=commitment.customer_id commitment_pk=commitment.pk %}">Ver</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="tc-empty">No hay compromisos con estos filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "_pager.html" %}
+    </section>
+</div>
+{% endblock %}

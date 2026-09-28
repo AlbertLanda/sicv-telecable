@@ -8,6 +8,23 @@ app_name = "payments"
 
 urlpatterns = [
 
+    # Vistas administrativas transversales.
+    path(
+        "caja-del-dia/",
+        views.DailyCashView.as_view(),
+        name="daily_cash",
+    ),
+    path(
+        "compromisos/",
+        views.PaymentCommitmentListView.as_view(),
+        name="commitments",
+    ),
+    path(
+        "comprobantes/",
+        views.ReceiptListView.as_view(),
+        name="receipt_list",
+    ),
+
     # --------------------------------------------------------------
     # Cuenta de un abonado concreto.
     #

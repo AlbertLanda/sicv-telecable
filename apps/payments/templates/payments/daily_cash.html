@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Caja del día - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb">Cobranza &rsaquo; <strong>Caja del día</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner">
+            <h2 class="tc-section-title"><i class="bi bi-wallet2"></i>Caja del día</h2>
+        </div>
+        <div class="tc-section-body">
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                <div>
+                    <label class="tc-form-label" for="day">Fecha</label>
+                    <input class="form-control" id="day" name="day" type="date" value="{{ selected_day|date:'Y-m-d' }}">
+                </div>
+                <button class="tc-btn primary" type="submit"><i class="bi bi-search"></i>Consultar</button>
+            </form>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">Resumen del {{ selected_day|date:"d/m/Y" }}{% if branch %} · {{ branch.name }}{% endif %}</h2>
+        </div>
+        <div class="tc-section-body">
+            <div class="row g-3">
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Total recaudado</div><div class="fs-3 fw-bold">S/ {{ total|floatformat:2 }}</div></div></div>
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Operaciones</div><div class="fs-3 fw-bold">{{ operation_count }}</div></div></div>
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Razones sociales con movimiento</div><div class="fs-3 fw-bold">{{ issuer_rows|length }}</div></div></div>
+            </div>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head"><h2 class="tc-section-title">Por razón social</h2></div>
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Razón social</th><th>RUC</th><th>Operaciones</th><th class="text-end">Total</th></tr></thead>
+                <tbody>
+                    {% for row in issuer_rows %}
+                    <tr>
+                        <td><strong>{{ row.sequence__issuer__business_name|default:"Sin razón social" }}</strong></td>
+                        <td>{{ row.sequence__issuer__ruc|default:"—" }}</td>
+                        <td>{{ row.operations }}</td>
+                        <td class="text-end">S/ {{ row.total|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="tc-empty">No hay cobros registrados para esta fecha.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head"><h2 class="tc-section-title">Por medio de pago</h2></div>
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Medio</th><th>Operaciones</th><th class="text-end">Total</th></tr></thead>
+                <tbody>
+                    {% for row in method_rows %}
+                    <tr><td>{{ row.label }}</td><td>{{ row.operations }}</td><td class="text-end">S/ {{ row.total|floatformat:2 }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="tc-empty">Sin movimientos.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -8,10 +8,12 @@ un menú global: una entrada global tendría que adivinar de qué abonado se
 habla y acabaría dependiendo de un estado que el operador no ve.
 """
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 from django.core.paginator import Paginator
+from django.db.models import Count, Q, Sum
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -1250,3 +1252,195 @@ class TransferReconciliationResolveView(
         )
         return redirect("payments:debt", pk=self.customer.pk)
 
+
+
+
+class DailyCashView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
+    """Recaudación diaria agrupada por razón social emisora."""
+
+    template_name = "payments/daily_cash.html"
+    permission_required = "payments.view_payment"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        branch = get_active_branch(self.request)
+
+        selected_day = timezone.localdate()
+        raw_day = (self.request.GET.get("day") or "").strip()
+        if raw_day:
+            try:
+                selected_day = date.fromisoformat(raw_day)
+            except ValueError:
+                messages.warning(
+                    self.request,
+                    "La fecha indicada no es válida; se muestra el día de hoy.",
+                )
+
+        receipts = Receipt.objects.filter(
+            payment__status=Payment.Status.REGISTERED,
+        ).filter(
+            Q(payment__paid_at__date=selected_day)
+            | Q(
+                payment__paid_at__isnull=True,
+                payment__received_at__date=selected_day,
+            )
+        )
+
+        if branch is not None:
+            receipts = receipts.filter(payment__branch=branch)
+
+        issuer_rows = list(
+            receipts.values(
+                "sequence__issuer_id",
+                "sequence__issuer__business_name",
+                "sequence__issuer__ruc",
+            )
+            .annotate(
+                operations=Count("pk"),
+                total=Sum("payment__amount"),
+            )
+            .order_by("sequence__issuer__business_name")
+        )
+
+        method_rows = list(
+            receipts.values("payment__method")
+            .annotate(
+                operations=Count("pk"),
+                total=Sum("payment__amount"),
+            )
+            .order_by("payment__method")
+        )
+        method_labels = dict(Payment.Method.choices)
+        for row in method_rows:
+            row["label"] = method_labels.get(
+                row["payment__method"],
+                row["payment__method"],
+            )
+
+        context.update(
+            {
+                "branch": branch,
+                "selected_day": selected_day,
+                "issuer_rows": issuer_rows,
+                "method_rows": method_rows,
+                "operation_count": receipts.count(),
+                "total": (
+                    receipts.aggregate(total=Sum("payment__amount"))["total"]
+                    or ZERO
+                ),
+            }
+        )
+        return context
+
+
+class PaymentCommitmentListView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    ListView,
+):
+    """Compromisos de pago de la sede activa para supervisión administrativa."""
+
+    template_name = "payments/commitment_list.html"
+    context_object_name = "commitments"
+    permission_required = "payments.view_paymentcommitment"
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = (
+            PaymentCommitment.objects
+            .select_related(
+                "customer",
+                "customer__branch",
+                "granted_by",
+                "authorized_by",
+            )
+            .order_by("-created_at", "-pk")
+        )
+
+        branch = get_active_branch(self.request)
+        if branch is not None:
+            queryset = queryset.filter(customer__branch=branch)
+
+        status = (self.request.GET.get("status") or "").strip()
+        if status in PaymentCommitment.Status.values:
+            queryset = queryset.filter(status=status)
+
+        query = (self.request.GET.get("q") or "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(customer__code__icontains=query)
+                | Q(customer__document_number__icontains=query)
+                | Q(customer__first_name__icontains=query)
+                | Q(customer__paternal_surname__icontains=query)
+                | Q(customer__maternal_surname__icontains=query)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["branch"] = get_active_branch(self.request)
+        context["query"] = (self.request.GET.get("q") or "").strip()
+        context["current_status"] = (
+            self.request.GET.get("status") or ""
+        ).strip()
+        context["status_choices"] = PaymentCommitment.Status.choices
+        return context
+
+
+class ReceiptListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """Comprobantes emitidos en la sede activa."""
+
+    template_name = "payments/receipt_list.html"
+    context_object_name = "receipts"
+    permission_required = "payments.view_receipt"
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = (
+            Receipt.objects
+            .select_related(
+                "payment",
+                "payment__customer",
+                "payment__branch",
+                "payment__received_by",
+                "sequence",
+                "sequence__issuer",
+            )
+            .order_by("-issued_at", "-pk")
+        )
+
+        branch = get_active_branch(self.request)
+        if branch is not None:
+            queryset = queryset.filter(payment__branch=branch)
+
+        raw_day = (self.request.GET.get("day") or "").strip()
+        if raw_day:
+            try:
+                queryset = queryset.filter(
+                    issued_at__date=date.fromisoformat(raw_day)
+                )
+            except ValueError:
+                pass
+
+        query = (self.request.GET.get("q") or "").strip()
+        if query:
+            filters = (
+                Q(series__icontains=query)
+                | Q(payment__customer__code__icontains=query)
+                | Q(payment__customer__document_number__icontains=query)
+                | Q(payment__customer__first_name__icontains=query)
+                | Q(payment__customer__paternal_surname__icontains=query)
+            )
+            if query.isdigit():
+                filters |= Q(number=int(query))
+            queryset = queryset.filter(filters)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["branch"] = get_active_branch(self.request)
+        context["query"] = (self.request.GET.get("q") or "").strip()
+        context["selected_day"] = (self.request.GET.get("day") or "").strip()
+        return context

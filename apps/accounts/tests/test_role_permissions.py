@@ -59,6 +59,17 @@ class PersonnelManagerRoleBaselinePermissionTests(TestCase):
         self.assertTrue(user.has_perm("accounts.add_user"))
         self.assertTrue(user.has_perm("accounts.change_user"))
         self.assertFalse(user.has_perm("accounts.delete_user"))
+        self.assertTrue(user.has_perm("payments.view_payment"))
+        self.assertTrue(user.has_perm("payments.view_receipt"))
+        self.assertTrue(user.has_perm("payments.view_paymentcommitment"))
+        self.assertTrue(user.has_perm("contracts.view_contract"))
+        self.assertTrue(user.has_perm("contracts.change_contract"))
+        self.assertTrue(
+            user.has_perm("inventory.view_workordermaterialmovement")
+        )
+        self.assertTrue(user.has_perm("audit.view_auditevent"))
+        self.assertFalse(user.has_perm("work_orders.view_workorder"))
+        self.assertFalse(user.has_perm("work_orders.view_incident"))
 
     def test_accounting_does_not_inherit_personnel_management(self):
         user = User.objects.create_user(

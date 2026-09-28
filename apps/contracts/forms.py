@@ -367,3 +367,46 @@ class InstallationWorkOrderForm(forms.Form):
             self.fields["seller"].help_text = (
                 "Se heredó de la venta registrada en la suscripción."
             )
+
+
+
+class ContractAdminEditForm(forms.ModelForm):
+    """Corrección administrativa de un contrato todavía no firmado."""
+
+    class Meta:
+        model = Contract
+        fields = [
+            "modality",
+            "installments",
+            "start_date",
+            "end_date",
+            "status",
+            "playhub_email",
+            "playhub_phone",
+            "notes",
+        ]
+        widgets = {
+            "modality": forms.Select(attrs={"class": "form-select"}),
+            "installments": forms.NumberInput(
+                attrs={"class": "form-control", "min": 1, "step": 1}
+            ),
+            "start_date": forms.DateInput(
+                format="%Y-%m-%d",
+                attrs={"class": "form-control", "type": "date"},
+            ),
+            "end_date": forms.DateInput(
+                format="%Y-%m-%d",
+                attrs={"class": "form-control", "type": "date"},
+            ),
+            "status": forms.Select(attrs={"class": "form-select"}),
+            "playhub_email": forms.EmailInput(attrs={"class": "form-control"}),
+            "playhub_phone": forms.TextInput(attrs={"class": "form-control"}),
+            "notes": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["end_date"].required = False
+        self.fields["playhub_email"].required = False
+        self.fields["playhub_phone"].required = False
+        self.fields["notes"].required = False

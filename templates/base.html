@@ -425,7 +425,7 @@
 
         <nav class="sicv-topnav" aria-label="Módulos principales">
             <a class="sicv-topnav-link" href="{% url 'customers:search' %}"><i class="bi bi-people"></i> Clientes</a>
-            {% if perms.work_orders.view_workorder %}
+            {% if user.role != "ADMIN" and perms.work_orders.view_workorder %}
             <a class="sicv-topnav-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-clipboard2-check"></i> Órdenes de trabajo</a>
             {% endif %}
             {% if perms.services.view_subscription %}

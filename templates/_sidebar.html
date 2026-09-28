@@ -1,9 +1,8 @@
 {% comment %}
 Navegación lateral global del SICV.
 
-La barra se organiza por dominio funcional, no por pantallas aisladas:
-Clientes, Operaciones, Comercial y Reportes. Solo los módulos construidos son
-enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
+El rol Administrador se concentra en gestión administrativa. Los módulos de
+NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
 {% endcomment %}
 
 <aside class="sicv-sidebar" aria-label="Navegación principal">
@@ -32,66 +31,66 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
             </div>
         </section>
 
-        {% comment %}
-        Cobranza. Deuda, historial y comprobantes de *un* abonado no estan
-        aqui: cuelgan de su ficha, porque son el mismo cliente visto desde
-        otro angulo y una entrada de menu global que necesita saber "de
-        quien" acaba dependiendo de un estado que el operador no ve.
-
-        Lo que si pertenece al menu son las listas transversales, las que
-        cruzan a todos los abonados. Todavia no existen.
-        {% endcomment %}
-        <section class="sidebar-section" data-sidebar-section="cobranza caja deuda cartera vencida compromisos de pago recaudacion">
+        {% if user.role == "ADMIN" or user.role == "ACCOUNTING" %}
+        <section class="sidebar-section" data-sidebar-section="cobranza caja compromisos recaudacion">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarCobranza" aria-expanded="true">
                 <i class="bi bi-cash-coin"></i><span>Cobranza</span><i class="bi bi-chevron-down chev"></i>
             </button>
             <div class="collapse show" id="sidebarCobranza">
                 <div class="sidebar-links">
-                    <span class="sidebar-link-pending"><span>Cartera vencida</span><span class="pending-tag">pendiente</span></span>
-                    <span class="sidebar-link-pending"><span>Caja del día</span><span class="pending-tag">pendiente</span></span>
-                    <span class="sidebar-link-pending"><span>Compromisos de pago</span><span class="pending-tag">pendiente</span></span>
+                    {% if perms.payments.view_payment %}
+                        <a class="sidebar-link" href="{% url 'payments:daily_cash' %}"><i class="bi bi-wallet2"></i>Caja del día</a>
+                    {% endif %}
+                    {% if perms.payments.view_paymentcommitment %}
+                        <a class="sidebar-link" href="{% url 'payments:commitments' %}"><i class="bi bi-calendar-check"></i>Compromisos de pago</a>
+                    {% endif %}
                 </div>
             </div>
         </section>
+        {% endif %}
 
-        <section class="sidebar-section" data-sidebar-section="operaciones agenda calendario tecnicos noc incidencias">
-            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOperaciones" aria-expanded="true">
-                <i class="bi bi-briefcase"></i><span>Operaciones</span><i class="bi bi-chevron-down chev"></i>
-            </button>
-            <div class="collapse show" id="sidebarOperaciones">
-                <div class="sidebar-links">
-                    {% if perms.work_orders.view_workorder %}
-                        <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Agenda / Calendario</a>
-                    {% endif %}
-                    {% if perms.work_orders.view_incident %}
-                        <a class="sidebar-link" href="{% url 'work_orders:incident_noc_queue' %}"><i class="bi bi-headset"></i>Incidencias NOC</a>
-                    {% endif %}
-                    {% if perms.work_orders.view_outsideplant %}
-                        <a class="sidebar-link" href="{% url 'work_orders:outside_plant_queue' %}"><i class="bi bi-diagram-3"></i>Planta Externa</a>
-                    {% endif %}
-                    <span class="sidebar-link-pending"><span>Técnicos</span><span class="pending-tag">pendiente</span></span>
+        {% if user.role != "ADMIN" %}
+            {% if perms.work_orders.view_workorder or perms.work_orders.view_incident or perms.work_orders.view_outsideplant %}
+            <section class="sidebar-section" data-sidebar-section="operaciones agenda calendario noc incidencias planta externa">
+                <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOperaciones" aria-expanded="true">
+                    <i class="bi bi-briefcase"></i><span>Operaciones</span><i class="bi bi-chevron-down chev"></i>
+                </button>
+                <div class="collapse show" id="sidebarOperaciones">
+                    <div class="sidebar-links">
+                        {% if perms.work_orders.view_workorder %}
+                            <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Agenda / Calendario</a>
+                        {% endif %}
+                        {% if perms.work_orders.view_incident %}
+                            <a class="sidebar-link" href="{% url 'work_orders:incident_noc_queue' %}"><i class="bi bi-headset"></i>Incidencias NOC</a>
+                        {% endif %}
+                        {% if perms.work_orders.view_outsideplant %}
+                            <a class="sidebar-link" href="{% url 'work_orders:outside_plant_queue' %}"><i class="bi bi-diagram-3"></i>Planta Externa</a>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+            {% endif %}
+        {% endif %}
 
-        <section class="sidebar-section" data-sidebar-section="comercial contratos suscripciones comprobantes pagos servicios">
+        {% if perms.contracts.view_contract or perms.payments.view_receipt %}
+        <section class="sidebar-section" data-sidebar-section="comercial contratos comprobantes">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarComercial" aria-expanded="true">
                 <i class="bi bi-file-earmark-text"></i><span>Comercial</span><i class="bi bi-chevron-down chev"></i>
             </button>
             <div class="collapse show" id="sidebarComercial">
                 <div class="sidebar-links">
-                    <span class="sidebar-link-pending"><span>Contratos</span><span class="pending-tag">pendiente</span></span>
-                    <span class="sidebar-link-pending"><span>Suscripciones</span><span class="pending-tag">pendiente</span></span>
-                    <span class="sidebar-link-pending"><span>Comprobantes</span><span class="pending-tag">pendiente</span></span>
+                    {% if perms.contracts.view_contract %}
+                        <a class="sidebar-link" href="{% url 'contracts:contract_list' %}"><i class="bi bi-file-earmark-pdf"></i>Contratos</a>
+                    {% endif %}
+                    {% if perms.payments.view_receipt %}
+                        <a class="sidebar-link" href="{% url 'payments:receipt_list' %}"><i class="bi bi-receipt"></i>Comprobantes</a>
+                    {% endif %}
                 </div>
             </div>
         </section>
+        {% endif %}
 
-        {% comment %}
-        Configurar. El catálogo comercial y la administración operativa del
-        personal viven aquí. El admin de Django queda como herramienta técnica;
-        Contabilidad trabaja desde la pantalla simple de Personal del SICV.
-        {% endcomment %}
+        {% if perms.accounts.view_user or perms.services.view_plan or perms.services.view_servicetype %}
         <section class="sidebar-section" data-sidebar-section="configurar personal usuarios planes servicios catalogo precios">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarConfigurar" aria-expanded="true">
                 <i class="bi bi-sliders"></i><span>Configurar</span><i class="bi bi-chevron-down chev"></i>
@@ -110,8 +109,10 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                 </div>
             </div>
         </section>
+        {% endif %}
 
-        <section class="sidebar-section" data-sidebar-section="reportes materiales retiro almacen logistica actividad reciente">
+        {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent %}
+        <section class="sidebar-section" data-sidebar-section="reportes ventas materiales actividad reciente auditoria">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
                 <i class="bi bi-pie-chart"></i><span>Reportes</span><i class="bi bi-chevron-down chev"></i>
             </button>
@@ -123,21 +124,9 @@ enlaces; lo pendiente permanece visible sin ofrecer rutas muertas.
                     {% if perms.inventory.view_workordermaterialmovement %}
                         <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam"></i>Materiales</a>
                     {% endif %}
-                    <span class="sidebar-link-pending"><span>Actividad reciente</span><span class="pending-tag">pendiente</span></span>
-                </div>
-            </div>
-        </section>
-
-        {% if sidebar_clientes_pending_items %}
-        <section class="sidebar-section" data-sidebar-section="otros clientes {{ sidebar_clientes_pending_items|join:' ' }}">
-            <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOtrosClientes" aria-expanded="false">
-                <i class="bi bi-three-dots"></i><span>Próximos módulos</span><i class="bi bi-chevron-down chev"></i>
-            </button>
-            <div class="collapse" id="sidebarOtrosClientes">
-                <div class="sidebar-links">
-                    {% for item in sidebar_clientes_pending_items %}
-                        <span class="sidebar-link-pending"><span>{{ item }}</span><span class="pending-tag">pendiente</span></span>
-                    {% endfor %}
+                    {% if perms.audit.view_auditevent %}
+                        <a class="sidebar-link" href="{% url 'audit:activity' %}"><i class="bi bi-clock-history"></i>Actividad reciente</a>
+                    {% endif %}
                 </div>
             </div>
         </section>

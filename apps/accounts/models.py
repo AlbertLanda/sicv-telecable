@@ -46,6 +46,15 @@ class User(AbstractUser):
                 "accounts.change_user",
                 "customers.discard_incomplete_registration",
                 "services.view_subscription",
+                "services.view_plan",
+                "services.view_servicetype",
+                "contracts.view_contract",
+                "contracts.change_contract",
+                "payments.view_payment",
+                "payments.view_receipt",
+                "payments.view_paymentcommitment",
+                "inventory.view_workordermaterialmovement",
+                "audit.view_auditevent",
             }
         ),
         Role.ATC: frozenset(
@@ -56,6 +65,7 @@ class User(AbstractUser):
                 "customers.discard_incomplete_registration",
                 "services.add_subscription",
                 "contracts.add_contract",
+                "contracts.view_contract",
                 "work_orders.add_workorder",
                 "work_orders.view_workorder",
                 "work_orders.view_incident",

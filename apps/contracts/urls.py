@@ -18,6 +18,18 @@ def require_authenticated_permission(permission, view):
 
 urlpatterns = [
 
+    # Gestión administrativa transversal.
+    path(
+        "",
+        views.ContractListView.as_view(),
+        name="contract_list",
+    ),
+    path(
+        "<int:pk>/editar/",
+        views.ContractAdminUpdateView.as_view(),
+        name="contract_edit",
+    ),
+
     # Registrar contrato para un cliente
     path(
         "customers/<int:customer_pk>/contracts/create/",

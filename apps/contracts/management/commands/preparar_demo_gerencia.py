@@ -194,11 +194,15 @@ class Command(BaseCommand):
             },
         )
 
-        admin = User.objects.create_superuser(
+        admin = User.objects.create_user(
             username="gerencia_demo",
             password=DEMO_PASSWORD,
+            first_name="Gerencia",
+            last_name="Demo",
             role=User.Role.ADMIN,
             branch=branch,
+            is_staff=False,
+            is_superuser=False,
         )
 
         atc = User.objects.create_user(

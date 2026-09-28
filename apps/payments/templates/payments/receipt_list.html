@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Comprobantes - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb">Comercial &rsaquo; <strong>Comprobantes</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner"><h2 class="tc-section-title"><i class="bi bi-receipt"></i>Comprobantes</h2></div>
+        <div class="tc-section-body">
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                <div><label class="tc-form-label" for="q">Buscar</label><input class="form-control" id="q" name="q" value="{{ query }}" placeholder="Serie, número, código o DNI"></div>
+                <div><label class="tc-form-label" for="day">Fecha</label><input class="form-control" id="day" name="day" type="date" value="{{ selected_day }}"></div>
+                <button class="tc-btn primary" type="submit"><i class="bi bi-search"></i>Filtrar</button>
+            </form>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Fecha</th><th>Comprobante</th><th>Razón social</th><th>Abonado</th><th>Medio</th><th class="text-end">Monto</th><th>Estado</th><th></th></tr></thead>
+                <tbody>
+                    {% for receipt in receipts %}
+                    <tr>
+                        <td>{{ receipt.issued_at|date:"d/m/Y H:i" }}</td>
+                        <td><strong>{{ receipt.full_number }}</strong></td>
+                        <td>{{ receipt.sequence.issuer.business_name|default:"—" }}</td>
+                        <td><a href="{% url 'customers:detail' receipt.payment.customer_id %}">{{ receipt.payment.customer }}</a></td>
+                        <td>{{ receipt.payment.get_method_display }}</td>
+                        <td class="text-end">S/ {{ receipt.payment.amount|floatformat:2 }}</td>
+                        <td>{{ receipt.payment.get_status_display }}</td>
+                        <td><a class="tc-btn small" href="{% url 'payments:receipt_detail' receipt.pk %}">Ver</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="tc-empty">No hay comprobantes con estos filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "_pager.html" %}
+    </section>
+</div>
+{% endblock %}

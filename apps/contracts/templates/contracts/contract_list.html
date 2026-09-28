@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Contratos - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb">Comercial &rsaquo; <strong>Contratos</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner"><h2 class="tc-section-title"><i class="bi bi-file-earmark-pdf"></i>Contratos</h2></div>
+        <div class="tc-section-body">
+            <p class="text-muted mb-3">Los contratos firmados conservan su PDF definitivo y no se pueden editar. Los no firmados pueden corregirse y el PDF reflejará los datos guardados.</p>
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                <div><label class="tc-form-label" for="q">Buscar</label><input class="form-control" id="q" name="q" value="{{ query }}" placeholder="Contrato, código, DNI o nombre"></div>
+                <div>
+                    <label class="tc-form-label" for="status">Estado</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">Todos</option>
+                        {% for value, label in status_choices %}<option value="{{ value }}"{% if current_status == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <button class="tc-btn primary" type="submit"><i class="bi bi-search"></i>Filtrar</button>
+            </form>
+        </div>
+    </section>
+    <section class="tc-card tc-section tc-full">
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead><tr><th>Contrato</th><th>Abonado</th><th>Servicio</th><th>Plan</th><th>Estado</th><th>Firma</th><th>PDF</th><th></th></tr></thead>
+                <tbody>
+                    {% for contract in contracts %}
+                    <tr>
+                        <td><strong>{{ contract.contract_number }}</strong></td>
+                        <td><a href="{% url 'customers:detail' contract.customer_id %}">{{ contract.customer }}</a></td>
+                        <td>{{ contract.service_type }}</td>
+                        <td>{{ contract.plan }}</td>
+                        <td>{{ contract.get_status_display }}</td>
+                        <td>{% if contract.has_signature %}<span class="badge text-bg-success">Firmado</span>{% else %}<span class="badge text-bg-secondary">Pendiente</span>{% endif %}</td>
+                        <td><a class="tc-btn small" target="_blank" href="{% url 'contracts:contract_document' customer_pk=contract.customer_id pk=contract.pk %}?ver=1"><i class="bi bi-file-earmark-pdf"></i>Ver PDF</a></td>
+                        <td>{% if not contract.has_signature and perms.contracts.change_contract %}<a class="tc-btn small" href="{% url 'contracts:contract_edit' contract.pk %}"><i class="bi bi-pencil"></i>Editar</a>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="tc-empty">No hay contratos con estos filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "_pager.html" %}
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Editar contrato - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+    <div class="tc-breadcrumb"><a href="{% url 'contracts:contract_list' %}">Contratos</a> &rsaquo; <strong>{{ object.contract_number }}</strong></div>
+    <section class="tc-card tc-section tc-full tc-sheet">
+        <div class="tc-section-head banner"><h2 class="tc-section-title"><i class="bi bi-pencil-square"></i>Editar {{ object.contract_number }}</h2></div>
+        <div class="tc-section-body">
+            <div class="alert alert-info">Cliente: <strong>{{ object.customer }}</strong> · Servicio: <strong>{{ object.service_type }}</strong> · Plan: <strong>{{ object.plan }}</strong>. Estos datos estructurales no se cambian desde administración.</div>
+            <form method="post" class="tc-form">
+                {% csrf_token %}
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                {% for field in form %}
+                    <label class="tc-form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    <div class="tc-form-field">{{ field }}{% for error in field.errors %}<div class="tc-form-error">{{ error }}</div>{% endfor %}</div>
+                {% endfor %}
+                <div></div>
+                <div class="tc-form-field d-flex gap-2">
+                    <button class="tc-btn primary" type="submit"><i class="bi bi-save"></i>Guardar cambios</button>
+                    <a class="tc-btn" target="_blank" href="{% url 'contracts:contract_document' customer_pk=object.customer_id pk=object.pk %}?ver=1">Ver PDF</a>
+                    <a class="tc-btn" href="{% url 'contracts:contract_list' %}">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+{% endblock %}

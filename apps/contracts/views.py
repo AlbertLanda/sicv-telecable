@@ -1,21 +1,24 @@
 ﻿from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import CreateView, DetailView, FormView
+from django.views.generic import CreateView, DetailView, FormView, ListView, UpdateView
 
-from .forms import ContractCreateForm, InstallationWorkOrderForm
+from .forms import ContractAdminEditForm, ContractCreateForm, InstallationWorkOrderForm
 from .signatures import firma_del_contrato
 from .subscriptions import (
     codigo_de_suscripcion,
     resolver_suscripcion,
     suscripciones_contratables,
 )
-from .models import Contract
+from .models import Contract, ContractSignature
 from apps.customers.models import Customer
+from apps.organization.context_processors import get_active_branch
 from apps.services.catalog import plans_by_service_type, service_type_config
 from apps.services.models import ServiceType, Subscription
 from apps.work_orders.location import resolve_location_display
@@ -673,3 +676,116 @@ class InstallationOrderReceiptView(LoginRequiredMixin, DetailView):
         context["location"] = resolve_location_display(subscription.address)
 
         return context
+
+
+class ContractListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
+    """Contratos de la sede activa para administración."""
+
+    model = Contract
+    template_name = "contracts/contract_list.html"
+    context_object_name = "contracts"
+    permission_required = "contracts.view_contract"
+    paginate_by = 50
+
+    def get_queryset(self):
+        signature_exists = ContractSignature.objects.filter(
+            contract_id=OuterRef("pk")
+        )
+        queryset = (
+            Contract.objects
+            .select_related(
+                "customer",
+                "customer__branch",
+                "subscription",
+                "service_type",
+                "plan",
+            )
+            .annotate(has_signature=Exists(signature_exists))
+            .order_by("-created_at", "-pk")
+        )
+
+        branch = get_active_branch(self.request)
+        if branch is not None:
+            queryset = queryset.filter(customer__branch=branch)
+
+        status = (self.request.GET.get("status") or "").strip()
+        if status in Contract.Status.values:
+            queryset = queryset.filter(status=status)
+
+        query = (self.request.GET.get("q") or "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(contract_number__icontains=query)
+                | Q(customer__code__icontains=query)
+                | Q(customer__document_number__icontains=query)
+                | Q(customer__first_name__icontains=query)
+                | Q(customer__paternal_surname__icontains=query)
+                | Q(customer__maternal_surname__icontains=query)
+            )
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["branch"] = get_active_branch(self.request)
+        context["query"] = (self.request.GET.get("q") or "").strip()
+        context["current_status"] = (
+            self.request.GET.get("status") or ""
+        ).strip()
+        context["status_choices"] = Contract.Status.choices
+        return context
+
+
+class ContractAdminUpdateView(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+    UpdateView,
+):
+    """Edita contratos no firmados; un documento firmado queda inmutable."""
+
+    model = Contract
+    form_class = ContractAdminEditForm
+    template_name = "contracts/contract_edit.html"
+    permission_required = "contracts.change_contract"
+
+    def get_queryset(self):
+        queryset = Contract.objects.select_related(
+            "customer",
+            "subscription",
+            "service_type",
+            "plan",
+        )
+        branch = get_active_branch(self.request)
+        if branch is not None:
+            queryset = queryset.filter(customer__branch=branch)
+        return queryset
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.has_perm(self.permission_required):
+            raise PermissionDenied
+
+        contract = self.get_object()
+        if ContractSignature.objects.filter(contract=contract).exists():
+            messages.error(
+                request,
+                (
+                    "El contrato ya fue firmado y su PDF quedó archivado. "
+                    "No se puede modificar un documento ya aceptado."
+                ),
+            )
+            return redirect("contracts:contract_list")
+
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        messages.success(
+            self.request,
+            (
+                f"Contrato {form.instance.contract_number} actualizado. "
+                "El PDF no firmado reflejará los datos guardados."
+            ),
+        )
+        return super().form_valid(form)
+
+    def get_success_url(self):
+        return reverse_lazy("contracts:contract_list")

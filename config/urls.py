@@ -84,6 +84,12 @@ urlpatterns = [
         include("apps.reports.urls"),
     ),
 
+    # Auditoría de actividad de usuarios.
+    path(
+        "auditoria/",
+        include("apps.audit.urls"),
+    ),
+
     # Portal móvil/responsive del técnico. El shell HTML no usa la sesión
     # web de ATC; toda lectura y escritura real exige TokenAuthentication.
     path(
