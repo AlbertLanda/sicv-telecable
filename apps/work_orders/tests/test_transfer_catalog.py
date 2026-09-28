@@ -23,9 +23,12 @@ class TransferCatalogTests(WorkOrderTestCase):
             supports_tv_annexes=True,
         )
 
-        requirement = OrderType.objects.create(
+        requirement, _ = OrderType.objects.update_or_create(
             code="REQUIREMENT",
-            name="REQUERIMIENTO",
+            defaults={
+                "name": "REQUERIMIENTO",
+                "is_active": True,
+            },
         )
         self.legacy_reason = OrderReason.objects.create(
             order_type=requirement,
