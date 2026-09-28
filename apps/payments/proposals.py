@@ -1,10 +1,11 @@
 """
 Deudas propuestas por una orden de trabajo antes de convertirse en un cargo.
 
-Hay dos casos: el TRASLADO y la AVERÍA que es responsabilidad del cliente. La
-propuesta conserva la decisión pendiente sin mover el saldo del abonado.
-Aceptarla emite el cargo; descartarla deja motivo, usuario y fecha para
-auditoría.
+Hay dos casos: el TRASLADO y la AVERÍA que es responsabilidad del cliente.
+En traslados la propuesta conserva una decisión pendiente sin mover saldo.
+En averías la propuesta funciona como trazabilidad OT -> cargo y se acepta
+automáticamente al finalizar la atención, porque ese cobro está definido por
+la responsabilidad y el tarifario.
 """
 
 from decimal import Decimal
@@ -113,10 +114,10 @@ def fault_description(work_order):
 
 @transaction.atomic
 def propose_fault_charge(*, work_order):
-    """Deja propuesta la deuda de una avería responsabilidad del cliente.
+    """Crea el vínculo auditable de una avería con su futuro cargo.
 
-    Como en el traslado, una sola propuesta por orden: liquidar no se repite,
-    pero la restricción única de (orden, concepto) lo respalda en la base.
+    El flujo normal la acepta automáticamente al finalizar la atención.
+    La restricción única de (orden, concepto) evita duplicados.
     """
     if not work_order.is_fault:
         return None
