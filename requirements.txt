@@ -8,3 +8,6 @@ reportlab==5.0.1
 requests==2.32.3
 sqlparse==0.5.5
 tzdata==2026.3
+gunicorn>=23,<24
+psycopg[binary]>=3.2,<4
+whitenoise>=6.9,<7
