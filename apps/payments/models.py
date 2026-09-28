@@ -1450,18 +1450,13 @@ class ProposedCharge(models.Model):
     """
     Deuda que una orden deja propuesta, antes de que nadie la acepte.
 
-    Hoy la deja el traslado. Registrar la orden no le puede mover el saldo al
-    abonado: cuánto se le cobra por mudarse lo decide quien atiende, no el
-    sistema. Pero que hay algo por cobrar sí lo sabe el sistema, y callarlo
-    hasta que alguien se acuerde es como se pierde el cobro.
+    En traslados representa una decisión económica todavía pendiente y no suma
+    al saldo hasta que un usuario la resuelve. En averías del cliente se usa
+    como vínculo auditable entre la OT y el cargo automático: nace y se acepta
+    en el mismo cierre técnico.
 
-    Por eso la propuesta no es un `Charge`. Vive aparte, se pinta encima de la
-    tabla de deuda y no suma al saldo. Hasta que alguien la acepta poniéndole
-    monto, el abonado no debe nada por ella.
-
-    Aceptarla emite el cargo y lo deja apuntado en `charge`; descartarla exige
-    decir por qué. En los dos casos la propuesta se conserva: la pregunta
-    «¿por qué este traslado no se cobró?» tiene que poder responderse.
+    En ambos casos la propuesta se conserva para responder qué orden originó
+    el cargo o por qué una propuesta de traslado se descartó.
     """
 
     class Status(models.TextChoices):
