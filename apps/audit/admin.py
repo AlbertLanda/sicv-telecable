@@ -23,6 +23,7 @@ class AuditEventAdmin(admin.ModelAdmin):
         "path",
         "status_code",
         "description",
+        "changes",
         "created_at",
     )
 
