@@ -380,11 +380,63 @@ if PRODUCTION:
         },
     }
 
-# Archivos subidos por los usuarios (evidencias de atención).
-# En desarrollo se sirven desde el disco local. En producción solo debe
-# cambiar el backend de storage: ningún modelo depende de esta ruta.
-MEDIA_URL = 'media/'
+# Archivos subidos por los usuarios (firmas, PDFs y evidencias).
+# Local sigue usando filesystem. En Azure/UAT, si se activa el flag, se usa
+# Blob Storage con Managed Identity mediante DefaultAzureCredential.
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+AZURE_MEDIA_ENABLED = env_bool(
+    'DJANGO_AZURE_MEDIA_ENABLED',
+    default=False,
+)
+
+if AZURE_MEDIA_ENABLED:
+    azure_storage_account = os.environ.get(
+        'DJANGO_AZURE_STORAGE_ACCOUNT',
+        '',
+    ).strip()
+    azure_media_container = os.environ.get(
+        'DJANGO_AZURE_MEDIA_CONTAINER',
+        '',
+    ).strip()
+
+    missing_azure_media = []
+    if not azure_storage_account:
+        missing_azure_media.append('DJANGO_AZURE_STORAGE_ACCOUNT')
+    if not azure_media_container:
+        missing_azure_media.append('DJANGO_AZURE_MEDIA_CONTAINER')
+    if missing_azure_media:
+        raise ImproperlyConfigured(
+            'Faltan variables de Azure Blob Storage: '
+            + ', '.join(missing_azure_media)
+        )
+
+    from azure.identity import DefaultAzureCredential
+
+    STORAGES = {
+        'default': {
+            'BACKEND': 'storages.backends.azure_storage.AzureStorage',
+            'OPTIONS': {
+                'token_credential': DefaultAzureCredential(),
+                'account_name': azure_storage_account,
+                'azure_container': azure_media_container,
+                'expiration_secs': env_int(
+                    'DJANGO_AZURE_MEDIA_URL_EXPIRATION_SECS',
+                    default=3600,
+                ),
+                'overwrite_files': False,
+            },
+        },
+        'staticfiles': {
+            'BACKEND': (
+                'whitenoise.storage.'
+                'CompressedManifestStaticFilesStorage'
+                if PRODUCTION
+                else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+            ),
+        },
+    }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
