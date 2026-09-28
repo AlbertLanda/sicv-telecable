@@ -11,27 +11,66 @@ from apps.accounts.forms import (
     ProfileContactForm,
 )
 from apps.accounts.models import User
+from apps.audit.models import AuditEvent
+from apps.organization.context_processors import get_active_branch
 
 
 class ProfileView(LoginRequiredMixin, UpdateView):
-    """
-    Mi perfil: identidad de solo lectura + contacto editable.
-
-    La vista siempre opera sobre el propio usuario autenticado
-    (get_object() no admite pk de la URL): no hay parámetro que
-    manipular para editar el perfil de otra persona.
-    """
+    """Perfil editable del usuario autenticado con auditoría de cambios."""
 
     form_class = ProfileContactForm
     template_name = "accounts/profile.html"
     success_url = reverse_lazy("accounts:profile")
+    audited_fields = (
+        ("username", "Usuario"),
+        ("first_name", "Nombres"),
+        ("last_name", "Apellidos"),
+        ("phone", "Teléfono"),
+        ("email", "Correo"),
+    )
+
+    def dispatch(self, request, *args, **kwargs):
+        self.profile_before = {
+            field: getattr(request.user, field)
+            for field, _label in self.audited_fields
+        }
+        return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
         return self.request.user
 
     def form_valid(self, form):
-        messages.success(self.request, "Datos de contacto actualizados.")
-        return super().form_valid(form)
+        changes = {}
+        for field, label in self.audited_fields:
+            before = self.profile_before.get(field) or ""
+            after = form.cleaned_data.get(field) or ""
+            if before != after:
+                changes[label] = {
+                    "before": before or "—",
+                    "after": after or "—",
+                }
+
+        response = super().form_valid(form)
+
+        if changes:
+            AuditEvent.objects.create(
+                actor=self.request.user,
+                branch=get_active_branch(self.request),
+                method=self.request.method,
+                route_name="accounts:profile",
+                path=self.request.path,
+                status_code=response.status_code,
+                description="Actualizó su perfil",
+                changes=changes,
+            )
+            messages.success(
+                self.request,
+                "Perfil actualizado. Los cambios quedaron registrados.",
+            )
+        else:
+            messages.info(self.request, "No se detectaron cambios en el perfil.")
+
+        return response
 
 
 class PersonnelListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
