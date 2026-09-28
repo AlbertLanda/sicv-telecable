@@ -4,6 +4,8 @@ from .models import (
     Charge,
     ChargeComponent,
     ChargeConcept,
+    EquipmentProduct,
+    EquipmentSale,
     Payment,
     PaymentAllocation,
     ProposedCharge,
@@ -115,6 +117,65 @@ class ProposedChargeAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
+
+
+@admin.register(EquipmentProduct)
+class EquipmentProductAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "current_price",
+        "order_reason_code",
+        "is_active",
+        "updated_at",
+    ]
+    list_filter = ["is_active"]
+    search_fields = ["name", "code"]
+    list_editable = ["current_price", "is_active"]
+
+
+@admin.register(EquipmentSale)
+class EquipmentSaleAdmin(admin.ModelAdmin):
+    list_display = [
+        "created_at",
+        "customer",
+        "product",
+        "price_snapshot",
+        "charge",
+        "work_order",
+        "registered_by",
+    ]
+    search_fields = [
+        "customer__document_number",
+        "customer__code",
+        "product__name",
+        "work_order__order_number",
+    ]
+    raw_id_fields = [
+        "customer",
+        "subscription",
+        "charge",
+        "work_order",
+        "registered_by",
+    ]
+    readonly_fields = [
+        "customer",
+        "subscription",
+        "product",
+        "price_snapshot",
+        "charge",
+        "work_order",
+        "registered_by",
+        "created_at",
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Payment)
