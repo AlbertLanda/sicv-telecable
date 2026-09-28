@@ -251,22 +251,25 @@ def snapshot_fault_material_prices(order):
         if movement.movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
             continue
 
+        # Si ya existe snapshot, nunca se vuelve a leer el catálogo:
+        # una liquidación posterior no puede revalorizar una avería atendida.
+        if movement.is_billable and movement.unit_price is not None:
+            snapped.append(movement)
+            continue
+
         price = movement.material.customer_price
         if price is None:
             continue
 
-        fields = []
-        if not movement.is_billable:
-            movement.is_billable = True
-            fields.append("is_billable")
-        if movement.unit_price != price:
-            movement.unit_price = price
-            fields.append("unit_price")
-
-        if fields:
-            fields.append("updated_at")
-            movement.save(update_fields=fields)
-
+        movement.is_billable = True
+        movement.unit_price = price
+        movement.save(
+            update_fields=[
+                "is_billable",
+                "unit_price",
+                "updated_at",
+            ]
+        )
         snapped.append(movement)
 
     return snapped
