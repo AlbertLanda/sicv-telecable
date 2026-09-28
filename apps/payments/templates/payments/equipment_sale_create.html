@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Venta de equipo - {{ customer }}{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="tc-content">
+
+    {% include "_customer_record_header.html" with active_tab="debt" record_title="Venta de equipo" %}
+
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-router"></i>Venta de equipo
+            </h2>
+        </div>
+
+        <div class="tc-section-body">
+            <div class="alert alert-info">
+                La venta genera <strong>una deuda inmediata por el precio total del equipo</strong>
+                y, en la misma operación, una <strong>OT de instalación</strong>.
+                No agrega mensualidad. El cargo puede pagarse completo o mediante abonos parciales.
+            </div>
+
+            <form method="post" novalidate class="row g-3">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="col-12">
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold"
+                           for="{{ form.subscription.id_for_label }}">
+                        {{ form.subscription.label }}
+                    </label>
+                    {{ form.subscription }}
+                    {% for error in form.subscription.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                    <div class="form-text">
+                        Solo servicios activos de Internet o Dúo.
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold"
+                           for="{{ form.product.id_for_label }}">
+                        {{ form.product.label }}
+                    </label>
+                    {{ form.product }}
+                    {% for error in form.product.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                    <div class="form-text">
+                        El precio mostrado es el que quedará congelado en la venta.
+                    </div>
+                </div>
+
+                <div class="col-12 d-flex justify-content-end gap-2">
+                    <a href="{% url 'payments:debt' customer.pk %}"
+                       class="tc-btn">
+                        Volver
+                    </a>
+                    <button type="submit" class="tc-btn primary">
+                        <i class="bi bi-check2-circle"></i>Registrar venta y generar OT
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    {% if recent_sales %}
+    <section class="tc-card tc-section tc-full">
+        <div class="tc-section-head">
+            <h2 class="tc-section-title">
+                <i class="bi bi-clock-history"></i>Ventas de equipo recientes
+            </h2>
+        </div>
+
+        <div class="table-responsive">
+            <table class="tc-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Equipo</th>
+                        <th>Servicio</th>
+                        <th>Precio vendido</th>
+                        <th>Deuda</th>
+                        <th>OT</th>
+                        <th>Registrado por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in recent_sales %}
+                    <tr>
+                        <td>{{ sale.created_at|date:"d/m/Y H:i" }}</td>
+                        <td><strong>{{ sale.product.name }}</strong></td>
+                        <td>{{ sale.subscription.service_code }}</td>
+                        <td>S/ {{ sale.price_snapshot|floatformat:2 }}</td>
+                        <td>
+                            S/ {{ sale.charge.amount|floatformat:2 }}
+                            · {{ sale.charge.get_status_display }}
+                        </td>
+                        <td>
+                            <a href="{% url 'work_orders:detail' sale.work_order.pk %}">
+                                {{ sale.work_order.order_number }}
+                            </a>
+                        </td>
+                        <td>{{ sale.registered_by }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+</div>
+{% endblock %}
