@@ -77,6 +77,17 @@ class PersonnelManagerRoleBaselinePermissionTests(TestCase):
         self.assertFalse(user.has_perm("work_orders.view_incident"))
         self.assertFalse(user.has_perm("work_orders.view_outsideplant"))
 
+    def test_admin_inherits_every_atc_baseline_capability(self):
+        admin = User.objects.create_user(
+            username="admin_inherits_atc",
+            role=User.Role.ADMIN,
+            is_active=True,
+        )
+
+        for permission in User.ATC_BASELINE_PERMISSIONS:
+            with self.subTest(permission=permission):
+                self.assertTrue(admin.has_perm(permission))
+
     def test_accounting_does_not_inherit_personnel_management(self):
         user = User.objects.create_user(
             username="accounting_test",
