@@ -416,9 +416,10 @@ class Command(BaseCommand):
         for service_code in ("INTERNET", "DUO"):
             rows.append(("UTP", service_code, None, "30.00", "2.00"))
 
-        # RG6 confirmado para Cable/CATV. La aplicacion automatica a la parte
-        # CATV de Duo se deja pendiente hasta confirmacion operativa explicita.
-        rows.append(("RG6", "CABLE", None, "50.00", "1.00"))
+        # RG6: Cable y Duo incluyen la parte CATV. La cortesía de
+        # instalación es de 50 m; el exceso cuesta S/ 1.00 por metro.
+        for service_code in ("CABLE", "DUO"):
+            rows.append(("RG6", service_code, None, "50.00", "1.00"))
 
         # Drop: regla por sede para Internet, Duo y Cable.
         free_drop_by_branch = {
