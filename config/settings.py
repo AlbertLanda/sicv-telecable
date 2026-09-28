@@ -56,6 +56,24 @@ def env_list(name, default=()):
     return [item.strip() for item in value.split(',') if item.strip()]
 
 
+def env_int(name, default=0):
+    """Convierte una variable de entorno a entero con un error explicito."""
+    value = os.environ.get(name)
+    if value is None or value.strip() == '':
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(
+            f'La variable {name} debe ser un entero.'
+        ) from exc
+
+
+# Marca explicita del entorno cloud/productivo. CI no la activa: de ese modo
+# sigue probando por HTTP/SQLite sin relajar las reglas que usara Azure.
+PRODUCTION = env_bool('DJANGO_PRODUCTION', default=False)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -80,6 +98,44 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = env_list(
     'DJANGO_ALLOWED_HOSTS',
     default=('localhost', '127.0.0.1') if DEBUG else (),
+)
+
+CSRF_TRUSTED_ORIGINS = env_list(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    default=(),
+)
+
+# Azure App Service termina TLS delante de Gunicorn y reenvia el protocolo
+# original mediante X-Forwarded-Proto. Django debe confiar solo en ese header
+# concreto para reconocer peticiones HTTPS.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# El hardening se activa al marcar explicitamente el entorno como productivo.
+# Los overrides individuales permiten reducir HSTS durante el primer piloto
+# sin deshabilitar cookies seguras o la redireccion HTTPS.
+SECURE_SSL_REDIRECT = env_bool(
+    'DJANGO_SECURE_SSL_REDIRECT',
+    default=PRODUCTION,
+)
+SESSION_COOKIE_SECURE = env_bool(
+    'DJANGO_SESSION_COOKIE_SECURE',
+    default=PRODUCTION,
+)
+CSRF_COOKIE_SECURE = env_bool(
+    'DJANGO_CSRF_COOKIE_SECURE',
+    default=PRODUCTION,
+)
+SECURE_HSTS_SECONDS = env_int(
+    'DJANGO_SECURE_HSTS_SECONDS',
+    default=3600 if PRODUCTION else 0,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    'DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS',
+    default=False,
+)
+SECURE_HSTS_PRELOAD = env_bool(
+    'DJANGO_SECURE_HSTS_PRELOAD',
+    default=False,
 )
 
 
@@ -130,6 +186,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Terceros
+    # En produccion App Service no debe depender de DEBUG para servir static.
+    'whitenoise.runserver_nostatic',
     'rest_framework',
     'rest_framework.authtoken',
 
@@ -149,6 +207,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -182,15 +241,63 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-# Desarrollo y CI usan SQLite. PostgreSQL se configurara en una actividad
-# posterior mediante variables de entorno (ver docs/configuration.md).
+#
+# Local/CI conservan SQLite. Azure usa PostgreSQL Flexible Server sin cambiar
+# codigo: basta definir DJANGO_DB_ENGINE=postgresql y las credenciales en los
+# App Settings. En modo productivo se rechaza SQLite para evitar desplegar
+# accidentalmente una base efimera dentro de App Service.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_ENGINE = os.environ.get('DJANGO_DB_ENGINE', 'sqlite').strip().lower()
+
+if DB_ENGINE in ('postgres', 'postgresql', 'django.db.backends.postgresql'):
+    required_db_vars = {
+        'DJANGO_DB_NAME': os.environ.get('DJANGO_DB_NAME', '').strip(),
+        'DJANGO_DB_USER': os.environ.get('DJANGO_DB_USER', '').strip(),
+        'DJANGO_DB_PASSWORD': os.environ.get('DJANGO_DB_PASSWORD', '').strip(),
+        'DJANGO_DB_HOST': os.environ.get('DJANGO_DB_HOST', '').strip(),
     }
-}
+    missing_db_vars = [
+        name for name, value in required_db_vars.items() if not value
+    ]
+    if missing_db_vars:
+        raise ImproperlyConfigured(
+            'Faltan variables de PostgreSQL: '
+            + ', '.join(missing_db_vars)
+        )
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': required_db_vars['DJANGO_DB_NAME'],
+            'USER': required_db_vars['DJANGO_DB_USER'],
+            'PASSWORD': required_db_vars['DJANGO_DB_PASSWORD'],
+            'HOST': required_db_vars['DJANGO_DB_HOST'],
+            'PORT': os.environ.get('DJANGO_DB_PORT', '5432'),
+            'CONN_MAX_AGE': env_int('DJANGO_DB_CONN_MAX_AGE', default=60),
+            'OPTIONS': {
+                'sslmode': os.environ.get(
+                    'DJANGO_DB_SSLMODE',
+                    'require',
+                ),
+            },
+        }
+    }
+elif DB_ENGINE in ('sqlite', 'sqlite3', 'django.db.backends.sqlite3'):
+    if PRODUCTION:
+        raise ImproperlyConfigured(
+            'DJANGO_PRODUCTION=True requiere PostgreSQL; '
+            'SQLite no se admite en Azure.'
+        )
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    raise ImproperlyConfigured(
+        'DJANGO_DB_ENGINE debe ser sqlite o postgresql.'
+    )
 
 
 # Password validation
@@ -252,10 +359,26 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = os.environ.get('DJANGO_STATIC_URL', '/static/')
+STATIC_ROOT = Path(
+    os.environ.get('DJANGO_STATIC_ROOT', BASE_DIR / 'staticfiles')
+)
 
-# Destino de collectstatic para un futuro despliegue. No se usa en desarrollo.
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+# En Azure, collectstatic crea el manifiesto y WhiteNoise entrega los assets
+# con nombre versionado/compresion. Local y CI conservan el backend normal para
+# no exigir collectstatic al ejecutar runserver o la suite.
+if PRODUCTION:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        },
+        'staticfiles': {
+            'BACKEND': (
+                'whitenoise.storage.'
+                'CompressedManifestStaticFilesStorage'
+            ),
+        },
+    }
 
 # Archivos subidos por los usuarios (evidencias de atención).
 # En desarrollo se sirven desde el disco local. En producción solo debe
