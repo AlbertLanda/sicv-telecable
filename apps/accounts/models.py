@@ -38,57 +38,52 @@ class User(AbstractUser):
     # NOC consulta la ficha del abonado como contexto para soporte, pero no
     # administra sus datos comerciales. Sus permisos base se limitan al flujo
     # operativo de incidencias.
+    # Sandra/Administrador es un ATC con responsabilidades adicionales de
+    # supervisión y administración. Mantener la base ATC en un solo conjunto
+    # evita que una capacidad nueva de atención se agregue a ATC y se olvide
+    # habilitarla para Administración.
+    ATC_BASELINE_PERMISSIONS = frozenset(
+        {
+            "customers.add_customer",
+            "customers.change_customer",
+            "customers.add_customeraddress",
+            "customers.discard_incomplete_registration",
+            "services.add_subscription",
+            "contracts.add_contract",
+            "contracts.view_contract",
+            "work_orders.add_workorder",
+            "work_orders.view_workorder",
+            "work_orders.view_incident",
+            "work_orders.schedule_workorder",
+            "work_orders.cancel_workorder",
+            "work_orders.withdraw_installation",
+            "work_orders.create_outsideplant",
+            "work_orders.view_outsideplant",
+            "payments.view_charge",
+            "payments.view_payment",
+            "payments.view_receipt",
+            "payments.add_payment",
+        }
+    )
+
+    ADMIN_EXTRA_PERMISSIONS = frozenset(
+        {
+            "accounts.view_user",
+            "accounts.add_user",
+            "accounts.change_user",
+            "services.view_subscription",
+            "services.view_plan",
+            "services.view_servicetype",
+            "contracts.change_contract",
+            "payments.view_paymentcommitment",
+            "inventory.view_workordermaterialmovement",
+            "audit.view_auditevent",
+        }
+    )
+
     ROLE_BASELINE_PERMISSIONS = {
-        Role.ADMIN: frozenset(
-            {
-                "accounts.view_user",
-                "accounts.add_user",
-                "accounts.change_user",
-                "customers.add_customer",
-                "customers.discard_incomplete_registration",
-                "services.view_subscription",
-                "services.view_plan",
-                "services.view_servicetype",
-                "contracts.view_contract",
-                "contracts.change_contract",
-                "payments.view_payment",
-                "payments.view_receipt",
-                "payments.view_paymentcommitment",
-                "inventory.view_workordermaterialmovement",
-                "audit.view_auditevent",
-                # Administración también atiende abonados desde su ficha:
-                # puede emitir, consultar, reprogramar y anular OTs, pero no
-                # recibe las capacidades operativas de NOC/Planta Externa.
-                "work_orders.add_workorder",
-                "work_orders.view_workorder",
-                "work_orders.schedule_workorder",
-                "work_orders.cancel_workorder",
-                "work_orders.withdraw_installation",
-            }
-        ),
-        Role.ATC: frozenset(
-            {
-                "customers.add_customer",
-                "customers.change_customer",
-                "customers.add_customeraddress",
-                "customers.discard_incomplete_registration",
-                "services.add_subscription",
-                "contracts.add_contract",
-                "contracts.view_contract",
-                "work_orders.add_workorder",
-                "work_orders.view_workorder",
-                "work_orders.view_incident",
-                "work_orders.schedule_workorder",
-                "work_orders.cancel_workorder",
-                "work_orders.withdraw_installation",
-                "work_orders.create_outsideplant",
-                "work_orders.view_outsideplant",
-                "payments.view_charge",
-                "payments.view_payment",
-                "payments.view_receipt",
-                "payments.add_payment",
-            }
-        ),
+        Role.ADMIN: ATC_BASELINE_PERMISSIONS | ADMIN_EXTRA_PERMISSIONS,
+        Role.ATC: ATC_BASELINE_PERMISSIONS,
         Role.NOC: frozenset(
             {
                 "work_orders.view_workorder",
