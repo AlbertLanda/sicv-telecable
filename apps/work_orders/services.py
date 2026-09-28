@@ -1367,12 +1367,12 @@ def attend_order(order: WorkOrder, result, user=None, remarks=""):
 
     apply_order_result(order)
 
-    # Una avería responsabilidad del cliente deja propuesta su deuda al
-    # terminar la atención: desde aquí los materiales ya no se editan.
+    # Una avería responsabilidad del cliente emite automáticamente su deuda
+    # al terminar la atención: desde aquí los materiales ya no se editan.
     # Importación local: `faults` construye sobre este módulo.
     from apps.work_orders.faults import propose_fault_charge_on_close
 
-    propose_fault_charge_on_close(order=order)
+    propose_fault_charge_on_close(order=order, user=user)
 
     return order
 
@@ -1694,7 +1694,7 @@ def liquidate_order(
     # sobre este módulo.
     from apps.work_orders.faults import propose_fault_charge_on_close
 
-    propose_fault_charge_on_close(order=order)
+    propose_fault_charge_on_close(order=order, user=user)
 
     order.change_status(
         WorkOrder.Status.LIQUIDATED,
