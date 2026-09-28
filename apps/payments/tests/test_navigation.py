@@ -10,6 +10,7 @@ buscador según lo que se hubiera hecho antes.
 
 from django.urls import reverse
 
+from apps.accounts.models import User
 from apps.customers.models import Customer
 from apps.payments.tests.base import PaymentsTestCase
 
