@@ -47,9 +47,9 @@ def field_completion_summary(order: WorkOrder):
 def liquidation_items_from_field(order: WorkOrder):
     """Convierte materiales de campo en snapshots de WorkOrderLiquidationItem.
 
-    En una avería responsabilidad del cliente, lo instalado con precio en el
-    catálogo llega facturable a ese precio: el técnico no lo marca ni lo
-    escribe, y la liquidación congela el precio del día.
+    En una avería responsabilidad del cliente, lo instalado llega facturable
+    con el precio que ya quedó congelado al finalizar la atención. El técnico
+    no escribe montos y la liquidación conserva ese mismo snapshot.
     """
     items = []
     movements = (
