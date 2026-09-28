@@ -22,7 +22,7 @@ class ActivityAuditMiddleware:
     """Registra POST/PUT/PATCH/DELETE sin almacenar el cuerpo de la petición."""
 
     SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
-    EXCLUDED_ROUTES = {"login", "logout", "audit:activity"}
+    EXCLUDED_ROUTES = {"login", "logout", "audit:activity", "accounts:profile"}
 
     def __init__(self, get_response):
         self.get_response = get_response
