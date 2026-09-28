@@ -1627,3 +1627,142 @@ class ProposedCharge(models.Model):
     @property
     def display_icon(self):
         return self._presentation()[1]
+
+class EquipmentProduct(models.Model):
+    """Equipo que Telecable vende al abonado con instalación posterior.
+
+    El precio vigente vive en catálogo; cada venta guarda su propio snapshot
+    para que una actualización futura no revalorice una deuda histórica.
+    """
+
+    code = models.SlugField(
+        max_length=60,
+        unique=True,
+        verbose_name="Código",
+    )
+    name = models.CharField(
+        max_length=120,
+        unique=True,
+        verbose_name="Equipo",
+    )
+    current_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio de venta",
+    )
+    charge_concept_code = models.SlugField(
+        max_length=80,
+        verbose_name="Concepto de cobranza",
+    )
+    order_reason_code = models.CharField(
+        max_length=30,
+        verbose_name="Motivo de instalación",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Equipo vendible"
+        verbose_name_plural = "Equipos vendibles"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} · S/ {self.current_price:.2f}"
+
+
+class EquipmentSale(models.Model):
+    """Venta de equipo que genera deuda inmediata y una OT de instalación."""
+
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.PROTECT,
+        related_name="equipment_sales",
+        verbose_name="Abonado",
+    )
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.PROTECT,
+        related_name="equipment_sales",
+        verbose_name="Suscripción",
+    )
+    product = models.ForeignKey(
+        EquipmentProduct,
+        on_delete=models.PROTECT,
+        related_name="sales",
+        verbose_name="Equipo",
+    )
+    price_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Precio vendido",
+    )
+    charge = models.OneToOneField(
+        Charge,
+        on_delete=models.PROTECT,
+        related_name="equipment_sale",
+        verbose_name="Deuda generada",
+    )
+    work_order = models.OneToOneField(
+        "work_orders.WorkOrder",
+        on_delete=models.PROTECT,
+        related_name="equipment_sale",
+        verbose_name="Orden de instalación",
+    )
+    registered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="equipment_sales_registered",
+        verbose_name="Registrado por",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Venta de equipo"
+        verbose_name_plural = "Ventas de equipos"
+        ordering = ["-created_at", "-pk"]
+
+    def __str__(self):
+        return f"{self.customer} · {self.product.name} · S/ {self.price_snapshot:.2f}"
+
+    def clean(self):
+        super().clean()
+
+        if self.subscription_id and self.customer_id:
+            if self.subscription.customer_id != self.customer_id:
+                raise ValidationError({
+                    "subscription": "La suscripción no pertenece al abonado.",
+                })
+
+        if self.charge_id:
+            if self.charge.customer_id != self.customer_id:
+                raise ValidationError({
+                    "charge": "La deuda no pertenece al abonado de la venta.",
+                })
+            if self.charge.subscription_id != self.subscription_id:
+                raise ValidationError({
+                    "charge": "La deuda no pertenece a la suscripción vendida.",
+                })
+
+        if self.work_order_id:
+            if self.work_order.subscription_id != self.subscription_id:
+                raise ValidationError({
+                    "work_order": "La OT no pertenece a la suscripción de la venta.",
+                })
+
+        if (
+            self.charge_id
+            and self.price_snapshot
+            and self.charge.amount != self.price_snapshot
+        ):
+            raise ValidationError({
+                "price_snapshot": (
+                    "El precio de la venta debe coincidir con la deuda emitida."
+                ),
+            })
+
