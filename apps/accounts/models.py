@@ -44,6 +44,7 @@ class User(AbstractUser):
                 "accounts.view_user",
                 "accounts.add_user",
                 "accounts.change_user",
+                "customers.add_customer",
                 "customers.discard_incomplete_registration",
                 "services.view_subscription",
                 "services.view_plan",
