@@ -31,7 +31,16 @@
                     <tr>
                         <td>{{ event.created_at|date:"d/m/Y H:i:s" }}</td>
                         <td><strong>{{ event.actor }}</strong></td>
-                        <td>{{ event.description }}</td>
+                        <td>
+                            <div>{{ event.description }}</div>
+                            {% if event.changes %}
+                                <div class="small text-muted mt-1">
+                                    {% for field, delta in event.changes.items %}
+                                        <div><strong>{{ field }}:</strong> {{ delta.before }} &rarr; {{ delta.after }}</div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </td>
                         <td><code>{{ event.route_name|default:event.path }}</code></td>
                         <td>{% if event.status_code < 400 %}<span class="badge text-bg-success">{{ event.status_code }}</span>{% else %}<span class="badge text-bg-warning">{{ event.status_code }}</span>{% endif %}</td>
                     </tr>
