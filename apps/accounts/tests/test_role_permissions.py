@@ -68,8 +68,14 @@ class PersonnelManagerRoleBaselinePermissionTests(TestCase):
             user.has_perm("inventory.view_workordermaterialmovement")
         )
         self.assertTrue(user.has_perm("audit.view_auditevent"))
-        self.assertFalse(user.has_perm("work_orders.view_workorder"))
+        self.assertTrue(user.has_perm("work_orders.add_workorder"))
+        self.assertTrue(user.has_perm("work_orders.view_workorder"))
+        self.assertTrue(user.has_perm("work_orders.schedule_workorder"))
+        self.assertTrue(user.has_perm("work_orders.cancel_workorder"))
+        self.assertTrue(user.has_perm("work_orders.withdraw_installation"))
+        # Administrador puede atender al abonado sin convertirse en NOC/PEX.
         self.assertFalse(user.has_perm("work_orders.view_incident"))
+        self.assertFalse(user.has_perm("work_orders.view_outsideplant"))
 
     def test_accounting_does_not_inherit_personnel_management(self):
         user = User.objects.create_user(
