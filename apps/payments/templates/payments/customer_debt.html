@@ -45,6 +45,12 @@
                     <i class="bi bi-cash-stack"></i>Deudas
                 </h2>
                 <div class="tc-board-actions">
+                    {% if perms.payments.add_charge and perms.work_orders.add_workorder %}
+                        <a class="tc-btn"
+                           href="{% url 'payments:equipment_sale_create' pk=customer.pk %}">
+                            <i class="bi bi-router"></i>Vender equipo
+                        </a>
+                    {% endif %}
                     {% if can_create_charge %}
                         {% comment %}
                         Abre la ventana de nueva deuda encima del tablero (ver
