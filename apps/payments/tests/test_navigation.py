@@ -230,14 +230,29 @@ class TheMenuDoesNotHoldSingleCustomerScreensTests(PaymentsTestCase):
             response, reverse("payments:debt", args=[self.customer.pk])
         )
 
-    def test_the_menu_keeps_a_place_for_the_lists_that_cross_customers(self):
-        """Cartera, caja y compromisos sí son del menú. Aún no existen."""
-        self.login(self.make_user("atc1", permissions=["view_charge"]))
+    def test_the_menu_exposes_only_the_cross_customer_lists_that_exist(self):
+        """Cartera vencida se retiró; caja y compromisos son vistas reales."""
+        from django.contrib.auth.models import Permission
+
+        user = self.make_user(
+            "admin_cobranza",
+            permissions=["view_payment"],
+            role=User.Role.ADMIN,
+        )
+        user.user_permissions.add(
+            Permission.objects.get(
+                codename="view_paymentcommitment",
+                content_type__app_label="payments",
+            )
+        )
+        self.login(user)
 
         response = self.client.get(reverse("customers:search"))
 
         self.assertContains(response, "Cobranza")
-        self.assertContains(response, "Cartera vencida")
+        self.assertNotContains(response, "Cartera vencida")
+        self.assertContains(response, reverse("payments:daily_cash"))
+        self.assertContains(response, reverse("payments:commitments"))
 
 
 class NoticesAreRenderedOnceTests(PaymentsTestCase):
