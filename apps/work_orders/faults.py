@@ -5,10 +5,11 @@ y llega al técnico por el mismo pool que una instalación. Lo propio de la
 avería es su responsable: el operador lo declara al registrarla y el técnico
 lo confirma o corrige en campo, que es donde se ve la causa.
 
-Solo la responsabilidad del cliente mueve dinero, y nunca de oficio. Cuando
-el técnico finaliza la atención, lo que dejó instalado se valoriza al precio
-del catálogo de materiales, se le suma la atención de la avería y todo queda
-como deuda propuesta. Emitirla o descartarla lo decide la ventanilla.
+Solo la responsabilidad del cliente mueve dinero. Cuando el técnico finaliza
+la atención, lo que dejó instalado se valoriza al precio vigente del catálogo,
+ese precio se congela, se suma la atención de S/ 10 y SICV emite
+automáticamente la deuda. La propuesta queda como trazabilidad OT -> cargo,
+no como una decisión pendiente de ventanilla.
 """
 
 from decimal import Decimal
@@ -219,15 +220,56 @@ def set_fault_responsibility(
 def fault_material_price(movement):
     """Precio al abonado de un material de campo, o None si no se le cobra.
 
-    Se cobra lo instalado que tiene precio en el catálogo. Lo retirado nunca
-    se cobra. Que la avería sea del cliente lo decide quien llama.
+    Si el movimiento ya tiene precio facturable, ese valor es el snapshot
+    histórico y manda sobre el catálogo actual. Mientras la atención sigue
+    abierta se usa el precio vigente del catálogo. Lo retirado nunca se cobra.
     """
-    if (
-        movement.movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED
-        or movement.material.customer_price is None
-    ):
+    if movement.movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
         return None
+
+    if movement.is_billable and movement.unit_price is not None:
+        return movement.unit_price
+
     return movement.material.customer_price
+
+
+def snapshot_fault_material_prices(order):
+    """Congela precios cobrables cuando termina una avería del cliente."""
+    if not customer_pays_fault(order):
+        return []
+
+    movements = (
+        WorkOrderMaterialMovement.objects
+        .select_for_update()
+        .select_related("material")
+        .filter(work_order=order)
+        .order_by("pk")
+    )
+    snapped = []
+
+    for movement in movements:
+        if movement.movement_type != WorkOrderMaterialMovement.MovementType.INSTALLED:
+            continue
+
+        price = movement.material.customer_price
+        if price is None:
+            continue
+
+        fields = []
+        if not movement.is_billable:
+            movement.is_billable = True
+            fields.append("is_billable")
+        if movement.unit_price != price:
+            movement.unit_price = price
+            fields.append("unit_price")
+
+        if fields:
+            fields.append("updated_at")
+            movement.save(update_fields=fields)
+
+        snapped.append(movement)
+
+    return snapped
 
 
 def _liquidation_or_none(order):
@@ -240,10 +282,10 @@ def _liquidation_or_none(order):
 def fault_charge_breakdown(order):
     """Lo que se le propone cobrar al abonado por una avería suya.
 
-    Sale de los materiales que el técnico registró, a los precios vigentes
-    del catálogo. Mientras la atención sigue abierta es una estimación; al
-    finalizarla los materiales ya no cambian y el monto es definitivo. Una
-    vez liquidada, sale de la liquidación, que congela cantidad y precio.
+    Mientras la atención sigue abierta usa el tarifario vigente. Al finalizar,
+    los precios quedan congelados en los movimientos de material, así que el
+    total ya no cambia aunque luego se edite el catálogo. Una vez liquidada,
+    sale de la liquidación, que conserva cantidad y precio.
     """
     liquidation = _liquidation_or_none(order)
     detail = fault_detail_for(order)
@@ -306,14 +348,12 @@ def fault_charge_breakdown(order):
     }
 
 
-def propose_fault_charge_on_close(*, order):
-    """Al terminar la atención de una avería del cliente, deja propuesta su deuda.
+def propose_fault_charge_on_close(*, order, user=None):
+    """Emite automáticamente la deuda al cerrar una avería del cliente.
 
-    Se llama al finalizar la atención -desde ahí los materiales ya no
-    cambian- y otra vez al liquidar, sin duplicar nada: la segunda llamada
-    cubre una avería que se finalizó antes de que existiera la primera.
-    Congela la atención de la avería; emitir la deuda es decisión de la
-    ventanilla.
+    La propuesta se conserva como vínculo auditable entre OT y cargo. Volver
+    a llamar esta función al liquidar es idempotente: si ya fue aceptada, no
+    se emite otra deuda.
     """
     if not customer_pays_fault(order):
         return None
@@ -323,8 +363,35 @@ def propose_fault_charge_on_close(*, order):
         detail.service_fee_snapshot = FAULT_CUSTOMER_SERVICE_FEE
         detail.save(update_fields=["service_fee_snapshot", "updated_at"])
 
-    # La importación es local a propósito: `payments` apunta a `work_orders`
-    # -la propuesta cuelga de la orden- y subirla al módulo cerraría el ciclo.
-    from apps.payments.proposals import propose_fault_charge
+    snapshot_fault_material_prices(order)
 
-    return propose_fault_charge(work_order=order)
+    from apps.payments.proposals import (
+        accept_proposed_charge,
+        propose_fault_charge,
+    )
+
+    proposal = propose_fault_charge(work_order=order)
+    if not proposal.is_pending:
+        return proposal
+
+    actor = (
+        user
+        or detail.responsibility_set_by
+        or order.assigned_technician
+        or order.created_by
+    )
+    if actor is None:
+        raise ValidationError(
+            "No se pudo identificar al usuario que originó el cierre de la avería."
+        )
+
+    breakdown = fault_charge_breakdown(order)
+    accept_proposed_charge(
+        proposal=proposal,
+        user=actor,
+        amount=breakdown["total"],
+        due_date=timezone.localdate(),
+        note="Cargo automático por avería atribuible al cliente.",
+    )
+    proposal.refresh_from_db()
+    return proposal
