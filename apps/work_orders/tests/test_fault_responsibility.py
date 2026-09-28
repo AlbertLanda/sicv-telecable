@@ -1,8 +1,9 @@
 """Averías con responsable: alta, portal del técnico y deuda al finalizar.
 
 Lo que se fija aquí es que la responsabilidad del cliente -y solo esa-
-termina en una deuda propuesta: la atención de la avería más lo instalado al
-precio del catálogo, sin mover el saldo hasta que la ventanilla la acepte.
+termina automáticamente en deuda al finalizar la atención: S/ 10 por atención
+más lo instalado al precio congelado del catálogo. La propuesta se conserva
+como trazabilidad OT -> cargo, pero no queda pendiente de ventanilla.
 """
 
 import shutil
@@ -461,7 +462,7 @@ class FaultTechnicianAPITests(FaultFieldTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_liquidar_averia_del_cliente_propone_atencion_mas_materiales(self):
+    def test_liquidar_averia_del_cliente_conserva_un_solo_cargo_automatico(self):
         order = self.start(self.create_fault())
         self.mark_customer(order)
         self.register_material(order, "CONECTOR_MECANICO", "1")
@@ -472,11 +473,15 @@ class FaultTechnicianAPITests(FaultFieldTestCase):
         order = self.complete_and_liquidate(order)
 
         proposal = ProposedCharge.objects.get(work_order=order)
-        self.assertEqual(proposal.status, ProposedCharge.Status.PENDING)
+        self.assertEqual(proposal.status, ProposedCharge.Status.ACCEPTED)
         self.assertEqual(proposal.concept_item.code, "averia-cliente")
         self.assertEqual(proposal.display_title, "Deuda avería")
         self.assertEqual(suggested_proposed_charge_amount(proposal), Decimal("47.00"))
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+        self.assertEqual(proposal.charge.amount, Decimal("47.00"))
+        self.assertEqual(
+            Charge.objects.filter(customer=self.customer).count(),
+            1,
+        )
 
         items = {item.material_code: item for item in order.liquidation.items.all()}
         self.assertTrue(items["CONECTOR_MECANICO"].is_billable)
@@ -488,7 +493,7 @@ class FaultTechnicianAPITests(FaultFieldTestCase):
             Decimal("10.00"),
         )
 
-    def test_finalizar_la_atencion_ya_propone_la_deuda(self):
+    def test_finalizar_la_atencion_emite_la_deuda_automaticamente(self):
         order = self.start(self.create_fault())
         self.mark_customer(order)
         self.register_material(order, "CONECTOR_MECANICO", "1")
@@ -497,34 +502,58 @@ class FaultTechnicianAPITests(FaultFieldTestCase):
 
         self.assertEqual(order.status, WorkOrder.Status.ATTENDED)
         proposal = ProposedCharge.objects.get(work_order=order)
-        self.assertEqual(proposal.status, ProposedCharge.Status.PENDING)
+        self.assertEqual(proposal.status, ProposedCharge.Status.ACCEPTED)
         # Atención 10 + conector mecánico 25.
         self.assertEqual(suggested_proposed_charge_amount(proposal), Decimal("35.00"))
+        self.assertEqual(proposal.charge.amount, Decimal("35.00"))
         self.assertTrue(fault_charge_breakdown(order)["is_final"])
         self.assertEqual(
             FaultDetail.objects.get(work_order=order).service_fee_snapshot,
             Decimal("10.00"),
         )
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
+        self.assertEqual(
+            Charge.objects.filter(customer=self.customer).count(),
+            1,
+        )
 
-    def test_caja_emite_antes_de_liquidar_y_liquidar_no_duplica(self):
+    def test_liquidar_despues_del_cargo_automatico_no_duplica(self):
         order = self.start(self.create_fault())
         self.mark_customer(order)
         self.register_material(order, "CONECTOR_MECANICO", "1")
         order = self.complete(order)
-        proposal = ProposedCharge.objects.get(work_order=order)
 
-        accept_proposed_charge(
-            proposal=proposal,
-            user=self.supervisor,
-            amount=Decimal("35.00"),
-            due_date=None,
-        )
+        proposal = ProposedCharge.objects.get(work_order=order)
+        charge_id = proposal.charge_id
+
         self.liquidate(order)
 
         self.assertEqual(ProposedCharge.objects.filter(work_order=order).count(), 1)
+        self.assertEqual(Charge.objects.filter(customer=self.customer).count(), 1)
         proposal.refresh_from_db()
         self.assertEqual(proposal.status, ProposedCharge.Status.ACCEPTED)
+        self.assertEqual(proposal.charge_id, charge_id)
+        self.assertEqual(proposal.charge.amount, Decimal("35.00"))
+
+    def test_precio_de_material_queda_congelado_al_finalizar(self):
+        order = self.start(self.create_fault())
+        self.mark_customer(order)
+        self.register_material(order, "CONECTOR_MECANICO", "1")
+
+        order = self.complete(order)
+        proposal = ProposedCharge.objects.get(work_order=order)
+
+        material = Material.objects.get(code="CONECTOR_MECANICO")
+        material.customer_price = Decimal("99.00")
+        material.save(update_fields=["customer_price", "updated_at"])
+
+        movement = order.field_material_movements.get(
+            material__code="CONECTOR_MECANICO"
+        )
+        movement.refresh_from_db()
+
+        self.assertTrue(movement.is_billable)
+        self.assertEqual(movement.unit_price, Decimal("25.00"))
+        self.assertEqual(fault_charge_breakdown(order)["total"], Decimal("35.00"))
         self.assertEqual(proposal.charge.amount, Decimal("35.00"))
 
     def test_mientras_esta_en_atencion_caja_no_puede_emitir(self):
