@@ -50,7 +50,14 @@ class CommercialCatalogCommandTests(TestCase):
             ),
             {Plan.Category.ECONOMIC, Plan.Category.SUPER_ECONOMIC},
         )
-        self.assertEqual(InstallationMaterialRule.objects.count(), 12)
+        self.assertEqual(InstallationMaterialRule.objects.count(), 13)
+        rg6_duo = InstallationMaterialRule.objects.get(
+            material=InstallationMaterialRule.Material.RG6,
+            service_type__code="DUO",
+            branch__isnull=True,
+        )
+        self.assertEqual(str(rg6_duo.free_meters), "50.00")
+        self.assertEqual(str(rg6_duo.excess_price_per_meter), "1.00")
 
         installation = OrderType.objects.get(code="INSTALLATION")
         self.assertTrue(installation.is_active)
