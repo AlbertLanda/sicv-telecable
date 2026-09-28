@@ -147,6 +147,26 @@ class FaultCreationTests(FaultTestCase):
                 evidence_files=[evidence_file()],
             )
 
+    def test_tarifario_confirmado_de_averias(self):
+        expected = {
+            "CONECTOR_MECANICO": Decimal("25.00"),
+            "FIBRA_DROP": Decimal("1.00"),
+            "ENFRENTADOR": Decimal("10.00"),
+            "ONU": Decimal("100.00"),
+            "ROUTER": Decimal("100.00"),
+            "CARGADOR": Decimal("10.00"),
+            "CABLE_UTP": Decimal("2.00"),
+            "RJ45": Decimal("1.00"),
+            "CABLE_RG6": Decimal("1.00"),
+        }
+
+        for code, price in expected.items():
+            self.assertEqual(
+                Material.objects.get(code=code).customer_price,
+                price,
+                code,
+            )
+
     def test_registrar_cliente_no_emite_deuda(self):
         order = self.create_fault(
             responsibility=CUSTOMER,
@@ -611,7 +631,7 @@ class FaultTechnicianAPITests(FaultFieldTestCase):
 
 
 class FaultDebtWebTests(FaultFieldTestCase):
-    """La ventanilla ve la deuda avería, su desglose, y la emite."""
+    """La ventanilla ve una deuda de avería ya emitida automáticamente."""
 
     def setUp(self):
         super().setUp()
@@ -628,100 +648,69 @@ class FaultDebtWebTests(FaultFieldTestCase):
         self.proposal = ProposedCharge.objects.get(work_order=self.order)
 
         self.resolver = self.supervisor
-        for app_label, codename in (
-            ("payments", "view_charge"),
-            ("payments", "resolve_proposedcharge"),
-        ):
-            self.resolver.user_permissions.add(
-                Permission.objects.get(
-                    content_type__app_label=app_label,
-                    codename=codename,
-                )
+        self.resolver.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="payments",
+                codename="view_charge",
             )
+        )
         self.client.force_login(self.resolver)
 
-    def resolve_url(self):
-        return reverse(
-            "payments:proposal_resolve",
-            kwargs={"pk": self.customer.pk, "proposal_pk": self.proposal.pk},
-        )
-
-    def test_la_ficha_de_deuda_muestra_la_deuda_averia(self):
+    def test_la_ficha_de_deuda_muestra_el_cargo_automatico(self):
         response = self.client.get(
             reverse("payments:debt", args=[self.customer.pk])
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Deuda avería")
-        self.assertIn(self.proposal, response.context["pending_proposals"])
-        self.assertEqual(list(response.context["debt"]["charges"]), [])
+        self.proposal.refresh_from_db()
 
-    def test_la_resolucion_desglosa_atencion_y_materiales(self):
-        response = self.client.get(self.resolve_url())
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Atención de la avería")
-        self.assertContains(response, "ONU")
-        self.assertContains(response, "CABLE UTP")
-        # Atención 10 + ONU 100 + 5 m de UTP a 2, en moneda localizada.
-        self.assertContains(response, "S/ 120,00")
-        self.assertContains(response, "Daño causado por el abonado.")
         self.assertEqual(
-            response.context["form"]["amount"].value(),
+            self.proposal.status,
+            ProposedCharge.Status.ACCEPTED,
+        )
+        self.assertNotIn(
+            self.proposal,
+            response.context["pending_proposals"],
+        )
+        self.assertIn(
+            self.proposal.charge,
+            list(response.context["debt"]["charges"]),
+        )
+        self.assertEqual(
+            response.context["debt"]["total"],
             Decimal("120.00"),
         )
-
-    def test_aceptar_emite_el_total_calculado(self):
-        response = self.client.post(
-            self.resolve_url(),
-            {
-                "accion": "aceptar",
-                "selected": "on",
-                "amount": "120.00",
-                "due_date": "2026-09-30",
-                "note": "",
-            },
-        )
-
-        self.assertRedirects(
+        self.assertContains(
             response,
-            reverse("payments:debt", args=[self.customer.pk]),
+            "AVERÍA INTERNET - RESPONSABILIDAD DEL CLIENTE",
         )
+
+    def test_el_cargo_automatico_conserva_trazabilidad_a_la_ot(self):
         self.proposal.refresh_from_db()
-        self.assertEqual(self.proposal.status, ProposedCharge.Status.ACCEPTED)
+
+        self.assertEqual(self.proposal.work_order, self.order)
         self.assertEqual(self.proposal.charge.amount, Decimal("120.00"))
         self.assertEqual(
             self.proposal.charge.description,
             "AVERÍA INTERNET - RESPONSABILIDAD DEL CLIENTE",
         )
+        self.assertEqual(self.proposal.resolved_by, self.technician)
+        self.assertIn(
+            "automático",
+            self.proposal.note.lower(),
+        )
 
-    def test_otro_monto_exige_observacion(self):
+    def test_una_propuesta_ya_aceptada_no_puede_emitirse_otra_vez(self):
         with self.assertRaises(ValidationError):
             accept_proposed_charge(
                 proposal=self.proposal,
                 user=self.resolver,
-                amount=Decimal("100.00"),
+                amount=Decimal("120.00"),
                 due_date=None,
             )
 
-        accept_proposed_charge(
-            proposal=self.proposal,
-            user=self.resolver,
-            amount=Decimal("100.00"),
-            due_date=None,
-            note="Descuento autorizado por supervisión.",
+        self.assertEqual(
+            Charge.objects.filter(customer=self.customer).count(),
+            1,
         )
 
-        self.proposal.refresh_from_db()
-        self.assertEqual(self.proposal.charge.amount, Decimal("100.00"))
-
-    def test_descartar_exige_motivo_y_no_emite(self):
-        response = self.client.post(
-            self.resolve_url(),
-            {"accion": "descartar", "note": ""},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.proposal.refresh_from_db()
-        self.assertEqual(self.proposal.status, ProposedCharge.Status.PENDING)
-        self.assertFalse(Charge.objects.filter(customer=self.customer).exists())
