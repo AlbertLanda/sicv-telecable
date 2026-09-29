@@ -1,7 +1,10 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -742,6 +745,7 @@ class LegacyWorkOrderMaterial(models.Model):
     quantity = models.DecimalField(
         max_digits=12,
         decimal_places=5,
+        validators=[MinValueValidator(Decimal("0.00001"))],
         verbose_name="Cantidad",
     )
     unit_snapshot = models.CharField(
