@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.customers.codes import next_available_branch_code
