@@ -266,3 +266,535 @@ class LegacyRecordCorrection(models.Model):
 
     def __str__(self):
         return f"Corrección {self.record} · {self.created_at:%Y-%m-%d %H:%M}"
+
+
+
+class LegacyContractSnapshot(models.Model):
+    """Contrato histórico recuperado sin convertirlo en contrato operativo.
+
+    Puede conservar planes/estados que hoy contradicen la suscripción vigente
+    porque describe lo que SICAV mostraba en ese momento. El contrato normal
+    sigue aplicando sus reglas estrictas para nuevas operaciones.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Borrador"
+        ACTIVE = "ACTIVE", "Activo"
+        SUSPENDED = "SUSPENDED", "Suspendido"
+        CANCELLED = "CANCELLED", "Cancelado"
+        FINISHED = "FINISHED", "Finalizado"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    class Modality(models.TextChoices):
+        SALE = "SALE", "Venta"
+        RENTAL = "RENTAL", "Alquiler"
+        OWNED = "OWNED", "Propio"
+        LOAN = "LOAN", "Préstamo"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="legacy_contracts",
+        verbose_name="Abonado",
+    )
+    subscription = models.ForeignKey(
+        "services.Subscription",
+        on_delete=models.PROTECT,
+        related_name="legacy_contracts",
+        verbose_name="Suscripción",
+    )
+    service_type = models.ForeignKey(
+        "services.ServiceType",
+        on_delete=models.PROTECT,
+        related_name="legacy_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Servicio normalizado",
+    )
+    plan = models.ForeignKey(
+        "services.Plan",
+        on_delete=models.PROTECT,
+        related_name="legacy_contracts",
+        null=True,
+        blank=True,
+        verbose_name="Plan normalizado",
+    )
+
+    legacy_contract_number = models.CharField(
+        max_length=60,
+        blank=True,
+        verbose_name="Número de contrato SICAV",
+    )
+    service_name_snapshot = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="Servicio histórico",
+    )
+    plan_name_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Plan histórico",
+    )
+    equipment_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Equipo histórico",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.UNKNOWN,
+        verbose_name="Estado histórico normalizado",
+    )
+    legacy_status = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Estado original",
+    )
+    modality = models.CharField(
+        max_length=20,
+        choices=Modality.choices,
+        default=Modality.UNKNOWN,
+        verbose_name="Modalidad normalizada",
+    )
+    installments = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Cuotas",
+    )
+
+    start_date = models.DateField(verbose_name="Inicio")
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fin",
+    )
+    last_activation_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Última activación",
+    )
+    last_cut_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Último corte",
+    )
+    notes = models.TextField(blank=True, verbose_name="Observaciones")
+    is_validated = models.BooleanField(default=False, verbose_name="Validado")
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Contrato histórico SICAV"
+        verbose_name_plural = "Contratos históricos SICAV"
+        ordering = ["subscription", "start_date", "pk"]
+
+    def clean(self):
+        super().clean()
+        if self.subscription_id and self.customer_id:
+            if self.subscription.customer_id != self.customer_id:
+                raise ValidationError({
+                    "subscription": "La suscripción no pertenece al abonado."
+                })
+        if self.end_date and self.end_date < self.start_date:
+            raise ValidationError({
+                "end_date": "La fecha final no puede ser anterior al inicio."
+            })
+
+    def normalized_snapshot(self):
+        return {
+            "subscription_id": self.subscription_id,
+            "service_type_id": self.service_type_id,
+            "plan_id": self.plan_id,
+            "legacy_contract_number": self.legacy_contract_number,
+            "service_name_snapshot": self.service_name_snapshot,
+            "plan_name_snapshot": self.plan_name_snapshot,
+            "equipment_snapshot": self.equipment_snapshot,
+            "status": self.status,
+            "legacy_status": self.legacy_status,
+            "modality": self.modality,
+            "installments": self.installments,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "last_activation_date": (
+                self.last_activation_date.isoformat()
+                if self.last_activation_date else None
+            ),
+            "last_cut_date": (
+                self.last_cut_date.isoformat() if self.last_cut_date else None
+            ),
+            "notes": self.notes,
+            "is_validated": self.is_validated,
+            "validation_notes": self.validation_notes,
+        }
+
+    def __str__(self):
+        number = self.legacy_contract_number or "sin número"
+        return f"{number} · {self.subscription.service_code}"
+
+
+class LegacyWorkOrderSnapshot(models.Model):
+    """Orden histórica consultable sin publicarla al flujo operativo actual."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pendiente"
+        ASSIGNED = "ASSIGNED", "Asignada"
+        DERIVED = "DERIVED", "Derivada"
+        IN_PROGRESS = "IN_PROGRESS", "En atención"
+        ATTENDED = "ATTENDED", "Atendida"
+        LIQUIDATED = "LIQUIDATED", "Liquidada"
+        REPROGRAMMED = "REPROGRAMMED", "Reprogramada"
+        REJECTED = "REJECTED", "Rechazada"
+        NOT_FEASIBLE = "NOT_FEASIBLE", "No factible"
+        CANCELLED = "CANCELLED", "Anulada"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    class AttentionType(models.TextChoices):
+        SYSTEM = "SYSTEM", "Sistema"
+        FIELD = "FIELD", "Física"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    class Responsibility(models.TextChoices):
+        CUSTOMER = "CUSTOMER", "Cliente"
+        COMPANY = "COMPANY", "Empresa"
+        OTHER = "OTHER", "Otros"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        verbose_name="Abonado",
+    )
+    subscription = models.ForeignKey(
+        "services.Subscription",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        verbose_name="Suscripción",
+    )
+    order_type = models.ForeignKey(
+        "work_orders.OrderType",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Tipo normalizado",
+    )
+    reason = models.ForeignKey(
+        "work_orders.OrderReason",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Motivo normalizado",
+    )
+    branch = models.ForeignKey(
+        "organization.Branch",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        verbose_name="Sede",
+    )
+    zone = models.ForeignKey(
+        "organization.Zone",
+        on_delete=models.PROTECT,
+        related_name="legacy_work_orders",
+        null=True,
+        blank=True,
+        verbose_name="Zona",
+    )
+
+    legacy_order_number = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Número de orden SICAV",
+    )
+    order_type_name_snapshot = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="Tipo histórico",
+    )
+    reason_name_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Motivo histórico",
+    )
+    legacy_type_code = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Código de tipo original",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.UNKNOWN,
+        verbose_name="Estado normalizado",
+    )
+    legacy_status = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Estado original",
+    )
+    attention_type = models.CharField(
+        max_length=20,
+        choices=AttentionType.choices,
+        default=AttentionType.UNKNOWN,
+        verbose_name="Tipo de atención",
+    )
+    responsibility = models.CharField(
+        max_length=20,
+        choices=Responsibility.choices,
+        default=Responsibility.UNKNOWN,
+        verbose_name="Responsabilidad",
+    )
+
+    detail = models.TextField(blank=True, verbose_name="Detalle de emisión")
+    attention_detail = models.TextField(
+        blank=True,
+        verbose_name="Detalle de atención / resultado",
+    )
+    technical_notes = models.TextField(
+        blank=True,
+        verbose_name="Observaciones técnicas",
+    )
+
+    issued_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Emitida el",
+    )
+    attended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Atendida el",
+    )
+
+    nap = models.CharField(max_length=100, blank=True, verbose_name="NAP")
+    terminal = models.CharField(max_length=40, blank=True, verbose_name="Borne")
+    equipment_code = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="MAC / equipo",
+    )
+    seal_number = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Precinto",
+    )
+
+    derived_from = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="derived_orders",
+        null=True,
+        blank=True,
+        verbose_name="Derivada de",
+        help_text=(
+            "Solo se llena si el expediente confirma la relación. "
+            "No se infiere únicamente por cercanía de fechas."
+        ),
+    )
+
+    is_validated = models.BooleanField(default=False, verbose_name="Validado")
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Orden histórica SICAV"
+        verbose_name_plural = "Órdenes históricas SICAV"
+        ordering = ["-issued_at", "-pk"]
+
+    def clean(self):
+        super().clean()
+        if self.subscription_id and self.customer_id:
+            if self.subscription.customer_id != self.customer_id:
+                raise ValidationError({
+                    "subscription": "La suscripción no pertenece al abonado."
+                })
+        if self.reason_id and self.order_type_id:
+            if self.reason.order_type_id != self.order_type_id:
+                raise ValidationError({
+                    "reason": "El motivo no pertenece al tipo de orden."
+                })
+        if self.attended_at and self.issued_at and self.attended_at < self.issued_at:
+            raise ValidationError({
+                "attended_at": "La atención no puede ser anterior a la emisión."
+            })
+        if self.derived_from_id and self.derived_from_id == self.pk:
+            raise ValidationError({
+                "derived_from": "Una orden no puede derivarse de sí misma."
+            })
+
+    def normalized_snapshot(self):
+        return {
+            "subscription_id": self.subscription_id,
+            "order_type_id": self.order_type_id,
+            "reason_id": self.reason_id,
+            "branch_id": self.branch_id,
+            "zone_id": self.zone_id,
+            "legacy_order_number": self.legacy_order_number,
+            "order_type_name_snapshot": self.order_type_name_snapshot,
+            "reason_name_snapshot": self.reason_name_snapshot,
+            "legacy_type_code": self.legacy_type_code,
+            "status": self.status,
+            "legacy_status": self.legacy_status,
+            "attention_type": self.attention_type,
+            "responsibility": self.responsibility,
+            "detail": self.detail,
+            "attention_detail": self.attention_detail,
+            "technical_notes": self.technical_notes,
+            "issued_at": self.issued_at.isoformat() if self.issued_at else None,
+            "attended_at": self.attended_at.isoformat() if self.attended_at else None,
+            "nap": self.nap,
+            "terminal": self.terminal,
+            "equipment_code": self.equipment_code,
+            "seal_number": self.seal_number,
+            "derived_from_id": self.derived_from_id,
+            "is_validated": self.is_validated,
+            "validation_notes": self.validation_notes,
+        }
+
+    def __str__(self):
+        number = self.legacy_order_number or f"ID {self.pk}"
+        return f"{number} · {self.order_type_name_snapshot or 'OT histórica'}"
+
+
+class LegacyWorkOrderParticipant(models.Model):
+    work_order = models.ForeignKey(
+        LegacyWorkOrderSnapshot,
+        on_delete=models.CASCADE,
+        related_name="participants",
+        verbose_name="Orden histórica",
+    )
+    legacy_user_code = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Código de usuario SICAV",
+    )
+    name_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Nombre histórico",
+    )
+    role_snapshot = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Rol / participación",
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Inicio",
+    )
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fin",
+    )
+    notes = models.TextField(blank=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Participante de OT histórica"
+        verbose_name_plural = "Participantes de OT histórica"
+        ordering = ["work_order", "pk"]
+
+    def clean(self):
+        super().clean()
+        if self.started_at and self.ended_at and self.ended_at < self.started_at:
+            raise ValidationError({
+                "ended_at": "El fin no puede ser anterior al inicio."
+            })
+
+
+class LegacyWorkOrderMaterial(models.Model):
+    class MovementType(models.TextChoices):
+        INSTALLED = "INSTALLED", "Instalado"
+        REMOVED = "REMOVED", "Retirado"
+        USED = "USED", "Utilizado"
+
+    work_order = models.ForeignKey(
+        LegacyWorkOrderSnapshot,
+        on_delete=models.CASCADE,
+        related_name="materials",
+        verbose_name="Orden histórica",
+    )
+    legacy_material_code = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Código SICAV",
+    )
+    name_snapshot = models.CharField(
+        max_length=180,
+        verbose_name="Material histórico",
+    )
+    quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=5,
+        verbose_name="Cantidad",
+    )
+    unit_snapshot = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Unidad",
+    )
+    movement_type = models.CharField(
+        max_length=20,
+        choices=MovementType.choices,
+        default=MovementType.USED,
+        verbose_name="Movimiento",
+    )
+    notes = models.TextField(blank=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Material de OT histórica"
+        verbose_name_plural = "Materiales de OT histórica"
+        ordering = ["work_order", "pk"]
+
+
+class LegacyWorkOrderEvidence(models.Model):
+    work_order = models.ForeignKey(
+        LegacyWorkOrderSnapshot,
+        on_delete=models.CASCADE,
+        related_name="evidences",
+        verbose_name="Orden histórica",
+    )
+    original_name = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Nombre original",
+    )
+    legacy_reference = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="Referencia SICAV",
+        help_text=(
+            "Ruta/identificador histórico. No contiene cookies ni tokens."
+        ),
+    )
+    file = models.FileField(
+        upload_to="legacy/work_orders/evidence/",
+        blank=True,
+        verbose_name="Archivo migrado",
+    )
+    description = models.CharField(
+        max_length=240,
+        blank=True,
+        verbose_name="Descripción",
+    )
+
+    class Meta:
+        verbose_name = "Evidencia de OT histórica"
+        verbose_name_plural = "Evidencias de OT histórica"
+        ordering = ["work_order", "pk"]
