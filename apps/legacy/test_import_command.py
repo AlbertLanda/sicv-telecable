@@ -19,7 +19,10 @@ from apps.services.models import (
 
 class ImportarAbonadoSicavTests(TestCase):
     def setUp(self):
-        self.branch = Branch.objects.create(code="JAUJA", name="Jauja")
+        # JAUJA ya viene sembrada por organization.0002_seed_sedes_reales.
+        # Reutilizarla mantiene el test alineado con una base real/migrada y
+        # evita chocar con la restricción UNIQUE de Branch.code.
+        self.branch = Branch.objects.get(code="JAUJA")
         self.zone = Zone.objects.create(
             branch=self.branch,
             name="JAUJA D",
