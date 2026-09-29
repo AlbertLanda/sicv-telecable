@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from apps.customers.models import Customer, CustomerAddress
@@ -1016,3 +1017,182 @@ class InstallationMaterialUsage(models.Model):
 
     def __str__(self):
         return f"{self.work_order} - {self.rule.get_material_display()} - {self.meters_used} m"
+
+
+class SubscriptionPlanHistory(models.Model):
+    """Historia comercial de planes sin reescribir la suscripción actual.
+
+    La suscripción mantiene el estado operativo vigente. Esta tabla conserva
+    qué plan/servicio se entendía vigente en cada tramo histórico y congela
+    nombre, tarifa y política de cobro para que una edición posterior del
+    catálogo no cambie el pasado.
+    """
+
+    class Source(models.TextChoices):
+        NATIVE = "NATIVE", "SICV"
+        SICAV = "SICAV", "SICAV"
+
+    subscription = models.ForeignKey(
+        Subscription,
+        on_delete=models.PROTECT,
+        related_name="plan_history",
+        verbose_name="Suscripción",
+    )
+    service_type = models.ForeignKey(
+        ServiceType,
+        on_delete=models.PROTECT,
+        related_name="subscription_plan_history",
+        null=True,
+        blank=True,
+        verbose_name="Servicio normalizado",
+    )
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.PROTECT,
+        related_name="subscription_history",
+        null=True,
+        blank=True,
+        verbose_name="Plan normalizado",
+    )
+
+    service_name_snapshot = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Servicio histórico",
+    )
+    plan_name_snapshot = models.CharField(
+        max_length=180,
+        verbose_name="Plan histórico",
+    )
+
+    start_date = models.DateField(
+        verbose_name="Vigente desde",
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Vigente hasta",
+    )
+
+    monthly_fee_snapshot = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Mensualidad histórica",
+        help_text=(
+            "Vacío significa que todavía no se ha validado el precio "
+            "histórico. Cero se reserva para una tarifa realmente gratuita."
+        ),
+    )
+    billing_policy = models.ForeignKey(
+        BillingPolicy,
+        on_delete=models.PROTECT,
+        related_name="subscription_plan_history",
+        null=True,
+        blank=True,
+        verbose_name="Política normalizada",
+    )
+    billing_policy_name_snapshot = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Política histórica",
+    )
+
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.NATIVE,
+        verbose_name="Origen",
+    )
+    source_reference = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Referencia de origen",
+        help_text=(
+            "Ejemplo: contrato 8610 u orden de cambio de plan 103676."
+        ),
+    )
+
+    is_validated = models.BooleanField(
+        default=False,
+        verbose_name="Validado",
+    )
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+    validated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="validated_subscription_plan_history",
+        null=True,
+        blank=True,
+        verbose_name="Validado por",
+    )
+    validated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Validado el",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Historial de plan"
+        verbose_name_plural = "Historial de planes"
+        ordering = ["subscription", "start_date", "pk"]
+        indexes = [
+            models.Index(
+                fields=["subscription", "start_date"],
+                name="svc_plan_hist_sub_start_idx",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.end_date and self.end_date < self.start_date:
+            raise ValidationError({
+                "end_date": (
+                    "La fecha final no puede ser anterior al inicio "
+                    "del tramo histórico."
+                )
+            })
+
+    def save(self, *args, **kwargs):
+        if self.plan_id:
+            if not self.service_type_id:
+                self.service_type = self.plan.service_type
+            if not self.plan_name_snapshot:
+                self.plan_name_snapshot = self.plan.name
+            if not self.service_name_snapshot:
+                self.service_name_snapshot = self.plan.service_type.name
+        elif self.service_type_id and not self.service_name_snapshot:
+            self.service_name_snapshot = self.service_type.name
+
+        if self.billing_policy_id and not self.billing_policy_name_snapshot:
+            self.billing_policy_name_snapshot = self.billing_policy.name
+
+        return super().save(*args, **kwargs)
+
+    def mark_validated(self, *, user=None, notes=""):
+        self.is_validated = True
+        self.validated_by = user
+        self.validated_at = timezone.now()
+        if notes:
+            self.validation_notes = notes
+        self.save(update_fields=[
+            "is_validated",
+            "validated_by",
+            "validated_at",
+            "validation_notes",
+            "updated_at",
+        ])
+
+    def __str__(self):
+        return (
+            f"{self.subscription.service_code} · "
+            f"{self.plan_name_snapshot} · {self.start_date:%d/%m/%Y}"
+        )
