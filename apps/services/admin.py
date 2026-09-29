@@ -10,6 +10,7 @@ from .models import (
     ServiceType,
     Subscription,
     SubscriptionAnnexAdjustment,
+    SubscriptionPlanHistory,
 )
 
 
@@ -249,3 +250,37 @@ class InstallationMaterialUsageAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(SubscriptionPlanHistory)
+class SubscriptionPlanHistoryAdmin(admin.ModelAdmin):
+    list_display = (
+        "subscription",
+        "plan_name_snapshot",
+        "start_date",
+        "end_date",
+        "monthly_fee_snapshot",
+        "source",
+        "is_validated",
+    )
+    list_filter = ("source", "is_validated", "service_type")
+    search_fields = (
+        "subscription__service_code",
+        "subscription__customer__code",
+        "plan_name_snapshot",
+        "source_reference",
+    )
+    autocomplete_fields = (
+        "subscription",
+        "service_type",
+        "plan",
+        "billing_policy",
+        "validated_by",
+    )
+    readonly_fields = ("validated_by", "validated_at", "created_at", "updated_at")
+    actions = ("mark_selected_validated",)
+
+    @admin.action(description="Marcar seleccionados como validados")
+    def mark_selected_validated(self, request, queryset):
+        for item in queryset:
+            item.mark_validated(user=request.user)
