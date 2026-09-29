@@ -212,19 +212,58 @@ class LegacyAuditedAdminMixin:
         )
 
 
-class LegacyWorkOrderParticipantInline(admin.TabularInline):
+class LegacyReadOnlyInlineMixin:
+    extra = 0
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+class LegacyWorkOrderParticipantInline(
+    LegacyReadOnlyInlineMixin,
+    admin.TabularInline,
+):
     model = LegacyWorkOrderParticipant
-    extra = 0
+    readonly_fields = (
+        "legacy_user_code",
+        "name_snapshot",
+        "role_snapshot",
+        "started_at",
+        "ended_at",
+        "notes",
+    )
 
 
-class LegacyWorkOrderMaterialInline(admin.TabularInline):
+class LegacyWorkOrderMaterialInline(
+    LegacyReadOnlyInlineMixin,
+    admin.TabularInline,
+):
     model = LegacyWorkOrderMaterial
-    extra = 0
+    readonly_fields = (
+        "legacy_material_code",
+        "name_snapshot",
+        "quantity",
+        "unit_snapshot",
+        "movement_type",
+        "notes",
+    )
 
 
-class LegacyWorkOrderEvidenceInline(admin.TabularInline):
+class LegacyWorkOrderEvidenceInline(
+    LegacyReadOnlyInlineMixin,
+    admin.TabularInline,
+):
     model = LegacyWorkOrderEvidence
-    extra = 0
+    readonly_fields = (
+        "original_name",
+        "legacy_reference",
+        "file",
+        "description",
+    )
 
 
 @admin.register(LegacyContractSnapshot)
