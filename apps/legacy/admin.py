@@ -53,10 +53,7 @@ class LegacyRecordAdmin(admin.ModelAdmin):
         "customer__document_number",
         "subscription__service_code",
     )
-    autocomplete_fields = (
-        "customer",
-        "subscription",
-    )
+    autocomplete_fields = ("subscription",)
     readonly_fields = (
         "source",
         "entity_type",
