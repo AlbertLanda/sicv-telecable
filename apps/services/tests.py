@@ -718,3 +718,43 @@ class SubscriptionCreateTests(TestCase):
         self.assertIsNone(
             subscription.billing_cycle
         )
+
+class EligibleSellerTests(TestCase):
+    """Quién aparece en el selector «Vendedor» de una venta."""
+
+    def test_superusuario_no_es_vendedor_por_su_rol(self):
+        admin = User.objects.create_superuser(
+            username="admin_tecnico",
+            password="123",
+            role=User.Role.ADMIN,
+        )
+
+        from .forms import eligible_sellers_queryset, seller_is_eligible
+
+        self.assertNotIn(admin, eligible_sellers_queryset())
+        self.assertFalse(seller_is_eligible(admin))
+
+    def test_superusuario_marcado_como_vendedor_si_aparece(self):
+        admin = User.objects.create_superuser(
+            username="admin_vende",
+            password="123",
+            role=User.Role.ADMIN,
+            is_salesperson=True,
+        )
+
+        from .forms import eligible_sellers_queryset, seller_is_eligible
+
+        self.assertIn(admin, eligible_sellers_queryset())
+        self.assertTrue(seller_is_eligible(admin))
+
+    def test_administrador_operativo_sigue_pudiendo_vender(self):
+        administrador = User.objects.create_user(
+            username="administracion",
+            password="123",
+            role=User.Role.ADMIN,
+        )
+
+        from .forms import eligible_sellers_queryset, seller_is_eligible
+
+        self.assertIn(administrador, eligible_sellers_queryset())
+        self.assertTrue(seller_is_eligible(administrador))

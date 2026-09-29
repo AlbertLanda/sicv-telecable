@@ -1,7 +1,35 @@
+from decimal import ROUND_HALF_UP, InvalidOperation
+
 from django import forms
 
+from .coordinates import COORDINATE_PRECISION
 from .models import Customer, CustomerAddress
 from apps.organization.models import Zone
+
+
+class CoordinateField(forms.DecimalField):
+    """Coordenada escrita a mano, redondeada a la precisión que se almacena.
+
+    Google Maps y otros visores copian coordenadas con 11 a 15 decimales
+    (`-11.79671375082`). El campo guarda 7 -~1,1 cm- y, sin este redondeo, el
+    `DecimalValidator` rechaza el valor pegado con «no más de 10 dígitos en
+    total». El redondeo va en `to_python` porque los validadores corren
+    después: validan el valor que de verdad se va a guardar, igual que
+    `normalize_coordinate` hace con lo que llega de Distriluz.
+    """
+
+    def to_python(self, value):
+        value = super().to_python(value)
+
+        if value is None:
+            return None
+
+        try:
+            return value.quantize(COORDINATE_PRECISION, rounding=ROUND_HALF_UP)
+        except InvalidOperation:
+            # Un número que no cabe ni redondeado (`1E+40`) se deja tal cual
+            # para que el validador del campo lo rechace con su mensaje.
+            return value
 
 
 class CustomerInitialForm(forms.Form):
@@ -283,6 +311,11 @@ class CustomerAddressForm(forms.ModelForm):
             "gps_link",
             "is_primary",
         ]
+
+        field_classes = {
+            "latitude": CoordinateField,
+            "longitude": CoordinateField,
+        }
 
         widgets = {
             "zone": forms.Select(

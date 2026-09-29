@@ -13,6 +13,7 @@ así que cualquier comprobación por presencia la acepta y construye un enlace a
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
 from apps.customers.coordinates import (
@@ -22,6 +23,7 @@ from apps.customers.coordinates import (
     normalize_coordinate,
     normalize_coordinate_pair,
 )
+from apps.customers.forms import CustomerAddressForm
 from apps.customers.models import CustomerAddress
 
 
@@ -296,3 +298,37 @@ class AddressLocationTests(SimpleTestCase):
                 "gps_link": "",
             },
         )
+
+
+class AddressFormCoordinateTests(SimpleTestCase):
+    """Lo que el operador escribe o pega en latitud y longitud del domicilio.
+
+    El caso es real: una coordenada copiada de Google Maps (`-11.79671375082`)
+    trae más decimales de los 7 que se guardan, y el formulario la rechazaba
+    con «no más de 10 dígitos en total» en vez de redondearla.
+    """
+
+    def clean(self, name, value):
+        return CustomerAddressForm.base_fields[name].clean(value)
+
+    def test_pasted_coordinates_are_rounded_to_stored_precision(self):
+        cases = (
+            ("latitude", "-11.79671375082", Decimal("-11.7967138")),
+            ("longitude", "-75.48588731234567", Decimal("-75.4858873")),
+        )
+        for name, value, expected in cases:
+            with self.subTest(campo=name, valor=value):
+                self.assertEqual(self.clean(name, value), expected)
+
+    def test_coordinates_already_at_stored_precision_are_kept(self):
+        self.assertEqual(
+            self.clean("latitude", "-11.7812368"),
+            Decimal("-11.7812368"),
+        )
+
+    def test_empty_coordinate_stays_empty(self):
+        self.assertIsNone(self.clean("latitude", ""))
+
+    def test_number_that_does_not_fit_is_still_rejected(self):
+        with self.assertRaises(ValidationError):
+            self.clean("latitude", "1E+40")

@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.organization.models import Branch
+from apps.services.catalogo_sistema_anterior import sembrar_planes_sistema_anterior
 from apps.services.models import (
     BillingPolicy,
     CommercialCoverageRule,
@@ -207,17 +208,17 @@ class Command(BaseCommand):
             ("INT-2025-ECO-100", "Internet 100 Mbps - Economico 2025", "INTERNET", 2025, Plan.Category.ECONOMIC, 100, "50.00", "calendar_pp5"),
             ("DUO-2025-ECO-100", "Duo 100 Mbps - Economico 2025", "DUO", 2025, Plan.Category.ECONOMIC, 100, "70.00", "calendar_pp5"),
             # 2025 - Estandar
-            ("INT-2025-STD-300", "Internet 300 Mbps - Estandar 2025", "INTERNET", 2025, Plan.Category.STANDARD, 300, "65.00", "calendar_pp5"),
-            ("DUO-2025-STD-300", "Duo 300 Mbps - Estandar 2025", "DUO", 2025, Plan.Category.STANDARD, 300, "85.00", "calendar_pp5"),
-            ("INT-2025-STD-600", "Internet 600 Mbps - Estandar 2025", "INTERNET", 2025, Plan.Category.STANDARD, 600, "75.00", "calendar_pp5"),
-            ("DUO-2025-STD-600", "Duo 600 Mbps - Estandar 2025", "DUO", 2025, Plan.Category.STANDARD, 600, "95.00", "calendar_pp5"),
-            ("INT-2025-STD-800", "Internet 800 Mbps - Estandar 2025", "INTERNET", 2025, Plan.Category.STANDARD, 800, "85.00", "calendar_pp5"),
-            ("DUO-2025-STD-800", "Duo 800 Mbps - Estandar 2025", "DUO", 2025, Plan.Category.STANDARD, 800, "105.00", "calendar_pp5"),
-            ("INT-2025-STD-1000", "Internet 1000 Mbps - Estandar 2025", "INTERNET", 2025, Plan.Category.STANDARD, 1000, "120.00", "calendar_pp5"),
-            ("DUO-2025-STD-1000", "Duo 1000 Mbps - Estandar 2025", "DUO", 2025, Plan.Category.STANDARD, 1000, "140.00", "calendar_pp5"),
+            ("INT-2025-STD-300", "INTERNET 300MG - 2025", "INTERNET", 2025, Plan.Category.STANDARD, 300, "65.00", "calendar_pp5"),
+            ("DUO-2025-STD-300", "DUO RESIDENCIAL 300MG - 2025", "DUO", 2025, Plan.Category.STANDARD, 300, "85.00", "calendar_pp5"),
+            ("INT-2025-STD-600", "INTERNET 600MG - 2025", "INTERNET", 2025, Plan.Category.STANDARD, 600, "75.00", "calendar_pp5"),
+            ("DUO-2025-STD-600", "DUO RESIDENCIAL 600MG - 2025", "DUO", 2025, Plan.Category.STANDARD, 600, "95.00", "calendar_pp5"),
+            ("INT-2025-STD-800", "INTERNET 800MG - 2025", "INTERNET", 2025, Plan.Category.STANDARD, 800, "85.00", "calendar_pp5"),
+            ("DUO-2025-STD-800", "DUO RESIDENCIAL 800MG - 2025", "DUO", 2025, Plan.Category.STANDARD, 800, "105.00", "calendar_pp5"),
+            ("INT-2025-STD-1000", "INTERNET 1000MG - 2025", "INTERNET", 2025, Plan.Category.STANDARD, 1000, "120.00", "calendar_pp5"),
+            ("DUO-2025-STD-1000", "DUO RESIDENCIAL 1000MG - 2025", "DUO", 2025, Plan.Category.STANDARD, 1000, "140.00", "calendar_pp5"),
             # 2026 - Economico
-            ("INT-2026-ECO-200", "Internet 200 Mbps - Economico 2026", "INTERNET", 2026, Plan.Category.ECONOMIC, 200, "50.00", "calendar_pp5"),
-            ("DUO-2026-ECO-200", "Duo 200 Mbps - Economico 2026", "DUO", 2026, Plan.Category.ECONOMIC, 200, "70.00", "calendar_pp5"),
+            ("INT-2026-ECO-200", "INTERNET ECONÓMICO 200MG", "INTERNET", 2026, Plan.Category.ECONOMIC, 200, "50.00", "calendar_pp5"),
+            ("DUO-2026-ECO-200", "DUO ECONÓMICO 200MG", "DUO", 2026, Plan.Category.ECONOMIC, 200, "70.00", "calendar_pp5"),
             # 2026 - Estandar
             ("INT-2026-STD-400", "PLAN INTERNET TELECABLE 400MG - 2026", "INTERNET", 2026, Plan.Category.TELECABLE, 400, "69.00", "anniversary_pp10"),
             ("DUO-2026-STD-400", "PLAN DUO TELECABLE 400MG - 2026", "DUO", 2026, Plan.Category.TELECABLE, 400, "89.00", "anniversary_pp10"),
@@ -303,7 +304,19 @@ class Command(BaseCommand):
             plan_ftth.save()
             stats["created" if created else "updated"] += 1
 
+        # Planes de SICAV para la migración manual. En una base nueva la
+        # migración 0017 no pudo crear los de INTERNET/DUO/CABLE porque esos
+        # servicios nacen arriba; aquí se completan. Solo crea: no pisa el
+        # precio que se les configure después.
+        legacy = sembrar_planes_sistema_anterior(Plan, ServiceType)
+        stats["created"] += legacy["created"]
+
         self.stdout.write(self.style.SUCCESS("OK Planes 2025/2026 y Super Economico confirmados"))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"OK Planes del sistema anterior: {legacy['created']} creados"
+            )
+        )
         return stats
 
     def _load_confirmed_cable_tariffs(self, branches):

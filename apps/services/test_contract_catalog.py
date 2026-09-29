@@ -85,7 +85,7 @@ class ContractServiceCatalogTests(TestCase):
                 "APP PREMIUM",
                 "APP PREMIUM - ST",
                 "APP PREMIUM PLUS",
-                "APP PREMIUM PLUS - RPR",
+                "APP PREMIUM PLUS - PR",
                 "APP PREMIUM PLUS - ST",
                 "APP TELECABLE",
             },

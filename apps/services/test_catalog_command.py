@@ -27,12 +27,12 @@ class CommercialCatalogCommandTests(TestCase):
         # datos y APPS los siembra la migracion de catalogo, asi que ya
         # existen antes de que el comando corra. Son 24 confirmados mas los
         # dos de TV Cable sobre FTTH, que nacen aqui porque cuelgan de CABLE.
-        self.assertEqual(
-            Plan.objects.filter(
-                service_type__code__in=["INTERNET", "CABLE", "DUO"]
-            ).count(),
-            26,
+        # Aparte van los 80 del sistema anterior (codigo SICAV-), sin precio.
+        planes = Plan.objects.filter(
+            service_type__code__in=["INTERNET", "CABLE", "DUO"]
         )
+        self.assertEqual(planes.exclude(code__startswith="SICAV-").count(), 26)
+        self.assertEqual(planes.filter(code__startswith="SICAV-").count(), 80)
         self.assertEqual(PlanTariff.objects.filter(plan__code="CABLE-GENERAL").count(), 2)
         # Dos reglas, y se comprueba cuales: la cobertura de La Oroya para
         # 2026 se expresa bloqueando las lineas anteriores, no exigiendo un

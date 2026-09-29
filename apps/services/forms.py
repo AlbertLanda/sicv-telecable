@@ -12,13 +12,18 @@ from .models import BillingPolicy, Plan, ServiceType, Subscription
 
 
 def eligible_sellers_queryset():
-    """Personal activo que puede recibir atribución comercial."""
+    """Personal activo que puede recibir atribución comercial.
+
+    El superusuario es la cuenta técnica del sistema, no una persona que vende:
+    su rol ADMIN no basta para listarlo. Solo aparece si se le marca como
+    vendedor de forma expresa.
+    """
     return (
         User.objects
         .filter(
             Q(is_salesperson=True)
-            | Q(role=User.Role.SALES)
-            | Q(role=User.Role.ADMIN),
+            | Q(role=User.Role.SALES, is_superuser=False)
+            | Q(role=User.Role.ADMIN, is_superuser=False),
             is_active=True,
         )
         .order_by("first_name", "last_name", "username")
@@ -31,7 +36,10 @@ def seller_is_eligible(user):
         and user.is_active
         and (
             user.is_salesperson
-            or user.role in (User.Role.SALES, User.Role.ADMIN)
+            or (
+                not user.is_superuser
+                and user.role in (User.Role.SALES, User.Role.ADMIN)
+            )
         )
     )
 
