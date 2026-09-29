@@ -1,5 +1,8 @@
 # Generated for historical SICAV contracts and work orders.
 
+import decimal
+
+import django.core.validators
 import django.db.models.deletion
 from django.db import migrations, models
 
@@ -106,7 +109,7 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("legacy_material_code", models.CharField(blank=True, max_length=80, verbose_name="Código SICAV")),
                 ("name_snapshot", models.CharField(max_length=180, verbose_name="Material histórico")),
-                ("quantity", models.DecimalField(decimal_places=5, max_digits=12, verbose_name="Cantidad")),
+                ("quantity", models.DecimalField(decimal_places=5, max_digits=12, validators=[django.core.validators.MinValueValidator(decimal.Decimal("0.00001"))], verbose_name="Cantidad")),
                 ("unit_snapshot", models.CharField(blank=True, max_length=40, verbose_name="Unidad")),
                 ("movement_type", models.CharField(choices=[("INSTALLED", "Instalado"), ("REMOVED", "Retirado"), ("USED", "Utilizado")], default="USED", max_length=20, verbose_name="Movimiento")),
                 ("notes", models.TextField(blank=True, verbose_name="Observación")),
