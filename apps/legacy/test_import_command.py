@@ -16,7 +16,7 @@ from apps.legacy.models import (
     LegacyWorkOrderSnapshot,
 )
 from apps.organization.models import Branch, Zone
-from apps.work_orders.models import OrderReason, OrderType
+from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 
 from apps.services.models import (
     Plan,
@@ -415,6 +415,11 @@ class ImportarAbonadoSicavTests(TestCase):
         self.assertEqual(fault.participants.count(), 1)
         self.assertEqual(fault.evidences.count(), 1)
         self.assertEqual(incident.materials.count(), 0)
+        self.assertEqual(
+            WorkOrder.objects.count(),
+            0,
+            "Las OT históricas no deben publicarse al flujo operativo.",
+        )
 
         self.assertEqual(
             LegacyRecord.objects.filter(
@@ -492,3 +497,20 @@ class ImportarAbonadoSicavTests(TestCase):
 
         self.assertFalse(Customer.objects.exists())
         self.assertFalse(LegacyWorkOrderSnapshot.objects.exists())
+
+
+    def test_no_infiere_derivacion_solo_por_fechas(self):
+        payload = self.expediente()
+        del payload["work_orders"][1]["normalized"]["derived_from_legacy_id"]
+        path = self.write_file(payload)
+
+        call_command(
+            "importar_abonado_sicav",
+            archivo=str(path),
+            verbosity=0,
+        )
+
+        fault = LegacyWorkOrderSnapshot.objects.get(
+            legacy_order_number="0000523"
+        )
+        self.assertIsNone(fault.derived_from)
