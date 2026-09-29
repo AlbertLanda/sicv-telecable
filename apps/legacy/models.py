@@ -410,6 +410,11 @@ class LegacyContractSnapshot(models.Model):
             raise ValidationError({
                 "end_date": "La fecha final no puede ser anterior al inicio."
             })
+        if self.plan_id and self.service_type_id:
+            if self.plan.service_type_id != self.service_type_id:
+                raise ValidationError({
+                    "plan": "El plan normalizado no pertenece al servicio."
+                })
 
     def normalized_snapshot(self):
         return {
@@ -639,9 +644,20 @@ class LegacyWorkOrderSnapshot(models.Model):
             raise ValidationError({
                 "derived_from": "Una orden no puede derivarse de sí misma."
             })
+        if (
+            self.derived_from_id
+            and self.subscription_id
+            and self.derived_from.subscription_id != self.subscription_id
+        ):
+            raise ValidationError({
+                "derived_from": (
+                    "La orden de origen debe pertenecer a la misma "
+                    "suscripción histórica."
+                )
+            })
 
     def normalized_snapshot(self):
-        return {
+        payload = {
             "subscription_id": self.subscription_id,
             "order_type_id": self.order_type_id,
             "reason_id": self.reason_id,
@@ -668,6 +684,47 @@ class LegacyWorkOrderSnapshot(models.Model):
             "is_validated": self.is_validated,
             "validation_notes": self.validation_notes,
         }
+
+        if not self.pk:
+            payload["participants"] = []
+            payload["materials"] = []
+            payload["evidences"] = []
+            return payload
+
+        payload["participants"] = [
+            {
+                "legacy_user_code": item.legacy_user_code,
+                "name_snapshot": item.name_snapshot,
+                "role_snapshot": item.role_snapshot,
+                "started_at": (
+                    item.started_at.isoformat() if item.started_at else None
+                ),
+                "ended_at": item.ended_at.isoformat() if item.ended_at else None,
+                "notes": item.notes,
+            }
+            for item in self.participants.order_by("pk")
+        ]
+        payload["materials"] = [
+            {
+                "legacy_material_code": item.legacy_material_code,
+                "name_snapshot": item.name_snapshot,
+                "quantity": str(item.quantity),
+                "unit_snapshot": item.unit_snapshot,
+                "movement_type": item.movement_type,
+                "notes": item.notes,
+            }
+            for item in self.materials.order_by("pk")
+        ]
+        payload["evidences"] = [
+            {
+                "original_name": item.original_name,
+                "legacy_reference": item.legacy_reference,
+                "file": item.file.name if item.file else "",
+                "description": item.description,
+            }
+            for item in self.evidences.order_by("pk")
+        ]
+        return payload
 
     def __str__(self):
         number = self.legacy_order_number or f"ID {self.pk}"
