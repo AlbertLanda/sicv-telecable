@@ -1190,11 +1190,11 @@ class LegacyPaymentAllocationSnapshot(models.Model):
 
 
 def legacy_receipt_pdf_path(instance, filename):
-    return f"legacy/receipts/{instance.pk or 'new'}/pdf/{filename}"
+    return f"legacy/receipts/payment-{instance.payment_id}/pdf/{filename}"
 
 
 def legacy_receipt_xml_path(instance, filename):
-    return f"legacy/receipts/{instance.pk or 'new'}/xml/{filename}"
+    return f"legacy/receipts/payment-{instance.payment_id}/xml/{filename}"
 
 
 class LegacyReceiptSnapshot(models.Model):
