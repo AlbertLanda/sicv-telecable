@@ -7,8 +7,17 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 from apps.customers.models import Customer, CustomerAddress
-from apps.legacy.models import LegacyRecord
+from apps.legacy.models import (
+    LegacyContractSnapshot,
+    LegacyRecord,
+    LegacyWorkOrderEvidence,
+    LegacyWorkOrderMaterial,
+    LegacyWorkOrderParticipant,
+    LegacyWorkOrderSnapshot,
+)
 from apps.organization.models import Branch, Zone
+from apps.work_orders.models import OrderReason, OrderType
+
 from apps.services.models import (
     Plan,
     ServiceType,
@@ -48,6 +57,57 @@ class ImportarAbonadoSicavTests(TestCase):
             name="TV CABLE FTTH - 50",
             technology="FTTH",
             monthly_price=0,
+        )
+        self.installation_type, _ = OrderType.objects.get_or_create(
+            code="INSTALLATION",
+            defaults={
+                "name": "INSTALACIÓN",
+                "description": "Instalación histórica de prueba.",
+                "is_active": True,
+            },
+        )
+        self.installation_reason, _ = OrderReason.objects.get_or_create(
+            order_type=self.installation_type,
+            code="REQUIRED",
+            defaults={
+                "name": "REQUERIDO",
+                "classification": OrderReason.Classification.TECHNICAL,
+                "is_active": True,
+            },
+        )
+        self.incident_type, _ = OrderType.objects.get_or_create(
+            code="INCIDENT",
+            defaults={
+                "name": "INCIDENCIA NOC",
+                "description": "Incidencia histórica de prueba.",
+                "is_active": True,
+            },
+        )
+        self.incident_reason, _ = OrderReason.objects.get_or_create(
+            order_type=self.incident_type,
+            code="NO_SIGNAL",
+            defaults={
+                "name": "SIN SEÑAL",
+                "classification": OrderReason.Classification.TECHNICAL,
+                "is_active": True,
+            },
+        )
+        self.fault_type, _ = OrderType.objects.get_or_create(
+            code="INTERNET_FAULT",
+            defaults={
+                "name": "AVERÍA INTERNET",
+                "description": "Avería histórica de prueba.",
+                "is_active": True,
+            },
+        )
+        self.fault_reason, _ = OrderReason.objects.get_or_create(
+            order_type=self.fault_type,
+            code="HIGH_POWER",
+            defaults={
+                "name": "POTENCIA ELEVADA",
+                "classification": OrderReason.Classification.TECHNICAL,
+                "is_active": True,
+            },
         )
         self.tempdir = TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
@@ -140,6 +200,138 @@ class ImportarAbonadoSicavTests(TestCase):
                     },
                 }
             ],
+            "contracts": [
+                {
+                    "legacy_id": "648-TEST",
+                    "raw": {
+                        "codigo": "648-TEST",
+                        "numero": "0000335",
+                        "servicio": "INTERNET",
+                        "plan": "INTERNET 20MG - 2022 OFICIAL",
+                        "estado": "U",
+                        "modalidad": "V",
+                        "inicio": "02/10/2018",
+                        "fin": "01/01/1900",
+                    },
+                    "normalized": {
+                        "subscription_legacy_id": "523-TEST",
+                        "contract_number": "0000335",
+                        "service_type_code": "INTERNET",
+                        "plan_code": "SICAV-016",
+                        "service_name_snapshot": "INTERNET",
+                        "plan_name_snapshot": "INTERNET 20MG - 2022 OFICIAL",
+                        "status": "U",
+                        "legacy_status": "Anulado",
+                        "modality": "V",
+                        "installments": 1,
+                        "start_date": "02/10/2018",
+                        "end_date": "01/01/1900",
+                        "last_activation_date": "01/01/1900",
+                        "last_cut_date": "01/01/1900",
+                        "is_validated": False,
+                    },
+                }
+            ],
+            "work_orders": [
+                {
+                    "legacy_id": "102352-TEST",
+                    "raw": {
+                        "codigo": "102352-TEST",
+                        "tipo": "NI",
+                        "estado": "D",
+                        "emision": "27/04/2025 11:21",
+                    },
+                    "normalized": {
+                        "subscription_legacy_id": "523-TEST",
+                        "order_number": "0013181",
+                        "order_type_code": "INCIDENT",
+                        "order_type_name_snapshot": "INCIDENCIA NOC",
+                        "reason_code": "NO_SIGNAL",
+                        "reason_name_snapshot": "SIN SEÑAL",
+                        "legacy_type_code": "NI",
+                        "status": "D",
+                        "legacy_status": "Derivado",
+                        "attention_type": "SISTEMA",
+                        "responsibility": "EMPRESA",
+                        "detail": "SIN SEÑAL DE INTERNET",
+                        "attention_detail": "POTENCIA ATENUADA",
+                        "issued_at": "27/04/2025 11:21",
+                        "attended_at": "27/04/2025 11:26",
+                        "terminal": "11",
+                        "seal_number": "2285607",
+                        "participants": [
+                            {
+                                "legacy_user_code": "0000014",
+                                "name_snapshot": "NOC",
+                                "role_snapshot": "NOC",
+                                "started_at": "27/04/2025 11:21",
+                                "ended_at": "27/04/2025 11:26"
+                            }
+                        ],
+                        "materials": [
+                            {
+                                "legacy_material_code": "EMPTY",
+                                "name_snapshot": "MATERIAL NO USADO",
+                                "quantity": "0"
+                            }
+                        ],
+                        "evidences": []
+                    },
+                },
+                {
+                    "legacy_id": "102353-TEST",
+                    "raw": {
+                        "codigo": "102353-TEST",
+                        "estado": "A",
+                        "emision": "27/04/2025 11:26",
+                    },
+                    "normalized": {
+                        "subscription_legacy_id": "523-TEST",
+                        "order_number": "0000523",
+                        "order_type_code": "INTERNET_FAULT",
+                        "order_type_name_snapshot": "AVERÍA",
+                        "reason_code": "HIGH_POWER",
+                        "reason_name_snapshot": "POTENCIA ELEVADA",
+                        "status": "A",
+                        "legacy_status": "Atendido",
+                        "attention_type": "F",
+                        "responsibility": "EMPRESA",
+                        "detail": "POTENCIA FUERA DE RANGO",
+                        "attention_detail": "POTENCIA ESTABLE",
+                        "technical_notes": "Prueba histórica.",
+                        "issued_at": "27/04/2025 11:26",
+                        "attended_at": "28/04/2025 11:50",
+                        "terminal": "11",
+                        "seal_number": "2285607",
+                        "derived_from_legacy_id": "102352-TEST",
+                        "participants": [
+                            {
+                                "legacy_user_code": "0000042",
+                                "name_snapshot": "Técnico histórico",
+                                "role_snapshot": "Técnico",
+                                "started_at": "28/04/2025 11:00",
+                                "ended_at": "28/04/2025 11:50"
+                            }
+                        ],
+                        "materials": [
+                            {
+                                "legacy_material_code": "CM-TEST",
+                                "name_snapshot": "CONECTOR MECÁNICO",
+                                "quantity": "1.00000",
+                                "unit_snapshot": "Unidad",
+                                "movement_type": "USED"
+                            }
+                        ],
+                        "evidences": [
+                            {
+                                "original_name": "evidencia-prueba.jpg",
+                                "legacy_reference": "/galeria/ver/modulo/ordenTecnica/codigo/102353-TEST/nombre/evidencia-prueba.jpg",
+                                "description": "Evidencia histórica de prueba"
+                            }
+                        ]
+                    },
+                }
+            ],
         }
 
     def write_file(self, payload):
@@ -164,6 +356,11 @@ class ImportarAbonadoSicavTests(TestCase):
         self.assertFalse(CustomerAddress.objects.exists())
         self.assertFalse(Subscription.objects.exists())
         self.assertFalse(SubscriptionPlanHistory.objects.exists())
+        self.assertFalse(LegacyContractSnapshot.objects.exists())
+        self.assertFalse(LegacyWorkOrderSnapshot.objects.exists())
+        self.assertFalse(LegacyWorkOrderParticipant.objects.exists())
+        self.assertFalse(LegacyWorkOrderMaterial.objects.exists())
+        self.assertFalse(LegacyWorkOrderEvidence.objects.exists())
         self.assertFalse(LegacyRecord.objects.exists())
 
     def test_importa_bloque_maestro_y_normaliza_fecha_1900(self):
@@ -189,11 +386,41 @@ class ImportarAbonadoSicavTests(TestCase):
         self.assertEqual(subscription.annex_count, 1)
         self.assertIsNone(history.end_date)
         self.assertEqual(history.plan, self.old_plan)
+        contract = LegacyContractSnapshot.objects.get(
+            subscription=subscription
+        )
+        incident = LegacyWorkOrderSnapshot.objects.get(
+            legacy_order_number="0013181"
+        )
+        fault = LegacyWorkOrderSnapshot.objects.get(
+            legacy_order_number="0000523"
+        )
+
+        self.assertEqual(contract.plan, self.old_plan)
+        self.assertEqual(
+            contract.status,
+            LegacyContractSnapshot.Status.CANCELLED,
+        )
+        self.assertIsNone(contract.end_date)
+        self.assertEqual(fault.derived_from, incident)
+        self.assertEqual(
+            fault.attention_type,
+            LegacyWorkOrderSnapshot.AttentionType.FIELD,
+        )
+        self.assertEqual(
+            fault.responsibility,
+            LegacyWorkOrderSnapshot.Responsibility.COMPANY,
+        )
+        self.assertEqual(fault.materials.count(), 1)
+        self.assertEqual(fault.participants.count(), 1)
+        self.assertEqual(fault.evidences.count(), 1)
+        self.assertEqual(incident.materials.count(), 0)
+
         self.assertEqual(
             LegacyRecord.objects.filter(
                 source=LegacyRecord.Source.SICAV
             ).count(),
-            4,
+            7,
         )
 
     def test_repetir_el_mismo_expediente_no_duplica(self):
@@ -206,7 +433,12 @@ class ImportarAbonadoSicavTests(TestCase):
         self.assertEqual(CustomerAddress.objects.count(), 1)
         self.assertEqual(Subscription.objects.count(), 1)
         self.assertEqual(SubscriptionPlanHistory.objects.count(), 1)
-        self.assertEqual(LegacyRecord.objects.count(), 4)
+        self.assertEqual(LegacyContractSnapshot.objects.count(), 1)
+        self.assertEqual(LegacyWorkOrderSnapshot.objects.count(), 2)
+        self.assertEqual(LegacyWorkOrderParticipant.objects.count(), 2)
+        self.assertEqual(LegacyWorkOrderMaterial.objects.count(), 1)
+        self.assertEqual(LegacyWorkOrderEvidence.objects.count(), 1)
+        self.assertEqual(LegacyRecord.objects.count(), 7)
 
     def test_payload_original_distinto_bloquea_reimportacion(self):
         payload = self.expediente()
@@ -242,3 +474,21 @@ class ImportarAbonadoSicavTests(TestCase):
             record.normalized_payload["zone_name"],
             "ZONA NO VALIDADA",
         )
+
+
+    def test_evidencia_rechaza_token_de_sesion(self):
+        payload = self.expediente()
+        payload["work_orders"][1]["normalized"]["evidences"][0][
+            "legacy_reference"
+        ] = "/galeria/ver?id=1&token=secreto"
+        path = self.write_file(payload)
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "importar_abonado_sicav",
+                archivo=str(path),
+                verbosity=0,
+            )
+
+        self.assertFalse(Customer.objects.exists())
+        self.assertFalse(LegacyWorkOrderSnapshot.objects.exists())
