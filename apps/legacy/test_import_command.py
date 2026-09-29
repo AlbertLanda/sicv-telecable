@@ -8,7 +8,11 @@ from django.test import TestCase
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.legacy.models import (
+    LegacyChargeSnapshot,
     LegacyContractSnapshot,
+    LegacyPaymentAllocationSnapshot,
+    LegacyPaymentSnapshot,
+    LegacyReceiptSnapshot,
     LegacyRecord,
     LegacyWorkOrderEvidence,
     LegacyWorkOrderMaterial,
@@ -16,6 +20,7 @@ from apps.legacy.models import (
     LegacyWorkOrderSnapshot,
 )
 from apps.organization.models import Branch, Zone
+from apps.payments.models import Charge, Payment
 from apps.work_orders.models import OrderReason, OrderType, WorkOrder
 
 from apps.services.models import (
@@ -334,6 +339,227 @@ class ImportarAbonadoSicavTests(TestCase):
             ],
         }
 
+    def expediente_financiero(self):
+        payload = self.expediente()
+        payload["charges_history"] = [
+            {
+                "legacy_id": "1037678-TEST",
+                "raw": {
+                    "id": "1037678-TEST",
+                    "detalle": "TV CABLE FTTH",
+                    "monto": "38.70",
+                    "documento": "S-TEST",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "description": "TV CABLE FTTH",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/05/2025",
+                    "period_end": "31/05/2025",
+                    "amount": "38.70",
+                    "due_date": "31/05/2025",
+                    "legacy_date": "05/06/2025",
+                    "document_snapshot": "S-TEST",
+                    "status": "PAID",
+                },
+            },
+            {
+                "legacy_id": "1037679-TEST",
+                "raw": {
+                    "id": "1037679-TEST",
+                    "detalle": "DUO RESIDENCIAL 300MG",
+                    "monto": "13.70",
+                    "documento": "S-TEST",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "description": "DUO RESIDENCIAL 300MG",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/05/2025",
+                    "period_end": "31/05/2025",
+                    "amount": "13.70",
+                    "due_date": "31/05/2025",
+                    "legacy_date": "05/06/2025",
+                    "document_snapshot": "S-TEST",
+                    "status": "PAID",
+                },
+            },
+        ]
+        payload["payments"] = [
+            {
+                "legacy_id": "0524102-TEST",
+                "raw": {
+                    "codigo": "0524102-TEST",
+                    "total": "52.40",
+                    "medio": "005",
+                },
+                "normalized": {
+                    "branch_code": "JAUJA",
+                    "amount": "52.40",
+                    "currency": "PEN",
+                    "method_code": "005",
+                    "method_snapshot": "YAPE",
+                    "reference": "OPERACION-PRUEBA",
+                    "status": "REGISTERED",
+                    "issued_at": "05/06/2025 21:06",
+                    "paid_at": "05/06/2025 21:06",
+                    "registered_at": "05/06/2025 21:07",
+                    "collector_snapshot": "COBRADOR PRUEBA",
+                    "registered_by_snapshot": "USUARIO PRUEBA",
+                },
+            }
+        ]
+        payload["payment_allocations"] = [
+            {
+                "legacy_id": "0524102-TEST:1037678-TEST",
+                "raw": {
+                    "pago": "0524102-TEST",
+                    "deuda": "1037678-TEST",
+                    "monto": "38.70",
+                },
+                "normalized": {
+                    "payment_legacy_id": "0524102-TEST",
+                    "charge_legacy_id": "1037678-TEST",
+                    "amount": "38.70",
+                    "discount": "0.00",
+                },
+            },
+            {
+                "legacy_id": "0524102-TEST:1037679-TEST",
+                "raw": {
+                    "pago": "0524102-TEST",
+                    "deuda": "1037679-TEST",
+                    "monto": "13.70",
+                },
+                "normalized": {
+                    "payment_legacy_id": "0524102-TEST",
+                    "charge_legacy_id": "1037679-TEST",
+                    "amount": "13.70",
+                    "discount": "0.00",
+                },
+            },
+        ]
+        payload["receipts"] = [
+            {
+                "legacy_id": "RECEIPT-0524102-TEST",
+                "raw": {
+                    "pago": "0524102-TEST",
+                    "documento": "S001-0000001",
+                },
+                "normalized": {
+                    "payment_legacy_id": "0524102-TEST",
+                    "document_snapshot": "S001-0000001",
+                    "series": "S001",
+                    "number": "0000001",
+                    "document_type_snapshot": "RECIBO",
+                    "total": "52.40",
+                    "issued_at": "05/06/2025 21:06",
+                    "legacy_pdf_reference": "/cobrar/ver/descargar/0524102-TEST/tipo/pdf",
+                    "legacy_xml_reference": "/cobrar/ver/descargar/0524102-TEST/tipo/xml",
+                },
+            }
+        ]
+        payload["outstanding_charges"] = [
+            {
+                "legacy_id": "1073773-TEST",
+                "raw": {
+                    "id": "1073773-TEST",
+                    "detalle": "TV CABLE FTTH",
+                    "periodo": "01/09/2025 - 30/09/2025",
+                    "monto": "50.00",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "concept": "MONTHLY",
+                    "description": "TV CABLE FTTH",
+                    "issued_on": "01/09/2025",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/09/2025",
+                    "period_end": "30/09/2025",
+                    "amount": "50.00",
+                    "due_date": "30/09/2025",
+                },
+            },
+            {
+                "legacy_id": "1254777-TEST",
+                "raw": {
+                    "id": "1254777-TEST",
+                    "detalle": "ANEXO FTTH",
+                    "periodo": "01/09/2025 - 30/09/2025",
+                    "monto": "5.00",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "concept": "ANNEX",
+                    "description": "ANEXO FTTH",
+                    "issued_on": "01/09/2025",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/09/2025",
+                    "period_end": "30/09/2025",
+                    "amount": "5.00",
+                    "due_date": "30/09/2025",
+                },
+            },
+            {
+                "legacy_id": "1091414-TEST",
+                "raw": {
+                    "id": "1091414-TEST",
+                    "detalle": "TV CABLE FTTH",
+                    "periodo": "01/10/2025 - 31/10/2025",
+                    "monto": "11.30",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "concept": "MONTHLY",
+                    "description": "TV CABLE FTTH",
+                    "issued_on": "01/10/2025",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/10/2025",
+                    "period_end": "31/10/2025",
+                    "amount": "11.30",
+                    "due_date": "31/10/2025",
+                },
+            },
+            {
+                "legacy_id": "1254778-TEST",
+                "raw": {
+                    "id": "1254778-TEST",
+                    "detalle": "ANEXO FTTH",
+                    "periodo": "01/10/2025 - 31/10/2025",
+                    "monto": "5.00",
+                },
+                "normalized": {
+                    "subscription_legacy_id": "523-TEST",
+                    "concept": "ANNEX",
+                    "description": "ANEXO FTTH",
+                    "issued_on": "01/10/2025",
+                    "quantity": "1.00000",
+                    "currency": "PEN",
+                    "period_start": "01/10/2025",
+                    "period_end": "31/10/2025",
+                    "amount": "5.00",
+                    "due_date": "31/10/2025",
+                },
+            },
+        ]
+        payload["reconciliation"] = {
+            "contract_count": 1,
+            "work_order_count": 2,
+            "historical_charge_count": 2,
+            "payment_count": 1,
+            "payment_allocation_count": 2,
+            "receipt_count": 1,
+            "outstanding_count": 4,
+            "outstanding_total": "71.30",
+            "require_full_payment_allocation": True,
+        }
+        return payload
+
     def write_file(self, payload):
         path = Path(self.tempdir.name) / "expediente.json"
         path.write_text(
@@ -514,3 +740,113 @@ class ImportarAbonadoSicavTests(TestCase):
             legacy_order_number="0000523"
         )
         self.assertIsNone(fault.derived_from)
+
+
+    def test_finanzas_historicas_y_deuda_viva_se_separan(self):
+        path = self.write_file(self.expediente_financiero())
+
+        call_command(
+            "importar_abonado_sicav",
+            archivo=str(path),
+            verbosity=0,
+        )
+
+        self.assertEqual(LegacyChargeSnapshot.objects.count(), 2)
+        self.assertEqual(LegacyPaymentSnapshot.objects.count(), 1)
+        self.assertEqual(LegacyPaymentAllocationSnapshot.objects.count(), 2)
+        self.assertEqual(LegacyReceiptSnapshot.objects.count(), 1)
+
+        payment = LegacyPaymentSnapshot.objects.get()
+        allocated = sum(
+            (item.amount for item in payment.allocations.all()),
+            0,
+        )
+        self.assertEqual(str(payment.amount), "52.40")
+        self.assertEqual(str(allocated), "52.40")
+
+        self.assertEqual(
+            Payment.objects.count(),
+            0,
+            "Los pagos antiguos no deben entrar a la caja operativa.",
+        )
+
+        charges = Charge.objects.order_by("period", "concept")
+        self.assertEqual(charges.count(), 4)
+        self.assertTrue(all(not charge.auto_update for charge in charges))
+        self.assertTrue(
+            all(charge.status == Charge.Status.PENDING for charge in charges)
+        )
+        total = sum((charge.amount for charge in charges), 0)
+        self.assertEqual(str(total), "71.30")
+
+        september = Charge.objects.filter(period="2025-09-01")
+        self.assertEqual(september.count(), 2)
+        self.assertEqual(
+            september.filter(concept=Charge.Concept.MONTHLY).count(),
+            1,
+        )
+        self.assertEqual(
+            september.filter(concept=Charge.Concept.ANNEX).count(),
+            1,
+        )
+
+    def test_reimportar_finanzas_no_duplica(self):
+        path = self.write_file(self.expediente_financiero())
+
+        call_command("importar_abonado_sicav", archivo=str(path), verbosity=0)
+        call_command("importar_abonado_sicav", archivo=str(path), verbosity=0)
+
+        self.assertEqual(LegacyChargeSnapshot.objects.count(), 2)
+        self.assertEqual(LegacyPaymentSnapshot.objects.count(), 1)
+        self.assertEqual(LegacyPaymentAllocationSnapshot.objects.count(), 2)
+        self.assertEqual(LegacyReceiptSnapshot.objects.count(), 1)
+        self.assertEqual(Charge.objects.count(), 4)
+
+    def test_conciliacion_deuda_incorrecta_revierte_todo(self):
+        payload = self.expediente_financiero()
+        payload["reconciliation"]["outstanding_total"] = "70.00"
+        path = self.write_file(payload)
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "importar_abonado_sicav",
+                archivo=str(path),
+                verbosity=0,
+            )
+
+        self.assertFalse(Customer.objects.exists())
+        self.assertFalse(Charge.objects.exists())
+        self.assertFalse(LegacyPaymentSnapshot.objects.exists())
+
+    def test_finanzas_dry_run_no_persisten(self):
+        path = self.write_file(self.expediente_financiero())
+
+        call_command(
+            "importar_abonado_sicav",
+            archivo=str(path),
+            dry_run=True,
+            verbosity=0,
+        )
+
+        self.assertFalse(Customer.objects.exists())
+        self.assertFalse(Charge.objects.exists())
+        self.assertFalse(LegacyChargeSnapshot.objects.exists())
+        self.assertFalse(LegacyPaymentSnapshot.objects.exists())
+        self.assertFalse(LegacyReceiptSnapshot.objects.exists())
+
+    def test_referencia_financiera_rechaza_token(self):
+        payload = self.expediente_financiero()
+        payload["receipts"][0]["normalized"][
+            "legacy_xml_reference"
+        ] = "/cobrar/xml?token=secreto"
+        path = self.write_file(payload)
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "importar_abonado_sicav",
+                archivo=str(path),
+                verbosity=0,
+            )
+
+        self.assertFalse(Customer.objects.exists())
+        self.assertFalse(Charge.objects.exists())
