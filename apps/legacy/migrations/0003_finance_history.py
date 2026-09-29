@@ -2,6 +2,7 @@
 
 import decimal
 
+import apps.legacy.models
 import django.core.validators
 import django.db.models.deletion
 from django.db import migrations, models
@@ -131,8 +132,8 @@ class Migration(migrations.Migration):
                 ("other_tax_amount", models.DecimalField(decimal_places=2, default=decimal.Decimal("0.00"), max_digits=10, validators=[django.core.validators.MinValueValidator(decimal.Decimal("0.00"))], verbose_name="Otros tributos")),
                 ("total", models.DecimalField(decimal_places=2, max_digits=10, validators=[django.core.validators.MinValueValidator(decimal.Decimal("0.01"))], verbose_name="Total documento")),
                 ("issued_at", models.DateTimeField(blank=True, null=True, verbose_name="Emitido el")),
-                ("pdf_file", models.FileField(blank=True, upload_to="legacy/receipts/new/pdf/", verbose_name="PDF histórico")),
-                ("xml_file", models.FileField(blank=True, upload_to="legacy/receipts/new/xml/", verbose_name="XML histórico")),
+                ("pdf_file", models.FileField(blank=True, upload_to=apps.legacy.models.legacy_receipt_pdf_path, verbose_name="PDF histórico")),
+                ("xml_file", models.FileField(blank=True, upload_to=apps.legacy.models.legacy_receipt_xml_path, verbose_name="XML histórico")),
                 ("legacy_pdf_reference", models.CharField(blank=True, max_length=500, verbose_name="Referencia PDF SICAV")),
                 ("legacy_xml_reference", models.CharField(blank=True, max_length=500, verbose_name="Referencia XML SICAV")),
                 ("is_validated", models.BooleanField(default=False, verbose_name="Validado")),
