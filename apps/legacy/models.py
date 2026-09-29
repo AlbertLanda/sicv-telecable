@@ -29,6 +29,7 @@ class LegacyRecord(models.Model):
         WORK_ORDER = "WORK_ORDER", "Orden de trabajo"
         CHARGE = "CHARGE", "Cargo / deuda"
         PAYMENT = "PAYMENT", "Pago"
+        PAYMENT_ALLOCATION = "PAYMENT_ALLOCATION", "Aplicación de pago"
         RECEIPT = "RECEIPT", "Comprobante"
         EVIDENCE = "EVIDENCE", "Evidencia"
         EQUIPMENT = "EQUIPMENT", "Equipo"
@@ -859,3 +860,476 @@ class LegacyWorkOrderEvidence(models.Model):
         verbose_name = "Evidencia de OT histórica"
         verbose_name_plural = "Evidencias de OT histórica"
         ordering = ["work_order", "pk"]
+
+
+
+class LegacyChargeSnapshot(models.Model):
+    """Concepto financiero histórico que ya no forma parte de la deuda viva."""
+
+    class Status(models.TextChoices):
+        PAID = "PAID", "Pagado"
+        PENDING = "PENDING", "Pendiente"
+        CANCELLED = "CANCELLED", "Anulado"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="legacy_charge_snapshots",
+        verbose_name="Abonado",
+    )
+    subscription = models.ForeignKey(
+        "services.Subscription",
+        on_delete=models.PROTECT,
+        related_name="legacy_charge_snapshots",
+        null=True,
+        blank=True,
+        verbose_name="Suscripción",
+    )
+    description = models.CharField(
+        max_length=180,
+        verbose_name="Concepto histórico",
+    )
+    quantity = models.DecimalField(
+        max_digits=12,
+        decimal_places=5,
+        default=Decimal("1.00000"),
+        validators=[MinValueValidator(Decimal("0.00001"))],
+        verbose_name="Cantidad",
+    )
+    currency = models.CharField(
+        max_length=3,
+        default="PEN",
+        verbose_name="Moneda",
+    )
+    period_start = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Periodo desde",
+    )
+    period_end = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Periodo hasta",
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Monto histórico",
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Vencimiento",
+    )
+    legacy_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha legacy",
+        help_text=(
+            "Fecha conservada desde SICAV cuya semántica exacta todavía "
+            "puede estar pendiente de validación."
+        ),
+    )
+    document_snapshot = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Documento mostrado",
+    )
+    observation = models.TextField(
+        blank=True,
+        verbose_name="Observación",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PAID,
+        verbose_name="Estado histórico",
+    )
+    is_validated = models.BooleanField(default=False, verbose_name="Validado")
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Cargo histórico SICAV"
+        verbose_name_plural = "Cargos históricos SICAV"
+        ordering = ["period_start", "due_date", "pk"]
+
+    def clean(self):
+        super().clean()
+        if self.subscription_id and self.customer_id:
+            if self.subscription.customer_id != self.customer_id:
+                raise ValidationError({
+                    "subscription": "La suscripción no pertenece al abonado."
+                })
+        if self.period_end and self.period_start:
+            if self.period_end < self.period_start:
+                raise ValidationError({
+                    "period_end": "El fin del periodo no puede preceder al inicio."
+                })
+
+    def normalized_snapshot(self):
+        return {
+            "subscription_id": self.subscription_id,
+            "description": self.description,
+            "quantity": str(self.quantity),
+            "currency": self.currency,
+            "period_start": (
+                self.period_start.isoformat() if self.period_start else None
+            ),
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+            "amount": str(self.amount),
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "legacy_date": self.legacy_date.isoformat() if self.legacy_date else None,
+            "document_snapshot": self.document_snapshot,
+            "observation": self.observation,
+            "status": self.status,
+            "is_validated": self.is_validated,
+            "validation_notes": self.validation_notes,
+        }
+
+    def __str__(self):
+        return f"{self.description} · {self.currency} {self.amount}"
+
+
+class LegacyPaymentSnapshot(models.Model):
+    """Un cobro histórico real; no equivale a una línea del historial."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pendiente"
+        REGISTERED = "REGISTERED", "Pagado"
+        VOIDED = "VOIDED", "Anulado"
+        UNKNOWN = "UNKNOWN", "Sin clasificar"
+
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        related_name="legacy_payment_snapshots",
+        verbose_name="Abonado",
+    )
+    branch = models.ForeignKey(
+        "organization.Branch",
+        on_delete=models.PROTECT,
+        related_name="legacy_payment_snapshots",
+        null=True,
+        blank=True,
+        verbose_name="Sede",
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Total histórico",
+    )
+    currency = models.CharField(
+        max_length=3,
+        default="PEN",
+        verbose_name="Moneda",
+    )
+    method_code = models.CharField(
+        max_length=30,
+        blank=True,
+        verbose_name="Código método SICAV",
+    )
+    method_snapshot = models.CharField(
+        max_length=80,
+        blank=True,
+        verbose_name="Método de pago",
+    )
+    reference = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Referencia / operación",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.REGISTERED,
+        verbose_name="Estado histórico",
+    )
+    issued_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Emitido el",
+    )
+    paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Pagado el",
+    )
+    registered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Registrado el",
+    )
+    due_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Vencimiento del cobro",
+    )
+    collector_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Cobrador histórico",
+    )
+    registered_by_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Usuario histórico",
+    )
+    note = models.TextField(blank=True, verbose_name="Observación")
+    is_validated = models.BooleanField(default=False, verbose_name="Validado")
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Pago histórico SICAV"
+        verbose_name_plural = "Pagos históricos SICAV"
+        ordering = ["-paid_at", "-issued_at", "-pk"]
+
+    def normalized_snapshot(self):
+        return {
+            "branch_id": self.branch_id,
+            "amount": str(self.amount),
+            "currency": self.currency,
+            "method_code": self.method_code,
+            "method_snapshot": self.method_snapshot,
+            "reference": self.reference,
+            "status": self.status,
+            "issued_at": self.issued_at.isoformat() if self.issued_at else None,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+            "registered_at": (
+                self.registered_at.isoformat() if self.registered_at else None
+            ),
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "collector_snapshot": self.collector_snapshot,
+            "registered_by_snapshot": self.registered_by_snapshot,
+            "note": self.note,
+            "is_validated": self.is_validated,
+            "validation_notes": self.validation_notes,
+        }
+
+    def __str__(self):
+        return f"{self.method_snapshot or 'Pago'} · {self.currency} {self.amount}"
+
+
+class LegacyPaymentAllocationSnapshot(models.Model):
+    """Qué concepto histórico cubrió un pago histórico."""
+
+    payment = models.ForeignKey(
+        LegacyPaymentSnapshot,
+        on_delete=models.CASCADE,
+        related_name="allocations",
+        verbose_name="Pago histórico",
+    )
+    charge = models.ForeignKey(
+        LegacyChargeSnapshot,
+        on_delete=models.PROTECT,
+        related_name="allocations",
+        verbose_name="Cargo histórico",
+    )
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Monto aplicado",
+    )
+    discount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Descuento",
+    )
+    notes = models.CharField(
+        max_length=240,
+        blank=True,
+        verbose_name="Observación",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Aplicación de pago histórica"
+        verbose_name_plural = "Aplicaciones de pago históricas"
+        ordering = ["payment", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["payment", "charge"],
+                name="legacy_unique_payment_charge_allocation",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.payment_id and self.charge_id:
+            if self.payment.customer_id != self.charge.customer_id:
+                raise ValidationError({
+                    "charge": "El cargo y el pago pertenecen a abonados distintos."
+                })
+
+    def normalized_snapshot(self):
+        return {
+            "payment_id": self.payment_id,
+            "charge_id": self.charge_id,
+            "amount": str(self.amount),
+            "discount": str(self.discount),
+            "notes": self.notes,
+        }
+
+    def __str__(self):
+        return f"{self.payment} → {self.charge} · {self.amount}"
+
+
+def legacy_receipt_pdf_path(instance, filename):
+    return f"legacy/receipts/{instance.pk or 'new'}/pdf/{filename}"
+
+
+def legacy_receipt_xml_path(instance, filename):
+    return f"legacy/receipts/{instance.pk or 'new'}/xml/{filename}"
+
+
+class LegacyReceiptSnapshot(models.Model):
+    """Comprobante histórico y, cuando se recupere, sus archivos PDF/XML."""
+
+    payment = models.OneToOneField(
+        LegacyPaymentSnapshot,
+        on_delete=models.CASCADE,
+        related_name="receipt",
+        verbose_name="Pago histórico",
+    )
+    document_snapshot = models.CharField(
+        max_length=120,
+        verbose_name="Documento",
+    )
+    series = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="Serie",
+    )
+    number = models.CharField(
+        max_length=40,
+        blank=True,
+        verbose_name="Número",
+    )
+    document_type_snapshot = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Tipo de documento",
+    )
+    issuer_snapshot = models.CharField(
+        max_length=180,
+        blank=True,
+        verbose_name="Emisor",
+    )
+    taxable_base = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Base gravada",
+    )
+    igv_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="IGV",
+    )
+    exempt_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Importe exonerado",
+    )
+    other_tax_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Otros tributos",
+    )
+    total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Total documento",
+    )
+    issued_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Emitido el",
+    )
+    pdf_file = models.FileField(
+        upload_to=legacy_receipt_pdf_path,
+        blank=True,
+        verbose_name="PDF histórico",
+    )
+    xml_file = models.FileField(
+        upload_to=legacy_receipt_xml_path,
+        blank=True,
+        verbose_name="XML histórico",
+    )
+    legacy_pdf_reference = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="Referencia PDF SICAV",
+    )
+    legacy_xml_reference = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name="Referencia XML SICAV",
+    )
+    is_validated = models.BooleanField(default=False, verbose_name="Validado")
+    validation_notes = models.TextField(
+        blank=True,
+        verbose_name="Notas de validación",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Comprobante histórico SICAV"
+        verbose_name_plural = "Comprobantes históricos SICAV"
+        ordering = ["-issued_at", "-pk"]
+
+    def normalized_snapshot(self):
+        return {
+            "payment_id": self.payment_id,
+            "document_snapshot": self.document_snapshot,
+            "series": self.series,
+            "number": self.number,
+            "document_type_snapshot": self.document_type_snapshot,
+            "issuer_snapshot": self.issuer_snapshot,
+            "taxable_base": (
+                str(self.taxable_base) if self.taxable_base is not None else None
+            ),
+            "igv_amount": (
+                str(self.igv_amount) if self.igv_amount is not None else None
+            ),
+            "exempt_amount": (
+                str(self.exempt_amount) if self.exempt_amount is not None else None
+            ),
+            "other_tax_amount": str(self.other_tax_amount),
+            "total": str(self.total),
+            "issued_at": self.issued_at.isoformat() if self.issued_at else None,
+            "legacy_pdf_reference": self.legacy_pdf_reference,
+            "legacy_xml_reference": self.legacy_xml_reference,
+            "is_validated": self.is_validated,
+            "validation_notes": self.validation_notes,
+        }
+
+    def __str__(self):
+        return self.document_snapshot
