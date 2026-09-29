@@ -4,7 +4,11 @@ from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
 from .models import (
+    LegacyChargeSnapshot,
     LegacyContractSnapshot,
+    LegacyPaymentAllocationSnapshot,
+    LegacyPaymentSnapshot,
+    LegacyReceiptSnapshot,
     LegacyRecord,
     LegacyRecordCorrection,
     LegacyWorkOrderEvidence,
@@ -369,3 +373,137 @@ class LegacyWorkOrderSnapshotAdmin(LegacyAuditedAdminMixin, admin.ModelAdmin):
         LegacyWorkOrderMaterialInline,
         LegacyWorkOrderEvidenceInline,
     )
+
+
+
+class LegacyPaymentAllocationInline(
+    LegacyReadOnlyInlineMixin,
+    admin.TabularInline,
+):
+    model = LegacyPaymentAllocationSnapshot
+    readonly_fields = (
+        "charge",
+        "amount",
+        "discount",
+        "notes",
+        "created_at",
+    )
+
+
+@admin.register(LegacyChargeSnapshot)
+class LegacyChargeSnapshotAdmin(LegacyAuditedAdminMixin, admin.ModelAdmin):
+    form = type(
+        "LegacyChargeSnapshotForm",
+        (LegacyCorrectionReasonForm,),
+        {"Meta": type(
+            "Meta",
+            (),
+            {"model": LegacyChargeSnapshot, "fields": "__all__"},
+        )},
+    )
+    list_display = (
+        "description",
+        "customer",
+        "period_start",
+        "amount",
+        "due_date",
+        "status",
+        "is_validated",
+    )
+    list_filter = ("status", "currency", "is_validated")
+    search_fields = (
+        "description",
+        "customer__code",
+        "customer__document_number",
+        "document_snapshot",
+    )
+    autocomplete_fields = ("subscription",)
+    readonly_fields = ("customer", "created_at", "updated_at")
+
+
+@admin.register(LegacyPaymentSnapshot)
+class LegacyPaymentSnapshotAdmin(LegacyAuditedAdminMixin, admin.ModelAdmin):
+    form = type(
+        "LegacyPaymentSnapshotForm",
+        (LegacyCorrectionReasonForm,),
+        {"Meta": type(
+            "Meta",
+            (),
+            {"model": LegacyPaymentSnapshot, "fields": "__all__"},
+        )},
+    )
+    list_display = (
+        "pk",
+        "customer",
+        "amount",
+        "method_snapshot",
+        "paid_at",
+        "status",
+        "is_validated",
+    )
+    list_filter = ("status", "method_snapshot", "branch", "is_validated")
+    search_fields = (
+        "customer__code",
+        "customer__document_number",
+        "reference",
+        "collector_snapshot",
+        "registered_by_snapshot",
+    )
+    autocomplete_fields = ("branch",)
+    readonly_fields = ("customer", "created_at", "updated_at")
+    inlines = (LegacyPaymentAllocationInline,)
+
+
+@admin.register(LegacyPaymentAllocationSnapshot)
+class LegacyPaymentAllocationSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("payment", "charge", "amount", "discount")
+    search_fields = (
+        "payment__customer__code",
+        "charge__description",
+    )
+    readonly_fields = (
+        "payment",
+        "charge",
+        "amount",
+        "discount",
+        "notes",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LegacyReceiptSnapshot)
+class LegacyReceiptSnapshotAdmin(LegacyAuditedAdminMixin, admin.ModelAdmin):
+    form = type(
+        "LegacyReceiptSnapshotForm",
+        (LegacyCorrectionReasonForm,),
+        {"Meta": type(
+            "Meta",
+            (),
+            {"model": LegacyReceiptSnapshot, "fields": "__all__"},
+        )},
+    )
+    list_display = (
+        "document_snapshot",
+        "payment",
+        "issued_at",
+        "total",
+        "is_validated",
+    )
+    list_filter = ("document_type_snapshot", "is_validated")
+    search_fields = (
+        "document_snapshot",
+        "series",
+        "number",
+        "payment__customer__code",
+    )
+    autocomplete_fields = ("payment",)
+    readonly_fields = ("created_at", "updated_at")
