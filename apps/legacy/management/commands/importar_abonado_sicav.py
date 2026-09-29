@@ -12,7 +12,11 @@ from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.legacy.models import (
+    LegacyChargeSnapshot,
     LegacyContractSnapshot,
+    LegacyPaymentAllocationSnapshot,
+    LegacyPaymentSnapshot,
+    LegacyReceiptSnapshot,
     LegacyRecord,
     LegacyWorkOrderEvidence,
     LegacyWorkOrderMaterial,
@@ -20,6 +24,7 @@ from apps.legacy.models import (
     LegacyWorkOrderSnapshot,
 )
 from apps.organization.models import Branch, Zone
+from apps.payments.models import Charge, ChargeConcept
 from apps.work_orders.models import OrderReason, OrderType
 
 from apps.services.models import (
@@ -107,6 +112,25 @@ RESPONSIBILITY_MAP = {
     "OTHER": LegacyWorkOrderSnapshot.Responsibility.OTHER,
 }
 
+LEGACY_CHARGE_STATUS_MAP = {
+    "PAID": LegacyChargeSnapshot.Status.PAID,
+    "PAGADO": LegacyChargeSnapshot.Status.PAID,
+    "PENDING": LegacyChargeSnapshot.Status.PENDING,
+    "PENDIENTE": LegacyChargeSnapshot.Status.PENDING,
+    "CANCELLED": LegacyChargeSnapshot.Status.CANCELLED,
+    "ANULADO": LegacyChargeSnapshot.Status.CANCELLED,
+}
+
+LEGACY_PAYMENT_STATUS_MAP = {
+    "REGISTERED": LegacyPaymentSnapshot.Status.REGISTERED,
+    "PAGADO": LegacyPaymentSnapshot.Status.REGISTERED,
+    "CANCELADO": LegacyPaymentSnapshot.Status.REGISTERED,
+    "PENDING": LegacyPaymentSnapshot.Status.PENDING,
+    "PENDIENTE": LegacyPaymentSnapshot.Status.PENDING,
+    "VOIDED": LegacyPaymentSnapshot.Status.VOIDED,
+    "ANULADO": LegacyPaymentSnapshot.Status.VOIDED,
+}
+
 DOCUMENT_TYPE_MAP = {
     "D": Customer.DocumentType.DNI,
     "DNI": Customer.DocumentType.DNI,
@@ -131,13 +155,18 @@ class ImportStats:
     participants: int = 0
     materials: int = 0
     evidences: int = 0
+    historical_charges: int = 0
+    historical_payments: int = 0
+    payment_allocations: int = 0
+    receipts: int = 0
+    outstanding_charges: int = 0
     warnings: int = 0
 
 
 class Command(BaseCommand):
     help = (
-        "Importa el bloque maestro de un expediente SICAV (abonado, "
-        "direcciones, suscripciones e historial de planes). Usa LegacyRecord "
+        "Importa un expediente SICAV (maestro, historia operativa y "
+        "financiera, más deuda pendiente). Usa LegacyRecord "
         "para idempotencia y permite --dry-run para validar sin persistir."
     )
 
@@ -165,7 +194,7 @@ class Command(BaseCommand):
         self._validate_envelope(data)
 
         self.stats = ImportStats()
-        self.stdout.write(self.style.MIGRATE_HEADING("Importación SICAV · bloque maestro"))
+        self.stdout.write(self.style.MIGRATE_HEADING("Importación SICAV · expediente"))
         if dry_run:
             self.stdout.write(self.style.WARNING("Modo DRY-RUN: todos los cambios se revertirán."))
 
@@ -191,6 +220,41 @@ class Command(BaseCommand):
             customer,
             subscriptions,
         )
+        historical_charges = self._import_historical_charges(
+            data.get("charges_history", []),
+            customer,
+            subscriptions,
+        )
+        historical_payments = self._import_historical_payments(
+            data.get("payments", []),
+            customer,
+        )
+        allocations = self._import_payment_allocations(
+            data.get("payment_allocations", []),
+            customer,
+            historical_charges,
+            historical_payments,
+        )
+        receipts = self._import_receipts(
+            data.get("receipts", []),
+            customer,
+            historical_payments,
+        )
+        outstanding_charges = self._import_outstanding_charges(
+            data.get("outstanding_charges", []),
+            customer,
+            subscriptions,
+        )
+        self._validate_reconciliation(
+            data.get("reconciliation", {}),
+            contracts=data.get("contracts", []),
+            work_orders=data.get("work_orders", []),
+            historical_charges=historical_charges,
+            historical_payments=historical_payments,
+            allocations=allocations,
+            receipts=receipts,
+            outstanding_charges=outstanding_charges,
+        )
 
         self._print_summary()
 
@@ -198,7 +262,7 @@ class Command(BaseCommand):
             transaction.set_rollback(True)
             self.stdout.write(self.style.WARNING("DRY-RUN: no se guardó ningún cambio."))
         else:
-            self.stdout.write(self.style.SUCCESS("Bloque maestro SICAV importado correctamente."))
+            self.stdout.write(self.style.SUCCESS("Expediente SICAV importado correctamente."))
 
     def _load_json(self, path):
         try:
@@ -226,10 +290,19 @@ class Command(BaseCommand):
             "plan_history",
             "contracts",
             "work_orders",
+            "charges_history",
+            "payments",
+            "payment_allocations",
+            "receipts",
+            "outstanding_charges",
         ):
             value = data.get(key, [])
             if not isinstance(value, list):
                 raise CommandError(f"{key} debe ser una lista.")
+
+        reconciliation = data.get("reconciliation", {})
+        if not isinstance(reconciliation, dict):
+            raise CommandError("reconciliation debe ser un objeto JSON.")
 
     def _payloads(self, item):
         raw = item.get("raw")
@@ -1136,6 +1209,640 @@ class Command(BaseCommand):
             )
             self.stats.evidences += 1
 
+    def _import_historical_charges(self, items, customer, subscriptions):
+        result = {}
+        for item in items:
+            legacy_id = self._legacy_id(item, "historical_charge")
+            raw, values = self._payloads(item)
+
+            existing = self._existing_target(
+                LegacyRecord.EntityType.CHARGE,
+                legacy_id,
+                raw,
+            )
+            if existing is not None:
+                if not isinstance(existing, LegacyChargeSnapshot):
+                    raise CommandError(
+                        f"historical_charge {legacy_id}: destino incorrecto."
+                    )
+                result[legacy_id] = existing
+                continue
+
+            subscription = self._optional_subscription_from_expedient(
+                values,
+                subscriptions,
+                f"historical_charge {legacy_id}",
+            )
+            status_raw = str(values.get("status") or "PAID").strip()
+            status = self._mapped_or_unknown(
+                LEGACY_CHARGE_STATUS_MAP,
+                status_raw,
+                LegacyChargeSnapshot.Status.UNKNOWN,
+                f"historical_charge {legacy_id}: estado {status_raw!r} sin mapear",
+            )
+
+            charge = LegacyChargeSnapshot(
+                customer=customer,
+                subscription=subscription,
+                description=str(
+                    self._required(
+                        values,
+                        "description",
+                        f"historical_charge {legacy_id}",
+                    )
+                ).strip(),
+                quantity=self._decimal_or_one(
+                    values.get("quantity"),
+                    f"historical_charge {legacy_id}.quantity",
+                ),
+                currency=str(values.get("currency") or "PEN").strip().upper(),
+                period_start=self._date_or_none(
+                    values.get("period_start"),
+                    f"historical_charge {legacy_id}.period_start",
+                ),
+                period_end=self._date_or_none(
+                    values.get("period_end"),
+                    f"historical_charge {legacy_id}.period_end",
+                ),
+                amount=self._required_decimal(
+                    values.get("amount"),
+                    f"historical_charge {legacy_id}.amount",
+                ),
+                due_date=self._date_or_none(
+                    values.get("due_date"),
+                    f"historical_charge {legacy_id}.due_date",
+                ),
+                legacy_date=self._date_or_none(
+                    values.get("legacy_date"),
+                    f"historical_charge {legacy_id}.legacy_date",
+                ),
+                document_snapshot=str(
+                    values.get("document_snapshot") or ""
+                ).strip(),
+                observation=str(values.get("observation") or "").strip(),
+                status=status,
+                is_validated=bool(values.get("is_validated", False)),
+                validation_notes=str(
+                    values.get("validation_notes") or ""
+                ).strip(),
+            )
+            self._save_validated(
+                charge,
+                f"historical_charge {legacy_id}",
+            )
+            self._record_legacy(
+                entity_type=LegacyRecord.EntityType.CHARGE,
+                legacy_id=legacy_id,
+                raw_payload=raw,
+                normalized_payload=charge.normalized_snapshot(),
+                target=charge,
+                customer=customer,
+                subscription=subscription,
+            )
+            self.stats.historical_charges += 1
+            result[legacy_id] = charge
+        return result
+
+    def _import_historical_payments(self, items, customer):
+        result = {}
+        for item in items:
+            legacy_id = self._legacy_id(item, "payment")
+            raw, values = self._payloads(item)
+
+            existing = self._existing_target(
+                LegacyRecord.EntityType.PAYMENT,
+                legacy_id,
+                raw,
+            )
+            if existing is not None:
+                if not isinstance(existing, LegacyPaymentSnapshot):
+                    raise CommandError(
+                        f"payment {legacy_id}: destino histórico incorrecto."
+                    )
+                result[legacy_id] = existing
+                continue
+
+            branch = customer.branch
+            branch_code = str(values.get("branch_code") or "").strip()
+            if branch_code:
+                try:
+                    branch = Branch.objects.get(code__iexact=branch_code)
+                except Branch.DoesNotExist as exc:
+                    raise CommandError(
+                        f"payment {legacy_id}: sede {branch_code!r} inexistente."
+                    ) from exc
+
+            status_raw = str(values.get("status") or "REGISTERED").strip()
+            status = self._mapped_or_unknown(
+                LEGACY_PAYMENT_STATUS_MAP,
+                status_raw,
+                LegacyPaymentSnapshot.Status.UNKNOWN,
+                f"payment {legacy_id}: estado {status_raw!r} sin mapear",
+            )
+
+            payment = LegacyPaymentSnapshot(
+                customer=customer,
+                branch=branch,
+                amount=self._required_decimal(
+                    values.get("amount"),
+                    f"payment {legacy_id}.amount",
+                ),
+                currency=str(values.get("currency") or "PEN").strip().upper(),
+                method_code=str(values.get("method_code") or "").strip(),
+                method_snapshot=str(
+                    values.get("method_snapshot") or ""
+                ).strip(),
+                reference=str(values.get("reference") or "").strip(),
+                status=status,
+                issued_at=self._datetime_or_none(
+                    values.get("issued_at"),
+                    f"payment {legacy_id}.issued_at",
+                ),
+                paid_at=self._datetime_or_none(
+                    values.get("paid_at"),
+                    f"payment {legacy_id}.paid_at",
+                ),
+                registered_at=self._datetime_or_none(
+                    values.get("registered_at"),
+                    f"payment {legacy_id}.registered_at",
+                ),
+                due_date=self._date_or_none(
+                    values.get("due_date"),
+                    f"payment {legacy_id}.due_date",
+                ),
+                collector_snapshot=str(
+                    values.get("collector_snapshot") or ""
+                ).strip(),
+                registered_by_snapshot=str(
+                    values.get("registered_by_snapshot") or ""
+                ).strip(),
+                note=str(values.get("note") or "").strip(),
+                is_validated=bool(values.get("is_validated", False)),
+                validation_notes=str(
+                    values.get("validation_notes") or ""
+                ).strip(),
+            )
+            self._save_validated(payment, f"payment {legacy_id}")
+            self._record_legacy(
+                entity_type=LegacyRecord.EntityType.PAYMENT,
+                legacy_id=legacy_id,
+                raw_payload=raw,
+                normalized_payload=payment.normalized_snapshot(),
+                target=payment,
+                customer=customer,
+            )
+            self.stats.historical_payments += 1
+            result[legacy_id] = payment
+        return result
+
+    def _import_payment_allocations(
+        self,
+        items,
+        customer,
+        historical_charges,
+        historical_payments,
+    ):
+        result = {}
+        for item in items:
+            legacy_id = self._legacy_id(item, "payment_allocation")
+            raw, values = self._payloads(item)
+
+            existing = self._existing_target(
+                LegacyRecord.EntityType.PAYMENT_ALLOCATION,
+                legacy_id,
+                raw,
+            )
+            if existing is not None:
+                if not isinstance(existing, LegacyPaymentAllocationSnapshot):
+                    raise CommandError(
+                        f"payment_allocation {legacy_id}: destino incorrecto."
+                    )
+                result[legacy_id] = existing
+                continue
+
+            payment_legacy_id = str(
+                self._required(
+                    values,
+                    "payment_legacy_id",
+                    f"payment_allocation {legacy_id}",
+                )
+            )
+            charge_legacy_id = str(
+                self._required(
+                    values,
+                    "charge_legacy_id",
+                    f"payment_allocation {legacy_id}",
+                )
+            )
+            payment = self._historical_target(
+                LegacyRecord.EntityType.PAYMENT,
+                payment_legacy_id,
+                LegacyPaymentSnapshot,
+                historical_payments,
+                f"payment_allocation {legacy_id}",
+            )
+            charge = self._historical_target(
+                LegacyRecord.EntityType.CHARGE,
+                charge_legacy_id,
+                LegacyChargeSnapshot,
+                historical_charges,
+                f"payment_allocation {legacy_id}",
+            )
+
+            allocation = LegacyPaymentAllocationSnapshot(
+                payment=payment,
+                charge=charge,
+                amount=self._required_decimal(
+                    values.get("amount"),
+                    f"payment_allocation {legacy_id}.amount",
+                ),
+                discount=self._decimal_or_zero(
+                    values.get("discount"),
+                    f"payment_allocation {legacy_id}.discount",
+                ),
+                notes=str(values.get("notes") or "").strip(),
+            )
+            self._save_validated(
+                allocation,
+                f"payment_allocation {legacy_id}",
+            )
+            self._record_legacy(
+                entity_type=LegacyRecord.EntityType.PAYMENT_ALLOCATION,
+                legacy_id=legacy_id,
+                raw_payload=raw,
+                normalized_payload=allocation.normalized_snapshot(),
+                target=allocation,
+                customer=customer,
+                subscription=charge.subscription,
+            )
+            self.stats.payment_allocations += 1
+            result[legacy_id] = allocation
+        return result
+
+    def _import_receipts(self, items, customer, historical_payments):
+        result = {}
+        for item in items:
+            legacy_id = self._legacy_id(item, "receipt")
+            raw, values = self._payloads(item)
+
+            existing = self._existing_target(
+                LegacyRecord.EntityType.RECEIPT,
+                legacy_id,
+                raw,
+            )
+            if existing is not None:
+                if not isinstance(existing, LegacyReceiptSnapshot):
+                    raise CommandError(
+                        f"receipt {legacy_id}: destino histórico incorrecto."
+                    )
+                result[legacy_id] = existing
+                continue
+
+            payment_legacy_id = str(
+                self._required(
+                    values,
+                    "payment_legacy_id",
+                    f"receipt {legacy_id}",
+                )
+            )
+            payment = self._historical_target(
+                LegacyRecord.EntityType.PAYMENT,
+                payment_legacy_id,
+                LegacyPaymentSnapshot,
+                historical_payments,
+                f"receipt {legacy_id}",
+            )
+
+            receipt = LegacyReceiptSnapshot(
+                payment=payment,
+                document_snapshot=str(
+                    self._required(
+                        values,
+                        "document_snapshot",
+                        f"receipt {legacy_id}",
+                    )
+                ).strip(),
+                series=str(values.get("series") or "").strip(),
+                number=str(values.get("number") or "").strip(),
+                document_type_snapshot=str(
+                    values.get("document_type_snapshot") or ""
+                ).strip(),
+                issuer_snapshot=str(
+                    values.get("issuer_snapshot") or ""
+                ).strip(),
+                taxable_base=self._decimal_or_none(
+                    values.get("taxable_base"),
+                    f"receipt {legacy_id}.taxable_base",
+                ),
+                igv_amount=self._decimal_or_none(
+                    values.get("igv_amount"),
+                    f"receipt {legacy_id}.igv_amount",
+                ),
+                exempt_amount=self._decimal_or_none(
+                    values.get("exempt_amount"),
+                    f"receipt {legacy_id}.exempt_amount",
+                ),
+                other_tax_amount=self._decimal_or_zero(
+                    values.get("other_tax_amount"),
+                    f"receipt {legacy_id}.other_tax_amount",
+                ),
+                total=self._required_decimal(
+                    values.get("total"),
+                    f"receipt {legacy_id}.total",
+                ),
+                issued_at=self._datetime_or_none(
+                    values.get("issued_at"),
+                    f"receipt {legacy_id}.issued_at",
+                ),
+                legacy_pdf_reference=self._safe_legacy_reference(
+                    values.get("legacy_pdf_reference"),
+                    f"receipt {legacy_id}.legacy_pdf_reference",
+                ),
+                legacy_xml_reference=self._safe_legacy_reference(
+                    values.get("legacy_xml_reference"),
+                    f"receipt {legacy_id}.legacy_xml_reference",
+                ),
+                is_validated=bool(values.get("is_validated", False)),
+                validation_notes=str(
+                    values.get("validation_notes") or ""
+                ).strip(),
+            )
+            self._save_validated(receipt, f"receipt {legacy_id}")
+
+            if abs(receipt.total - payment.amount) > Decimal("0.01"):
+                self._warn(
+                    f"receipt {legacy_id}: total {receipt.total} no coincide "
+                    f"con pago {payment.amount}."
+                )
+
+            self._record_legacy(
+                entity_type=LegacyRecord.EntityType.RECEIPT,
+                legacy_id=legacy_id,
+                raw_payload=raw,
+                normalized_payload=receipt.normalized_snapshot(),
+                target=receipt,
+                customer=customer,
+            )
+            self.stats.receipts += 1
+            result[legacy_id] = receipt
+        return result
+
+    def _import_outstanding_charges(self, items, customer, subscriptions):
+        result = {}
+        valid_concepts = {choice.value for choice in Charge.Concept}
+
+        for item in items:
+            legacy_id = self._legacy_id(item, "outstanding_charge")
+            raw, values = self._payloads(item)
+
+            existing = self._existing_target(
+                LegacyRecord.EntityType.CHARGE,
+                legacy_id,
+                raw,
+            )
+            if existing is not None:
+                if not isinstance(existing, Charge):
+                    raise CommandError(
+                        f"outstanding_charge {legacy_id}: el legacy_id ya "
+                        "apunta a un cargo histórico, no a deuda operativa."
+                    )
+                result[legacy_id] = existing
+                continue
+
+            subscription = self._subscription_from_expedient(
+                values,
+                subscriptions,
+                f"outstanding_charge {legacy_id}",
+            )
+            concept = str(
+                self._required(
+                    values,
+                    "concept",
+                    f"outstanding_charge {legacy_id}",
+                )
+            ).strip().upper()
+            if concept not in valid_concepts:
+                raise CommandError(
+                    f"outstanding_charge {legacy_id}: concepto {concept!r} "
+                    "no soportado."
+                )
+
+            period = self._date_or_none(
+                values.get("period_start"),
+                f"outstanding_charge {legacy_id}.period_start",
+            )
+            if concept == Charge.Concept.MONTHLY and period is None:
+                raise CommandError(
+                    f"outstanding_charge {legacy_id}: una mensualidad "
+                    "requiere period_start."
+                )
+
+            concept_item = None
+            concept_item_code = str(
+                values.get("concept_item_code") or ""
+            ).strip()
+            if concept_item_code:
+                try:
+                    concept_item = ChargeConcept.objects.get(
+                        code__iexact=concept_item_code
+                    )
+                except ChargeConcept.DoesNotExist as exc:
+                    raise CommandError(
+                        f"outstanding_charge {legacy_id}: no existe "
+                        f"ChargeConcept {concept_item_code!r}."
+                    ) from exc
+
+            if concept == Charge.Concept.MONTHLY:
+                collision = Charge.objects.filter(
+                    subscription=subscription,
+                    concept=Charge.Concept.MONTHLY,
+                    period=period,
+                ).first()
+                if collision is not None:
+                    raise CommandError(
+                        f"outstanding_charge {legacy_id}: ya existe una "
+                        f"mensualidad SICV para {period:%m/%Y} sin vínculo "
+                        "legacy. Revise antes de importar."
+                    )
+
+            charge = Charge(
+                customer=customer,
+                subscription=subscription,
+                concept=concept,
+                concept_item=concept_item,
+                description=str(
+                    self._required(
+                        values,
+                        "description",
+                        f"outstanding_charge {legacy_id}",
+                    )
+                ).strip(),
+                issued_on=self._required_date(
+                    values.get("issued_on"),
+                    f"outstanding_charge {legacy_id}.issued_on",
+                ),
+                quantity=self._decimal_or_one(
+                    values.get("quantity"),
+                    f"outstanding_charge {legacy_id}.quantity",
+                ),
+                currency=str(values.get("currency") or "PEN").strip().upper(),
+                auto_update=False,
+                period=period,
+                period_end=self._date_or_none(
+                    values.get("period_end"),
+                    f"outstanding_charge {legacy_id}.period_end",
+                ),
+                amount=self._required_decimal(
+                    values.get("amount"),
+                    f"outstanding_charge {legacy_id}.amount",
+                ),
+                due_date=self._required_date(
+                    values.get("due_date"),
+                    f"outstanding_charge {legacy_id}.due_date",
+                ),
+                early_discount=self._decimal_or_zero(
+                    values.get("early_discount"),
+                    f"outstanding_charge {legacy_id}.early_discount",
+                ),
+                discount_deadline=self._date_or_none(
+                    values.get("discount_deadline"),
+                    f"outstanding_charge {legacy_id}.discount_deadline",
+                ),
+                cut_date=self._date_or_none(
+                    values.get("cut_date"),
+                    f"outstanding_charge {legacy_id}.cut_date",
+                ),
+                status=Charge.Status.PENDING,
+            )
+            self._save_validated(
+                charge,
+                f"outstanding_charge {legacy_id}",
+            )
+            self._record_legacy(
+                entity_type=LegacyRecord.EntityType.CHARGE,
+                legacy_id=legacy_id,
+                raw_payload=raw,
+                normalized_payload=values,
+                target=charge,
+                customer=customer,
+                subscription=subscription,
+            )
+            self.stats.outstanding_charges += 1
+            result[legacy_id] = charge
+
+        return result
+
+    def _validate_reconciliation(
+        self,
+        reconciliation,
+        *,
+        contracts,
+        work_orders,
+        historical_charges,
+        historical_payments,
+        allocations,
+        receipts,
+        outstanding_charges,
+    ):
+        checks = {
+            "contract_count": len(contracts),
+            "work_order_count": len(work_orders),
+            "historical_charge_count": len(historical_charges),
+            "payment_count": len(historical_payments),
+            "payment_allocation_count": len(allocations),
+            "receipt_count": len(receipts),
+            "outstanding_count": len(outstanding_charges),
+        }
+        for key, actual in checks.items():
+            expected = reconciliation.get(key)
+            if expected is None:
+                continue
+            try:
+                expected = int(expected)
+            except (TypeError, ValueError) as exc:
+                raise CommandError(
+                    f"reconciliation.{key} debe ser entero."
+                ) from exc
+            if expected != actual:
+                raise CommandError(
+                    f"Conciliación fallida: {key} esperado={expected}, "
+                    f"obtenido={actual}."
+                )
+
+        expected_total = reconciliation.get("outstanding_total")
+        if expected_total is not None:
+            expected_total = self._required_decimal(
+                expected_total,
+                "reconciliation.outstanding_total",
+            )
+            actual_total = sum(
+                (charge.amount for charge in outstanding_charges.values()),
+                Decimal("0.00"),
+            )
+            if actual_total != expected_total:
+                raise CommandError(
+                    "Conciliación fallida: deuda pendiente esperada "
+                    f"{expected_total}, obtenida {actual_total}."
+                )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"OK Conciliación deuda pendiente: S/ {actual_total:.2f}"
+                )
+            )
+
+        if reconciliation.get("require_full_payment_allocation"):
+            for legacy_id, payment in historical_payments.items():
+                allocated = sum(
+                    (item.amount for item in payment.allocations.all()),
+                    Decimal("0.00"),
+                )
+                if allocated != payment.amount:
+                    raise CommandError(
+                        f"Conciliación fallida: pago {legacy_id} total "
+                        f"{payment.amount} pero aplicaciones {allocated}."
+                    )
+
+    def _historical_target(
+        self,
+        entity_type,
+        legacy_id,
+        expected_class,
+        current,
+        label,
+    ):
+        target = current.get(legacy_id)
+        if target is not None:
+            if not isinstance(target, expected_class):
+                raise CommandError(f"{label}: destino de tipo incorrecto.")
+            return target
+
+        record = LegacyRecord.objects.filter(
+            source=LegacyRecord.Source.SICAV,
+            entity_type=entity_type,
+            legacy_id=legacy_id,
+        ).first()
+        target = record.target_object if record else None
+        if not isinstance(target, expected_class):
+            raise CommandError(
+                f"{label}: referencia legacy {legacy_id!r} no encontrada."
+            )
+        return target
+
+    def _optional_subscription_from_expedient(
+        self,
+        values,
+        subscriptions,
+        label,
+    ):
+        legacy_id = str(values.get("subscription_legacy_id") or "").strip()
+        if not legacy_id:
+            return None
+        return self._subscription_from_expedient(
+            {"subscription_legacy_id": legacy_id},
+            subscriptions,
+            label,
+        )
+
     def _subscription_from_expedient(self, values, subscriptions, label):
         subscription_id = str(
             self._required(values, "subscription_legacy_id", label)
@@ -1343,6 +2050,16 @@ class Command(BaseCommand):
         except (InvalidOperation, ValueError) as exc:
             raise CommandError(f"{label}: decimal inválido {value!r}.") from exc
 
+    def _required_decimal(self, value, label):
+        result = self._decimal_or_none(value, label)
+        if result is None:
+            raise CommandError(f"{label}: el monto es obligatorio.")
+        return result
+
+    def _decimal_or_one(self, value, label):
+        result = self._decimal_or_none(value, label)
+        return result if result is not None else Decimal("1.00000")
+
     def _decimal_or_zero(self, value, label):
         result = self._decimal_or_none(value, label)
         return result if result is not None else Decimal("0.00")
@@ -1368,7 +2085,7 @@ class Command(BaseCommand):
 
     def _print_summary(self):
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS("Resumen bloque maestro"))
+        self.stdout.write(self.style.SUCCESS("Resumen del expediente"))
         self.stdout.write(f"  Abonados creados: {self.stats.customers}")
         self.stdout.write(f"  Direcciones creadas: {self.stats.addresses}")
         self.stdout.write(f"  Suscripciones creadas: {self.stats.subscriptions}")
@@ -1378,5 +2095,18 @@ class Command(BaseCommand):
         self.stdout.write(f"  Participantes OT: {self.stats.participants}")
         self.stdout.write(f"  Materiales OT: {self.stats.materials}")
         self.stdout.write(f"  Evidencias OT: {self.stats.evidences}")
+        self.stdout.write(
+            f"  Cargos históricos: {self.stats.historical_charges}"
+        )
+        self.stdout.write(
+            f"  Pagos históricos: {self.stats.historical_payments}"
+        )
+        self.stdout.write(
+            f"  Aplicaciones históricas: {self.stats.payment_allocations}"
+        )
+        self.stdout.write(f"  Comprobantes históricos: {self.stats.receipts}")
+        self.stdout.write(
+            f"  Deudas operativas importadas: {self.stats.outstanding_charges}"
+        )
         self.stdout.write(f"  Registros ya importados: {self.stats.reused}")
         self.stdout.write(f"  Advertencias: {self.stats.warnings}")
