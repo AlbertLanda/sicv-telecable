@@ -56,7 +56,6 @@ class LegacyRecordAdmin(admin.ModelAdmin):
     autocomplete_fields = (
         "customer",
         "subscription",
-        "target_content_type",
     )
     readonly_fields = (
         "source",
