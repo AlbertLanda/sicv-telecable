@@ -76,6 +76,7 @@ class User(AbstractUser):
             "services.view_servicetype",
             "contracts.change_contract",
             "payments.view_paymentcommitment",
+            "payments.view_cash_closing",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
         }
