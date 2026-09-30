@@ -21,10 +21,18 @@ from django.http import FileResponse
 from django.template.response import TemplateResponse
 from django.views.generic import FormView, TemplateView
 
-from apps.organization.context_processors import get_active_branch
+from apps.organization.context_processors import get_active_branch, get_active_office
 
+from . import cash_closing_exporters
+from .cash_closing import build_cash_closing
 from .exporters import CONTENT_TYPES, render
-from .forms import VIEWED_FORMATS, MaterialReportForm, SalesReportForm
+from .forms import (
+    VIEWED_FORMATS,
+    CashClosingForm,
+    MaterialReportForm,
+    SalesReportForm,
+    cash_closing_defaults,
+)
 from .materials import build_report
 from .sales import build_sales_report
 
@@ -141,3 +149,94 @@ class SalesReportView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView)
             )
 
         return context
+
+
+class CashClosingPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
+    """Quién puede sacar el cierre de caja: Contabilidad.
+
+    Es un permiso propio y no el de consultar comprobantes, que ATC ya tiene
+    para atender en la ficha: el cierre suma la recaudación de toda la sede.
+    """
+
+    permission_required = "payments.view_cash_closing"
+
+
+class CashClosingView(CashClosingPermissionMixin, TemplateView):
+    """Reportes › Cierre de caja: el formulario, y el consolidado como archivo.
+
+    Misma pantalla que el reporte de materiales: campos, «Formato» y
+    «Exportar». El consolidado de emisión sale en Excel o PDF, que es donde
+    Contabilidad lo trabaja.
+
+    El formulario viaja por GET a esta misma dirección. Llega enviado cuando
+    trae su «Formato»; sin él es la primera visita, y el formulario abre con
+    el mes en curso. Un envío inválido vuelve aquí con el formulario ligado,
+    para que el mensaje aparezca sobre lo que el operador escribió.
+
+    La sede es siempre la activa. Sin «Consolidado oficinas», además, solo la
+    oficina activa de la barra superior: es la que el operador tiene a la
+    vista, y pedirla otra vez en el formulario daría dos respuestas a la
+    misma pregunta.
+    """
+
+    template_name = "reports/cash_closing.html"
+
+    def get(self, request, *args, **kwargs):
+        branch = get_active_branch(request)
+        submitted = "export_format" in request.GET
+
+        form = CashClosingForm(
+            request.GET if submitted else cash_closing_defaults(),
+            branch=branch,
+        )
+
+        if submitted and form.is_valid():
+            office = None
+
+            if branch is None:
+                form.add_error(
+                    None,
+                    "No hay una sede activa. Elige una en la barra superior.",
+                )
+
+            elif not form.cleaned_data["all_offices"]:
+                office = get_active_office(request, branch=branch)
+
+                if office is None:
+                    form.add_error(
+                        "all_offices",
+                        "No hay una oficina activa. Elige una en la barra "
+                        "superior o marca «Consolidado oficinas».",
+                    )
+
+            if not form.errors:
+                report = build_cash_closing(
+                    branch=branch,
+                    date_from=form.cleaned_data["date_from"],
+                    date_to=form.cleaned_data["date_to"],
+                    office=office,
+                    issuer=form.cleaned_data["issuer"],
+                    sequence=form.cleaned_data["sequence"],
+                    user=form.cleaned_data["user"],
+                    report_type=form.cleaned_data["report_type"],
+                    printed_by=request.user.username,
+                )
+                export_format = form.cleaned_data["export_format"]
+                buffer, nombre = cash_closing_exporters.render(report, export_format)
+
+                # `inline`, como en materiales: el PDF se abre en el visor del
+                # navegador y el Excel se descarga igual por su cuenta.
+                return FileResponse(
+                    buffer,
+                    as_attachment=False,
+                    filename=nombre,
+                    content_type=cash_closing_exporters.CONTENT_TYPES[export_format],
+                )
+
+        return self.render_to_response(
+            self.get_context_data(
+                form=form,
+                branch=branch,
+                viewed_formats=VIEWED_FORMATS,
+            )
+        )

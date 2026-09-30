@@ -26,4 +26,12 @@ urlpatterns = [
         views.MaterialReportListView.as_view(),
         name="materials_list",
     ),
+
+    # Cierre de caja: filtros, consolidado y detalle en una sola pantalla.
+    # Excel y PDF salen de la misma dirección con `export`.
+    path(
+        "cierre-caja/",
+        views.CashClosingView.as_view(),
+        name="cash_closing",
+    ),
 ]

@@ -45,6 +45,32 @@ periodos y tres vencimientos, y agrupado por pago no cabía ninguno.
             <h2 class="tc-section-title">
                 <i class="bi bi-clock-history"></i>Pagos
             </h2>
+
+            {% if rows %}
+                {% comment %}
+                Exportar, arriba a la derecha y pegado a la tabla que exporta,
+                como las acciones del tablero de deuda. Lleva todas las filas
+                del historial, no solo la página a la vista, y por eso el menú
+                lo dice. El PDF se abre en otra pestaña; el Excel se descarga.
+                {% endcomment %}
+                <div class="dropdown">
+                    <button class="tc-btn muted dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-download"></i>Exportar
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end tc-menu">
+                        <h6 class="dropdown-header">Exportar todas las filas</h6>
+                        <a class="dropdown-item" href="{% querystring exportar="excel" page=None %}">
+                            <i class="bi bi-file-earmark-excel"></i>Excel (.xlsx)
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item" href="{% querystring exportar="pdf" page=None %}"
+                           target="_blank" rel="noopener">
+                            <i class="bi bi-file-earmark-pdf"></i>PDF
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
         </div>
 
         {% if rows %}

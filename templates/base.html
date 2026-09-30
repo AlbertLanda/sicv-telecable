@@ -432,6 +432,8 @@
             <a class="sicv-topnav-link" href="{% url 'reports:sales' %}"><i class="bi bi-bar-chart"></i> Reportes</a>
             {% elif perms.inventory.view_workordermaterialmovement %}
             <a class="sicv-topnav-link" href="{% url 'reports:materials' %}"><i class="bi bi-bar-chart"></i> Reportes</a>
+            {% elif perms.payments.view_cash_closing %}
+            <a class="sicv-topnav-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-bar-chart"></i> Reportes</a>
             {% else %}
             <span class="sicv-topnav-link opacity-50"><i class="bi bi-bar-chart"></i> Reportes</span>
             {% endif %}

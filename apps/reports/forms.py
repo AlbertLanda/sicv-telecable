@@ -5,7 +5,9 @@ from django.utils import timezone
 from django.db.models import Q
 
 from apps.accounts.models import User
+from apps.payments.models import Issuer, ReceiptSequence
 
+from .cash_closing import DEFAULT_REPORT_TYPE, REPORT_TYPE_CHOICES
 from .materials import DEFAULT_SCOPE, SCOPE_CHOICES
 
 
@@ -131,3 +133,125 @@ class SalesReportForm(forms.Form):
             .order_by("first_name", "last_name", "username")
         )
 
+
+
+# El cierre de caja sale en Excel -el formato con el que trabaja
+# Contabilidad- o en PDF para firmarlo y archivarlo.
+CASH_CLOSING_FORMAT_CHOICES = [
+    ("EXCEL", "Excel"),
+    ("PDF", "PDF"),
+]
+
+DEFAULT_CASH_CLOSING_FORMAT = "EXCEL"
+
+
+class CashClosingForm(forms.Form):
+    """Los campos de Reportes › Cierre de caja, los mismos de SICAV y en su
+    orden.
+
+    «Consolidado oficinas» marcado es la sede entera. Desmarcado, el cierre
+    se limita a la oficina activa de la barra superior.
+    """
+
+    issuer = forms.ModelChoiceField(
+        label="Empresa",
+        queryset=Issuer.objects.all(),
+        required=False,
+        empty_label="Todas",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    date_from = forms.DateField(
+        label="Desde",
+        widget=forms.DateInput(
+            attrs={"type": "date", "class": "form-control"},
+            format="%Y-%m-%d",
+        ),
+    )
+
+    date_to = forms.DateField(
+        label="Hasta",
+        widget=forms.DateInput(
+            attrs={"type": "date", "class": "form-control"},
+            format="%Y-%m-%d",
+        ),
+    )
+
+    report_type = forms.ChoiceField(
+        label="Reporte",
+        choices=REPORT_TYPE_CHOICES,
+        initial=DEFAULT_REPORT_TYPE,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    user = forms.ModelChoiceField(
+        label="Usuario",
+        queryset=User.objects.none(),
+        required=False,
+        empty_label="Todos",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    sequence = forms.ModelChoiceField(
+        label="Serie",
+        queryset=ReceiptSequence.objects.select_related("issuer"),
+        required=False,
+        empty_label="Todas",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    export_format = forms.ChoiceField(
+        label="Formato",
+        choices=CASH_CLOSING_FORMAT_CHOICES,
+        initial=DEFAULT_CASH_CLOSING_FORMAT,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    all_offices = forms.BooleanField(
+        label="Consolidado oficinas",
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    def __init__(self, *args, branch=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Solo quienes registraron cobros en la sede: una lista con todo el
+        # personal obligaría a buscar entre técnicos y NOC que nunca cobran.
+        usuarios = User.objects.filter(payments_received__isnull=False)
+
+        if branch is not None:
+            usuarios = usuarios.filter(payments_received__branch=branch)
+
+        self.fields["user"].queryset = usuarios.distinct().order_by(
+            "first_name", "last_name", "username"
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+
+        desde = cleaned.get("date_from")
+        hasta = cleaned.get("date_to")
+
+        if desde and hasta and desde > hasta:
+            raise forms.ValidationError(
+                "La fecha inicial no puede ser posterior a la final."
+            )
+
+        return cleaned
+
+
+def cash_closing_defaults():
+    """Con qué abre el cierre de caja: el mes en curso hasta hoy, la sede
+    entera. Es el cuadre que Contabilidad pide más a menudo, así que la
+    pantalla ya llega respondiéndolo."""
+    hoy = timezone.localdate()
+
+    return {
+        "date_from": hoy.replace(day=1).isoformat(),
+        "date_to": hoy.isoformat(),
+        "report_type": DEFAULT_REPORT_TYPE,
+        "export_format": DEFAULT_CASH_CLOSING_FORMAT,
+        "all_offices": "on",
+    }

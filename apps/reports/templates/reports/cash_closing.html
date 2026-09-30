@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Cierre de caja - SICV{% endblock %}
+
+{% block extra_css %}
+{% include "_tc_design.html" %}
+<style>
+    /* El mismo trazo que el reporte de materiales: etiquetas a la derecha
+       contra su columna y campos de ancho limitado, para que un selector de
+       dos opciones no mida media pantalla. */
+    .tc-report-form { max-width:620px; }
+    .tc-report-form .tc-form-field { max-width:320px; }
+    .tc-report-form .tc-form-field.narrow { max-width:160px; }
+    .tc-report-form .tc-form-check { display:flex; align-items:center; min-height:38px; }
+    .tc-report-form .tc-form-check .form-check-input { width:18px; height:18px; margin:0; cursor:pointer; }
+    .tc-report-form .tc-form-check .form-check-input:checked { background-color:var(--tc-blue); border-color:var(--tc-blue); }
+</style>
+{% endblock %}
+
+{% comment %}
+Reportes › Cierre de caja: la pantalla que pide el consolidado de emisión.
+
+Mismo diseño que el reporte de materiales, con los campos de SICAV en su
+orden. El consolidado sale en Excel o PDF: el PDF abre pestaña y el Excel se
+descarga sobre la misma pantalla, igual que en materiales.
+{% endcomment %}
+
+{% block content %}
+
+<div class="tc-content">
+
+    <div class="tc-breadcrumb">
+        Reportes &rsaquo; <strong>Cierre de caja</strong>
+    </div>
+
+    <form method="get" action="{% url 'reports:cash_closing' %}" id="reportForm" novalidate>
+
+        <section class="tc-card tc-section tc-full tc-sheet">
+
+            <div class="tc-section-head banner">
+                <h2 class="tc-section-title">
+                    <i class="bi bi-cash-stack"></i>Cierre de caja
+                </h2>
+            </div>
+
+            <div class="tc-section-body">
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="tc-form tc-report-form">
+
+                    <label class="tc-form-label" for="{{ form.issuer.id_for_label }}">Empresa</label>
+                    <div class="tc-form-field">
+                        {{ form.issuer }}
+                        {% for error in form.issuer.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.date_from.id_for_label }}">Desde</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.date_from }}
+                        {% for error in form.date_from.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.date_to.id_for_label }}">Hasta</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.date_to }}
+                        {% for error in form.date_to.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.report_type.id_for_label }}">Reporte</label>
+                    <div class="tc-form-field">
+                        {{ form.report_type }}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.user.id_for_label }}">Usuario</label>
+                    <div class="tc-form-field">
+                        {{ form.user }}
+                        {% for error in form.user.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.sequence.id_for_label }}">Serie</label>
+                    <div class="tc-form-field">
+                        {{ form.sequence }}
+                        {% for error in form.sequence.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.export_format.id_for_label }}">Formato</label>
+                    <div class="tc-form-field narrow">
+                        {{ form.export_format }}
+                        {% for error in form.export_format.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <label class="tc-form-label" for="{{ form.all_offices.id_for_label }}">Consolidado oficinas</label>
+                    <div class="tc-form-field">
+                        <div class="tc-form-check">
+                            {{ form.all_offices }}
+                        </div>
+                        {% for error in form.all_offices.errors %}
+                            <div class="tc-form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="tc-card-footer">
+                <button type="submit" class="tc-btn primary">
+                    <i class="bi bi-download"></i>Exportar
+                </button>
+            </div>
+
+        </section>
+
+    </form>
+
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        "use strict";
+
+        var form = document.getElementById("reportForm");
+        var formato = document.getElementById("{{ form.export_format.id_for_label }}");
+
+        if (!form || !formato) {
+            return;
+        }
+
+        // Qué formatos abren pestaña lo decide el servidor
+        // (`forms.VIEWED_FORMATS`), igual que en el reporte de materiales:
+        // el PDF se pinta en el visor del navegador y taparía el formulario;
+        // el Excel se descarga sobre la misma pantalla.
+        var enPestana = [{% for formato_visto in viewed_formats %}"{{ formato_visto }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+        function ajustar() {
+            form.target =
+                enPestana.indexOf(formato.value) !== -1 ? "_blank" : "_self";
+        }
+
+        formato.addEventListener("change", ajustar);
+        ajustar();
+    })();
+</script>
+{% endblock %}
