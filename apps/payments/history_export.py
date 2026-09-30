@@ -34,6 +34,22 @@ STAMP_FORMAT = "%d/%m/%Y %H:%M"
 
 TITLE = "Historial de pagos"
 
+# Los archivos se abren normalmente en Excel. Referencias, observaciones y
+# nombres vienen de datos operativos y no deben convertirse en fórmulas si
+# empiezan por =, +, -, @ o caracteres de control.
+_EXCEL_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def safe_excel_text(value):
+    """Fuerza una cadena a texto seguro para una celda de Excel."""
+    text = "" if value is None else str(value)
+
+    if text.startswith(_EXCEL_FORMULA_PREFIXES):
+        return "'" + text
+
+    return text
+
+
 # Las columnas de la tabla, en su orden, más referencia y observación.
 COLUMNS = [
     {"key": "date", "label": "Fecha", "width": 11},
@@ -108,8 +124,8 @@ def render_excel(customer, rows, printed_by=""):
         bottom=Side(style="thin", color="D9E4EF"),
     )
 
-    sheet.cell(row=1, column=1, value=_stamp(printed_by)).font = Font(bold=True, size=8)
-    code = sheet.cell(row=1, column=last, value=customer.code)
+    sheet.cell(row=1, column=1, value=safe_excel_text(_stamp(printed_by))).font = Font(bold=True, size=8)
+    code = sheet.cell(row=1, column=last, value=safe_excel_text(customer.code))
     code.font = Font(bold=True, size=11)
     code.alignment = Alignment(horizontal="right")
 
@@ -121,7 +137,7 @@ def render_excel(customer, rows, printed_by=""):
         start=2,
     ):
         sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=last)
-        cell = sheet.cell(row=row, column=1, value=text)
+        cell = sheet.cell(row=row, column=1, value=safe_excel_text(text))
         cell.font = font
         cell.alignment = Alignment(horizontal="center")
 
@@ -141,9 +157,12 @@ def render_excel(customer, rows, printed_by=""):
         for index, column in enumerate(COLUMNS, start=1):
             value = data[column["key"]]
 
-            # El monto como número: es la columna que se suma en la hoja.
+            # El monto se mantiene numérico para poder sumar; cualquier otro
+            # valor se fuerza a texto para que Excel no lo evalúe como fórmula.
             if column["key"] == "amount":
                 value = float(value)
+            else:
+                value = safe_excel_text(value)
 
             cell = sheet.cell(row=offset, column=index, value=value)
             cell.font = Font(size=9)
