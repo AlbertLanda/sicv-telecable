@@ -98,6 +98,18 @@ class HistoryExportTests(HistorialBase):
         self.assertEqual(row["Estado"], "Pagado")
         self.assertTrue(row["Comprobante"])
 
+    def test_excel_forces_formula_like_reference_to_text(self):
+        dangerous = '=HYPERLINK("https://example.invalid","x")'
+        self.pay_october(reference=dangerous)
+
+        sheet = self.sheet(self.export("excel"))
+        headers = [cell.value for cell in sheet[5]]
+        reference_col = headers.index("Referencia") + 1
+        cell = sheet.cell(row=6, column=reference_col)
+
+        self.assertEqual(cell.value, "'" + dangerous)
+        self.assertEqual(cell.data_type, "s")
+
     def test_excel_exports_every_row_not_just_the_page(self):
         for _ in range(20):
             self.advance()
