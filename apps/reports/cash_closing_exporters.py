@@ -38,6 +38,21 @@ STAMP_FORMAT = "%d/%m/%Y %H:%M:%S"
 # hoja de SICAV y como Contabilidad los copia a sus propios cuadros.
 AMOUNT_FORMAT = "#,##0.00"
 
+# Excel interpreta como fórmulas las cadenas que empiezan por ciertos
+# caracteres. Los reportes incluyen datos de usuarios/clientes y referencias
+# externas, así que toda celda textual se fuerza a texto antes de escribirla.
+_EXCEL_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+
+def safe_excel_text(value):
+    """Devuelve texto que Excel no pueda interpretar como fórmula."""
+    text = "" if value is None else str(value)
+
+    if text.startswith(_EXCEL_FORMULA_PREFIXES):
+        return "'" + text
+
+    return text
+
 
 def stamp(report):
     """Quién imprimió y cuándo, como la esquina de la hoja de SICAV."""
@@ -96,10 +111,10 @@ def _consolidated_sheet(sheet, report):
     bold = Font(bold=True, size=10)
     normal = Font(size=10)
 
-    stamp_cell = sheet.cell(row=1, column=1, value=stamp(report))
+    stamp_cell = sheet.cell(row=1, column=1, value=safe_excel_text(stamp(report)))
     stamp_cell.font = Font(bold=True, size=8)
 
-    place = sheet.cell(row=1, column=2, value=report["place_label"])
+    place = sheet.cell(row=1, column=2, value=safe_excel_text(report["place_label"]))
     place.font = Font(bold=True, size=11)
     place.alignment = Alignment(horizontal="right")
 
@@ -112,7 +127,7 @@ def _consolidated_sheet(sheet, report):
 
     for text, font in heading:
         sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-        cell = sheet.cell(row=row, column=1, value=text)
+        cell = sheet.cell(row=row, column=1, value=safe_excel_text(text))
         cell.font = font
         cell.alignment = Alignment(horizontal="center")
         row += 1
@@ -125,7 +140,7 @@ def _consolidated_sheet(sheet, report):
             row += 1
             continue
 
-        label = sheet.cell(row=row, column=1, value=text)
+        label = sheet.cell(row=row, column=1, value=safe_excel_text(text))
         label.font = bold if style in ("section", "total", "balance") else normal
 
         if amount is not None:
@@ -168,7 +183,7 @@ def _detail_sheet(sheet, report):
             if column["key"] == "amount":
                 value = float(detail["amount"])
             else:
-                value = detail_text(detail, column)
+                value = safe_excel_text(detail_text(detail, column))
 
             cell = sheet.cell(row=offset, column=index, value=value)
             cell.font = Font(size=9)
