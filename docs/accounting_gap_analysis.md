@@ -9,10 +9,11 @@ Resumen:
 - SICV ya registra casi todo lo que un cuadre de caja necesita **por pago**:
   sede, oficina, empresa emisora, talonario, método, referencia, usuario,
   cobrador, fecha de emisión, fecha real de pago, pendientes y anulados.
-- Lo que faltaba era **el reporte con el que Contabilidad cuadra**. Esta rama
-  agrega **Reportes › Cierre de caja › Consolidado de emisión**, con la misma
-  hoja que usa hoy el área en SICAV (sección A.1), y la exportación a Excel y
-  PDF del historial de pagos del abonado (sección A.2).
+- Esta rama cubre **uno de los reportes de cierre validados en esta
+  iteración**: **Reportes › Cierre de caja › Consolidado de emisión**, y agrega
+  la exportación a Excel y PDF del historial de pagos del abonado. El sistema
+  legado dispone de más reportes contables/fiscales; su uso y prioridad deben
+  validarse antes de replicarlos.
 - No existe nada de contabilidad administrativa (gastos, depósitos, bancos,
   cierres guardados, libro de ventas) ni emisión fiscal real a SUNAT. SUNAT
   queda fuera de esta iteración.
@@ -32,7 +33,7 @@ El MVP del issue. Solo lee: no toca pagos ni comprobantes.
 | Filtros y vista | `apps/reports/forms.py` (`CashClosingForm`), `apps/reports/views.py` (`CashClosingView`) |
 | Pantalla | `apps/reports/templates/reports/cash_closing.html` |
 | Ruta | `/reportes/cierre-caja/` (el formulario viaja por GET a la misma ruta) |
-| Permiso | `payments.view_cash_closing` (migración `payments/0021`), dado por rol a **Contabilidad** (`User.ACCOUNTING_BASELINE_PERMISSIONS`) |
+| Permiso | `payments.view_cash_closing` (migración `payments/0021`), disponible para **Contabilidad** y **Administrador** mediante la matriz base de roles |
 | Pruebas | `apps/reports/tests/test_cash_closing.py` (50 pruebas) |
 
 **Pantalla.** Mismo diseño que el reporte de materiales, con los campos de
@@ -61,14 +62,14 @@ COMPOSICION         Billetes de 200/100/50/20/10, Monedas, Cheques,
                     Vales Personal, Otros, ... TOTAL
 ```
 
-Las series son las de la hoja de SICAV de cada sede, en su orden, y figuran
-aunque no hayan emitido, en 0 (`SICAV_SERIES` en `apps/reports/cash_closing.py`;
-hoy Jauja y Huancayo). No salen del padrón de talonarios, porque el padrón
-decide qué ofrece cada ventanilla al cobrar. Un talonario que emite y no está
-en la lista se agrega al final de su grupo, para que ningún monto quede fuera.
-Una sede sin lista (La Oroya) usa el padrón de sus oficinas. El Excel tiene una
-segunda pestaña, **Detalle**, con un comprobante por fila y totales por estado.
-El total cancelado del detalle es el mismo número que el Total de Ventas.
+Las series visibles en el consolidado siguen el orden observado en el sistema
+legado y figuran aunque no hayan emitido. El padrón operativo de talonarios se
+mantiene separado para no cambiar qué puede emitir cada ventanilla. Si aparece
+un talonario con movimiento que no estaba en la lista de referencia, se agrega
+al final de su grupo para no omitir montos. Los detalles exactos de series y
+catálogos reales se mantienen fuera de esta documentación pública. El Excel
+tiene una segunda pestaña, **Detalle**, con un comprobante por fila y totales
+por estado. El total cancelado del detalle coincide con el Total de Ventas.
 
 **Reglas acordadas con Contabilidad** (sección D):
 
@@ -79,11 +80,10 @@ El total cancelado del detalle es el mismo número que el Total de Ventas.
    MN, gastos y la composición) salen en **0**.
 4. La hoja es **igual a la de SICAV**: nada que la de SICAV no tenga.
 
-**Diferencias de padrón con SICAV (Jauja, septiembre 2026).** La hoja de SICAV
-trae series que el padrón sembrado en SICV no tiene: facturas INVERSIONES 003,
-boletas INVERSIONES 004 y recibos RED OPTICA, SPEEDY y VELOCIDAD 012. La hoja
-las muestra igual (en 0), pero para cobrar con ellas en SICV hay que darlas de
-alta con su correlativo real.
+**Diferencias de padrón.** Se detectaron diferencias entre el catálogo del
+sistema legado y el catálogo sembrado en SICV. Antes del piloto se debe
+conciliar el padrón real (serie, emisor, correlativo y sede) en documentación
+interna; no se publican aquí identificadores operativos concretos.
 
 ### A.2 Nuevo en esta rama: exportar el historial de pagos
 
@@ -108,7 +108,6 @@ bajo el cierre de caja, pero se retiró a pedido de Contabilidad. De ese
 intento quedó `payments.services.paid_between`, la regla del día de cobro que
 ahora usa la caja del día.
 
-### A.3 Lo que ya existía
 ### A.3 Lo que ya existía
 
 | Necesidad contable | Existe | Parcial | No existe | Archivo/modelo que lo soporta | Observación |
@@ -190,7 +189,8 @@ contable, asientos y estados financieros.
 Los confirmó Kevin Rivera con el área el 2026-09-29. No hubo entrevista con
 Sandra: no interviene en este reporte.
 
-1. El reporte lo usa el **personal de Contabilidad** (rol Contabilidad).
+1. El reporte lo usa el **personal de Contabilidad** y debe poder consultarlo
+   también un usuario **Administrador**.
 2. Se cuadra **por sede**, una a la vez.
 3. Va en **Reportes › Cierre de caja**, como en SICAV.
 4. El formato de trabajo es el **Consolidado de emisión** exportado a Excel.
@@ -201,7 +201,10 @@ Sandra: no interviene en este reporte.
 8. El personal de Contabilidad **usa el Cierre de caja**. El componente de
    recaudación bajo el cierre se probó y se retiró; en su lugar, el historial
    de pagos del abonado se exporta a Excel y PDF.
-9. **SUNAT** queda fuera de esta iteración.
+9. **SUNAT** queda fuera de esta iteración. La revisión administrativa del
+   legado confirma que existen funciones fiscales y archivos electrónicos,
+   pero todavía falta determinar el mecanismo técnico de generación, firma,
+   envío, respuesta y contingencia antes de diseñar la integración.
 
 **Preguntas que siguen abiertas** (de las sugeridas por el issue):
 
@@ -229,8 +232,9 @@ Sandra: no interviene en este reporte.
 - **Cierre guardado:** congelar el cierre de un periodo para que las
   anulaciones posteriores no lo cambien, y sacar de ahí el saldo anterior.
   Incluye el arqueo.
-- **Emisión electrónica:** XML UBL, firma y envío (idealmente contra la API de
-  un OSE), CDR, comunicación de baja y notas de crédito.
+- **Emisión electrónica:** definir primero el flujo real del legado y el
+  mecanismo autorizado para producción; después implementar XML, firma,
+  transmisión, respuesta/constancia, bajas y notas de crédito según ese flujo.
 - **Otros tipos de reporte** del desplegable de SICAV, cuando Contabilidad
   diga cuáles usa.
 - **Reportes Deudores y Cobranza:** deuda por sede, antigüedad y por plan.
@@ -248,17 +252,19 @@ pagar y proveedores, plan contable, asientos y estados financieros.
   que SUNAT vigila. Durante el piloto, cada talonario debería emitirse desde
   un solo sistema.
 - **Periodos que cambian.** El cierre se recalcula en cada consulta. Una
-  anulación posterior cambia un periodo que Contabilidad ya dio por cuadrado,
-  y no queda rastro en el reporte. Mitigación: el cierre guardado (P1).
+  anulación posterior o la confirmación posterior de un pago pendiente puede
+  cambiar un periodo que Contabilidad ya dio por cuadrado. Mitigación:
+  persistir un cierre guardado/auditable antes de producción.
 - **Saldo en caja incompleto.** Sin gastos ni depósitos, el saldo en caja de
   SICV no descuenta nada, y la hoja no lo advierte porque es igual a la de
   SICAV. No sirve todavía para un arqueo físico.
 - **Pagos sin oficina.** Los cobros anteriores al padrón de oficinas no
   tienen oficina: entran en el consolidado de la sede, pero no en el de
   ninguna oficina.
-- **Talonarios y marca.** La línea «Serie MARCA - número» sale de la etiqueta
-  del talonario («S:S010 - VELOCIDAD»). Si alguien reescribe una etiqueta sin
-  el « - MARCA», la línea usa la razón social de la emisora.
+- **Metadatos históricos del talonario.** El reporte todavía consulta parte
+  de la configuración actual del talonario (emisor, tipo y etiqueta). Un
+  cambio posterior de catálogo podría alterar cómo se presenta un periodo
+  antiguo. El cierre guardado o snapshots fiscales deben congelar esos datos.
 
 ## G. Evidencia
 
@@ -271,18 +277,20 @@ python manage.py test apps.reports.tests.test_cash_closing
 python manage.py test                               → suite completa
 ```
 
-Pruebas del cierre (50), de la exportación del historial (8) y del día de
-cobro (3):
+La revisión posterior añade cobertura para acceso de Administrador y para
+evitar que textos que comienzan como fórmulas sean evaluados por Excel. La
+cantidad final de pruebas queda sujeta al CI de la rama de revisión.
 
 - filtros por fecha (extremos incluidos), sede, oficina, razón social, serie
   y usuario;
 - que pendientes y anulados no inflen la recaudación;
 - totales por grupo y por serie, y las series y el orden de la hoja de SICAV;
-- permisos (Contabilidad sí; ATC, Administrador y anónimo no);
+- permisos (Contabilidad y Administrador sí; ATC y anónimo no);
 - aislamiento por sede;
 - exportación: el Excel del cierre (y que su detalle suma el Total de
   Ventas), su PDF, y el historial de pagos en Excel y PDF con todas sus
   filas.
 
-Todos los datos de prueba son sintéticos. El trabajo está en la rama
-`feature/accounting-audit-kevin`.
+Todos los datos de prueba son sintéticos. El trabajo original está en
+`feature/accounting-audit-kevin` y la revisión técnica en
+`fix/accounting-audit-review`.
