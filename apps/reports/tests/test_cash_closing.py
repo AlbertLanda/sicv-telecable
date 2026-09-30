@@ -607,16 +607,16 @@ class PeriodAndScopeTests(CashClosingTestCase):
 
 
 class CashClosingPermissionTests(CashClosingTestCase):
-    def test_accounting_role_brings_the_permission(self):
-        self.assertTrue(self.accountant.has_perm("payments.view_cash_closing"))
-
-    def test_atc_and_admin_do_not(self):
+    def test_accounting_and_admin_roles_bring_the_permission(self):
         admin = User.objects.create_user(
             username="admin_prueba", role=User.Role.ADMIN, branch=self.branch
         )
 
+        self.assertTrue(self.accountant.has_perm("payments.view_cash_closing"))
+        self.assertTrue(admin.has_perm("payments.view_cash_closing"))
+
+    def test_atc_does_not_bring_the_permission(self):
         self.assertFalse(self.cashier.has_perm("payments.view_cash_closing"))
-        self.assertFalse(admin.has_perm("payments.view_cash_closing"))
 
     def test_accounting_still_does_not_see_payments_or_register_them(self):
         """El rol solo trae el cierre. Las pruebas de cobranza cuentan con
@@ -670,6 +670,18 @@ class CashClosingAccessTests(CashClosingWebTestCase):
 
         self.assertEqual(self.page().status_code, 403)
         self.assertEqual(self.page(export_format="EXCEL").status_code, 403)
+
+    def test_admin_can_open_and_export_the_cash_closing(self):
+        admin = User.objects.create_user(
+            username="admin_cierre", role=User.Role.ADMIN, branch=self.branch
+        )
+        self.login(admin)
+
+        self.assertEqual(
+            self.client.get(reverse("reports:cash_closing")).status_code,
+            200,
+        )
+        self.assertEqual(self.page(export_format="EXCEL").status_code, 200)
 
     def test_accounting_sees_the_filters_of_sicav(self):
         self.login(self.accountant)
@@ -848,6 +860,28 @@ class CashClosingScreenTests(CashClosingWebTestCase):
         # Nada que la hoja de SICAV no tenga.
         self.assertNotIn("INFORMATIVO (no suma en caja)", values)
         self.assertNotIn(999.0, values.values())
+
+    def test_excel_forces_formula_like_reference_to_text(self):
+        dangerous = '=HYPERLINK("https://example.invalid","x")'
+        self.emit(
+            "15.00",
+            self.boleta,
+            method=Payment.Method.YAPE,
+            reference=dangerous,
+        )
+
+        book = load_workbook(BytesIO(self.body(self.page(export_format="EXCEL"))))
+        detail = book["Detalle"]
+        headers = [cell.value for cell in detail[1]]
+        reference_col = headers.index("Referencia") + 1
+
+        values = [
+            detail.cell(row=row, column=reference_col)
+            for row in range(2, detail.max_row + 1)
+        ]
+        cell = next(cell for cell in values if cell.value == "'" + dangerous)
+
+        self.assertEqual(cell.data_type, "s")
 
     def test_the_excel_detail_adds_up_to_the_consolidated(self):
         """La pestaña Detalle suma lo mismo que el Total de Ventas."""
