@@ -15,8 +15,9 @@ La evidencia operativa concreta se mantiene fuera del repositorio público.
   el cuadre diario. Movimiento caja e Ingresos por usuario son vistas
   complementarias; no se debe asumir que emisión y cobranza siempre coinciden.
 - **Ingresos por usuario** ya existe en Excel/PDF y fue contrastado contra el
-  legado: `NINGUNO` devuelve todos los usuarios y un usuario seleccionado
-  recorta solo sus ingresos.
+  legado: `NINGUNO` devuelve todos los usuarios, un usuario seleccionado
+  recorta solo sus ingresos y el periodo se filtra por **fecha real de pago**,
+  no por fecha de emisión del comprobante.
 - Falta la parte administrativa del cierre: **gastos, depósitos, composición
   (arqueo) y cierre persistido/inmutable**.
 - El legado participa en la emisión fiscal de comprobantes de clientes, pero el
@@ -110,14 +111,13 @@ Validado contra exportaciones reales del legado:
 - `Pagó hasta` se informa por concepto.
 - El total del pie coincide con la suma de las filas.
 
-**Pendiente funcional:** el código actual recorta el conjunto base por
-`Receipt.issued_at` porque comparte la selección del consolidado. Todavía debe
-validarse qué hace el legado cuando fecha de emisión y fecha de pago son
-distintas. También falta validar `Pagó hasta` ante un pago parcial de un cargo
-periódico.
+La semántica temporal ya quedó validada con exportaciones reales donde
+`Fecha` y `Fecha pago` difieren: la fila aparece en el día de
+`Fecha pago`, no en el día de emisión. La implementación del SICV nuevo fue
+corregida para recortar por `Payment.paid_at`.
 
-Por tanto, el comportamiento actual se conserva hasta obtener evidencia, pero
-no se documenta como regla definitiva de negocio.
+**Pendiente funcional:** validar `Pagó hasta` ante un pago parcial de un cargo
+periódico.
 
 ### A.2 Exportación del historial de pagos
 
@@ -307,7 +307,8 @@ historial de estados/correcciones.
 3. El cuadre se realiza por sede y puede consolidar oficinas.
 4. ATC registra gastos, depósitos y composición de su caja.
 5. Cada cajero realiza su cierre.
-6. `Ingresos por usuario`: sin usuario salen todos; con usuario se filtra.
+6. `Ingresos por usuario`: sin usuario salen todos; con usuario se filtra y
+   Desde/Hasta recorta por fecha real de pago.
 7. Registro de Ventas no es un reporte operativo actual de Contabilidad.
 8. Los tres reportes fiscales legacy relevados no deben replicarse por defecto.
 9. El control auxiliar por entidad legal se basa en recaudación/pagos de
@@ -321,7 +322,6 @@ historial de estados/correcciones.
 ### P0 · antes del piloto financiero
 
 - Cuadrar **Consolidado de emisión** legado vs nuevo con mismos filtros.
-- Cerrar la semántica de fecha en `Ingresos por usuario`.
 - Validar `Pagó hasta` ante pago parcial.
 - Definir propiedad exclusiva de series/talonarios durante convivencia.
 - Mantener generación mensual idempotente y pruebas de reejecución.
@@ -385,5 +385,5 @@ pruebas específicas para:
 Todos los datos automatizados son sintéticos. La rama de continuación es
 `fix/accounting-legacy-validation`.
 
-No se cambia todavía la lógica de fecha de `Ingresos por usuario`: queda
-explícitamente marcada como pendiente de validación funcional.
+La lógica de fecha de `Ingresos por usuario` ya se ajustó a la evidencia del
+legado: el rango filtra por `Payment.paid_at`.
