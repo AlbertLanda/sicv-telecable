@@ -72,7 +72,7 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
             {% endif %}
         {% endif %}
 
-        {% if perms.contracts.view_contract or perms.payments.view_receipt %}
+        {% if perms.contracts.view_contract or perms.payments.view_receipt or perms.fiscal.view_fiscaldocument %}
         <section class="sidebar-section" data-sidebar-section="comercial contratos comprobantes">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarComercial" aria-expanded="true">
                 <i class="bi bi-file-earmark-text"></i><span>Comercial</span><i class="bi bi-chevron-down chev"></i>
@@ -84,6 +84,9 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
                     {% endif %}
                     {% if perms.payments.view_receipt %}
                         <a class="sidebar-link" href="{% url 'payments:receipt_list' %}"><i class="bi bi-receipt"></i>Comprobantes</a>
+                    {% endif %}
+                    {% if perms.fiscal.view_fiscaldocument %}
+                        <a class="sidebar-link" href="{% url 'fiscal:list' %}"><i class="bi bi-file-earmark-check"></i>Preparación de facturación</a>
                     {% endif %}
                 </div>
             </div>

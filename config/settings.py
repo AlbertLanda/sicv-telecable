@@ -199,6 +199,7 @@ INSTALLED_APPS = [
     'apps.contracts',
     'apps.work_orders',
     'apps.payments',
+    'apps.fiscal',
     'apps.technicians',
     'apps.inventory',
     'apps.audit',

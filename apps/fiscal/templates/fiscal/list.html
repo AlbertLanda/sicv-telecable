@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Preparación de facturación - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <h1 class="h4">Preparación de facturación</h1>
+  <div class="alert alert-warning">Borradores para validación de Contabilidad. Emisión real no habilitada.</div>
+  {% if perms.fiscal.add_fiscaldocument %}
+  <section class="tc-card p-3 mb-3">
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <label for="customer-code">Código de abonado</label>
+      <input id="customer-code" class="form-control" style="max-width:260px" name="customer_code" value="{{ customer_code }}" required>
+      <button class="btn btn-primary">Buscar</button>
+    </form>
+    {% if selected_customer %}
+    <p class="mt-3 mb-0">{{ selected_customer }} · <a href="{% url 'fiscal:create' selected_customer.pk %}">Preparar borrador</a></p>
+    {% elif customer_code %}<p class="mt-3 mb-0">No se encontró ese abonado en la sede activa.</p>{% endif %}
+  </section>
+  {% endif %}
+  {% if perms.fiscal.add_fiscalprofile and perms.fiscal.change_fiscalprofile %}
+  <p>Configuración por empresa:
+    {% for issuer in issuers %}<a class="me-3" href="{% url 'fiscal:profile' issuer.pk %}">{{ issuer }}</a>{% empty %}Sin empresas activas.{% endfor %}
+  </p>
+  {% endif %}
+  <section class="tc-card p-3">
+    <div class="table-responsive"><table class="table">
+      <thead><tr><th>Borrador</th><th>Abonado</th><th>Empresa</th><th>Tipo</th><th>Importe de origen</th><th>Estado</th></tr></thead>
+      <tbody>{% for document in documents %}
+      <tr><td><a href="{% url 'fiscal:detail' document.public_id %}">{{ document.public_id }}</a></td>
+        <td>{{ document.snapshot.receiver_candidate.code }} · {{ document.snapshot.receiver_candidate.name }}</td>
+        <td>{{ document.snapshot.issuer.business_name }}</td><td>{{ document.get_document_type_display }}</td>
+        <td>{{ document.currency }} {{ document.source_total }}</td><td>{{ document.get_status_display }}</td></tr>
+      {% empty %}<tr><td colspan="6">Todavía no hay borradores en la sede activa.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}
+    {% if is_paginated %}<span>Página {{ page_obj.number }} de {{ paginator.num_pages }}</span>{% endif %}
+    {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}
+  </section>
+</div>
+{% endblock %}
