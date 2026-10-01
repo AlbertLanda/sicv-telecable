@@ -1,319 +1,389 @@
 # Contabilidad y cobranza: qué tiene SICV y qué falta
 
-Auditoría del issue #20 («Auditoría contable integral + MVP de recaudación
-para Contabilidad»), hecha sobre `feature/accounting-audit-kevin`, que parte
-de `feature/sicav-legacy-import` (`fe23eb5`). Fecha: 2026-09-29.
+Auditoría técnica y funcional de Caja/Contabilidad, actualizada al 2026-10-01.
+La implementación revisada parte de `feature/sicav-legacy-import`, incorpora el
+MVP contable revisado y el reporte `Ingresos por usuario`.
 
-Resumen:
+La evidencia operativa concreta se mantiene fuera del repositorio público.
 
-- SICV ya registra casi todo lo que un cuadre de caja necesita **por pago**:
-  sede, oficina, empresa emisora, talonario, método, referencia, usuario,
-  cobrador, fecha de emisión, fecha real de pago, pendientes y anulados.
-- Esta rama cubre **uno de los reportes de cierre validados en esta
-  iteración**: **Reportes › Cierre de caja › Consolidado de emisión**, y agrega
-  la exportación a Excel y PDF del historial de pagos del abonado. El sistema
-  legado dispone de más reportes contables/fiscales; su uso y prioridad deben
-  validarse antes de replicarlos.
-- No existe nada de contabilidad administrativa (gastos, depósitos, bancos,
-  cierres guardados, libro de ventas) ni emisión fiscal real a SUNAT. SUNAT
-  queda fuera de esta iteración.
+## Resumen
+
+- SICV ya registra casi todo lo necesario **por pago**: sede, oficina, empresa
+  emisora, talonario, método, referencia, usuario, cobrador, fecha de emisión,
+  fecha real de pago, pendientes y anulados.
+- **Consolidado de emisión** es el reporte que Contabilidad usa realmente para
+  el cuadre diario. Movimiento caja e Ingresos por usuario son vistas
+  complementarias; no se debe asumir que emisión y cobranza siempre coinciden.
+- **Ingresos por usuario** ya existe en Excel/PDF y fue contrastado contra el
+  legado: `NINGUNO` devuelve todos los usuarios y un usuario seleccionado
+  recorta solo sus ingresos.
+- Falta la parte administrativa del cierre: **gastos, depósitos, composición
+  (arqueo) y cierre persistido/inmutable**.
+- El legado participa en la emisión fiscal de comprobantes de clientes, pero el
+  mecanismo técnico exacto de XML/firma/transporte/respuesta sigue sin
+  determinarse. El SICV nuevo todavía no debe afirmar integración SUNAT real.
+- Registro de Ventas y varios reportes fiscales legacy existen, pero
+  Contabilidad indicó que no forman parte de su operación actual; no deben
+  replicarse por defecto.
 
 ---
 
 ## A. Lo que SICV ya tiene
 
-### A.1 Nuevo en esta rama: Reportes › Cierre de caja
-
-El MVP del issue. Solo lee: no toca pagos ni comprobantes.
+### A.1 Reportes › Cierre de caja
 
 | Pieza | Dónde |
 |---|---|
 | Construcción del consolidado | `apps/reports/cash_closing.py` |
-| Salidas Excel y PDF | `apps/reports/cash_closing_exporters.py` |
-| Filtros y vista | `apps/reports/forms.py` (`CashClosingForm`), `apps/reports/views.py` (`CashClosingView`) |
+| Salidas Excel/PDF | `apps/reports/cash_closing_exporters.py` |
+| Ingresos por usuario | `apps/reports/user_income.py`, `user_income_exporters.py` |
+| Formulario/vista | `apps/reports/forms.py`, `apps/reports/views.py` |
 | Pantalla | `apps/reports/templates/reports/cash_closing.html` |
-| Ruta | `/reportes/cierre-caja/` (el formulario viaja por GET a la misma ruta) |
-| Permiso | `payments.view_cash_closing` (migración `payments/0021`), disponible para **Contabilidad** y **Administrador** mediante la matriz base de roles |
-| Pruebas | `apps/reports/tests/test_cash_closing.py` y `test_user_income.py` |
+| Ruta | `/reportes/cierre-caja/` |
+| Permiso | `payments.view_cash_closing` |
+| Pruebas | `apps/reports/tests/test_cash_closing.py`, `test_user_income.py` |
 
-**Pantalla.** Mismo diseño que el reporte de materiales, con los campos de
-SICAV en su orden: Empresa, Desde, Hasta, Reporte (Consolidado de emisión
-o Ingresos por usuario), Usuario, Serie, Formato (Excel o PDF) y Consolidado
-oficinas. El botón
-**Exportar** saca el consolidado en el formato elegido.
+La pantalla conserva los filtros principales del legado: Empresa, Desde,
+Hasta, Reporte, Usuario, Serie, Formato y Consolidado oficinas.
 
-El formulario abre con el mes en curso. La sede es siempre la activa. Sin
-«Consolidado oficinas», el cierre se limita a la oficina activa de la barra
-superior. «Empresa» abre en **Todas**: sin elegir una, el cierre suma todas
-las empresas de la sede.
+- La sede es la activa.
+- Sin «Consolidado oficinas», se limita a la oficina activa.
+- Empresa vacía significa todas las empresas de la sede.
+- Usuario solo se habilita en «Ingresos por usuario»; en el consolidado no debe
+  recortar resultados.
 
-**Usuario** está bloqueado salvo en «Ingresos por usuario». En el consolidado
-no recorta nada, aunque llegue en la dirección.
+#### Consolidado de emisión
 
-**Ingresos por usuario** (`apps/reports/user_income.py` y
-`user_income_exporters.py`) es el «Reporte de ingresos» de SICAV, en Excel o
-PDF apaisado:
+Es la **referencia operativa del cuadre diario de Contabilidad**.
 
-- Título «Reporte de ingresos: desde - hasta Usuarios» (o el usuario elegido),
-  la hora en la esquina y la sede a la derecha.
-- Una fila por concepto cobrado, no por comprobante: Código, Fecha, Abonado,
-  Dirección, Fecha pago, Detalle, Pagó hasta, Monto, Documento y Usuario. Lo
-  que un pago no aplicó a ningún cargo sale como «Saldo a favor».
-- El **total** al pie, bajo Monto.
-- Sin usuario salen todos, como con el «NINGUNO» de SICAV.
-- Mismas reglas que el consolidado (solo cancelados, recorte por emisión), así
-  que con los mismos filtros su total es el Total de Ventas.
-
-POR VALIDAR contra SICAV: si recorta por emisión o por fecha de pago, qué
-pone en «Pagó hasta» cuando el concepto no cubre un periodo (SICV lo deja en
-blanco), y si «Usuario» es quien registra o el cobrador.
-
-**La hoja** es la de SICAV fila por fila, con sus mismos textos:
+La estructura observada incluye:
 
 ```
-usuario dd/mm/aaaa hh:mm:ss                                   <Sede>
-                 CONTROL ADMINISTRATIVO EMISIÓN
-                 Desde dd/mm/aaaa Hasta dd/mm/aaaa
-SALDO ANTERIOR      Total
-INGRESOS            Total de Ventas
-                      . Facturas / . Boletas / . Recibos de servicios públicos
-                        .. Serie <MARCA> - <número>   (una línea por talonario)
-                    Garantias, Otros, ... TOTAL
-EGRESOS             (-)Garantias, (-)Deposito MN, (-)Gastos RECIBO, ... TOTAL
+CONTROL ADMINISTRATIVO EMISIÓN
+SALDO ANTERIOR
+INGRESOS
+  Facturas
+  Boletas
+  Recibos de servicios públicos
+  Garantías / Otros
+EGRESOS
+  Depósitos
+  Gastos
 SALDO EN CAJA
-COMPOSICION         Billetes de 200/100/50/20/10, Monedas, Cheques,
-                    Vales Personal, Otros, ... TOTAL
+COMPOSICIÓN
 ```
 
-Las series visibles en el consolidado siguen el orden observado en el sistema
-legado y figuran aunque no hayan emitido. El padrón operativo de talonarios se
-mantiene separado para no cambiar qué puede emitir cada ventanilla. Si aparece
-un talonario con movimiento que no estaba en la lista de referencia, se agrega
-al final de su grupo para no omitir montos. Los detalles exactos de series y
-catálogos reales se mantienen fuera de esta documentación pública. El Excel
-tiene una segunda pestaña, **Detalle**, con un comprobante por fila y totales
-por estado. El total cancelado del detalle coincide con el Total de Ventas.
+El SICV nuevo reproduce actualmente el bloque documental principal y las
+salidas Excel/PDF, pero los movimientos que aún no existen en el dominio
+(gastos, depósitos, composición y saldo de apertura persistido) no pueden
+cuadrarse de forma completa.
 
-**Reglas acordadas con Contabilidad** (sección D):
+**No imponer** `Movimiento caja == Consolidado de emisión`: el primero refleja
+movimiento de dinero/cobranza y el segundo agrupa emisión documental por tipo y
+serie. Una diferencia entre ambos puede ser válida y debe poder explicarse.
 
-1. Solo suman los comprobantes de pagos **cancelados**. Pendientes y anulados
-   quedan en la pestaña Detalle, con su estado.
-2. El periodo se recorta por la **fecha de emisión** del comprobante.
-3. Las filas que SICV no registra (saldo anterior, garantías, otros, depósito
-   MN, gastos y la composición) salen en **0**.
-4. La hoja es **igual a la de SICAV**: nada que la de SICAV no tenga.
+#### Ingresos por usuario
 
-**Diferencias de padrón.** Se detectaron diferencias entre el catálogo del
-sistema legado y el catálogo sembrado en SICV. Antes del piloto se debe
-conciliar el padrón real (serie, emisor, correlativo y sede) en documentación
-interna; no se publican aquí identificadores operativos concretos.
+El reporte produce una fila por concepto/cargo cubierto, no por comprobante.
+Un mismo comprobante puede ocupar varias filas.
 
-### A.2 Nuevo en esta rama: exportar el historial de pagos
+Columnas:
 
-En la ficha del abonado, pestaña **Historial de pagos**, la tarjeta «Pagos»
-tiene un botón **Exportar** con dos opciones: **Excel (.xlsx)** y **PDF**.
+```
+Código
+Fecha
+Abonado
+Dirección
+Fecha pago
+Detalle
+Pagó hasta
+Monto
+Documento
+Usuario
+```
+
+Validado contra exportaciones reales del legado:
+
+- `NINGUNO` = todos los usuarios.
+- Con un usuario elegido solo aparecen sus registros.
+- Las líneas del mismo comprobante permanecen juntas.
+- `Pagó hasta` se informa por concepto.
+- El total del pie coincide con la suma de las filas.
+
+**Pendiente funcional:** el código actual recorta el conjunto base por
+`Receipt.issued_at` porque comparte la selección del consolidado. Todavía debe
+validarse qué hace el legado cuando fecha de emisión y fecha de pago son
+distintas. También falta validar `Pagó hasta` ante un pago parcial de un cargo
+periódico.
+
+Por tanto, el comportamiento actual se conserva hasta obtener evidencia, pero
+no se documenta como regla definitiva de negocio.
+
+### A.2 Exportación del historial de pagos
+
+En la ficha del abonado, Historial de pagos permite exportar Excel/PDF.
 
 | Pieza | Dónde |
 |---|---|
-| Excel y PDF | `apps/payments/history_export.py` |
-| Vista | `CustomerPaymentHistoryView.get` (`?exportar=excel` / `pdf`) |
-| Botón | `payments/customer_payment_history.html` |
-| Pruebas | `apps/payments/tests/test_history_export.py` (8 pruebas) |
+| Excel/PDF | `apps/payments/history_export.py` |
+| Vista | `CustomerPaymentHistoryView.get` |
+| Pruebas | `apps/payments/tests/test_history_export.py` |
 
-- Exporta **todas las filas** del historial, no solo la página a la vista.
-- Lleva las columnas de la tabla en su orden. El número de operación y la
-  observación (o el motivo de la anulación), que en pantalla aparecen al
-  pasar el cursor, van en columnas propias.
-- Usa el mismo permiso que el historial: quien lo ve puede exportarlo.
+- Exporta todas las filas del historial, no solo la página visible.
+- Incluye operación/referencia y observación o motivo de anulación.
+- Usa el mismo permiso que la consulta del historial.
+- Los textos destinados a Excel se protegen contra formula injection.
 
-También se probó un componente «Recaudación» con resumen, tablas y detalle
-bajo el cierre de caja, pero se retiró a pedido de Contabilidad. De ese
-intento quedó `payments.services.paid_between`, la regla del día de cobro que
-ahora usa la caja del día.
+### A.3 Capacidades existentes
 
-### A.3 Lo que ya existía
+| Necesidad | Estado | Soporte / observación |
+|---|---|---|
+| Total por día/rango | Existe | `DailyCashView`, `reports.cash_closing` |
+| Sede | Existe | `Payment.branch` |
+| Oficina/caja | Existe | `Payment.office` |
+| Empresa emisora | Existe | `Issuer`, `ReceiptSequence.issuer` |
+| Serie/talonario | Existe | `ReceiptSequence`, `Receipt` |
+| Usuario que registra | Existe | `Payment.received_by`, Ingresos por usuario |
+| Cobrador | Parcial | `Payment.collector`, sin reporte específico |
+| Medio de pago | Existe/Parcial | `Payment.method`; disponible en detalle |
+| Pendientes | Existe | `Payment.Status.PENDING` |
+| Anulados | Parcial | Se audita el pago, pero un cambio posterior altera reportes históricos recalculados |
+| Fecha emisión vs pago | Existe | `Receipt.issued_at`, `Payment.paid_at` |
+| Deuda por abonado | Existe | cargos y deuda de cliente |
+| Pagos parciales | Existe | `PaymentAllocation`, cargos parciales |
+| Compromisos | Existe | modelos de compromisos/cuotas |
+| Saldo a favor | Parcial | `Payment.unallocated_amount`; sin tablero propio |
+| PDF de comprobante | Existe | representación impresa |
+| Cierre guardado | Falta | hoy se recalcula en cada consulta |
+| Gastos | Falta | no hay entidad operativa equivalente |
+| Depósitos | Falta | no hay entidad operativa equivalente |
+| Composición/arqueo | Falta | no hay snapshot de efectivo declarado |
+| Banco/conciliación | Falta | sin módulo contable/bancario |
+| Proveedores/CxP | Fuera del alcance actual | el flujo legado relevado es de clientes |
+| Libro de ventas | Falta / no prioritario | el área indicó que no usa actualmente el reporte legacy |
+| Emisión fiscal real | Falta | no hay XML firmado/transmisión/CDR demostrados |
+| Notas de crédito | Falta | requiere validar el flujo real |
+| Plan contable/asientos/EEFF | Fuera del alcance | no construir sin requerimiento |
 
-| Necesidad contable | Existe | Parcial | No existe | Archivo/modelo que lo soporta | Observación |
-|---|:-:|:-:|:-:|---|---|
-| **Recaudación / caja** | | | | | |
-| Total por día | ✓ | | | `payments.views.DailyCashView`; `reports.cash_closing` | La caja del día muestra un día. El cierre admite cualquier rango. |
-| Por sede | ✓ | | | `Payment.branch` | Los dos reportes usan la sede activa. |
-| Por oficina/caja | ✓ | | | `Payment.office`, `organization.Office` | La oficina es opcional en pagos antiguos, anteriores al padrón de oficinas. |
-| Por razón social/RUC | ✓ | | | `Issuer`, `ReceiptSequence.issuer` | La caja del día agrupa por emisora y el cierre filtra por emisora. |
-| Por medio de pago | | ✓ | | `Payment.method` | La caja del día agrupa por método. El cierre no lo desglosa, porque la hoja de SICAV tampoco; el detalle del Excel trae el método. |
-| Por usuario que registra | ✓ | | | `Payment.received_by` | Reporte «Ingresos por usuario» del cierre. |
-| Por cobrador | | ✓ | | `Payment.collector` | Solo aparece en el detalle del Excel del cierre; no hay filtro ni subtotal. |
-| Pagos pendientes | ✓ | | | `Payment.Status.PENDING`, `Payment.confirm()` | No bajan deuda ni suman en caja. |
-| Pagos anulados | | ✓ | | `Payment.Status.VOIDED`, `voided_at/by`, `void_reason` | Anular un pago después cambia un periodo ya consultado (ver riesgos). |
-| Referencia Yape/Plin/transferencia | ✓ | | | `Payment.reference`, `METHODS_REQUIRING_REFERENCE` | |
-| Correlativos/talonarios | ✓ | | | `ReceiptSequence` (`select_for_update`), `OfficeSequence`, `Receipt` único por talonario y número | |
-| Fecha de emisión vs. fecha real de pago | ✓ | | | `Receipt.issued_at`, `Payment.paid_at` | El detalle del cierre muestra las dos. |
-| Cierre de caja guardado / arqueo | | | ✓ | — | El cierre se recalcula en cada consulta; no se guarda. |
-| **Cuentas por cobrar** | | | | | |
-| Deuda total del abonado | ✓ | | | `services.customer_debt`, `CustomerDebtView` | Por abonado, no por sede. |
-| Vencida / no vencida | | ✓ | | `Charge.overdue()`, `Charge.is_overdue()` | Solo en la ficha del abonado. |
-| Antigüedad (0–30, 31–60, 61–90, 90+) | | | ✓ | — | |
-| Deuda por sede | | | ✓ | — | No hay reporte («Deudores» y «Cobranza» siguen pendientes). |
-| Deuda por servicio/plan | | | ✓ | — | |
-| Cargos parciales | ✓ | | | `Charge.Status.PARTIALLY_PAID`, `PaymentAllocation` | |
-| Compromisos de pago | ✓ | | | `PaymentCommitment`, `PaymentCommitmentInstallment`, `PaymentCommitmentListView` | |
-| Saldo a favor | | ✓ | | `Payment.unallocated_amount` | Se calcula por pago; no hay reporte. |
-| **Comprobantes / fiscal** | | | | | |
-| Boleta, factura, recibo de servicio | ✓ | | | `ReceiptSequence.SunatCode` (03, 01, 14) | Es la representación impresa, no una emisión fiscal. |
-| Serie y número | ✓ | | | `Receipt.series`, `Receipt.number` | |
-| Empresa emisora | ✓ | | | `Issuer` | |
-| Base gravada e IGV | | ✓ | | `payments/invoicing.py` (`receipt_totals`) | Se calcula para imprimir; no se guarda ni se reporta. |
-| Anulaciones | | ✓ | | `Payment.void()` | Es una anulación interna; no hay comunicación de baja a SUNAT. |
-| PDF / representación impresa | ✓ | | | `payments/pdf.py`, `ReceiptPdfView` | |
-| XML, envío a SUNAT, CDR | | | ✓ | — | `pdf.py` aclara que no hay XML firmado. |
-| Notas de crédito/débito | | | ✓ | — | Figuran como pendientes en el menú Caja. |
-| Detracción | | | ✓ | — | `docs/payments_module.md` la deja para cuando exista la factura electrónica. |
-| **Contabilidad administrativa** | | | | | |
-| Ingresos distintos a cobros de abonados | | | ✓ | — | La fila «Otros» del cierre sale en 0. |
-| Egresos, gastos, caja chica | | | ✓ | — | «Gastos» figura como pendiente en el menú Caja. |
-| Depósitos al banco / movimientos entre cajas | | | ✓ | — | «Depósitos» figura como pendiente en el menú Caja. |
-| Bancos y conciliación bancaria | | | ✓ | — | Ojo: `TransferReconciliation*` es de traslados de servicio, no bancaria. |
-| Cuentas por pagar, proveedores | | | ✓ | — | |
-| Libro de ventas / PLE | | | ✓ | — | |
-| Exportación para Contabilidad | | ✓ | | `reports.cash_closing_exporters`, `payments.history_export` | El cierre (Excel y PDF) y el historial de pagos del abonado (Excel y PDF). Falta el libro de ventas. |
-| Plan contable, asientos, estados financieros | | | ✓ | — | El issue pide no construirlos sin validar el flujo. |
+---
 
-## B. Lo que está parcial
+## B. Hallazgos operativos que cambian el diseño
 
-- **Método de pago y cobrador:** la hoja del cierre no los desglosa, porque
-  la de SICAV tampoco; están en la pestaña Detalle del Excel.
-- **Anulaciones:** el pago anulado conserva su comprobante y su motivo, pero
-  anularlo en octubre cambia el cierre de septiembre la próxima vez que se
-  consulte.
-- **Cuentas por cobrar:** hay deuda, vencimientos y saldo a favor por
-  abonado, pero ningún reporte de sede (antigüedad, por plan, deudores).
-- **IGV:** se calcula para el papel, pero no queda guardado ni se reporta.
+### B.1 Gastos, depósitos y composición pertenecen al cierre de ATC
 
-## C. Lo que no existe
+ATC registra los movimientos de su caja y cada cajero realiza su cierre. Por
+tanto, no basta un reporte global de fechas: el modelo futuro debe poder
+identificar, como mínimo:
 
-En lo fiscal hay que distinguir tres niveles:
+- sede y oficina;
+- cajero/responsable;
+- apertura o saldo base;
+- cobros;
+- gastos;
+- depósitos;
+- composición declarada;
+- saldo esperado y diferencia;
+- estado de cierre;
+- usuario/fecha de cierre.
 
-1. **Representación impresa y cálculo:** existe. El papel dice boleta,
-   factura o recibo, con serie, número, emisora, base, IGV y QR
-   (`payments/pdf.py`, `payments/invoicing.py`).
-2. **Emisión fiscal real** (XML UBL firmado): no existe.
-3. **Envío y estado en SUNAT** (OSE, CDR, aceptado o rechazado, baja): no
-   existe.
+El cierre final debe ser persistido y auditable. Un pago anulado después no
+debe reescribir silenciosamente un cierre ya aprobado.
 
-Además no existen:
+### B.2 Condonación = ajuste comercial, no anulación fiscal
 
-Emisión fiscal real (XML, firma, envío a SUNAT, CDR, baja), notas de crédito y
-débito, gastos, depósitos, garantías, caja chica, cierres guardados y arqueo,
-bancos y conciliación bancaria, cuentas por pagar, libro de ventas, plan
-contable, asientos y estados financieros.
+El legado usa condonaciones para más de un caso:
+
+- neutralizar mensualidades duplicadas por error del generador;
+- corregir diferencias de una mensualidad/cobro.
+
+El SICV nuevo ya debe impedir duplicación por diseño/idempotencia, pero además
+necesita una operación explícita de ajuste:
+
+```
+ChargeAdjustment
+- cargo
+- tipo/motivo
+- monto
+- usuario
+- fecha
+- referencia
+```
+
+No borrar el cargo original.
+
+### B.3 Control por entidad legal
+
+Contabilidad mantiene un control auxiliar de **recaudación/pagos de clientes
+por entidad legal**, hoy revisado aproximadamente cada quince días.
+
+El SICV debería ofrecer un tablero diario con acumulados por:
+
+- entidad legal;
+- sede/oficina;
+- serie;
+- periodo;
+- medio de pago cuando aporte valor.
+
+Los umbrales deben ser configurables/administrativos y el sistema debe
+**informar**, no cambiar automáticamente de entidad legal al alcanzar un
+umbral.
+
+La dotación de personal por entidad legal pertenece al dominio RR. HH.; puede
+mostrarse en un tablero gerencial, pero no debe formar parte de la lógica de
+caja.
+
+### B.4 Unidades operativas legacy
+
+El selector legado mezcla conceptos distintos.
+
+**APP Perú**
+
+- unidad comercial lógica para IPTV/app;
+- la plataforma técnica de aprovisionamiento es externa al SICV;
+- Plan, disponibilidad por unidad y Tarifa son conceptos separados;
+- el corte/activación técnica es manual en la plataforma externa;
+- el flujo observado usa recibo interno y no tiene integración fiscal completa.
+
+**Eco Net**
+
+- operación ISP territorial con oficina/local propio;
+- usa Internet FTTH, suscripciones, deuda, facturas, pagos y OTs;
+- se observaron tarifas históricas por fecha;
+- un plan real tenía tarifa/suscripciones pero no relación `Plan x Sucursal`,
+  evidencia de inconsistencia tolerada por el legado;
+- una OT existía enlazada desde la suscripción aunque el listado general no la
+  mostraba.
+
+Implicación arquitectónica: separar **unidad/marca**, **sede**, **oficina**,
+**plan**, **disponibilidad**, **tarifa**, **suscripción** y **aprovisionamiento**.
+
+---
+
+## C. Fiscal: qué sabemos y qué no
+
+### Confirmado funcionalmente
+
+- El legado emite comprobantes de clientes.
+- Contabilidad revisa posteriormente si esos comprobantes llegaron/figuran
+  correctamente en una herramienta externa de SUNAT.
+- Hay casos que requieren revisión por error humano o del sistema.
+- El legado conserva PDF/XML para parte de sus comprobantes.
+- Los reportes legacy `Resumen comprobantes SUNAT`,
+  `Archivos Facturador SUNAT` y `Emisión de comprobantes electrónicos` no
+  forman parte actualmente del flujo cotidiano del área.
+
+### No confirmado técnicamente
+
+No se sabe todavía si el legado usa:
+
+- envío directo;
+- Facturador SUNAT;
+- PSE/OSE;
+- otro servicio intermedio.
+
+Tampoco están documentados todavía:
+
+- formato XML exacto;
+- firma;
+- CDR/respuesta;
+- reintentos;
+- baja;
+- contingencia;
+- relación exacta de notas de crédito.
+
+Por ello el SICV nuevo no debe codificar una integración fiscal suponiendo el
+mecanismo.
+
+Una acción legacy llamada «eliminar/anular» tampoco prueba que el documento
+desaparezca fiscalmente. El modelo nuevo debe conservar el documento y su
+historial de estados/correcciones.
+
+---
 
 ## D. Requerimientos confirmados
 
-Los confirmó Kevin Rivera con el área el 2026-09-29. No hubo entrevista con
-Sandra: no interviene en este reporte.
+1. **Consolidado de emisión** es la fuente principal del cuadre diario.
+2. Contabilidad y Administrador deben poder consultarlo.
+3. El cuadre se realiza por sede y puede consolidar oficinas.
+4. ATC registra gastos, depósitos y composición de su caja.
+5. Cada cajero realiza su cierre.
+6. `Ingresos por usuario`: sin usuario salen todos; con usuario se filtra.
+7. Registro de Ventas no es un reporte operativo actual de Contabilidad.
+8. Los tres reportes fiscales legacy relevados no deben replicarse por defecto.
+9. El control auxiliar por entidad legal se basa en recaudación/pagos de
+   clientes y conviene ofrecerlo diariamente.
+10. SUNAT sigue fuera de esta iteración hasta validar el mecanismo técnico real.
 
-1. El reporte lo usa el **personal de Contabilidad** y debe poder consultarlo
-   también un usuario **Administrador**.
-2. Se cuadra **por sede**, una a la vez.
-3. Va en **Reportes › Cierre de caja**, como en SICAV.
-4. El formato de trabajo es el **Consolidado de emisión** exportado a Excel.
-5. Suman **solo los cancelados**; pendientes y anulados quedan en la
-   pestaña Detalle del Excel.
-6. Las filas que SICV no registra salen **en 0**.
-7. El periodo del cierre se recorta por **emisión del comprobante**.
-8. El personal de Contabilidad **usa el Cierre de caja**. El componente de
-   recaudación bajo el cierre se probó y se retiró; en su lugar, el historial
-   de pagos del abonado se exporta a Excel y PDF.
-9. **SUNAT** queda fuera de esta iteración. La revisión administrativa del
-   legado confirma que existen funciones fiscales y archivos electrónicos,
-   pero todavía falta determinar el mecanismo técnico de generación, firma,
-   envío, respuesta y contingencia antes de diseñar la integración.
-
-**Preguntas que siguen abiertas** (de las sugeridas por el issue):
-
-- ¿Qué reportes se entregan a gerencia?
-- ¿Qué datos necesitan para SUNAT?
-- ¿Cómo manejan Yape, Plin y transferencias (quién los confirma y cuándo)?
-- ¿Qué es indispensable antes de usar SICV en paralelo con SICAV?
+---
 
 ## E. Backlog propuesto
 
-### P0 · antes del piloto
+### P0 · antes del piloto financiero
 
-- **Cuadre en paralelo:** sacar el mismo periodo y la misma sede en SICAV y en
-  SICV y comparar el Total de Ventas talonario por talonario.
-- **Asignar el rol Contabilidad** a las cuentas del área y aplicar la
-  migración `payments/0021` en cada entorno.
-- **Decidir quién emite ante SUNAT durante el piloto.** SICAV declara hoy los
-  comprobantes y los talonarios de SICV continúan esas mismas series (ver
-  riesgos).
+- Cuadrar **Consolidado de emisión** legado vs nuevo con mismos filtros.
+- Cerrar la semántica de fecha en `Ingresos por usuario`.
+- Validar `Pagó hasta` ante pago parcial.
+- Definir propiedad exclusiva de series/talonarios durante convivencia.
+- Mantener generación mensual idempotente y pruebas de reejecución.
+- Diseñar estados fiscales internos sin implementar aún el transporte SUNAT.
 
 ### P1 · antes de producción
 
-- **Egresos de caja:** gastos con recibo, depósitos en moneda nacional y
-  garantías. Sin ellos el SALDO EN CAJA de SICV será mayor que el de SICAV.
-- **Cierre guardado:** congelar el cierre de un periodo para que las
-  anulaciones posteriores no lo cambien, y sacar de ahí el saldo anterior.
-  Incluye el arqueo.
-- **Emisión electrónica:** definir primero el flujo real del legado y el
-  mecanismo autorizado para producción; después implementar XML, firma,
-  transmisión, respuesta/constancia, bajas y notas de crédito según ese flujo.
-- **Otros tipos de reporte** del desplegable de SICAV, cuando Contabilidad
-  diga cuáles usa.
-- **Reportes Deudores y Cobranza:** deuda por sede, antigüedad y por plan.
+- Gastos.
+- Depósitos.
+- Composición/arqueo.
+- Cierre persistido/inmutable.
+- Movimiento de caja como ledger.
+- Ajustes/condonaciones de cargos con auditoría.
+- Dashboard diario por entidad legal.
+- Notas de crédito y flujo fiscal real una vez validado.
+- Matriz definitiva de permisos.
 
-### P2 · posterior
+### P2/P3 · solo por necesidad confirmada
 
-Libro de ventas y exportación PLE, bancos y conciliación bancaria, cuentas por
-pagar y proveedores, plan contable, asientos y estados financieros.
+- Consolidado de ingresos separado.
+- Resumen de caja legacy.
+- Registro de ventas legacy.
+- Reportes legacy de archivos/resumen SUNAT.
+- Contabilidad ERP (proveedores, libro mayor, asientos, EEFF).
+
+---
 
 ## F. Riesgos
 
-- **SUNAT y correlativos compartidos.** SICAV declara comprobantes a SUNAT y
-  SICV continúa las mismas series reales. Si los dos sistemas emiten a la vez
-  sobre el mismo talonario, se repiten números o quedan huecos en una serie
-  que SUNAT vigila. Durante el piloto, cada talonario debería emitirse desde
-  un solo sistema.
-- **Periodos que cambian.** El cierre se recalcula en cada consulta. Una
-  anulación posterior o la confirmación posterior de un pago pendiente puede
-  cambiar un periodo que Contabilidad ya dio por cuadrado. Mitigación:
-  persistir un cierre guardado/auditable antes de producción.
-- **Saldo en caja incompleto.** Sin gastos ni depósitos, el saldo en caja de
-  SICV no descuenta nada, y la hoja no lo advierte porque es igual a la de
-  SICAV. No sirve todavía para un arqueo físico.
-- **Pagos sin oficina.** Los cobros anteriores al padrón de oficinas no
-  tienen oficina: entran en el consolidado de la sede, pero no en el de
-  ninguna oficina.
-- **Metadatos históricos del talonario.** El reporte todavía consulta parte
-  de la configuración actual del talonario (emisor, tipo y etiqueta). Un
-  cambio posterior de catálogo podría alterar cómo se presenta un periodo
-  antiguo. El cierre guardado o snapshots fiscales deben congelar esos datos.
+- **Correlativos compartidos.** Durante el piloto un mismo talonario no puede
+  emitirse simultáneamente desde legado y nuevo.
+- **Periodos mutables.** El cierre actual se recalcula; una anulación posterior
+  puede cambiar un periodo ya cuadrado.
+- **Saldo incompleto.** Sin gastos/depósitos/composición, el saldo del SICV
+  nuevo no constituye un arqueo real.
+- **Metadatos históricos mutables.** El reporte consulta datos actuales de
+  talonarios/emisores; un snapshot/cierre debe congelarlos.
+- **Datos legacy inconsistentes.** Se observaron relaciones y fechas que no
+  siempre son coherentes entre pantallas. La migración debe preservar
+  `raw_payload`, normalizar solo reglas demostradas (por ejemplo sentinels) y
+  marcar casos dudosos para revisión.
+- **`01/01/1900`.** Se usa como ausencia de fecha en varios contextos; se
+  normaliza a `NULL` cuando esa semántica esté demostrada, conservando el raw.
 
-## G. Evidencia
+---
 
-Comandos ejecutados en la rama:
+## G. Evidencia y estado técnico
 
-```
-python manage.py check                              → sin problemas
-python manage.py makemigrations --check --dry-run   → sin cambios pendientes
-python manage.py test apps.reports.tests.test_cash_closing
-python manage.py test                               → suite completa
-```
+La rama de entrega `feature/reporte-ingresos-usuario` quedó con CI verde y
+pruebas específicas para:
 
-La revisión posterior añade cobertura para acceso de Administrador y para
-evitar que textos que comienzan como fórmulas sean evaluados por Excel. La
-cantidad final de pruebas queda sujeta al CI de la rama de revisión.
-
-- filtros por fecha (extremos incluidos), sede, oficina, razón social, serie
-  y usuario;
-- que pendientes y anulados no inflen la recaudación;
-- totales por grupo y por serie, y las series y el orden de la hoja de SICAV;
-- permisos (Contabilidad y Administrador sí; ATC y anónimo no);
+- filtros por sede, oficina, empresa, serie y usuario;
+- pendientes/anulados fuera de recaudación;
+- totales por grupo/serie;
+- permisos;
 - aislamiento por sede;
-- exportación: el Excel del cierre (y que su detalle suma el Total de
-  Ventas), su PDF, y el historial de pagos en Excel y PDF con todas sus
-  filas.
+- Excel/PDF;
+- `NINGUNO` = todos los usuarios;
+- protección contra formula injection.
 
-Todos los datos de prueba son sintéticos. El trabajo original está en
-`feature/accounting-audit-kevin` y la revisión técnica en
-`fix/accounting-audit-review`.
+Todos los datos automatizados son sintéticos. La rama de continuación es
+`fix/accounting-legacy-validation`.
+
+No se cambia todavía la lógica de fecha de `Ingresos por usuario`: queda
+explícitamente marcada como pendiente de validación funcional.
