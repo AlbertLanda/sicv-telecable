@@ -13,6 +13,8 @@ tenían que entrar juntas:
 """
 
 import re
+import uuid
+
 from datetime import timedelta
 from decimal import Decimal
 
@@ -211,6 +213,8 @@ class LugarDeCobroTests(PaymentsTestCase):
 
     def datos(self, **extra):
         datos = {
+            "expected_total": "50.00",
+            "request_key": str(uuid.uuid4()),
             "amount": "50.00",
             "method": Payment.Method.CASH,
             "settled": "1",
@@ -384,6 +388,8 @@ class FormularioDeCobroTests(PaymentsTestCase):
                 "settled": "1",
                 "series": "B001",
                 "number": "003031",
+                "request_key": str(uuid.uuid4()),
+                "expected_total": "50.00",
             }
         )
 
@@ -409,6 +415,8 @@ class FormularioDeCobroTests(PaymentsTestCase):
         self.client.post(
             reverse("payments:register", args=[self.customer.pk]),
             {
+                "expected_total": "50.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "50.00",
                 "method": Payment.Method.CASH,
                 "settled": "1",
@@ -742,6 +750,8 @@ class PadronDeTalonariosPorOficinaTests(PaymentsTestCase):
         response = self.client.post(
             reverse("payments:register", args=[self.customer.pk]),
             {
+                "expected_total": "50.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "50.00",
                 "method": Payment.Method.CASH,
                 "settled": "1",

@@ -91,3 +91,40 @@ jobs:
       - name: Reporte de hardening (informativo)
         continue-on-error: true
         run: python manage.py check --deploy
+
+  concurrencia-cobranza:
+    name: Cobranza simultánea (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sicv_collection_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DJANGO_SECRET_KEY: ci-only-insecure-key-for-automated-tests
+      DJANGO_DB_ENGINE: postgresql
+      DJANGO_DB_NAME: sicv_collection_ci
+      DJANGO_DB_USER: postgres
+      DJANGO_DB_PASSWORD: ci-only-password
+      DJANGO_DB_HOST: 127.0.0.1
+      DJANGO_DB_PORT: "5432"
+      DJANGO_DB_SSLMODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Verificar saldo, reintentos y transiciones concurrentes
+        run: python manage.py test apps.payments.tests.test_collection --verbosity 2

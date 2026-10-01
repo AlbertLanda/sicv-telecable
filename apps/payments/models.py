@@ -692,6 +692,11 @@ class Payment(models.Model):
         verbose_name="Observación",
     )
 
+    full_monthly_only = models.BooleanField(
+        default=False, editable=False,
+        help_text="Regla aplicada al preparar el cobro. Los registros anteriores conservan su política.",
+    )
+
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -732,6 +737,7 @@ class Payment(models.Model):
             ),
         ]
         permissions = [
+            ("confirm_payment", "Puede confirmar cobros pendientes"),
             # Cobrar y deshacer lo cobrado son capacidades distintas: quien
             # atiende la ventanilla no debería poder anular por su cuenta lo
             # que ya entró en caja.
@@ -769,53 +775,52 @@ class Payment(models.Model):
         """Dinero recibido que todavía no cubre ningún cargo (saldo a favor)."""
         return self.amount - self.allocated_amount
 
-    def confirm(self, paid_at=None):
+    def confirm(self, paid_at=None, actor=None):
         """Da por cobrado un pago emitido como pendiente.
 
         Recien aqui la deuda baja: mientras el pago esta PENDING sus
         aplicaciones no cuentan, porque el dinero no entro. Confirmarlo es lo
         que convierte el compromiso de la ventanilla en un cobro real.
         """
-        if self.status != self.Status.PENDING:
-            raise ValidationError(
-                "Solo un pago pendiente se puede confirmar."
-            )
-
-        self.status = self.Status.REGISTERED
-        self.paid_at = paid_at or timezone.now()
-        self.save(update_fields=["status", "paid_at", "updated_at"])
-
-        for allocation in self.allocations.select_related("charge"):
-            allocation.charge.refresh_status()
-
+        from .collection import confirm_payment
+        confirm_payment(payment_id=self.pk, paid_at=paid_at, actor=actor)
+        self.refresh_from_db()
         return self
 
     def void(self, user, reason):
         """Anula el pago y devuelve los cargos que cubría a su estado real."""
-        reason = (reason or "").strip()
-
-        if not reason:
-            raise ValidationError("Debe indicar el motivo de la anulación.")
-
-        if self.status == self.Status.VOIDED:
-            raise ValidationError("El pago ya está anulado.")
-
-        self.status = self.Status.VOIDED
-        self.voided_at = timezone.now()
-        self.voided_by = user
-        self.void_reason = reason
-        self.save(update_fields=[
-            "status",
-            "voided_at",
-            "voided_by",
-            "void_reason",
-            "updated_at",
-        ])
-
-        for allocation in self.allocations.select_related("charge"):
-            allocation.charge.refresh_status()
-
+        from .collection import void_payment
+        void_payment(payment_id=self.pk, actor=user, reason=reason)
+        self.refresh_from_db()
         return self
+
+
+class PaymentSubmission(models.Model):
+    """Una solicitud de ventanilla produce un solo pago y comprobante."""
+
+    key = models.UUIDField(unique=True, editable=False)
+    fingerprint = models.CharField(max_length=64, editable=False)
+    payment = models.OneToOneField(Payment, on_delete=models.PROTECT, related_name="submission")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PaymentOperationEvent(models.Model):
+    class Action(models.TextChoices):
+        REGISTERED = "REGISTERED", "Cobro registrado"
+        PENDING = "PENDING", "Pendiente registrado"
+        CONFIRMED = "CONFIRMED", "Pendiente confirmado"
+        VOIDED = "VOIDED", "Pago anulado"
+
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="operation_events")
+    action = models.CharField(max_length=20, choices=Action.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+        verbose_name = "Evento de cobranza"
+        verbose_name_plural = "Eventos de cobranza"
 
 
 class PaymentAllocation(models.Model):
@@ -1772,4 +1777,3 @@ class EquipmentSale(models.Model):
                     "El precio de la venta debe coincidir con la deuda emitida."
                 ),
             })
-

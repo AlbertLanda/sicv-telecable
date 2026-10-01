@@ -6,6 +6,15 @@ MVP contable revisado y el reporte `Ingresos por usuario`.
 
 La evidencia operativa concreta se mantiene fuera del repositorio público.
 
+## Entrega posterior: cobranza completa
+
+La rama `fix/full-monthly-collection`, sobre la base fiscal, añade cobro completo
+de las mensualidades seleccionadas, claves de reenvío, bloqueo transaccional de
+registro/confirmación/anulación y eventos por operación. La confirmación desde
+el detalle exige un permiso propio y oficina autorizada. La guía de validación
+está en [collection_validation.md](collection_validation.md). Esta entrega no
+completa gastos, depósitos, arqueo, cierre administrativo ni emisión SUNAT.
+
 ## Resumen
 
 - SICV ya registra casi todo lo necesario **por pago**: sede, oficina, empresa

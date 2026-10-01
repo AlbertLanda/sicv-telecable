@@ -6,6 +6,8 @@ la deuda. Es la confusión que haría perder dinero: si un pendiente descontara
 el saldo, el abonado quedaría al día sin que el dinero hubiera entrado.
 """
 
+import uuid
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -377,6 +379,8 @@ class ComprobanteWebTests(ComprobanteTestCase):
         self.client.post(
             self.register_url(),
             {
+                "expected_total": "20.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "20.00",
                 "method": Payment.Method.CASH,
                 "charges": [self.plain.pk],
@@ -396,6 +400,8 @@ class ComprobanteWebTests(ComprobanteTestCase):
         self.client.post(
             self.register_url(),
             {
+                "expected_total": "20.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "20.00",
                 "method": Payment.Method.CASH,
                 "charges": [self.plain.pk],
@@ -413,6 +419,8 @@ class ComprobanteWebTests(ComprobanteTestCase):
         response = self.client.post(
             self.register_url(),
             {
+                "expected_total": "20.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "20.00",
                 "method": Payment.Method.CHEQUE,
                 "charges": [self.plain.pk],

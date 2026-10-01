@@ -11,7 +11,7 @@ cuadrar.
 
 import calendar
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -20,6 +20,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.services.models import Subscription
+from apps.customers.models import Customer
 
 from .models import (
     Charge,
@@ -27,6 +28,7 @@ from .models import (
     ChargeConcept,
     Payment,
     PaymentAllocation,
+    PaymentOperationEvent,
     PaymentCommitment,
     PaymentCommitmentInstallment,
     Receipt,
@@ -422,6 +424,18 @@ def discount_for(charge, applied, day=None):
     return charge.amount - due
 
 
+def payment_money(value):
+    """Importe finito y representable sin redondear dinero del operador."""
+    try:
+        amount = Decimal(value)
+        if (not amount.is_finite() or abs(amount) > Decimal("9999999999.99")
+                or amount != amount.quantize(Decimal("0.01"))):
+            raise ValueError
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValidationError("Indique un importe válido con hasta dos decimales.")
+    return amount
+
+
 @transaction.atomic
 def register_payment(
     *,
@@ -442,6 +456,7 @@ def register_payment(
     settled=True,
     paid_at=None,
     due_date=None,
+    full_monthly_only=False,
 ):
     """Registra un cobro, lo aplica a los cargos y emite su comprobante.
 
@@ -454,17 +469,30 @@ def register_payment(
     confirme con `Payment.confirm()`.
     """
     day = day or timezone.localdate()
-    amount = Decimal(amount)
+    amount = payment_money(amount)
 
     if amount <= ZERO:
         raise ValidationError("El monto recibido debe ser mayor a cero.")
 
+    # Todos los cambios de aplicaciones para un abonado toman este bloqueo
+    # antes de leer saldos. Es compartido por registro, confirmación y anulación.
+    Customer.objects.select_for_update().get(pk=customer.pk)
+
     if allocations is None:
         allocations = allocate_oldest_first(
-            outstanding_charges(customer, day), amount, day
+            Charge.objects.select_for_update().filter(customer=customer).outstanding().order_by("due_date", "pk"),
+            amount, day,
         )
 
-    allocations = [(charge, Decimal(value)) for charge, value in allocations if value]
+    allocations = [(charge, payment_money(value)) for charge, value in allocations if value]
+
+    ids = [charge.pk for charge, value in allocations]
+    if len(ids) != len(set(ids)):
+        raise ValidationError("Un cargo no puede repetirse en el mismo cobro.")
+    fresh = {charge.pk: charge for charge in Charge.objects.select_for_update().filter(pk__in=ids).order_by("pk")}
+    if len(fresh) != len(ids):
+        raise ValidationError("Uno de los cargos ya no existe. Actualice el tablero.")
+    allocations = [(fresh[charge.pk], value) for charge, value in allocations]
 
     for charge, value in allocations:
         if charge.customer_id != customer.pk:
@@ -475,10 +503,18 @@ def register_payment(
         if value <= ZERO:
             raise ValidationError("Los montos aplicados deben ser mayores a cero.")
 
+        if charge.status == Charge.Status.CANCELLED:
+            raise ValidationError("No se puede cobrar un cargo anulado.")
+
         if value > charge.balance_on(day):
             raise ValidationError(
                 f"No se puede aplicar S/ {value} al cargo «{charge.description}»: "
                 f"su saldo es S/ {charge.balance_on(day)}."
+            )
+        if full_monthly_only and charge.concept == Charge.Concept.MONTHLY and value != charge.balance_on(day):
+            raise ValidationError(
+                f"La mensualidad «{charge.description}» se paga completa: "
+                f"debe aplicar S/ {charge.balance_on(day):.2f}. Seleccione los periodos que desea cobrar."
             )
 
     allocated = sum((value for _, value in allocations), ZERO)
@@ -518,6 +554,7 @@ def register_payment(
         ),
         paid_at=(paid_at or received_at) if settled else None,
         due_date=due_date,
+        full_monthly_only=full_monthly_only,
     )
     payment.full_clean(
         exclude=["received_by", "collector", "branch", "office", "customer"]
@@ -539,6 +576,11 @@ def register_payment(
         series=sequence.series,
         number=issue_receipt_number(sequence, number),
         issued_at=payment.received_at,
+    )
+
+    PaymentOperationEvent.objects.create(
+        payment=payment, actor=user,
+        action=(PaymentOperationEvent.Action.REGISTERED if settled else PaymentOperationEvent.Action.PENDING),
     )
 
     return payment, receipt

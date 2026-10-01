@@ -9,7 +9,7 @@ habla y acabaría dependiendo de un estado que el operador no ve.
 """
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from io import BytesIO
 
 from django.core.paginator import Paginator
@@ -54,6 +54,7 @@ from .models import (
 )
 from . import history_export
 from .board import charge_lines, debt_rows
+from .collection import collect_payment, manageable_payments
 from .pdf import render_receipt
 from .proposals import (
     accept_proposed_charge,
@@ -72,8 +73,8 @@ from .services import (
     grant_commitment,
     outstanding_charges,
     paid_between,
+    payment_money,
     receipt_series_options,
-    register_payment,
 )
 
 
@@ -81,6 +82,7 @@ from .services import (
 #: marcar filas» de «vengo del menú de la ficha», que es un caso legítimo sin
 #: nada marcado: el abonado que adelanta dinero sin deber todavía nada.
 BOARD_ORIGIN = "tablero"
+
 
 
 class BoardSelectionRequiredMixin:
@@ -465,6 +467,7 @@ class PaymentRegisterView(
             series[0] if series else None,
         )
         inicial = {
+            "expected_total": sum((charge.balance for charge in (selected or charges)), ZERO),
             "settled": "1",
             "series": propuesto.code if propuesto else None,
             # Formateado, como el del papel: el campo es una cadena y lo que
@@ -537,7 +540,9 @@ class PaymentRegisterView(
         office = self.active_office()
 
         form = PaymentRegisterForm(request.POST, office=office)
-        charges = list(outstanding_charges(self.customer))
+        # Incluir los cargos ya cobrados permite reconocer un reenvío de la
+        # misma solicitud. El servicio vuelve a validar sus saldos bajo bloqueo.
+        charges = list(Charge.objects.filter(customer=self.customer))
 
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form))
@@ -551,11 +556,7 @@ class PaymentRegisterView(
         # Sin reparto explicito se cobra lo marcado en el tablero, cada cargo
         # por su saldo. Es lo que el operador acaba de elegir; caer al reparto
         # por antiguedad cobraria otra cosa distinta de la que marco.
-        if allocations is None:
-            selected = self._selected_charges(charges)
-            allocations = [
-                (charge, charge.balance) for charge in selected
-            ] or None
+        selected_ids = request.GET.getlist("charges") or request.POST.getlist("charges")
 
         branch = get_active_branch(request)
 
@@ -568,7 +569,10 @@ class PaymentRegisterView(
             return self.render_to_response(self.get_context_data(form=form))
 
         try:
-            payment, receipt = register_payment(
+            payment, receipt = collect_payment(
+                request_key=form.cleaned_data["request_key"],
+                selected_charge_ids=selected_ids,
+                expected_total=form.cleaned_data["expected_total"],
                 customer=self.customer,
                 amount=form.cleaned_data["amount"],
                 method=form.cleaned_data["method"],
@@ -611,6 +615,9 @@ class PaymentRegisterView(
         aplicar a nada.
         """
         allocations = []
+        allowed_keys = {f"charge_{charge.pk}" for charge in charges}
+        if any(key.startswith("charge_") and key not in allowed_keys for key in data):
+            raise ValidationError("El reparto contiene cargos ajenos al abonado.")
 
         for charge in charges:
             raw = (data.get(f"charge_{charge.pk}") or "").strip()
@@ -618,16 +625,10 @@ class PaymentRegisterView(
             if not raw:
                 continue
 
-            try:
-                value = Decimal(raw)
-            except (InvalidOperation, ValueError):
-                raise ValidationError(
-                    f"El monto aplicado al cargo «{charge.description}» no es "
-                    f"un número válido."
-                )
+            value = payment_money(raw)
 
             if value <= ZERO:
-                continue
+                raise ValidationError("Los montos aplicados deben ser mayores a cero.")
 
             allocations.append((charge, value))
 
@@ -680,6 +681,12 @@ class ReceiptDetailView(
         context["customer"] = payment.customer
         context["allocations"] = allocations
         context["printed_number"] = format_receipt_number(self.object.number)
+        context["can_confirm_payment"] = (
+            payment.status == Payment.Status.PENDING
+            and self.request.user.has_perm("payments.confirm_payment")
+            and manageable_payments(self.request.user, get_active_branch(self.request)).filter(pk=payment.pk).exists()
+        )
+        context["payment_events"] = payment.operation_events.select_related("actor")
 
         # La hora del cobro sale de `paid_at` cuando existe, porque un
         # comprobante emitido como pendiente se cobra despues: la fecha en que
@@ -743,7 +750,7 @@ class PaymentVoidView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def post(self, request, pk):
         payment = get_object_or_404(
-            Payment.objects.select_related("customer"), pk=pk
+            manageable_payments(request.user, get_active_branch(request)).select_related("customer"), pk=pk
         )
         form = PaymentVoidForm(request.POST)
 
@@ -763,6 +770,20 @@ class PaymentVoidView(LoginRequiredMixin, PermissionRequiredMixin, View):
         )
 
         return redirect("payments:history", pk=payment.customer_id)
+
+
+class PaymentConfirmView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = ("payments.confirm_payment", "payments.view_receipt")
+
+    def post(self, request, pk):
+        payment = get_object_or_404(manageable_payments(request.user, get_active_branch(request)), pk=pk)
+        try:
+            payment.confirm(actor=request.user)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        else:
+            messages.success(request, "Cobro pendiente confirmado. La deuda y el ingreso fueron actualizados.")
+        return redirect("payments:receipt_detail", pk=payment.receipt.pk)
 
 
 class ChargeCreateView(CustomerDebtView):

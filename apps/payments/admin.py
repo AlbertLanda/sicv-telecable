@@ -8,6 +8,8 @@ from .models import (
     EquipmentSale,
     Payment,
     PaymentAllocation,
+    PaymentSubmission,
+    PaymentOperationEvent,
     ProposedCharge,
     Receipt,
     OfficeSequence,
@@ -41,6 +43,14 @@ class PaymentAllocationInline(admin.TabularInline):
     model = PaymentAllocation
     extra = 0
     raw_id_fields = ["charge"]
+    can_delete = False
+    readonly_fields = ["charge", "amount", "discount", "created_at"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 class ChargeComponentInline(admin.TabularInline):
@@ -178,8 +188,22 @@ class EquipmentSaleAdmin(admin.ModelAdmin):
         return False
 
 
+class CollectionReadOnlyAdmin(admin.ModelAdmin):
+    def get_readonly_fields(self, request, obj=None):
+        return [field.name for field in self.model._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(CollectionReadOnlyAdmin):
     list_display = [
         "pk",
         "customer",
@@ -206,11 +230,21 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(Receipt)
-class ReceiptAdmin(admin.ModelAdmin):
+class ReceiptAdmin(CollectionReadOnlyAdmin):
     list_display = ["full_number", "sequence", "payment", "issued_at"]
     list_filter = ["sequence"]
     search_fields = ["series", "number"]
     date_hierarchy = "issued_at"
+
+
+@admin.register(PaymentSubmission)
+class PaymentSubmissionAdmin(CollectionReadOnlyAdmin):
+    list_display = ["key", "payment", "created_at"]
+
+
+@admin.register(PaymentOperationEvent)
+class PaymentOperationEventAdmin(CollectionReadOnlyAdmin):
+    list_display = ["payment", "action", "actor", "created_at"]
 
 
 class OfficeSequenceInline(admin.TabularInline):

@@ -62,6 +62,11 @@ Sin la franja azul, como el tablero de deuda.
     <form method="post" class="tc-pay" novalidate>
 
         {% csrf_token %}
+        {{ form.request_key }}
+        {{ form.expected_total }}
+        {% for error in form.expected_total.errors %}<div class="alert alert-danger">Actualice el tablero antes de cobrar.</div>{% endfor %}
+        {% for error in form.request_key.errors %}<div class="alert alert-danger">{{ error }} Abra nuevamente la pantalla de cobro.</div>{% endfor %}
+        <p class="tc-muted">Las mensualidades seleccionadas se cobran completas, con el descuento vigente cuando corresponda.</p>
 
         {% comment %}
         Las deudas elegidas en el tablero viajan con el formulario: son las
