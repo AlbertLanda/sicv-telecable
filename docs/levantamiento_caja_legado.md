@@ -29,8 +29,9 @@ Estado en el SICV nuevo: **Existe**, **Parcial**, **Falta** o **Por validar**.
   El SICV nuevo todavía no cubre gastos, depósitos ni composición.
 - **Ingresos por usuario** fue contrastado contra exportaciones reales:
   `NINGUNO` significa todos los usuarios; elegir un usuario recorta solo sus
-  ingresos. La hoja tiene una fila por concepto cobrado y puede repetir un
-  comprobante cuando cubre varios conceptos.
+  ingresos. La hoja tiene una fila por concepto cobrado, puede repetir un
+  comprobante cuando cubre varios conceptos y **Desde/Hasta filtra por fecha de
+  pago**, no por fecha de emisión.
 - **Registro de Ventas no se usa actualmente para el cuadre de Contabilidad.**
   Tampoco forman parte del flujo operativo actual los reportes legacy
   `Resumen comprobantes SUNAT`, `Archivos Facturador SUNAT` y
@@ -153,10 +154,11 @@ Validado contra exportaciones reales del legado:
 - Un mismo comprobante puede aparecer en varias filas.
 - `Pagó hasta` se informa por concepto.
 - El total del pie coincide con la suma de las filas.
+- Cuando `Fecha` (emisión) y `Fecha pago` difieren, el registro pertenece al
+  día de `Fecha pago`.
 
-**Sigue por validar:** si el rango Desde/Hasta recorta por fecha de emisión o
-por fecha efectiva de pago cuando ambas difieren, y la semántica exacta de
-`Pagó hasta` ante un pago parcial de un cargo.
+**Sigue por validar:** la semántica exacta de `Pagó hasta` ante un pago
+parcial de un cargo.
 
 ### 2.5 Facturación electrónica
 
@@ -271,31 +273,29 @@ Detalle técnico en
 
 ### P0
 
-1. En Ingresos por usuario, ¿Desde/Hasta recorta por fecha de emisión o por
-   fecha de pago cuando ambas difieren?
-2. ¿Qué debe mostrar `Pagó hasta` cuando un pago cubre solo parcialmente un
+1. ¿Qué debe mostrar `Pagó hasta` cuando un pago cubre solo parcialmente un
    cargo periódico?
-3. ¿Cuál es el mecanismo técnico real de emisión fiscal: generación XML,
+2. ¿Cuál es el mecanismo técnico real de emisión fiscal: generación XML,
    firma, transporte, respuesta/CDR, rechazo, baja y contingencia?
-4. Durante el piloto, ¿qué sistema es dueño de cada serie/talonario para evitar
+3. Durante el piloto, ¿qué sistema es dueño de cada serie/talonario para evitar
    correlativos duplicados?
 
 ### P1
 
-5. Persistencia exacta de composición: ¿por día, cajero, oficina o combinación?
-6. Reglas de apertura/saldo anterior y cuándo se modifica.
-7. Diferencia funcional entre las dos pantallas de nota de crédito.
-8. Matriz definitiva de permisos para ATC, Contabilidad, Administración y
+4. Persistencia exacta de composición: ¿por día, cajero, oficina o combinación?
+5. Reglas de apertura/saldo anterior y cuándo se modifica.
+6. Diferencia funcional entre las dos pantallas de nota de crédito.
+7. Matriz definitiva de permisos para ATC, Contabilidad, Administración y
    Gerencia.
-9. Regla formal de vigencia de tarifas cuando hay más de una tarifa activa por
+8. Regla formal de vigencia de tarifas cuando hay más de una tarifa activa por
    fecha.
-10. Alcance exacto del control por entidad legal y periodicidad requerida por
-    Contabilidad, sin publicar umbrales reales.
+9. Alcance exacto del control por entidad legal y periodicidad requerida por
+   Contabilidad, sin publicar umbrales reales.
 
 ### No bloqueantes
 
-11. Por qué el Resumen de caja legacy puede quedar en 0/«no cuadra».
-12. Significado y necesidad actual de reportes legacy que Contabilidad ya no
+10. Por qué el Resumen de caja legacy puede quedar en 0/«no cuadra».
+11. Significado y necesidad actual de reportes legacy que Contabilidad ya no
     utiliza.
 
 ---
@@ -306,7 +306,8 @@ Detalle técnico en
 
 - Validar el **Consolidado de emisión** contra el legado para la misma sede,
   oficina, empresa, serie y periodo.
-- Mantener **Ingresos por usuario** y cerrar las dos dudas de fecha/pago parcial.
+- Mantener **Ingresos por usuario** y cerrar la duda de `Pagó hasta` ante
+  pago parcial.
 - Definir propiedad de series durante la coexistencia legado/nuevo.
 - Diseñar el estado fiscal sin asumir todavía el proveedor/mecanismo de SUNAT.
 - Mantener la generación de mensualidades idempotente para impedir cargos
