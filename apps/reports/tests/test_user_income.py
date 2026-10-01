@@ -13,7 +13,6 @@ from openpyxl import load_workbook
 
 from apps.customers.models import Customer, CustomerAddress
 from apps.payments.models import Charge, Payment, PaymentAllocation
-from apps.reports.cash_closing import build_cash_closing
 from apps.reports.user_income import (
     build_user_income,
     customer_name,
@@ -122,28 +121,30 @@ class UserIncomeRowsTests(UserIncomeTestCase):
         self.assertEqual(len(report["rows"]), 1)
         self.assertEqual(report["total"], Decimal("5.00"))
 
-    def test_the_total_is_the_sales_total_of_the_consolidated(self):
-        """Mismas reglas que el consolidado: con los mismos filtros, los dos
-        reportes dicen la misma cifra."""
-        self.collect(self.factura, self.charge("PLAN", "70.00"), extra="10.00")
-        self.collect(
-            self.boleta, self.charge("ANEXO", "5.00"), office=self.second_office
+    def test_period_uses_payment_date_not_receipt_issue_date(self):
+        """SICAV ubica la fila en el día del pago aunque el comprobante se
+        haya emitido antes."""
+        receipt = self.collect(
+            self.factura,
+            self.charge("PLAN", "70.00"),
+            issued_at=base.moment(9),
         )
-        self.emit("20.00", self.recibo_gamma)
-        self.emit("40.00", self.boleta, status=Payment.Status.PENDING)
+        receipt.payment.paid_at = base.moment(10)
+        receipt.payment.save(update_fields=["paid_at"])
 
-        for filters in ({}, {"issuer": self.issuer}, {"office": self.office}):
-            with self.subTest(filters=sorted(filters)):
-                consolidated = build_cash_closing(
-                    branch=self.branch,
-                    date_from=date(2026, 9, 1),
-                    date_to=date(2026, 9, 30),
-                    **filters,
-                )
+        day_of_issue = self.income(
+            date_from=date(2026, 9, 9),
+            date_to=date(2026, 9, 9),
+        )
+        day_of_payment = self.income(
+            date_from=date(2026, 9, 10),
+            date_to=date(2026, 9, 10),
+        )
 
-                self.assertEqual(
-                    self.income(**filters)["total"], consolidated["sales_total"]
-                )
+        self.assertEqual(day_of_issue["rows"], [])
+        self.assertEqual(day_of_payment["total"], Decimal("70.00"))
+        self.assertEqual(day_of_payment["rows"][0]["issued_on"], date(2026, 9, 9))
+        self.assertEqual(day_of_payment["rows"][0]["paid_on"], date(2026, 9, 10))
 
     def test_without_user_everyone_and_with_user_only_theirs(self):
         self.collect(self.factura, self.charge("ANEXO", "5.00"))
