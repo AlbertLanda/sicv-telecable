@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Borrador de facturación - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <div class="alert alert-warning"><strong>BORRADOR SIN VALIDEZ TRIBUTARIA</strong> · Emisión real no habilitada.</div>
+  <section class="tc-card p-3 mb-3">
+    <h1 class="h4">{{ document.get_document_type_display }} · propuesta para revisión</h1>
+    <p>Referencia interna: {{ document.public_id }} · {{ document.get_status_display }}</p>
+    <p>Empresa: {{ document.snapshot.issuer.business_name }} · RUC {{ document.snapshot.issuer.ruc }}<br>{{ document.snapshot.issuer.address }}</p>
+    <p>Receptor propuesto: {{ document.snapshot.receiver_candidate.name }} · {{ document.snapshot.receiver_candidate.document_type }} {{ document.snapshot.receiver_candidate.document_number }}<br>Abonado {{ document.snapshot.receiver_candidate.code }}</p>
+    <p>Fecha propuesta: {{ document.proposed_issue_date|date:"d/m/Y" }}</p>
+    <div class="table-responsive"><table class="table">
+      <thead><tr><th>Concepto</th><th>Periodo</th><th>Cantidad</th><th>Importe original</th></tr></thead>
+      <tbody>{% for line in document.snapshot.lines %}<tr><td>{{ line.description }}</td>
+        <td>{{ line.period|default:"—" }}{% if line.period_end %} a {{ line.period_end }}{% endif %}</td>
+        <td>{{ line.quantity }}</td><td>{{ document.currency }} {{ line.source_amount }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <p><strong>Importe de origen: {{ document.currency }} {{ document.source_total }}</strong></p>
+    <p>Impuestos, descuentos fiscales y total fiscal: pendientes de cálculo validado.</p>
+  </section>
+  <section class="tc-card p-3 mb-3">
+    <h2 class="h5">Pendientes al preparar este borrador</h2>
+    <ul>{% for pending in document.snapshot.pending_decisions %}<li>{{ pending }}</li>{% endfor %}
+    {% for limitation in document.snapshot.limitations %}<li>{{ limitation }}</li>{% endfor %}</ul>
+    <p>Los datos se conservan como fueron preparados. Para corregirlos, descarte este borrador y prepare otro.</p>
+  </section>
+  {% if document.status == 'DRAFT' and perms.fiscal.cancel_fiscaldocument %}
+  <form method="post" action="{% url 'fiscal:cancel' document.public_id %}" class="tc-card p-3 mb-3">{% csrf_token %}
+    <label for="cancel-reason">Motivo para descartar</label>
+    <textarea id="cancel-reason" name="reason" required class="form-control mb-2" rows="2"></textarea>
+    <button class="btn btn-outline-danger">Descartar borrador</button>
+  </form>
+  {% endif %}
+  <section class="tc-card p-3 mb-3"><h2 class="h5">Historial</h2>
+    <ul>{% for event in document.events.all %}<li>{{ event.created_at|date:"d/m/Y H:i" }} · {{ event.get_action_display }} · {{ event.actor }}{% if event.reason %} · {{ event.reason }}{% endif %}</li>{% endfor %}</ul>
+  </section>
+  <a href="{% url 'fiscal:list' %}">Volver a preparación de facturación</a>
+</div>
+{% endblock %}

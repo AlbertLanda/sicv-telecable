@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Configuración fiscal - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <h1 class="h4">Configuración fiscal · {{ issuer }}</h1>
+  <div class="alert alert-warning">Puede guardar las decisiones pendientes y completarlas cuando Contabilidad confirme. Ninguna opción de esta pantalla habilita la emisión real.</div>
+  <section class="tc-card p-3" style="max-width:850px">
+    <form method="post">{% csrf_token %}{{ form.as_p }}
+      <button class="btn btn-primary">Guardar configuración</button>
+      <a class="btn btn-outline-secondary" href="{% url 'fiscal:list' %}">Volver</a>
+    </form>
+  </section>
+</div>
+{% endblock %}

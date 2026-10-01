@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Preparar borrador - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <h1 class="h4">Preparar borrador · {{ customer.code }}</h1>
+  <p>{{ customer }}</p>
+  <div class="alert alert-warning">Los importes son los cargos originales. Los descuentos y el tratamiento tributario quedan pendientes de validación. Preparar este borrador no registra un pago ni emite un comprobante fiscal.</div>
+  <section class="tc-card p-3" style="max-width:850px">
+    <form method="post">{% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn btn-primary" type="submit">Guardar borrador para revisión</button>
+      <a class="btn btn-outline-secondary" href="{% url 'fiscal:list' %}">Volver</a>
+    </form>
+  </section>
+</div>
+{% endblock %}
