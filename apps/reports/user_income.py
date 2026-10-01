@@ -4,13 +4,14 @@ Es el «Reporte de ingresos» de SICAV: una fila por concepto cobrado -no por
 comprobante-, con quién lo registró y el total al pie. Un comprobante que
 cubrió tres conceptos ocupa tres filas, como en la hoja de SICAV.
 
-Las reglas son las del consolidado (`cash_closing`), para que los dos cuadren
-entre sí: solo suman los pagos cancelados y el periodo se recorta por la
-emisión del comprobante. Con los mismos filtros, el total de este reporte es
-el Total de Ventas del consolidado.
+La implementación comparte hoy la selección base del consolidado
+(`cash_closing`): solo suma pagos registrados y recorta el rango por la
+emisión del comprobante. Esa semántica de fecha todavía debe contrastarse con
+un caso del legado donde «Fecha» y «Fecha pago» sean distintas; no se considera
+regla definitiva de negocio hasta entonces.
 
-Sin usuario elegido salen todos los que registraron cobros, como hace SICAV
-con «NINGUNO», y el título lo dice con «Usuarios».
+Sin usuario elegido salen todos los que registraron cobros, comportamiento ya
+validado contra SICAV con «NINGUNO»; el título lo dice con «Usuarios».
 """
 
 from decimal import Decimal
@@ -159,6 +160,9 @@ def build_user_income(
     user=None,
 ):
     """Todo lo que el PDF y el Excel del reporte necesitan para imprimirse."""
+    # El legado ya validó NINGUNO=Todos y el filtro por usuario. La semántica
+    # temporal sigue pendiente cuando emisión y pago caen en días distintos;
+    # por ahora se conserva la misma selección por emisión del consolidado.
     receipts = (
         period_receipts(
             branch=branch,
