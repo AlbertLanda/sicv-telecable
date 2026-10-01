@@ -1,40 +1,54 @@
 # Levantamiento: Caja, comprobantes y facturación del SICV legado
 
-Entregable del issue #22. Fecha: 2026-09-30.
+Entregable del issue #22. Actualizado: 2026-10-01.
 
-**Fuentes.** Los hallazgos del área que Albert Landa registró en el issue,
-coordinados por Kevin Rivera con el área, y la revisión del código del SICV
-nuevo en la rama `feature/reporte-ingresos-usuario`.
+**Fuentes.** Validaciones funcionales con las áreas usuarias, navegación de solo
+lectura del SICV legado y revisión del código del SICV nuevo en
+`feature/reporte-ingresos-usuario`.
 
-**Método.** Solo lectura: navegación normal de la interfaz del legado, sin
-crear, modificar, condonar ni anular nada.
+**Método.** Solo lectura: navegación normal de la interfaz del legado y
+exportación de reportes existentes, sin crear, modificar, condonar, anular ni
+reintentar operaciones reales.
 
-**Privacidad.** El repositorio es público. Este documento no contiene nombres,
-documentos de identidad, direcciones, importes, series concretas, usuarios,
-capturas ni archivos reales. La evidencia concreta se entregó a Albert por un
-canal privado.
+**Privacidad.** El repositorio es público. Este documento no contiene nombres
+de personas, documentos de identidad, direcciones, cuentas bancarias, importes
+reales de clientes, series concretas, usuarios, capturas ni archivos reales.
+La evidencia concreta se conserva fuera del repositorio.
 
 Estado en el SICV nuevo: **Existe**, **Parcial**, **Falta** o **Por validar**.
-«No relevado» quiere decir que la pantalla no se revisó en este levantamiento
-y entra en la lista de dudas (sección 4).
 
 ---
 
-## 1. Resumen
+## 1. Resumen validado
 
-- **Caja en el legado son cuatro registros:** comprobantes, gastos, depósitos
-  y composición (arqueo). El SICV nuevo solo tiene comprobantes.
-- **Los reportes de caja no cuadran entre sí.** Para el mismo periodo y la
-  misma sede, Consolidado de ingresos, Movimiento caja, Resumen de caja y
-  Registro de ventas dan totales de entrada distintos. Antes de replicar más
-  reportes hay que saber cuál es la fuente de verdad. Es el punto crítico del
-  levantamiento.
-- **El legado declara comprobantes ante SUNAT y el SICV nuevo no.** El
-  mecanismo técnico del legado no se ha determinado.
-- **Las condonaciones corrigen cargos duplicados** de mensualidad. No son una
-  anulación fiscal.
-- **Contabilidad vigila los acumulados por razón social** en un Excel aparte,
-  cada quince días aproximadamente.
+- **La fuente operativa del cuadre diario de Contabilidad es Consolidado de
+  emisión.** Movimiento caja y Consolidado de ingresos son vistas auxiliares y
+  no deben forzarse a dar el mismo total: emisión y cobranza pueden diferir.
+- **Caja en el legado combina comprobantes, gastos, depósitos y composición
+  (arqueo).** ATC registra estos movimientos y cada cajero realiza su cierre.
+  El SICV nuevo todavía no cubre gastos, depósitos ni composición.
+- **Ingresos por usuario** fue contrastado contra exportaciones reales:
+  `NINGUNO` significa todos los usuarios; elegir un usuario recorta solo sus
+  ingresos. La hoja tiene una fila por concepto cobrado y puede repetir un
+  comprobante cuando cubre varios conceptos.
+- **Registro de Ventas no se usa actualmente para el cuadre de Contabilidad.**
+  Tampoco forman parte del flujo operativo actual los reportes legacy
+  `Resumen comprobantes SUNAT`, `Archivos Facturador SUNAT` y
+  `Emisión de comprobantes electrónicos`.
+- **El SICV legado sí participa en la emisión fiscal de comprobantes de
+  clientes.** Contabilidad revisa posteriormente en una herramienta externa de
+  SUNAT cuáles llegaron correctamente y cuáles requieren revisión. El mecanismo
+  técnico exacto de envío, firma y recepción todavía no está determinado.
+- **Las condonaciones son ajustes de deuda**, no equivalen a una anulación
+  fiscal. Se usan, entre otros casos, para neutralizar mensualidades duplicadas
+  por error del sistema y para corregir diferencias de un cargo.
+- **Contabilidad lleva un control auxiliar por entidad legal** basado en la
+  recaudación de clientes. Actualmente se revisa aproximadamente cada quince
+  días; el SICV nuevo debería ofrecer una vista diaria sin automatizar
+  decisiones contables o tributarias.
+- El legado usa `01/01/1900` como valor centinela en varios campos de fecha.
+  En la migración se normaliza a `NULL` cuando representa ausencia de fecha,
+  conservando siempre el valor original en el snapshot legacy.
 
 ---
 
@@ -47,226 +61,274 @@ y entra en la lista de dudas (sección 4).
 | | |
 |---|---|
 | Objetivo | Alta, listado y detalle de comprobantes, con control de su estado. |
-| Campos y filtros | No detallados en el levantamiento. |
-| Estados | Pendiente, Anulado y Extraviado. |
-| Acciones | Alta y consulta del detalle. Auditoría básica: usuario, fecha y acción. |
-| Rol | Por validar. |
-| Dependencias | Talonario o serie y empresa emisora. |
-| SICV nuevo | **Parcial.** El comprobante nace al registrar el cobro, no hay alta suelta. El pago tiene los estados Cancelado, Pendiente y Anulado, y la anulación guarda usuario, fecha y motivo. No existe el estado Extraviado. |
+| Campos principales | Serie, número, fecha y estado. |
+| Estados observados | Pendiente, Anulado y Extraviado. |
+| Auditoría observada | Fecha/hora, usuario y acción. |
+| SICV nuevo | **Parcial.** El comprobante nace al registrar el cobro; el pago tiene estados y la anulación es auditable. No existe el estado Extraviado ni un alta suelta equivalente. |
 
 #### Buscar / Listar comprobantes
 
 | | |
 |---|---|
-| Objetivo | Consultar comprobantes emitidos y descargar su PDF o XML. |
-| Campos, filtros y estados | No relevados. |
-| SICV nuevo | **Parcial.** «Comprobantes» lista los de la sede activa, con filtro por día y búsqueda por serie, número, código, documento o nombre del abonado. Ofrece el PDF, pero no hay XML. |
+| Objetivo | Consultar comprobantes emitidos y descargar artefactos asociados. |
+| Legado | Puede exponer PDF y XML según el comprobante. |
+| SICV nuevo | **Parcial.** Lista comprobantes de la sede y ofrece representación PDF; no existe todavía el flujo fiscal/XML completo. |
 
 #### Nota de crédito y Nota de crédito 2
 
 | | |
 |---|---|
-| Objetivo | Anular o corregir un comprobante emitido. |
-| Diferencia entre las dos | No relevada. |
-| SICV nuevo | **Falta.** Figura como pendiente en el menú Caja. |
+| Objetivo | Corregir o anular documentalmente un comprobante emitido. |
+| Diferencia entre ambas pantallas | **Por validar.** |
+| SICV nuevo | **Falta.** |
 
 #### Gastos
 
 | | |
 |---|---|
-| Objetivo | Registrar los egresos de caja. |
-| Campos | Empresa, fecha, tipo de documento, serie y número, motivo, descripción, monto, cajero y anulación. |
-| Estados | Vigente o anulado. |
-| Efecto en caja | Aparecen en el Haber de Movimiento caja y reducen el saldo. En el consolidado entran como egreso. |
-| Tipos y relación con comprobantes | Por validar. |
-| SICV nuevo | **Falta.** La fila de gastos del consolidado sale en 0. |
+| Objetivo | Registrar egresos de caja. |
+| Campos observados | Empresa, fecha, tipo de documento, serie/número, motivo, descripción, monto, cajero y anulación. |
+| Operación real | ATC registra gastos propios del cierre, por ejemplo movilidad/pasajes. |
+| Efecto | Aparecen como egreso y reducen el saldo del consolidado. |
+| SICV nuevo | **Falta.** |
 
 #### Depósitos
 
 | | |
 |---|---|
-| Objetivo | Registrar el dinero de caja depositado en el banco. |
-| Campos | Empresa, fecha, cuenta bancaria, número de operación, monto, medio o referencia de pago, cajero, anulación y observaciones. |
-| Estados | Vigente o anulado. |
-| Efecto en caja | Egreso del consolidado («Depósito MN»). |
-| Cuentas y bancos, sede u oficina | Por validar. |
-| SICV nuevo | **Falta.** La fila de depósitos del consolidado sale en 0. |
+| Objetivo | Registrar dinero de caja trasladado a una cuenta bancaria. |
+| Campos observados | Empresa, fecha, cuenta bancaria, operación, monto, medio/referencia, cajero, anulación y observaciones. |
+| Operación real | ATC lo registra como parte de su cierre cuando corresponde. |
+| Efecto | Egreso del consolidado. |
+| SICV nuevo | **Falta.** |
 
 #### Composición
 
 | | |
 |---|---|
-| Objetivo | Arqueo físico de la caja. |
-| Campos | Importes en billetes de 200, 100, 50, 20 y 10, monedas, cheques, vales, otros y el total calculado. |
-| Persistencia | Por validar: si se guarda por día, por cajero o por oficina. |
-| SICV nuevo | **Falta.** La sección de composición del consolidado sale en 0. |
+| Objetivo | Arqueo de caja. |
+| Campos observados | Importes por denominación, monedas, cheques, vales, otros y total calculado. |
+| Operación real | Forma parte del proceso de cierre del cajero. |
+| Persistencia exacta | **Por validar**: día, cajero y/o oficina. |
+| SICV nuevo | **Falta.** |
 
 ### 2.2 Reportes
 
-Todos se sacan por sede y periodo.
+| Reporte | Uso validado | SICV nuevo | Prioridad |
+|---|---|---|---|
+| Consolidado de emisión | **Fuente principal del cuadre diario de Contabilidad.** Resume saldo anterior, ventas por tipo de documento/serie, egresos, saldo y composición. | **Existe parcialmente.** Excel/PDF; gastos, depósitos y composición todavía no están modelados. | P0 |
+| Ingresos por usuario | Detalle de ingresos por usuario/cajero; una fila por concepto cobrado. `NINGUNO` devuelve todos. | **Existe.** Validado contra muestras reales para esta semántica. | P0 |
+| Movimiento caja | Libro cronológico de entradas/salidas con saldo acumulado. | **Falta.** No es la fuente principal del cuadre. | P1 |
+| Consolidado de ingresos | Vista auxiliar; su total puede diferir de Movimiento caja y del consolidado de emisión. | **No replicar por defecto** hasta confirmar necesidad actual. | P2 |
+| Resumen de caja | En la muestra observada llegó a reportar 0 y «CAJA NO CUADRA» pese a existir movimientos. | **Falta.** | P2 |
+| Gastos | Listado de egresos. | **Falta.** | P1 |
+| Depósitos | Listado de depósitos. | **Falta.** | P1 |
+| Registro de ventas | Reporte detallado legacy. | **No prioritario:** Contabilidad indicó que actualmente no lo usa. | P3 |
+| Resumen comprobantes SUNAT | Reporte legacy. | **No replicar por defecto:** no forma parte del flujo operativo actual. | P3 |
+| Archivos Facturador SUNAT | Reporte/paquete legacy. | **No replicar por defecto:** no forma parte del flujo operativo actual. | P3 |
+| Emisión de comprobantes electrónicos | Reporte legacy separado. | **No replicar por defecto:** no forma parte del flujo operativo actual. | P3 |
 
-| Reporte | Para qué sirve | Quién lo usa | SICV nuevo | Prioridad |
-|---|---|---|---|---|
-| Consolidado de emisión | Cuadre de la sede: saldo anterior, ventas por tipo de documento y por serie, egresos, saldo en caja y composición. | Contabilidad | **Existe**, en Reportes › Cierre de caja, con Excel y PDF. Los egresos y la composición salen en 0. | P0 (cuadre en paralelo) |
-| Consolidado de ingresos | Misma estructura que el de emisión. Su aritmética interna cuadra, pero su total de entradas difiere del de Movimiento caja. | Contabilidad | **Por validar** si es el mismo reporte que el de emisión o una variante. | P0 (validar) |
-| Ingresos por usuario | Una fila por concepto cobrado, con su comprobante y quién lo registró, y el total al pie. Sin usuario elegido salen todos. | Contabilidad | **Existe** desde esta rama. | P0 (cuadre en paralelo) |
-| Movimiento caja | Libro cronológico con Debe, Haber y saldo acumulado. Los cobros entran al Debe y los gastos al Haber. | Contabilidad | **Falta.** Necesita gastos y depósitos. | P1 |
-| Resumen de caja | Resumen del periodo. En la muestra observada da ingreso 0 y «CAJA NO CUADRA», aunque hubo cobros. | Por validar | **Falta.** | P1, después de la duda 3 |
-| Caja por día | No relevado. | Por validar | **Por validar** si equivale a la «Caja del día» del SICV nuevo (un día, agrupado por razón social). | P2 |
-| Gastos | Listado de gastos del periodo. | Por validar | **Falta.** | P1, con el registro de gastos |
-| Depósitos | Listado de depósitos del periodo con su total. | Por validar | **Falta.** | P1, con el registro de depósitos |
-| Registro ventas | Detalle por concepto: un comprobante puede ocupar varias filas. Lleva tipo de documento (factura, boleta y recibo de servicio), empresa emisora y anulado. | Contabilidad | **Falta.** No hay libro de ventas. | P2 |
-| Resumen comprobantes SUNAT | No relevado. | Por validar | **Falta.** | P1, con la emisión electrónica |
-| Archivos Facturador SUNAT | No relevado. | Por validar | **Falta.** | P1, con la emisión electrónica |
+### 2.3 Diferencia entre emisión y caja
 
-Observaciones del Registro ventas:
+En una comparación controlada del mismo día se observó que:
 
-- Gravado, Exonerado, IGV y Total vienen vacíos; el valor está en Monto.
-- Algunas filas, sobre todo de facturas, traen la fecha de pago 01/01/1900. Se
-  tratan como «sin dato» hasta validar qué significan.
-- Su total no coincide con el del consolidado del mismo periodo.
+- Movimiento caja agrupa **cobros** (por ejemplo, boletas/facturas cobradas).
+- Consolidado de emisión agrupa **documentos/series emitidos** e incluye tipos
+  documentales que no aparecen con la misma clasificación en Movimiento caja.
+- Ambos pueden coincidir en saldo base y egresos y, aun así, tener distinto
+  total de ingresos.
 
-### 2.3 Facturación electrónica
+Por tanto, el SICV nuevo no debe imponer la falsa invariancia
+`movimiento_caja == consolidado_emision`. Debe reconciliar y explicar las
+diferencias entre fecha/documento de emisión y movimiento de dinero.
+
+### 2.4 Ingresos por usuario
+
+Validado contra exportaciones reales del legado:
+
+- `NINGUNO` = todos los usuarios.
+- Elegir un usuario devuelve solo las filas de ese usuario.
+- Una fila representa un concepto/cargo cubierto, no necesariamente un
+  comprobante completo.
+- Un mismo comprobante puede aparecer en varias filas.
+- `Pagó hasta` se informa por concepto.
+- El total del pie coincide con la suma de las filas.
+
+**Sigue por validar:** si el rango Desde/Hasta recorta por fecha de emisión o
+por fecha efectiva de pago cuando ambas difieren, y la semántica exacta de
+`Pagó hasta` ante un pago parcial de un cargo.
+
+### 2.5 Facturación electrónica
 
 | Punto | Legado | SICV nuevo |
 |---|---|---|
-| ¿Declara ante SUNAT? | **Sí.** Un comprobante emitido por el legado figura como aceptado en la consulta pública de validez de SUNAT (verificado el 2026-09-14). | **No.** |
-| Artefactos | PDF y XML desde Buscar/Listar comprobantes. Hay además pantallas de resumen y de archivos para SUNAT. | Solo el PDF (representación impresa con QR). |
-| Generación, firma, envío, respuesta (CDR), baja y contingencia | **Por validar.** La interfaz revisada no muestra el mecanismo, y no se asume ni proveedor ni método. | **Falta.** |
+| Emisión a clientes | El área usuaria indica que el SICV emite comprobantes y luego Contabilidad verifica su recepción/estado en una herramienta externa de SUNAT. | **Falta el flujo fiscal real.** |
+| Artefactos | Existen PDF/XML y pantallas fiscales en el legado, aunque varios reportes legacy ya no se usan operativamente. | PDF de representación; no hay ciclo fiscal completo. |
+| Estados/errores | Contabilidad revisa comprobantes que llegaron y los que presentan errores. | Falta modelar envío, respuesta, error, reintento/ajuste y trazabilidad. |
+| Mecanismo técnico | **Por validar.** No se asume envío directo, proveedor, OSE/PSE ni Facturador SUNAT sin evidencia técnica. | Por diseñar después de validar el mecanismo real. |
 
-Riesgo: los talonarios del SICV nuevo continúan las mismas series reales que
-declara el legado. Si los dos sistemas emiten a la vez sobre el mismo
-talonario, el correlativo de una serie que SUNAT vigila quedaría con números
-repetidos o con huecos.
+El hecho de que un usuario pueda «eliminar/anular» un comprobante en el legado
+no prueba que desaparezca fiscalmente. El SICV nuevo no debe borrar documentos
+fiscales históricos: cualquier corrección deberá conservar estado, motivo,
+usuario y referencia al documento original.
 
-### 2.4 Organización y permisos
+### 2.6 Organización y permisos
 
 | Dimensión | Legado | SICV nuevo |
 |---|---|---|
-| Sede | Todos los reportes de caja se sacan por sede. | Cada pago tiene sede; los reportes usan la sede activa. |
-| Oficina | «Consolidado oficinas» en el cierre de caja. | Cada pago tiene oficina (opcional en los cobros antiguos); el cierre filtra por la oficina activa. |
-| Empresa emisora | Filtro «Empresa» en los reportes. El Registro ventas trae la empresa de cada fila. | Cada talonario tiene emisora; el cierre filtra por empresa y abre en «Todas». |
-| Serie o talonario | El consolidado da un subtotal por serie. | Talonarios por oficina, con correlativo propio. |
-| Usuario | Comprobantes, gastos y depósitos registran al cajero. Existe «Ingresos por usuario». | Cada pago registra quién lo cobró; existe «Ingresos por usuario». |
-| Rol | **No relevado.** Falta la matriz de quién consulta y quién opera cada pantalla. | Contabilidad: solo el cierre de caja. Atención al Cliente: cobra y consulta comprobantes. Administrador: lo de Atención al Cliente más el cierre de caja. |
+| Sede/unidad | El selector legado mezcla sedes físicas con unidades comerciales/operativas. | Conviene separar unidad/marca de sede física. |
+| Oficina | Existe un nivel de oficina/local y el cierre puede consolidarlas. | Los pagos ya admiten oficina; falta cerrar reglas operativas. |
+| Empresa emisora | Filtro de empresa en caja/reportes y relación con talonarios. | Existe `Issuer`; falta el control acumulado por entidad legal. |
+| Serie/talonario | El consolidado subtotaliza por serie. | Existe `ReceiptSequence`. |
+| Usuario/cajero | Cobros, gastos y depósitos quedan vinculados a usuario/cajero. | Los pagos registran `received_by`; Ingresos por usuario ya existe. |
+| Roles | ATC registra operaciones de caja; Contabilidad revisa y cuadra. | La matriz final debe reflejar esas responsabilidades sin dar permisos fiscales por defecto. |
 
-### 2.5 Prácticas operativas
+### 2.7 Unidades operativas observadas
 
-**Condonaciones.**
+#### APP Perú
 
-- Legado: se usan para corregir mensualidades duplicadas que generó el sistema
-  y evitar cobrarlas dos veces al cliente.
-- SICV nuevo: **Parcial.**
-  - Ya está la protección: una suscripción no puede tener dos mensualidades
-    del mismo periodo, así que volver a correr la generación no duplica deuda.
-  - No hay una operación trazable para anular o condonar un cargo con motivo y
-    usuario. El cargo tiene el estado «Anulado», pero no guarda ni quién ni
-    por qué.
+- Es una **unidad comercial lógica**, no una sede física comparable con las
+  sedes tradicionales.
+- Su negocio observado es IPTV mediante una plataforma/app externa.
+- Puede existir como servicio adicional de un cliente de una sede normal o
+  como única suscripción de un abonado clasificado en APP Perú.
+- El legado separa Plan, Plan x Sucursal y Tarifa; la tarifa puede depender de
+  la unidad.
+- La activación/corte técnico del servicio se realiza en la plataforma externa;
+  el SICV mantiene la suscripción comercial.
+- El comprobante observado fue un recibo interno de ingresos; el área indicó
+  que esta operación no tiene integración SUNAT completa.
 
-**Control por razón social.**
+**Implicación:** en el SICV nuevo conviene separar unidad comercial,
+producto/plan, plataforma de aprovisionamiento, suscripción y estado técnico.
 
-- Legado: Contabilidad consolida en un Excel aparte la emisión por razón
-  social y sede, cada quince días aproximadamente, para ver qué emisor se
-  acerca a su límite operativo o tributario.
-- SICV nuevo: **Parcial.** La caja del día agrupa por razón social y el cierre
-  filtra por empresa, pero no hay acumulados quincenales ni mensuales.
+#### Eco Net
+
+- Se comporta como una **operación ISP territorial** con una unidad/marca y
+  una oficina/local territorial diferenciadas.
+- Usa Internet FTTH, suscripciones, deuda mensual, facturas, pagos y órdenes
+  técnicas del mismo motor general.
+- Se observó histórico de tarifas por fecha de inicio.
+- En un plan observado existían tarifa y suscripciones para la unidad, pero
+  `Plan x Sucursal` estaba vacío: el legado tolera configuraciones
+  inconsistentes.
+- Una OT de instalación estaba enlazada directamente desde la suscripción,
+  aunque el listado general de órdenes del abonado no la mostraba.
+- También se observaron datos históricos incompletos/inconsistentes (por
+  ejemplo, fechas de emisión/atención no monotónicas o técnico vacío).
+
+**Implicación:** el importador debe preservar el raw legacy y marcar
+inconsistencias para revisión; el modelo nuevo debe garantizar una relación
+consistente Suscripción → OT y validar disponibilidad/tarifa del plan.
+
+### 2.8 Condonaciones y ajustes
+
+Las condonaciones observadas no son una sola operación fiscal. Se utilizan para:
+
+- neutralizar mensualidades duplicadas generadas por error;
+- ajustar diferencias de una mensualidad/cobro;
+- dejar trazabilidad de una corrección comercial.
+
+El SICV nuevo debe implementar una operación de ajuste trazable (cargo,
+importe, tipo/motivo, usuario, fecha y referencia) y no borrar silenciosamente
+el cargo original.
+
+### 2.9 Control por entidad legal
+
+Contabilidad mantiene un Excel auxiliar para vigilar la **recaudación/pagos de
+clientes por entidad legal**, aproximadamente cada quince días. El detalle del
+umbral y su fundamento no se publica en este repositorio.
+
+Requisito propuesto para el SICV nuevo:
+
+- acumulado diario, quincenal, mensual y anual por entidad legal;
+- desglose por sede, oficina, serie y medio cuando aplique;
+- alertas configurables;
+- solo informar: ninguna selección automática de entidad legal por alcanzar un
+  umbral.
+
+La relación con dotación de personal pertenece al dominio de RR. HH. y no debe
+mezclarse con la lógica de caja, aunque un tablero gerencial pueda mostrar
+ambos indicadores.
 
 ---
 
 ## 3. Lo que ya quedó en el SICV nuevo
 
-Detalle en [`accounting_gap_analysis.md`](accounting_gap_analysis.md), sección
-A.1.
+Detalle técnico en
+[`accounting_gap_analysis.md`](accounting_gap_analysis.md).
 
-- **Reportes › Cierre de caja › Ingresos por usuario**: el formato del legado
-  en Excel y PDF, con una fila por concepto cobrado y el total al pie.
-- «Empresa» abre en «Todas», y «Usuario» queda bloqueado salvo en «Ingresos
-  por usuario».
+- **Consolidado de emisión** en Excel y PDF.
+- **Ingresos por usuario** en Excel y PDF.
+- `NINGUNO`/usuario individual validado contra el comportamiento del legado.
+- Empresa, sede, oficina y serie como filtros del cierre.
+- Protección contra inyección de fórmulas en exportaciones Excel.
+- Pruebas automáticas y CI verde en la rama de entrega.
 
 ---
 
 ## 4. Dudas POR VALIDAR
 
-**Fuente de verdad y reportes**
+### P0
 
-1. ¿Qué reporte es la fuente de verdad del cuadre: Consolidado de ingresos o
-   Movimiento caja? ¿Qué significa exactamente «Total de Ventas»?
-2. ¿Consolidado de emisión y Consolidado de ingresos son el mismo reporte o
-   dos variantes? Hipótesis: uno parte de la emisión y el otro de la cobranza.
-3. ¿Por qué Resumen de caja da ingreso 0 y «CAJA NO CUADRA» en un periodo con
-   cobros? ¿Depende de algo que se registra aparte, como la composición?
-4. ¿Por qué el total del Registro ventas no coincide con el del consolidado?
-5. En Registro ventas, ¿las columnas Gravado, Exonerado, IGV y Total vacías
-   son diseño del reporte o una limitación?
-6. ¿Qué significa la fecha de pago 01/01/1900: no pagado o sin dato?
-7. En Ingresos por usuario:
-   - ¿recorta por fecha de emisión o por fecha de pago?
-   - ¿«Usuario» es quien registra el cobro o el cobrador?
-   - ¿qué pone en «Pagó hasta» cuando el concepto no cubre un periodo?
+1. En Ingresos por usuario, ¿Desde/Hasta recorta por fecha de emisión o por
+   fecha de pago cuando ambas difieren?
+2. ¿Qué debe mostrar `Pagó hasta` cuando un pago cubre solo parcialmente un
+   cargo periódico?
+3. ¿Cuál es el mecanismo técnico real de emisión fiscal: generación XML,
+   firma, transporte, respuesta/CDR, rechazo, baja y contingencia?
+4. Durante el piloto, ¿qué sistema es dueño de cada serie/talonario para evitar
+   correlativos duplicados?
 
-**Caja**
+### P1
 
-8. En Control de comprobantes, ¿qué es el «alta» (la emisión o el registro de
-   un comprobante físico)? ¿Cuándo pasa un comprobante a Extraviado?
-9. ¿En qué se diferencian Nota de crédito y Nota de crédito 2, y cuál es el
-   flujo de cada una?
-10. Gastos: ¿cuál es el catálogo de tipos y motivos, y cómo se relacionan con
-    los comprobantes?
-11. Depósitos: ¿cuál es el catálogo de cuentas y bancos? ¿Se registran por
-    oficina?
-12. Composición: ¿es el arqueo? ¿Se guarda por día, por cajero o por oficina?
-    ¿Alimenta el Resumen de caja?
-13. ¿Caja por día equivale a la «Caja del día» del SICV nuevo?
+5. Persistencia exacta de composición: ¿por día, cajero, oficina o combinación?
+6. Reglas de apertura/saldo anterior y cuándo se modifica.
+7. Diferencia funcional entre las dos pantallas de nota de crédito.
+8. Matriz definitiva de permisos para ATC, Contabilidad, Administración y
+   Gerencia.
+9. Regla formal de vigencia de tarifas cuando hay más de una tarifa activa por
+   fecha.
+10. Alcance exacto del control por entidad legal y periodicidad requerida por
+    Contabilidad, sin publicar umbrales reales.
 
-**Facturación electrónica**
+### No bloqueantes
 
-14. ¿Quién genera, firma y envía hoy los comprobantes: desarrollo propio,
-    facturador de SUNAT u OSE? ¿Qué hacen Resumen comprobantes SUNAT y Archivos
-    Facturador SUNAT? ¿Cómo se manejan la baja y la contingencia?
-15. Durante el piloto, ¿desde qué sistema se emite cada talonario?
-
-**Organización**
-
-16. Matriz de roles del legado: ¿quién consulta y quién opera cada pantalla de
-    caja y de reportes?
-17. ¿Qué límite vigila Contabilidad por razón social, y cada cuánto? Sin
-    publicar cifras.
+11. Por qué el Resumen de caja legacy puede quedar en 0/«no cuadra».
+12. Significado y necesidad actual de reportes legacy que Contabilidad ya no
+    utiliza.
 
 ---
 
-## 5. Propuesta de prioridad
+## 5. Prioridad propuesta
 
-Ningún punto se implementa antes de cerrar las dudas de las que depende.
+### P0 · antes del piloto financiero
 
-### P0 · antes del piloto
-
-- **Fuente de verdad del cuadre** (dudas 1 a 4). Sin ella no se replica ningún
-  otro reporte de caja.
-- **Emisión durante el piloto** (dudas 14 y 15): decidir qué sistema emite
-  cada talonario, para no romper correlativos declarados.
-- **Cuadre en paralelo:** sacar Consolidado de emisión e Ingresos por usuario
-  en los dos sistemas para el mismo periodo y sede, y compararlos serie por
-  serie.
+- Validar el **Consolidado de emisión** contra el legado para la misma sede,
+  oficina, empresa, serie y periodo.
+- Mantener **Ingresos por usuario** y cerrar las dos dudas de fecha/pago parcial.
+- Definir propiedad de series durante la coexistencia legado/nuevo.
+- Diseñar el estado fiscal sin asumir todavía el proveedor/mecanismo de SUNAT.
+- Mantener la generación de mensualidades idempotente para impedir cargos
+  duplicados.
 
 ### P1 · antes de producción
 
-- **Gastos, depósitos y composición** (dudas 10 a 12), con sus reportes. Sin
-  ellos el saldo en caja del SICV nuevo no sirve para un arqueo.
-- **Movimiento caja y Resumen de caja**, una vez definida la fuente de verdad.
-- **Cierre guardado:** congelar un periodo cuadrado para que una anulación o
-  confirmación posterior no lo cambie.
-- **Emisión electrónica** según el flujo que se valide (duda 14), con Resumen
-  comprobantes SUNAT, Archivos Facturador SUNAT y la baja.
-- **Notas de crédito** (duda 9).
-- **Corrección trazable de cargos:** anular o condonar un cargo duplicado con
-  motivo y usuario, sin borrarlo.
-- **Permisos por rol** según la matriz del legado (duda 16).
+- Gastos, depósitos y composición.
+- Cierre guardado/inmutable con ajustes posteriores auditados.
+- Movimiento de caja como ledger auxiliar.
+- Ajustes/condonaciones de cargos con motivo y usuario.
+- Notas de crédito y flujo fiscal real después de validar el mecanismo.
+- Dashboard diario de recaudación por entidad legal.
+- Matriz definitiva de permisos.
 
-### P2 · posterior
+### P2/P3 · solo si el área confirma necesidad
 
-- **Registro ventas y libro de ventas** (dudas 5 y 6).
-- **Tablero de acumulados por razón social**, sede, serie y tipo de
-  comprobante, con vistas quincenal y mensual, para reemplazar el Excel manual
-  (duda 17).
-- **Caja por día**, si resulta distinta de la Caja del día (duda 13).
-- **Más filtros en Comprobantes:** estado, tipo y rango de fechas.
+- Consolidado de ingresos como reporte separado.
+- Resumen de caja.
+- Registro de ventas legacy.
+- Resumen comprobantes SUNAT.
+- Archivos Facturador SUNAT.
+- Emisión de comprobantes electrónicos como reporte separado.
+
+No se replica un reporte solo porque exista en el menú legacy.
