@@ -6,6 +6,8 @@ deuda, ver el historial y anular un cobro son capacidades distintas: quien
 atiende la ventanilla puede cobrar, pero deshacer lo cobrado es otra decisión.
 """
 
+import uuid
+
 from datetime import date
 from decimal import Decimal
 
@@ -237,7 +239,7 @@ class PaymentRegisterTests(AccountScreensTestCase):
 
         response = self.client.post(
             self.register_url(),
-            {"amount": "80.00", "method": Payment.Method.CASH},
+            {"expected_total": "80.00", "request_key": str(uuid.uuid4()), "amount": "80.00", "method": Payment.Method.CASH},
         )
 
         payment = Payment.objects.get()
@@ -258,7 +260,7 @@ class PaymentRegisterTests(AccountScreensTestCase):
 
         response = self.client.post(
             self.register_url(),
-            {"amount": "80.00", "method": Payment.Method.YAPE},
+            {"expected_total": "80.00", "request_key": str(uuid.uuid4()), "amount": "80.00", "method": Payment.Method.YAPE},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -280,6 +282,8 @@ class PaymentRegisterTests(AccountScreensTestCase):
         self.client.post(
             self.register_url(),
             {
+                "expected_total": "80.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "80.00",
                 "method": Payment.Method.CASH,
                 f"charge_{september.pk}": "80.00",
@@ -299,6 +303,8 @@ class PaymentRegisterTests(AccountScreensTestCase):
         response = self.client.post(
             self.register_url(),
             {
+                "expected_total": "500.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "500.00",
                 "method": Payment.Method.CASH,
                 f"charge_{self.charge.pk}": "500.00",

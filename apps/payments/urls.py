@@ -7,6 +7,7 @@ app_name = "payments"
 
 
 urlpatterns = [
+    path("pagos/<int:pk>/confirmar/", views.PaymentConfirmView.as_view(), name="confirm"),
 
     # Vistas administrativas transversales.
     path(

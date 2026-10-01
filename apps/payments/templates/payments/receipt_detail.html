@@ -59,7 +59,23 @@ aspecto de editable, que invita a intentarlo.
             <strong>Pendiente de cobro.</strong>
             El comprobante está emitido pero el dinero todavía no ha entrado,
             así que la deuda del abonado sigue en pie.
+            {% if can_confirm_payment %}
+            <form method="post" action="{% url 'payments:confirm' receipt.payment.pk %}" class="mt-2 d-print-none">
+                {% csrf_token %}
+                <button class="tc-btn success" type="submit">Confirmar ingreso del dinero</button>
+            </form>
+            {% endif %}
         </div>
+    {% endif %}
+
+    {% if payment_events %}
+    <details class="tc-card p-3 mb-3 d-print-none">
+        <summary>Historial de operaciones del cobro</summary>
+        <ul class="mt-2 mb-0">{% for event in payment_events %}
+            <li>{{ event.created_at|date:"d/m/Y H:i" }} · {{ event.get_action_display }}
+                {% if event.actor %} · {{ event.actor }}{% endif %}{% if event.reason %} · {{ event.reason }}{% endif %}</li>
+        {% endfor %}</ul>
+    </details>
     {% endif %}
 
     <section class="tc-card tc-section tc-full tc-sheet">

@@ -10,6 +10,8 @@ concepto.
 """
 
 import re
+import uuid
+
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -389,6 +391,8 @@ class ChargeSelectionTests(PaymentsTestCase):
         self.client.post(
             self.register_url(),
             {
+                "expected_total": "50.00",
+                "request_key": str(uuid.uuid4()),
                 "amount": "50.00",
                 "method": Payment.Method.CASH,
                 "charges": [self.recent.pk],

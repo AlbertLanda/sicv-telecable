@@ -1,6 +1,7 @@
 """Formularios de caja."""
 
 from decimal import Decimal
+import uuid
 
 from django import forms
 from django.core.validators import MinValueValidator
@@ -161,6 +162,9 @@ class PaymentRegisterForm(forms.Form):
     el POST y lo resuelve la vista, porque cuántos cargos hay depende del
     abonado y no del formulario.
     """
+
+    request_key = forms.UUIDField(initial=uuid.uuid4, widget=forms.HiddenInput)
+    expected_total = forms.DecimalField(min_value=0, max_digits=12, decimal_places=2, widget=forms.HiddenInput)
 
     amount = forms.DecimalField(
         label="Total",
@@ -815,4 +819,3 @@ class EquipmentSaleForm(forms.Form):
             )
 
         return subscription
-
