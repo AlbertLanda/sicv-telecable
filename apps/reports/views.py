@@ -23,8 +23,8 @@ from django.views.generic import FormView, TemplateView
 
 from apps.organization.context_processors import get_active_branch, get_active_office
 
-from . import cash_closing_exporters
-from .cash_closing import build_cash_closing
+from . import cash_closing_exporters, user_income_exporters
+from .cash_closing import USER_REPORT_TYPE, build_cash_closing
 from .exporters import CONTENT_TYPES, render
 from .forms import (
     VIEWED_FORMATS,
@@ -35,6 +35,7 @@ from .forms import (
 )
 from .materials import build_report
 from .sales import build_sales_report
+from .user_income import build_user_income
 
 
 class MaterialReportPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
@@ -165,8 +166,8 @@ class CashClosingView(CashClosingPermissionMixin, TemplateView):
     """Reportes › Cierre de caja: el formulario, y el consolidado como archivo.
 
     Misma pantalla que el reporte de materiales: campos, «Formato» y
-    «Exportar». El consolidado de emisión sale en Excel o PDF, que es donde
-    Contabilidad lo trabaja.
+    «Exportar». El consolidado de emisión y los ingresos por usuario salen en
+    Excel o PDF, que es donde Contabilidad los trabaja.
 
     El formulario viaja por GET a esta misma dirección. Llega enviado cuando
     trae su «Formato»; sin él es la primera visita, y el formulario abre con
@@ -185,10 +186,10 @@ class CashClosingView(CashClosingPermissionMixin, TemplateView):
         branch = get_active_branch(request)
         submitted = "export_format" in request.GET
 
-        form = CashClosingForm(
-            request.GET if submitted else cash_closing_defaults(),
-            branch=branch,
-        )
+        if submitted:
+            form = CashClosingForm(request.GET, branch=branch)
+        else:
+            form = CashClosingForm(initial=cash_closing_defaults(), branch=branch)
 
         if submitted and form.is_valid():
             office = None
@@ -210,19 +211,34 @@ class CashClosingView(CashClosingPermissionMixin, TemplateView):
                     )
 
             if not form.errors:
-                report = build_cash_closing(
-                    branch=branch,
-                    date_from=form.cleaned_data["date_from"],
-                    date_to=form.cleaned_data["date_to"],
-                    office=office,
-                    issuer=form.cleaned_data["issuer"],
-                    sequence=form.cleaned_data["sequence"],
-                    user=form.cleaned_data["user"],
-                    report_type=form.cleaned_data["report_type"],
-                    printed_by=request.user.username,
-                )
+                filters = {
+                    "branch": branch,
+                    "date_from": form.cleaned_data["date_from"],
+                    "date_to": form.cleaned_data["date_to"],
+                    "office": office,
+                    "issuer": form.cleaned_data["issuer"],
+                    "sequence": form.cleaned_data["sequence"],
+                    "user": form.cleaned_data["user"],
+                }
+                report_type = form.cleaned_data["report_type"]
                 export_format = form.cleaned_data["export_format"]
-                buffer, nombre = cash_closing_exporters.render(report, export_format)
+
+                # «Ingresos por usuario» no es la hoja del consolidado
+                # recortada: es otra hoja, una fila por concepto cobrado.
+                if report_type == USER_REPORT_TYPE:
+                    report = build_user_income(**filters)
+                    buffer, nombre = user_income_exporters.render(
+                        report, export_format
+                    )
+                else:
+                    report = build_cash_closing(
+                        **filters,
+                        report_type=report_type,
+                        printed_by=request.user.username,
+                    )
+                    buffer, nombre = cash_closing_exporters.render(
+                        report, export_format
+                    )
 
                 # `inline`, como en materiales: el PDF se abre en el visor del
                 # navegador y el Excel se descarga igual por su cuenta.
@@ -238,5 +254,6 @@ class CashClosingView(CashClosingPermissionMixin, TemplateView):
                 form=form,
                 branch=branch,
                 viewed_formats=VIEWED_FORMATS,
+                user_report_type=USER_REPORT_TYPE,
             )
         )

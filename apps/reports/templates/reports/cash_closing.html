@@ -162,5 +162,35 @@ descarga sobre la misma pantalla, igual que en materiales.
         formato.addEventListener("change", ajustar);
         ajustar();
     })();
+
+    (function () {
+        "use strict";
+
+        var reporte = document.getElementById("{{ form.report_type.id_for_label }}");
+        var usuario = document.getElementById("{{ form.user.id_for_label }}");
+
+        if (!reporte || !usuario) {
+            return;
+        }
+
+        // «Usuario» solo se abre en el reporte por usuario, que también lo
+        // decide el servidor (`cash_closing.USER_REPORT_TYPE`). Al bloquearse
+        // vuelve a «Todos»: un cajero a la vista que no se aplica haría creer
+        // que el consolidado salió de él.
+        var porUsuario = "{{ user_report_type }}";
+
+        function ajustar() {
+            var bloqueado = reporte.value !== porUsuario;
+
+            usuario.disabled = bloqueado;
+
+            if (bloqueado) {
+                usuario.value = "";
+            }
+        }
+
+        reporte.addEventListener("change", ajustar);
+        ajustar();
+    })();
 </script>
 {% endblock %}

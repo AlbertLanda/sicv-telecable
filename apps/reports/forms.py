@@ -7,7 +7,11 @@ from django.db.models import Q
 from apps.accounts.models import User
 from apps.payments.models import Issuer, ReceiptSequence
 
-from .cash_closing import DEFAULT_REPORT_TYPE, REPORT_TYPE_CHOICES
+from .cash_closing import (
+    DEFAULT_REPORT_TYPE,
+    REPORT_TYPE_CHOICES,
+    USER_REPORT_TYPE,
+)
 from .materials import DEFAULT_SCOPE, SCOPE_CHOICES
 
 
@@ -151,6 +155,14 @@ class CashClosingForm(forms.Form):
 
     «Consolidado oficinas» marcado es la sede entera. Desmarcado, el cierre
     se limita a la oficina activa de la barra superior.
+
+    «Empresa» abre en «Todas»: sin elegir una, el cierre suma todas las
+    empresas de la sede, que es como se cuadra la caja.
+
+    «Usuario» solo cuenta en «Ingresos por usuario»: vacío salen todos los que
+    cobraron, como con el «NINGUNO» de SICAV. En los demás reportes queda
+    bloqueado y lo que traiga se descarta: un usuario elegido que no se ve
+    aplicado haría pasar por consolidado el cierre de un solo cajero.
     """
 
     issuer = forms.ModelChoiceField(
@@ -228,6 +240,16 @@ class CashClosingForm(forms.Form):
             "first_name", "last_name", "username"
         )
 
+        # Bloqueado en el servidor y no solo en el navegador: un campo
+        # deshabilitado se pinta con `disabled` y Django ignora lo que llegue
+        # por él, aunque alguien lo escriba a mano en la dirección.
+        if self.is_bound:
+            report_type = self.data.get(self.add_prefix("report_type"))
+        else:
+            report_type = self.initial.get("report_type", DEFAULT_REPORT_TYPE)
+
+        self.fields["user"].disabled = report_type != USER_REPORT_TYPE
+
     def clean(self):
         cleaned = super().clean()
 
@@ -244,14 +266,17 @@ class CashClosingForm(forms.Form):
 
 def cash_closing_defaults():
     """Con qué abre el cierre de caja: el mes en curso hasta hoy, la sede
-    entera. Es el cuadre que Contabilidad pide más a menudo, así que la
-    pantalla ya llega respondiéndolo."""
+    entera y todas sus empresas. Es el cuadre que Contabilidad pide más a
+    menudo, así que la pantalla ya llega respondiéndolo.
+
+    Son valores iniciales y no un envío: la primera visita no se valida, y
+    ningún aviso aparece antes de que el operador haya tocado nada."""
     hoy = timezone.localdate()
 
     return {
-        "date_from": hoy.replace(day=1).isoformat(),
-        "date_to": hoy.isoformat(),
+        "date_from": hoy.replace(day=1),
+        "date_to": hoy,
         "report_type": DEFAULT_REPORT_TYPE,
         "export_format": DEFAULT_CASH_CLOSING_FORMAT,
-        "all_offices": "on",
+        "all_offices": True,
     }

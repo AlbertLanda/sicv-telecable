@@ -34,16 +34,39 @@ El MVP del issue. Solo lee: no toca pagos ni comprobantes.
 | Pantalla | `apps/reports/templates/reports/cash_closing.html` |
 | Ruta | `/reportes/cierre-caja/` (el formulario viaja por GET a la misma ruta) |
 | Permiso | `payments.view_cash_closing` (migración `payments/0021`), disponible para **Contabilidad** y **Administrador** mediante la matriz base de roles |
-| Pruebas | `apps/reports/tests/test_cash_closing.py` (50 pruebas) |
+| Pruebas | `apps/reports/tests/test_cash_closing.py` y `test_user_income.py` |
 
 **Pantalla.** Mismo diseño que el reporte de materiales, con los campos de
-SICAV en su orden: Empresa, Desde, Hasta, Reporte (Consolidado de emisión),
-Usuario, Serie, Formato (Excel o PDF) y Consolidado oficinas. El botón
+SICAV en su orden: Empresa, Desde, Hasta, Reporte (Consolidado de emisión
+o Ingresos por usuario), Usuario, Serie, Formato (Excel o PDF) y Consolidado
+oficinas. El botón
 **Exportar** saca el consolidado en el formato elegido.
 
 El formulario abre con el mes en curso. La sede es siempre la activa. Sin
 «Consolidado oficinas», el cierre se limita a la oficina activa de la barra
-superior.
+superior. «Empresa» abre en **Todas**: sin elegir una, el cierre suma todas
+las empresas de la sede.
+
+**Usuario** está bloqueado salvo en «Ingresos por usuario». En el consolidado
+no recorta nada, aunque llegue en la dirección.
+
+**Ingresos por usuario** (`apps/reports/user_income.py` y
+`user_income_exporters.py`) es el «Reporte de ingresos» de SICAV, en Excel o
+PDF apaisado:
+
+- Título «Reporte de ingresos: desde - hasta Usuarios» (o el usuario elegido),
+  la hora en la esquina y la sede a la derecha.
+- Una fila por concepto cobrado, no por comprobante: Código, Fecha, Abonado,
+  Dirección, Fecha pago, Detalle, Pagó hasta, Monto, Documento y Usuario. Lo
+  que un pago no aplicó a ningún cargo sale como «Saldo a favor».
+- El **total** al pie, bajo Monto.
+- Sin usuario salen todos, como con el «NINGUNO» de SICAV.
+- Mismas reglas que el consolidado (solo cancelados, recorte por emisión), así
+  que con los mismos filtros su total es el Total de Ventas.
+
+POR VALIDAR contra SICAV: si recorta por emisión o por fecha de pago, qué
+pone en «Pagó hasta» cuando el concepto no cubre un periodo (SICV lo deja en
+blanco), y si «Usuario» es quien registra o el cobrador.
 
 **La hoja** es la de SICAV fila por fila, con sus mismos textos:
 
@@ -118,7 +141,7 @@ ahora usa la caja del día.
 | Por oficina/caja | ✓ | | | `Payment.office`, `organization.Office` | La oficina es opcional en pagos antiguos, anteriores al padrón de oficinas. |
 | Por razón social/RUC | ✓ | | | `Issuer`, `ReceiptSequence.issuer` | La caja del día agrupa por emisora y el cierre filtra por emisora. |
 | Por medio de pago | | ✓ | | `Payment.method` | La caja del día agrupa por método. El cierre no lo desglosa, porque la hoja de SICAV tampoco; el detalle del Excel trae el método. |
-| Por usuario que registra | ✓ | | | `Payment.received_by` | Filtro «Usuario» del cierre. |
+| Por usuario que registra | ✓ | | | `Payment.received_by` | Reporte «Ingresos por usuario» del cierre. |
 | Por cobrador | | ✓ | | `Payment.collector` | Solo aparece en el detalle del Excel del cierre; no hay filtro ni subtotal. |
 | Pagos pendientes | ✓ | | | `Payment.Status.PENDING`, `Payment.confirm()` | No bajan deuda ni suman en caja. |
 | Pagos anulados | | ✓ | | `Payment.Status.VOIDED`, `voided_at/by`, `void_reason` | Anular un pago después cambia un periodo ya consultado (ver riesgos). |

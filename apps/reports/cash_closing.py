@@ -45,14 +45,20 @@ ZERO = Decimal("0.00")
 
 
 # El desplegable «Reporte». SICAV ofrece más de uno; el que Contabilidad usa
-# para cuadrar es este, y los demás entran cuando se pidan.
+# para cuadrar es el consolidado, y los demás entran cuando se pidan.
 REPORT_TYPES = {
     "EMISSION": "Consolidado de emisión",
+    "INCOME_BY_USER": "Ingresos por usuario",
 }
 
 DEFAULT_REPORT_TYPE = "EMISSION"
 
 REPORT_TYPE_CHOICES = list(REPORT_TYPES.items())
+
+# El único reporte que se pide por usuario (`user_income`). Los demás son de
+# la caja entera: en ellos «Usuario» queda bloqueado y no recorta nada, para
+# que el consolidado no salga a medias porque quedó elegido un cajero de antes.
+USER_REPORT_TYPE = "INCOME_BY_USER"
 
 
 # Los tres grupos de ingresos, en el orden de la hoja de SICAV.

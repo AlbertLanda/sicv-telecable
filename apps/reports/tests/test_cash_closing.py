@@ -606,6 +606,7 @@ class PeriodAndScopeTests(CashClosingTestCase):
         self.assertEqual(report["sales_total"], Decimal("60.00"))
 
 
+
 class CashClosingPermissionTests(CashClosingTestCase):
     def test_accounting_and_admin_roles_bring_the_permission(self):
         admin = User.objects.create_user(
@@ -713,9 +714,24 @@ class CashClosingAccessTests(CashClosingWebTestCase):
         form = response.context["form"]
         today = timezone.localdate()
 
-        self.assertEqual(form.cleaned_data["date_from"], today.replace(day=1))
-        self.assertEqual(form.cleaned_data["date_to"], today)
-        self.assertTrue(form.cleaned_data["all_offices"])
+        self.assertEqual(form["date_from"].value(), today.replace(day=1))
+        self.assertEqual(form["date_to"].value(), today)
+        self.assertTrue(form["all_offices"].value())
+
+    def test_the_company_opens_on_all(self):
+        """«Empresa» abre en «Todas», elegida y sin ningún aviso."""
+        self.login(self.accountant)
+
+        response = self.client.get(reverse("reports:cash_closing"))
+        form = response.context["form"]
+        labels = [label for _value, label in form.fields["issuer"].choices]
+
+        self.assertIsNone(form["issuer"].value())
+        self.assertEqual(labels[0], "Todas")
+        self.assertContains(
+            response, '<option value="" selected>Todas</option>', html=True
+        )
+        self.assertNotContains(response, '<div class="tc-form-error">')
 
     def test_the_user_list_only_offers_who_registered_in_the_branch(self):
         self.emit("10.00", self.boleta, user=self.cashier)
@@ -811,6 +827,70 @@ class CashClosingScreenTests(CashClosingWebTestCase):
         values = self.consolidated(response)
 
         self.assertEqual(values["Total de Ventas:"], 100.0)
+
+    def test_without_a_company_it_adds_up_all_and_with_one_only_that(self):
+        self.emit("50.00", self.boleta)
+
+        todas = self.consolidated(self.page(issuer="", export_format="EXCEL"))
+        alfa = self.consolidated(
+            self.page(issuer=self.issuer.pk, export_format="EXCEL")
+        )
+        beta = self.consolidated(
+            self.page(issuer=self.other_issuer.pk, export_format="EXCEL")
+        )
+
+        self.assertEqual(todas["Total de Ventas:"], 170.0)
+        self.assertEqual(alfa["Total de Ventas:"], 100.0)
+        self.assertEqual(beta["Total de Ventas:"], 70.0)
+
+    def test_the_report_offers_the_consolidated_and_income_by_user(self):
+        form = self.page().context["form"]
+
+        self.assertEqual(
+            list(form.fields["report_type"].choices),
+            [
+                ("EMISSION", "Consolidado de emisión"),
+                ("INCOME_BY_USER", "Ingresos por usuario"),
+            ],
+        )
+
+    def test_the_user_opens_locked_on_all(self):
+        """El formulario abre en el consolidado, así que «Usuario» llega
+        bloqueado y en «Todos»; la plantilla sabe qué reporte lo abre."""
+        response = self.page()
+        form = response.context["form"]
+        labels = [label for _value, label in form.fields["user"].choices]
+
+        self.assertTrue(form.fields["user"].disabled)
+        self.assertIn("disabled", str(form["user"]))
+        self.assertIsNone(form["user"].value())
+        self.assertEqual(labels[0], "Todos")
+        self.assertEqual(response.context["user_report_type"], "INCOME_BY_USER")
+
+    def test_the_consolidated_ignores_a_user_in_the_address(self):
+        """Bloqueado también en el servidor: un usuario escrito a mano en la
+        dirección no recorta el consolidado."""
+        self.emit("60.00", self.factura, user=self.second_cashier)
+
+        values = self.consolidated(
+            self.page(user=self.second_cashier.pk, export_format="EXCEL")
+        )
+
+        self.assertEqual(values["Total de Ventas:"], 180.0)
+
+    def test_income_by_user_opens_the_user_without_requiring_it(self):
+        """Vacío no es un error: son todos los usuarios. Si el envío vuelve
+        por otro error, «Usuario» vuelve abierto."""
+        response = self.page(
+            report_type="INCOME_BY_USER",
+            date_from="2026-09-30",
+            date_to="2026-09-01",
+            export_format="EXCEL",
+        )
+        form = response.context["form"]
+
+        self.assertFalse(form.fields["user"].disabled)
+        self.assertNotIn("user", form.errors)
 
     def test_an_inverted_period_returns_to_the_filters_with_its_error(self):
         response = self.page(
