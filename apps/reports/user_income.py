@@ -4,11 +4,10 @@ Es el «Reporte de ingresos» de SICAV: una fila por concepto cobrado -no por
 comprobante-, con quién lo registró y el total al pie. Un comprobante que
 cubrió tres conceptos ocupa tres filas, como en la hoja de SICAV.
 
-La implementación comparte hoy la selección base del consolidado
-(`cash_closing`): solo suma pagos registrados y recorta el rango por la
-emisión del comprobante. Esa semántica de fecha todavía debe contrastarse con
-un caso del legado donde «Fecha» y «Fecha pago» sean distintas; no se considera
-regla definitiva de negocio hasta entonces.
+A diferencia del consolidado de emisión, este reporte recorta el rango por la
+fecha real de pago. Ese comportamiento se validó contra SICAV con días en los
+que «Fecha» (emisión) y «Fecha pago» son distintas: la fila aparece en el día
+del pago, no en el día de emisión.
 
 Sin usuario elegido salen todos los que registraron cobros, comportamiento ya
 validado contra SICAV con «NINGUNO»; el título lo dice con «Usuarios».
@@ -20,9 +19,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from apps.customers.models import Customer, CustomerAddress
-from apps.payments.models import Payment
-
-from .cash_closing import period_receipts
+from apps.payments.models import Payment, Receipt
 
 
 ZERO = Decimal("0.00")
@@ -160,28 +157,47 @@ def build_user_income(
     user=None,
 ):
     """Todo lo que el PDF y el Excel del reporte necesitan para imprimirse."""
-    # El legado ya validó NINGUNO=Todos y el filtro por usuario. La semántica
-    # temporal sigue pendiente cuando emisión y pago caen en días distintos;
-    # por ahora se conserva la misma selección por emisión del consolidado.
+    # SICAV recorta «Ingresos por usuario» por Fecha pago, no por la
+    # emisión del comprobante. Es deliberadamente distinto del Consolidado de
+    # emisión: un comprobante emitido un día y cobrado al siguiente pertenece
+    # al segundo día en este reporte.
     receipts = (
-        period_receipts(
-            branch=branch,
-            date_from=date_from,
-            date_to=date_to,
-            office=office,
-            issuer=issuer,
-            sequence=sequence,
-            user=user,
+        Receipt.objects
+        .select_related(
+            "sequence",
+            "sequence__issuer",
+            "payment",
+            "payment__customer",
+            "payment__office",
+            "payment__received_by",
         )
-        .filter(payment__status=Payment.Status.REGISTERED)
-        .prefetch_related(
-            "payment__allocations__charge",
-            Prefetch(
-                "payment__customer__addresses",
-                queryset=CustomerAddress.objects.filter(is_primary=True),
-                to_attr="primary_addresses",
-            ),
+        .filter(
+            payment__branch=branch,
+            payment__status=Payment.Status.REGISTERED,
+            payment__paid_at__date__gte=date_from,
+            payment__paid_at__date__lte=date_to,
         )
+    )
+
+    if office is not None:
+        receipts = receipts.filter(payment__office=office)
+
+    if issuer is not None:
+        receipts = receipts.filter(sequence__issuer=issuer)
+
+    if sequence is not None:
+        receipts = receipts.filter(sequence=sequence)
+
+    if user is not None:
+        receipts = receipts.filter(payment__received_by=user)
+
+    receipts = receipts.prefetch_related(
+        "payment__allocations__charge",
+        Prefetch(
+            "payment__customer__addresses",
+            queryset=CustomerAddress.objects.filter(is_primary=True),
+            to_attr="primary_addresses",
+        ),
     )
 
     rows = []
