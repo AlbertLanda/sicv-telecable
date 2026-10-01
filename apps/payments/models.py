@@ -1226,6 +1226,13 @@ class Receipt(models.Model):
         verbose_name = "Comprobante de pago"
         verbose_name_plural = "Comprobantes de pago"
         ordering = ["-issued_at", "-pk"]
+        # El cierre de caja suma los comprobantes de toda la sede, de todas
+        # sus oficinas y usuarios. Es un permiso propio y no `view_receipt`
+        # porque ATC ya consulta comprobantes uno a uno en la ficha del
+        # abonado, y con eso vería también la recaudación de la sede entera.
+        permissions = [
+            ("view_cash_closing", "Puede ver el cierre de caja"),
+        ]
         constraints = [
             # Por talonario y no por serie impresa: los tres «S010» son
             # blocks distintos y cada uno recorre sus propios números, así

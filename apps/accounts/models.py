@@ -76,14 +76,26 @@ class User(AbstractUser):
             "services.view_servicetype",
             "contracts.change_contract",
             "payments.view_paymentcommitment",
+            "payments.view_cash_closing",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
+        }
+    )
+
+    # Contabilidad saca el cierre de caja de cada sede y nada más por ahora.
+    # No registra ni anula cobros, y tampoco hereda la consulta de pagos:
+    # las pruebas de cobranza usan este rol como el que no trae permisos de
+    # pagos para aislar cada uno.
+    ACCOUNTING_BASELINE_PERMISSIONS = frozenset(
+        {
+            "payments.view_cash_closing",
         }
     )
 
     ROLE_BASELINE_PERMISSIONS = {
         Role.ADMIN: ATC_BASELINE_PERMISSIONS | ADMIN_EXTRA_PERMISSIONS,
         Role.ATC: ATC_BASELINE_PERMISSIONS,
+        Role.ACCOUNTING: ACCOUNTING_BASELINE_PERMISSIONS,
         Role.NOC: frozenset(
             {
                 "work_orders.view_workorder",

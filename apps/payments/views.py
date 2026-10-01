@@ -52,6 +52,7 @@ from .models import (
     ZERO,
     format_receipt_number,
 )
+from . import history_export
 from .board import charge_lines, debt_rows
 from .pdf import render_receipt
 from .proposals import (
@@ -70,6 +71,7 @@ from .services import (
     customer_debt,
     grant_commitment,
     outstanding_charges,
+    paid_between,
     receipt_series_options,
     register_payment,
 )
@@ -352,6 +354,34 @@ class CustomerPaymentHistoryView(
                 part for part in (explanation, payment.note) if part
             ),
         }
+
+    def get(self, request, *args, **kwargs):
+        """Con `?exportar=excel` o `?exportar=pdf`, el historial como archivo.
+
+        Exporta todas las filas y no la página que se ve (ver
+        `history_export`). Lo sirve esta misma vista, con su mismo permiso:
+        quien puede ver el historial puede llevárselo, y nadie más.
+
+        El Excel se descarga; el PDF se abre en el visor del navegador, que ya
+        trae sus botones de imprimir y guardar.
+        """
+        export_format = request.GET.get("exportar")
+
+        if export_format in history_export.FORMATS:
+            buffer, nombre = history_export.RENDERERS[export_format](
+                self.customer,
+                self.get_queryset(),
+                printed_by=request.user.username,
+            )
+
+            return FileResponse(
+                buffer,
+                as_attachment=export_format == "excel",
+                filename=nombre,
+                content_type=history_export.CONTENT_TYPES[export_format],
+            )
+
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1279,11 +1309,7 @@ class DailyCashView(LoginRequiredMixin, PermissionRequiredMixin, TemplateView):
         receipts = Receipt.objects.filter(
             payment__status=Payment.Status.REGISTERED,
         ).filter(
-            Q(payment__paid_at__date=selected_day)
-            | Q(
-                payment__paid_at__isnull=True,
-                payment__received_at__date=selected_day,
-            )
+            paid_between(selected_day, selected_day, prefix="payment__")
         )
 
         if branch is not None:

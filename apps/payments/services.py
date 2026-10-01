@@ -16,6 +16,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.services.models import Subscription
@@ -33,6 +34,28 @@ from .models import (
     ZERO,
     format_receipt_number,
 )
+
+
+def paid_between(date_from, date_to, prefix=""):
+    """Los pagos cuyo día de cobro cae en el rango, como condición `Q`.
+
+    El día de cobro es la fecha real de pago y, si el pago todavía no la
+    tiene -un «Cancelado: No»-, la fecha en que se registró. Es la regla de la
+    caja del día; vive aquí para que cualquier otra consulta por día de cobro
+    cuente el mismo día que la caja para el mismo pago.
+
+    `prefix` permite aplicarla desde otra tabla: `"payment__"` para filtrar
+    comprobantes por el día de su pago. Las dos fechas son inclusivas y se
+    leen en la hora de Lima.
+    """
+    return Q(**{
+        f"{prefix}paid_at__date__gte": date_from,
+        f"{prefix}paid_at__date__lte": date_to,
+    }) | Q(**{
+        f"{prefix}paid_at__isnull": True,
+        f"{prefix}received_at__date__gte": date_from,
+        f"{prefix}received_at__date__lte": date_to,
+    })
 
 
 # Serie única de recibos internos. No es una serie SUNAT: numera la constancia
