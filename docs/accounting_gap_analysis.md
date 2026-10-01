@@ -116,8 +116,22 @@ La semántica temporal ya quedó validada con exportaciones reales donde
 `Fecha pago`, no en el día de emisión. La implementación del SICV nuevo fue
 corregida para recortar por `Payment.paid_at`.
 
-**Pendiente funcional:** validar `Pagó hasta` ante un pago parcial de un cargo
-periódico.
+**Confirmación funcional de ATC (2026-10-01):** en el flujo operativo actual,
+los cobros de los planes se realizan por el importe completo; no se admiten
+abonos parciales. Por tanto, la duda de `Pagó hasta` ante pago parcial queda
+**no aplicable al alcance actual**. Es una confirmación del área, no una prueba
+observada de cómo el legado representaría un caso parcial.
+
+Para un cargo periódico cobrado completo se conserva `Charge.period_end` en
+`Pagó hasta`; los conceptos sin periodo siguen sin fecha. No se debe inferir
+que el cliente tenga que cancelar toda su deuda acumulada en una sola operación,
+ni calcular días proporcionales a partir del importe pagado.
+
+El SICV nuevo dispone técnicamente de `PaymentAllocation` para pagos parciales.
+Esta confirmación no elimina esa capacidad ni demuestra que su pantalla de
+cobro impida usarlos: antes del piloto debe contrastarse ese flujo con la regla
+de cobro completo. Cualquier excepción futura necesita validación funcional
+propia y una prueba de regresión para `Pagó hasta`.
 
 ### A.2 Exportación del historial de pagos
 
@@ -150,7 +164,7 @@ En la ficha del abonado, Historial de pagos permite exportar Excel/PDF.
 | Anulados | Parcial | Se audita el pago, pero un cambio posterior altera reportes históricos recalculados |
 | Fecha emisión vs pago | Existe | `Receipt.issued_at`, `Payment.paid_at` |
 | Deuda por abonado | Existe | cargos y deuda de cliente |
-| Pagos parciales | Existe | `PaymentAllocation`, cargos parciales |
+| Pagos parciales | Capacidad técnica; fuera del flujo ATC confirmado | `PaymentAllocation` admite parciales; ATC confirmó cobro completo del plan. Falta contrastar la pantalla nueva con esta regla. |
 | Compromisos | Existe | modelos de compromisos/cuotas |
 | Saldo a favor | Parcial | `Payment.unallocated_amount`; sin tablero propio |
 | PDF de comprobante | Existe | representación impresa |
@@ -322,7 +336,8 @@ historial de estados/correcciones.
 ### P0 · antes del piloto financiero
 
 - Cuadrar **Consolidado de emisión** legado vs nuevo con mismos filtros.
-- Validar `Pagó hasta` ante pago parcial.
+- Contrastar la pantalla de cobro nueva con la regla ATC de importe completo;
+  `Pagó hasta` ante pago parcial queda no aplicable al flujo actual.
 - Definir propiedad exclusiva de series/talonarios durante convivencia.
 - Mantener generación mensual idempotente y pruebas de reejecución.
 - Diseñar estados fiscales internos sin implementar aún el transporte SUNAT.

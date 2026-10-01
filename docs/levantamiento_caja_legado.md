@@ -157,8 +157,22 @@ Validado contra exportaciones reales del legado:
 - Cuando `Fecha` (emisión) y `Fecha pago` difieren, el registro pertenece al
   día de `Fecha pago`.
 
-**Sigue por validar:** la semántica exacta de `Pagó hasta` ante un pago
-parcial de un cargo.
+**Confirmación funcional de ATC (2026-10-01):** en el flujo operativo actual,
+los cobros de los planes se realizan por el importe completo; no se admiten
+abonos parciales. Por tanto, la duda de `Pagó hasta` ante pago parcial queda
+**no aplicable al alcance actual**. Es una confirmación del área, no una prueba
+observada de cómo el legado representaría un caso parcial.
+
+Para un cargo periódico cobrado completo se conserva `Charge.period_end` en
+`Pagó hasta`; los conceptos sin periodo siguen sin fecha. No se debe inferir
+que el cliente tenga que cancelar toda su deuda acumulada en una sola operación,
+ni calcular días proporcionales a partir del importe pagado.
+
+El SICV nuevo dispone técnicamente de `PaymentAllocation` para pagos parciales.
+Esta confirmación no elimina esa capacidad ni demuestra que su pantalla de
+cobro impida usarlos: antes del piloto debe contrastarse ese flujo con la regla
+de cobro completo. Cualquier excepción futura necesita validación funcional
+propia y una prueba de regresión para `Pagó hasta`.
 
 ### 2.5 Facturación electrónica
 
@@ -273,8 +287,9 @@ Detalle técnico en
 
 ### P0
 
-1. ¿Qué debe mostrar `Pagó hasta` cuando un pago cubre solo parcialmente un
-   cargo periódico?
+1. ¿La pantalla de cobro del SICV nuevo respeta la regla confirmada de importe
+   completo del plan? La duda de `Pagó hasta` ante un pago parcial queda no
+   aplicable al flujo ATC actual; no se observó un caso parcial en el legado.
 2. ¿Cuál es el mecanismo técnico real de emisión fiscal: generación XML,
    firma, transporte, respuesta/CDR, rechazo, baja y contingencia?
 3. Durante el piloto, ¿qué sistema es dueño de cada serie/talonario para evitar
@@ -306,8 +321,9 @@ Detalle técnico en
 
 - Validar el **Consolidado de emisión** contra el legado para la misma sede,
   oficina, empresa, serie y periodo.
-- Mantener **Ingresos por usuario** y cerrar la duda de `Pagó hasta` ante
-  pago parcial.
+- Mantener **Ingresos por usuario** y contrastar el flujo nuevo de cobro con la
+  regla de importe completo del plan confirmada por ATC. La semántica parcial
+  de `Pagó hasta` no bloquea la réplica del flujo operativo actual.
 - Definir propiedad de series durante la coexistencia legado/nuevo.
 - Diseñar el estado fiscal sin asumir todavía el proveedor/mecanismo de SUNAT.
 - Mantener la generación de mensualidades idempotente para impedir cargos
