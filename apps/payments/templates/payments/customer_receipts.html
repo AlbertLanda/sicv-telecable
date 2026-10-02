@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load customer_ui %}
 
 {% block title %}Comprobantes de {{ customer }} - SICV{% endblock %}
 
@@ -9,6 +10,8 @@
 <div class="tc-content">
 
     {% include "_customer_record_header.html" with active_tab="receipts" record_title="Comprobantes" %}
+
+    {% customer_qa_billing_examples customer %}
 
     <section class="tc-card tc-section tc-full">
 
@@ -104,6 +107,14 @@
                                        target="_blank" rel="noopener"
                                        class="tc-icon-btn" title="Imprimir comprobante">
                                         <i class="bi bi-printer"></i>
+                                    </a>
+                                    <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1&amp;formato=TICKET"
+                                       target="_blank" rel="noopener" class="tc-btn" title="Ticket vertical">
+                                        Vertical
+                                    </a>
+                                    <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1&amp;formato=SHEET"
+                                       target="_blank" rel="noopener" class="tc-btn" title="Media hoja horizontal">
+                                        Horizontal
                                     </a>
                                 </td>
                             </tr>

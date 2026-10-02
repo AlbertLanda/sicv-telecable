@@ -23,6 +23,32 @@ def customer_has_qa_samples(customer):
     return AuditEvent.objects.filter(route_name=SAMPLE_ROUTE, path=sample_path(customer)).exists()
 
 
+@register.inclusion_tag("customers/_qa_billing_examples.html")
+def customer_qa_billing_examples(customer):
+    from decimal import Decimal
+    from apps.audit.models import AuditEvent
+    from apps.customers.qa_billing_examples import BILLING_SAMPLE_ROUTE
+    from apps.customers.qa_samples import sample_path
+    from apps.payments.models import Charge, Receipt
+
+    event = AuditEvent.objects.filter(route_name=BILLING_SAMPLE_ROUTE, path=sample_path(customer)).first()
+    rows = []
+    if event:
+        data = event.changes
+        charges = {c.pk: c for c in Charge.objects.filter(customer=customer, pk__in=data["charges"])}
+        receipts = {r.pk: r for r in Receipt.objects.filter(payment__customer=customer, pk__in=data["receipts"]).select_related("payment")}
+        for case in data["cases"]:
+            items = [charges[pk] for pk in case["charges"] if pk in charges]
+            if not items:
+                continue
+            receipt = receipts.get(case["receipt"])
+            rows.append({"label": case["label"], "charge": items[0], "receipt": receipt,
+                         "fee": sum((c.amount for c in items[1:]), Decimal("0.00")),
+                         "total": receipt.payment.amount if receipt else sum((c.balance for c in items), Decimal("0.00")),
+                         "status": receipt.payment.get_status_display() if receipt else "Por cobrar"})
+    return {"examples": rows}
+
+
 @register.inclusion_tag("customers/_hero.html")
 def customer_hero(customer, heading_level=2):
     """

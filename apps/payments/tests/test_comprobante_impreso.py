@@ -11,6 +11,7 @@ from unittest.mock import patch
 from reportlab.lib.units import mm
 
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.customers.models import Customer
 from apps.payments import pdf
@@ -1056,7 +1057,7 @@ class ElCodigoQrTests(PaymentsTestCase):
 
         campos = self.contenido(receipt).split("|")
 
-        self.assertEqual(campos[6], receipt.issued_at.strftime("%Y-%m-%d"))
+        self.assertEqual(campos[6], timezone.localtime(receipt.issued_at).strftime("%Y-%m-%d"))
         self.assertRegex(campos[6], r"^\d{4}-\d{2}-\d{2}$")
 
     def test_the_last_field_is_the_same_summary_that_is_printed(self):
