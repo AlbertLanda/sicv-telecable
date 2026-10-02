@@ -4,7 +4,7 @@ from django import forms
 from django.utils import timezone
 
 from apps.payments.models import Charge, Issuer
-from .models import DocumentType, FiscalProfile
+from .models import DocumentType, FiscalProfile, OseConnection, OseSimulation
 
 
 class ChargeChoiceField(forms.ModelMultipleChoiceField):
@@ -47,3 +47,28 @@ class FiscalProfileForm(forms.ModelForm):
         for field in self.fields.values():
             if not isinstance(field.widget, (forms.CheckboxInput, forms.CheckboxSelectMultiple)):
                 field.widget.attrs["class"] = "form-control"
+
+
+class OseConnectionForm(forms.ModelForm):
+    class Meta:
+        model = OseConnection
+        fields = ["mode", "provider_name", "test_endpoint", "production_endpoint",
+                  "username_setting", "password_setting", "certificate_setting", "certificate_password_setting"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            field.widget.attrs["class"] = "form-control"
+            if name.endswith("_setting"):
+                field.help_text = "Nombre de una variable SICV_OSE_… del servidor. Aquí no se guardan secretos."
+
+
+class OseSimulationForm(forms.Form):
+    scenario = forms.ChoiceField(label="Escenario de prueba", choices=OseSimulation.Scenario.choices,
+                                 widget=forms.Select(attrs={"class": "form-select"}))
+    request_key = forms.UUIDField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.initial["request_key"] = uuid.uuid4()

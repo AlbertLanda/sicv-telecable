@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Conexión OSE prevista - SICV{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4">Conexión OSE prevista · {{ issuer }}</h1>
+  <div class="alert alert-warning">Emisión real no habilitada. El proveedor se elegirá después de cotizar. Guardar direcciones y referencias no activa el envío.</div>
+  <p>El simulador local permite revisar el circuito sin contratar un proveedor. Las URL previstas y las referencias de secretos se reservan para una integración posterior.</p>
+  <form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Guardar configuración prevista</button></form>
+  <p class="mt-3"><a href="{% url 'fiscal:list' %}">Volver a preparación de facturación</a></p>
+</div>
+{% endblock %}

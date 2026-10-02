@@ -466,3 +466,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
+
+# Pruebas OSE locales, deshabilitadas por defecto. El servicio además impide
+# ejecutarlas cuando PRODUCTION=True aunque se configure esta variable.
+FISCAL_SIMULATION_ENABLED = env_bool('DJANGO_FISCAL_SIMULATION_ENABLED', default=False)

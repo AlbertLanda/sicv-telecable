@@ -22,6 +22,11 @@
     {% for issuer in issuers %}<a class="me-3" href="{% url 'fiscal:profile' issuer.pk %}">{{ issuer }}</a>{% empty %}Sin empresas activas.{% endfor %}
   </p>
   {% endif %}
+  {% if perms.fiscal.configure_ose %}
+  <p>Conexión OSE prevista:
+    {% for issuer in issuers %}<a class="me-3" href="{% url 'fiscal:ose_connection' issuer.pk %}">{{ issuer }}</a>{% empty %}Sin empresas activas.{% endfor %}
+  </p>
+  {% endif %}
   <section class="tc-card p-3">
     <div class="table-responsive"><table class="table">
       <thead><tr><th>Borrador</th><th>Abonado</th><th>Empresa</th><th>Tipo</th><th>Importe de origen</th><th>Estado</th></tr></thead>

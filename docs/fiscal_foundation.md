@@ -100,8 +100,11 @@ entrega al cliente, contingencia o SIRE. Tampoco resuelve por sí sola los
 pendientes de cobro completo, concurrencia de pagos, egresos o cierres de caja
 identificados en `levantamiento_caja_legado.md`.
 
-La siguiente entrega implementará reglas de cálculo y un adaptador de prueba
-con estados de envío y recuperación, después de confirmar su contrato. La
+La entrega posterior `feature/ose-connector-foundation` añade una estructura
+por empresa, un contrato interno y un simulador de envío/consulta recuperable.
+La guía está en [ose_connector_foundation.md](ose_connector_foundation.md).
+El simulador no implementa el contrato de un proveedor ni calcula impuestos.
+Las reglas de cálculo y el adaptador real continúan pendientes de validación. La
 emisión real requerirá además las reglas y habilitación por emisor, archivos y
 respuestas verificables, numeración y revisión del procedimiento de cambio.
 

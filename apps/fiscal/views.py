@@ -8,9 +8,10 @@ from django.views.generic import DetailView, FormView, ListView, View
 from apps.customers.models import Customer
 from apps.organization.context_processors import get_active_branch
 from apps.payments.models import Issuer
-from .forms import DraftForm, FiscalProfileForm
-from .models import FiscalDocument, FiscalProfile
+from .forms import DraftForm, FiscalProfileForm, OseConnectionForm, OseSimulationForm
+from .models import FiscalDocument, FiscalProfile, OseConnection, OseSimulation
 from .services import cancel_draft, prepare_draft, save_profile
+from .ose_services import prepare_simulation, run_simulation, save_connection, simulations_enabled
 
 
 class DraftListView(LoginRequiredMixin, PermissionRequiredMixin, ListView):
@@ -80,6 +81,10 @@ class DraftDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
     def get_queryset(self):
         return FiscalDocument.objects.filter(branch=get_active_branch(self.request)).prefetch_related("events__actor")
 
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "simulations_enabled": simulations_enabled(),
+                "ose_simulations": self.object.ose_simulations.all()}
+
 
 class DraftCancelView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = ("fiscal.cancel_fiscaldocument", "fiscal.view_fiscaldocument")
@@ -119,3 +124,77 @@ class ProfileView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
             return self.form_invalid(form)
         messages.success(self.request, "Configuración guardada. La emisión real continúa bloqueada.")
         return redirect(reverse("fiscal:profile", kwargs={"issuer_id": self.issuer.pk}))
+
+
+class OseConnectionView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
+    permission_required = "fiscal.configure_ose"
+    template_name = "fiscal/ose_connection.html"
+
+    form_class = OseConnectionForm
+
+    def get_form_kwargs(self):
+        self.issuer = get_object_or_404(Issuer, pk=self.kwargs["issuer_id"], is_active=True)
+        connection = OseConnection.objects.filter(issuer=self.issuer).first() or OseConnection(issuer=self.issuer)
+        return {**super().get_form_kwargs(), "instance": connection}
+
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "issuer": self.issuer}
+
+    def form_valid(self, form):
+        try:
+            save_connection(actor=self.request.user, issuer_id=self.issuer.pk, values=form.cleaned_data)
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
+        messages.success(self.request, "Conexión prevista guardada. La emisión real continúa bloqueada.")
+        return redirect("fiscal:ose_connection", issuer_id=self.issuer.pk)
+
+
+class OseSimulationCreateView(LoginRequiredMixin, PermissionRequiredMixin, FormView):
+    permission_required = ("fiscal.simulate_ose", "fiscal.view_fiscaldocument")
+    template_name = "fiscal/ose_simulation_create.html"
+
+    form_class = OseSimulationForm
+
+    def get_document(self):
+        if not hasattr(self, "document"):
+            self.document = get_object_or_404(FiscalDocument, public_id=self.kwargs["public_id"], branch=get_active_branch(self.request))
+        return self.document
+
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "document": self.get_document(), "simulations_enabled": simulations_enabled()}
+
+    def form_valid(self, form):
+        try:
+            simulation = prepare_simulation(actor=self.request.user, branch=get_active_branch(self.request),
+                document_id=self.get_document().pk, scenario=form.cleaned_data["scenario"], request_key=form.cleaned_data["request_key"])
+        except ValidationError as exc:
+            form.add_error(None, exc)
+            return self.form_invalid(form)
+        return redirect("fiscal:ose_simulation_detail", public_id=simulation.public_id)
+
+
+class OseSimulationDetailView(LoginRequiredMixin, PermissionRequiredMixin, DetailView):
+    permission_required = "fiscal.view_fiscaldocument"
+    template_name = "fiscal/ose_simulation_detail.html"
+    context_object_name = "simulation"
+    slug_field = "public_id"
+    slug_url_kwarg = "public_id"
+
+    def get_queryset(self):
+        return OseSimulation.objects.filter(document__branch=get_active_branch(self.request)).select_related("document").prefetch_related("attempts__actor", "events__actor")
+
+    def get_context_data(self, **kwargs):
+        return {**super().get_context_data(**kwargs), "simulations_enabled": simulations_enabled()}
+
+
+class OseSimulationRunView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    permission_required = ("fiscal.simulate_ose", "fiscal.view_fiscaldocument")
+
+    def post(self, request, public_id):
+        simulation = get_object_or_404(OseSimulation, public_id=public_id, document__branch=get_active_branch(request))
+        try:
+            run_simulation(simulation_id=simulation.pk, actor=request.user, branch=get_active_branch(request))
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        return redirect("fiscal:ose_simulation_detail", public_id=public_id)

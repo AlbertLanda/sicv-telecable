@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Prueba simulada OSE - SICV{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="alert alert-warning"><strong>PRUEBA SIN VALIDEZ TRIBUTARIA</strong> · Resultado del simulador local. No se ha contactado a SUNAT ni a un OSE real.</div>
+  <h1 class="h4">{{ simulation.get_scenario_display }}</h1>
+  <p>Referencia de prueba: {{ simulation.public_id }}<br>Estado: <strong>{{ simulation.get_state_display }}</strong></p>
+  <p>Empresa: {{ simulation.payload.draft_snapshot.issuer.business_name }} · RUC {{ simulation.payload.issuer_ruc }}</p>
+  {% if simulation.ticket %}<p>Ticket de prueba: {{ simulation.ticket }}</p>{% endif %}
+  {% if simulation.response.message %}<p>{{ simulation.response.message }}</p>{% endif %}
+  {% if not simulation.is_terminal and simulation.document.status == 'DRAFT' and simulations_enabled and perms.fiscal.simulate_ose %}
+  <form method="post" action="{% url 'fiscal:ose_simulation_run' simulation.public_id %}">{% csrf_token %}
+    <button class="btn btn-primary">{% if simulation.state == 'PROCESSING' or simulation.state == 'UNCERTAIN' or simulation.state == 'WORKING' %}Consultar o recuperar prueba{% else %}Ejecutar prueba simulada{% endif %}</button>
+  </form>
+  {% endif %}
+  <h2 class="h5 mt-4">Intentos de prueba</h2>
+  <div class="table-responsive"><table class="table"><thead><tr><th>Intento</th><th>Operación</th><th>Resultado</th><th>Usuario</th><th>Inicio</th><th>Detalle</th></tr></thead>
+  <tbody>{% for attempt in simulation.attempts.all %}<tr><td>{{ attempt.number }}</td><td>{{ attempt.get_operation_display }}</td><td>{{ attempt.get_outcome_display }}</td><td>{{ attempt.actor }}</td><td>{{ attempt.started_at|date:"d/m/Y H:i:s" }}</td><td>{{ attempt.message }}</td></tr>{% empty %}<tr><td colspan="6">Sin intentos.</td></tr>{% endfor %}</tbody></table></div>
+  <h2 class="h5 mt-4">Historial de la prueba</h2>
+  <ul>{% for event in simulation.events.all %}<li>{{ event.created_at|date:"d/m/Y H:i:s" }} · {{ event.get_action_display }} · {{ event.actor }} · {{ event.message }}</li>{% endfor %}</ul>
+  <a href="{% url 'fiscal:detail' simulation.document.public_id %}">Volver al borrador</a>
+</div>
+{% endblock %}
