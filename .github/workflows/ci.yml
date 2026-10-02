@@ -93,7 +93,7 @@ jobs:
         run: python manage.py check --deploy
 
   concurrencia-cobranza:
-    name: Cobranza y pruebas OSE (PostgreSQL)
+    name: Instalaciones, cobranza y pruebas OSE (PostgreSQL)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -126,5 +126,9 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Verificar saldo, reintentos y transiciones concurrentes
-        run: python manage.py test apps.payments.tests.test_collection apps.fiscal --verbosity 2
+      - name: Verificar instalaciones, saldo, reintentos y transiciones concurrentes
+        run: >-
+          python manage.py test
+          apps.contracts.tests.InstallationWorkOrderCreateTests
+          apps.work_orders.tests.test_ftth_installation_publication
+          apps.payments.tests.test_collection apps.fiscal --verbosity 2
