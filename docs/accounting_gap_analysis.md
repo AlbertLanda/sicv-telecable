@@ -15,6 +15,14 @@ el detalle exige un permiso propio y oficina autorizada. La guía de validación
 está en [collection_validation.md](collection_validation.md). Esta entrega no
 completa gastos, depósitos, arqueo, cierre administrativo ni emisión SUNAT.
 
+## Entrega posterior: estructura OSE
+
+La rama `feature/ose-connector-foundation` amplía la base con configuración por
+empresa, contrato interno de adaptadores, simulador local y recuperación de
+intentos. Sus estados de prueba no son estados fiscales. La guía está en
+[ose_connector_foundation.md](ose_connector_foundation.md). Continúan pendientes
+cálculo tributario, XML/firma, numeración oficial, proveedor y adaptación real.
+
 ## Resumen
 
 - SICV ya registra casi todo lo necesario **por pago**: sede, oficina, empresa

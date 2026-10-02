@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Preparar prueba OSE - SICV{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4">Preparar prueba simulada OSE</h1>
+  <div class="alert alert-warning"><strong>PRUEBA SIN VALIDEZ TRIBUTARIA</strong> · Se utiliza un proveedor ficticio local. No genera XML, firma, numeración oficial ni CDR.</div>
+  <p>Borrador {{ document.public_id }} · {{ document.snapshot.issuer.business_name }}</p>
+  {% if simulations_enabled %}
+  <form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Preparar prueba</button></form>
+  {% else %}<div class="alert alert-info">Las pruebas de OSE están deshabilitadas en este entorno.</div>{% endif %}
+  <p class="mt-3"><a href="{% url 'fiscal:detail' document.public_id %}">Volver al borrador</a></p>
+</div>
+{% endblock %}

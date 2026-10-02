@@ -54,3 +54,12 @@ class FiscalEventAdmin(ReadOnlyAdmin):
 @admin.register(FiscalProfileRevision)
 class FiscalProfileRevisionAdmin(ReadOnlyAdmin):
     list_display = ["profile", "actor", "created_at"]
+
+
+# La configuración OSE se edita en su pantalla para conservar revisiones.
+from .models import (OseConnection, OseConnectionRevision, OseSimulation,
+                     OseSimulationAttempt, OseSimulationEvent, OseSimulatorReceipt)
+
+for evidence_model in (OseConnection, OseConnectionRevision, OseSimulation,
+                       OseSimulationAttempt, OseSimulationEvent, OseSimulatorReceipt):
+    admin.site.register(evidence_model, ReadOnlyAdmin)

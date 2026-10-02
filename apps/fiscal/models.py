@@ -175,3 +175,11 @@ class FiscalEvent(models.Model):
         ordering = ["created_at", "pk"]
         verbose_name = "Evento de preparación fiscal"
         verbose_name_plural = "Eventos de preparación fiscal"
+
+
+# Django descubre los modelos de la estructura OSE sin mezclar estados de
+# pruebas y estados de los borradores/documentos fiscales.
+from .ose_models import (  # noqa: E402,F401
+    OseConnection, OseConnectionRevision, OseSimulation, OseSimulationAttempt,
+    OseSimulatorReceipt, OseSimulationEvent,
+)

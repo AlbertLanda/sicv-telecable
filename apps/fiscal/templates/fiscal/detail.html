@@ -32,6 +32,13 @@
     <button class="btn btn-outline-danger">Descartar borrador</button>
   </form>
   {% endif %}
+  <section class="tc-card p-3 mb-3">
+    <h2 class="h5">Pruebas de conexión OSE</h2>
+    <p>Los resultados de estas pruebas son simulados y no habilitan la emisión.</p>
+    {% if perms.fiscal.configure_ose %}<a class="btn btn-outline-secondary mb-2" href="{% url 'fiscal:ose_connection' document.issuer_id %}">Configurar conexión prevista</a>{% endif %}
+    {% if document.status == 'DRAFT' and simulations_enabled and perms.fiscal.simulate_ose %}<a class="btn btn-outline-primary mb-2" href="{% url 'fiscal:ose_simulation_create' document.public_id %}">Preparar prueba simulada</a>{% endif %}
+    <ul>{% for simulation in ose_simulations %}<li><a href="{% url 'fiscal:ose_simulation_detail' simulation.public_id %}">{{ simulation.created_at|date:"d/m/Y H:i" }} · {{ simulation.get_scenario_display }} · {{ simulation.get_state_display }}</a></li>{% empty %}<li>Sin pruebas preparadas.</li>{% endfor %}</ul>
+  </section>
   <section class="tc-card p-3 mb-3"><h2 class="h5">Historial</h2>
     <ul>{% for event in document.events.all %}<li>{{ event.created_at|date:"d/m/Y H:i" }} · {{ event.get_action_display }} · {{ event.actor }}{% if event.reason %} · {{ event.reason }}{% endif %}</li>{% endfor %}</ul>
   </section>
