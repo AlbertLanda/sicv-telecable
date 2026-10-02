@@ -1175,7 +1175,9 @@ def create_installation_work_order(
     try:
         locked_subscription = (
             Subscription.objects
-            .select_for_update()
+            # La suscripción serializa las altas concurrentes. La zona es
+            # opcional y su LEFT JOIN no admite FOR UPDATE en PostgreSQL.
+            .select_for_update(of=("self",))
             .select_related("customer__branch", "address__zone")
             .get(pk=subscription.pk)
         )
