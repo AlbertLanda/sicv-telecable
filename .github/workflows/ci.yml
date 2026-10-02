@@ -132,4 +132,6 @@ jobs:
           apps.contracts.tests.InstallationWorkOrderCreateTests
           apps.work_orders.tests.test_ftth_installation_publication
           apps.customers.test_qa_samples
+          apps.payments.tests.test_confirmed_billing_rules
+          apps.work_orders.tests.test_results
           apps.payments.tests.test_collection apps.fiscal --verbosity 2
