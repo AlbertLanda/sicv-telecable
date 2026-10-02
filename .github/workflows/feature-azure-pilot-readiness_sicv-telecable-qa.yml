@@ -10,6 +10,10 @@ on:
       - feature/azure-pilot-readiness
   workflow_dispatch:
 
+concurrency:
+  group: sicv-telecable-qa-deployment
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,8 +35,29 @@ jobs:
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      - name: Validate before deploying QA
+        env:
+          DJANGO_SECRET_KEY: qa-build-only-key-not-used-by-the-cloud
+          DJANGO_DEBUG: "False"
+          DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          source antenv/bin/activate
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test --verbosity 1
+
+      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size.
+      - name: Record deployed QA revision
+        run: |
+          python - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          path = Path("apps/fiscal/static/fiscal/qa-release.json")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(json.dumps({"commit": os.environ["GITHUB_SHA"], "environment": "qa"}))
+          PYCODE
+
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
@@ -45,7 +70,7 @@ jobs:
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
       # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
       # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
+
 
   deploy:
     runs-on: ubuntu-latest
@@ -59,7 +84,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -73,4 +98,30 @@ jobs:
         with:
           app-name: 'sicv-telecable-qa'
           slot-name: 'Production'
-          
+
+      - name: Verify running QA revision and login
+        env:
+          QA_URL: https://sicv-telecable-qa-f8fnfrhug3cwajc6.centralus-01.azurewebsites.net
+        run: |
+          python - <<'PYCODE'
+          import json, os, time
+          from urllib.request import urlopen
+          from urllib.error import URLError
+          base = os.environ["QA_URL"]
+          expected = os.environ["GITHUB_SHA"]
+          for attempt in range(36):
+              try:
+                  with urlopen(base + "/static/fiscal/qa-release.json?revision=" + expected, timeout=15) as response:
+                      version = json.load(response)
+                  if version.get("commit") != expected:
+                      raise ValueError("QA is still serving the previous revision")
+                  with urlopen(base + "/accounts/login/", timeout=15) as response:
+                      assert response.status == 200
+                  print("QA ready with commit", expected)
+                  break
+              except (URLError, ValueError, AssertionError) as error:
+                  print("Waiting for QA startup:", str(error))
+                  if attempt == 35:
+                      raise
+                  time.sleep(10)
+          PYCODE

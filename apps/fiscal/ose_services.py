@@ -27,7 +27,10 @@ def connection_snapshot(connection):
 
 
 def simulations_enabled():
-    return bool(getattr(settings, "FISCAL_SIMULATION_ENABLED", False)) and not getattr(settings, "PRODUCTION", False)
+    return bool(getattr(settings, "FISCAL_SIMULATION_ENABLED", False)) and (
+        not getattr(settings, "PRODUCTION", False)
+        or getattr(settings, "FISCAL_QA_SIMULATION_ALLOWED", False)
+    )
 
 
 def _require_simulation(actor):

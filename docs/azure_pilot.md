@@ -41,9 +41,10 @@ Configurar:
 bash startup.sh
 ```
 
-`startup.sh` ejecuta `collectstatic` y levanta Gunicorn. Las migraciones **no
-se ejecutan automáticamente al reiniciar la aplicación**. Se aplican de forma
-controlada durante el despliegue:
+`startup.sh` ejecuta `collectstatic` y levanta Gunicorn. En el recurso de pruebas
+existente `sicv-telecable-qa`, aplica primero las migraciones pendientes y habilita
+las simulaciones OSE. La excepción no se aplica a otros recursos, donde las
+migraciones se aplican de forma controlada durante el despliegue:
 
 ```bash
 python manage.py migrate --noinput

@@ -238,6 +238,17 @@ class OseStructureTests(PaymentsTestCase):
                     self.prepare()
         self.assertEqual(simulation.attempts.count(), 0)
 
+    @override_settings(PRODUCTION=True, FISCAL_QA_SIMULATION_ALLOWED=True)
+    def test_explicit_qa_can_simulate_with_secure_production_profile(self):
+        simulation = self.execute(self.prepare())
+        self.assertEqual(simulation.state, "ACCEPTED")
+        self.assertTrue(simulation.response["simulated"])
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.status, "DRAFT")
+        with override_settings(FISCAL_SIMULATION_ENABLED=False):
+            with self.assertRaises(ValidationError):
+                self.prepare()
+
     def test_connection_disabled_blocks_new_attempts(self):
         simulation = self.prepare()
         save_connection(actor=self.cashier, issuer_id=self.issuer.pk, values={"mode": "DISABLED"})
