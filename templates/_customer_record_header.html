@@ -100,4 +100,13 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
 
 {% customer_hero customer heading_level=1 %}
 
+{% customer_has_qa_samples customer as has_qa_samples %}
+{% if has_qa_samples %}
+<div class="alert alert-info mt-3" role="status">
+    <strong>Muestras de QA.</strong> Este abonado contiene ejemplos identificados como
+    MUESTRA QA para revisar deuda, pagos, comprobantes internos y órdenes.
+    Los movimientos de ejemplo son ficticios y no tienen validez tributaria.
+</div>
+{% endif %}
+
 {% include "_account_tabs.html" %}

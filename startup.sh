@@ -9,6 +9,10 @@ if [[ "${WEBSITE_SITE_NAME:-}" == "sicv-telecable-qa" ]]; then
   export DJANGO_FISCAL_QA_SIMULATION=True
   echo "[SICV QA] Aplicando migraciones pendientes..."
   python manage.py migrate --noinput
+  echo "[SICV QA] Preparando muestras autorizadas del abonado de Huancayo..."
+  python manage.py preparar_muestras_abonado_qa \
+    --customer-code HY01-A0000001 --actor admin_sicv --if-present \
+    --status-output apps/customers/static/customers/qa-sample-status.json
 fi
 
 echo "[SICV] Recolectando archivos estaticos..."

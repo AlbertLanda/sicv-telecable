@@ -16,6 +16,13 @@ from apps.work_orders.models import WorkOrder
 register = template.Library()
 
 
+@register.simple_tag
+def customer_has_qa_samples(customer):
+    from apps.audit.models import AuditEvent
+    from apps.customers.qa_samples import SAMPLE_ROUTE, sample_path
+    return AuditEvent.objects.filter(route_name=SAMPLE_ROUTE, path=sample_path(customer)).exists()
+
+
 @register.inclusion_tag("customers/_hero.html")
 def customer_hero(customer, heading_level=2):
     """
