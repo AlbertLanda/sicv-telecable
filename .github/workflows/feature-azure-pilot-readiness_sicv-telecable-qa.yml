@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: sicv-telecable-qa-deployment
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -65,6 +65,12 @@ jobs:
           path: |
             .
             !antenv/
+            !.git/
+            !.env
+            !.env.*
+            !db.sqlite3*
+            !media/
+            !staticfiles/
 
       # 🚫 Opting Out of Oryx Build
       # If you prefer to disable the Oryx build process during deployment, follow these steps:
