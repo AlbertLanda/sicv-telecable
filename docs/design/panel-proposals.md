@@ -1,6 +1,6 @@
 # Propuestas visuales del panel SICV
 
-Estado: propuestas para seleccionar. La aplicación conserva el panel actual; el comparador se publica como archivo estático independiente en QA.
+Estado: comparador de propuestas históricas. El 2026-10-03 el usuario delegó la selección de una referencia empresarial y se integró una dirección corporativa en el panel real y la ficha; véase `corporate-ui-direction.md`. Este comparador se conserva como referencia estática independiente en QA y no abre fichas reales.
 
 Abrir `apps/reports/static/reports/panel-proposals.html` en un navegador, o `/static/reports/panel-proposals.html` en QA. Es autocontenido, funciona sin conexión y no necesita dependencias. El selector superior permite comparar ambos diseños con el mismo alcance y los mismos datos. La selección no guarda una preferencia definitiva para la aplicación.
 
@@ -26,7 +26,7 @@ Primera pantalla: alcance, período, cifras y comparativo de sedes. Interacción
 
 Logo corporativo existente; familia de sistema apropiada para una interfaz operativa; numerales tabulares; contraste legible; controles de al menos 44px; foco visible; navegación accesible por teclado; adaptación móvil con menú desplegable y tablas desplazables. Sin animaciones de entrada ni dependencias de red. Las transiciones se limitan a color y estados y respetan movimiento reducido.
 
-No se escribe DESIGN.md: ninguna alternativa ha sido elegida como sistema visual definitivo. Las guías consultadas son Impeccable (modo Operate y craft floor) y Emil Kowalski (interacciones breves, estados y movimiento reducido). Sus cargadores no se instalaron; la revisión se realiza sobre el código y el navegador local.
+En la fase de estas propuestas no se escribió DESIGN.md porque todavía no se había elegido un sistema visual definitivo. La elección posterior se documenta en el DESIGN.md de la raíz. Las guías consultadas fueron Impeccable (modo Operate y craft floor) y Emil Kowalski (interacciones breves, estados y movimiento reducido). Sus cargadores no se instalaron; la revisión se realiza sobre el código y el navegador local.
 
 Fuentes: https://github.com/pbakaus/impeccable y https://emilkowal.ski/skill.
 

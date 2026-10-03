@@ -1,4 +1,4 @@
-<form method="get" class="card card-body mb-4">
+<form method="get" class="card card-body mb-4 dashboard-filter" aria-label="Filtros del panel">
     {% if form.errors %}<div class="alert alert-danger" role="alert">Revisa los filtros. {{ form.non_field_errors }}</div>{% endif %}
     <div class="row g-3 align-items-end">
         <div class="col-md-3"><label class="form-label" for="{{ form.scope.id_for_label }}">{{ form.scope.label }}</label>{{ form.scope }}{{ form.scope.errors }}</div>
