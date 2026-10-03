@@ -3,18 +3,13 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
-from django.views.generic import RedirectView
+from apps.reports.landing import landing
 
 
 urlpatterns = [
-    # Raíz del sistema → Login
-    path(
-        "",
-        RedirectView.as_view(
-            pattern_name="login",
-            permanent=False,
-        ),
-    ),
+    # El panel es la entrada de Administración; los otros roles conservan
+    # el buscador y los permisos de sus propios canales.
+    path("", landing),
 
     # Administración
     path("admin/", admin.site.urls),

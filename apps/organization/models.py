@@ -30,6 +30,10 @@ class Branch(models.Model):
         verbose_name = "Sede"
         verbose_name_plural = "Sedes"
         ordering = ["name"]
+        permissions = [
+            ("view_operational_dashboard", "Puede consultar el panel administrativo y sus detalles"),
+            ("view_consolidated_dashboard", "Puede consolidar las sedes en el panel administrativo"),
+        ]
 
     def __str__(self):
         return self.name

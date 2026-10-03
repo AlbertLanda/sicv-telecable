@@ -1,0 +1,31 @@
+<form method="get" class="card card-body mb-4">
+    {% if form.errors %}<div class="alert alert-danger" role="alert">Revisa los filtros. {{ form.non_field_errors }}</div>{% endif %}
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3"><label class="form-label" for="{{ form.scope.id_for_label }}">{{ form.scope.label }}</label>{{ form.scope }}{{ form.scope.errors }}</div>
+        {% if can_consolidate %}
+        <fieldset class="col-md-3" id="dashboardBranchFilter" {% if current_scope != 'consolidated' %}hidden disabled{% endif %}><label class="form-label" for="{{ form.branch.id_for_label }}">{{ form.branch.label }}</label>{{ form.branch }}{{ form.branch.errors }}</fieldset>
+        {% endif %}
+        <div class="col-md-3"><label class="form-label" for="{{ form.month.id_for_label }}">{{ form.month.label }}</label>{{ form.month }}{{ form.month.errors }}</div>
+        {% if kind %}
+        <div class="col-md-4"><label class="form-label" for="{{ form.q.id_for_label }}">{{ form.q.label }}</label>{{ form.q }}{{ form.q.errors }}</div>
+        <div class="col-md-2"><label class="form-label" for="{{ form.per_page.id_for_label }}">{{ form.per_page.label }}</label>{{ form.per_page }}{{ form.per_page.errors }}</div>
+        {% if has_age or kind == 'orders' or kind == 'debt' %}
+        <div class="col-md-3"><label class="form-label" for="{{ form.age.id_for_label }}">{{ form.age.label }}</label>{{ form.age }}{{ form.age.errors }}</div>
+        {% endif %}
+        {% endif %}
+        <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-arrow-clockwise"></i> Actualizar</button></div>
+    </div>
+</form>
+{% if can_consolidate %}
+<script>
+(function () {
+    const scope = document.getElementById('{{ form.scope.id_for_label }}');
+    const branches = document.getElementById('dashboardBranchFilter');
+    scope.addEventListener('change', function () {
+        const consolidated = scope.value === 'consolidated';
+        branches.hidden = !consolidated;
+        branches.disabled = !consolidated;
+    });
+}());
+</script>
+{% endif %}

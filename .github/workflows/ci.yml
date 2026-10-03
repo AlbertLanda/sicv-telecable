@@ -134,5 +134,6 @@ jobs:
           apps.customers.test_qa_samples
           apps.customers.test_qa_billing_examples
           apps.payments.tests.test_confirmed_billing_rules
+          apps.reports.tests.test_dashboard
           apps.work_orders.tests.test_results
           apps.payments.tests.test_collection apps.fiscal --verbosity 2

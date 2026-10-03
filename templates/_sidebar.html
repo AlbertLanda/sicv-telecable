@@ -12,6 +12,11 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
     </div>
 
     <div class="sidebar-inner">
+        {% if perms.organization.view_operational_dashboard %}
+        <section class="sidebar-section" data-sidebar-section="panel administrador indicadores recaudacion cartera ordenes">
+            <a class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'dashboard_detail' %}active{% endif %}" href="{% url 'reports:dashboard' %}"><i class="bi bi-speedometer2"></i>Panel administrador</a>
+        </section>
+        {% endif %}
         <div class="sidebar-search">
             <i class="bi bi-search"></i>
             <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">

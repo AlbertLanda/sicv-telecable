@@ -448,7 +448,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = "accounts.User"
 
 # Redirecciones de autenticación
-LOGIN_REDIRECT_URL = '/customers/search/'
+LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 

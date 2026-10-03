@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} — SICV{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+    <h1 class="h3">{{ title }}</h1>
+    {% if dashboard_data %}<p class="text-muted">{{ scope_label }} · Consultado {{ dashboard_data.now|date:'d/m/Y H:i:s' }}{% if kind == 'income' %} · Pagos de {{ dashboard_data.month|date:'m/Y' }}{% endif %}</p>{% endif %}
+    {% include 'reports/_dashboard_filters.html' %}
+    {% if dashboard_data %}
+    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3"><div><strong>{{ page_obj.paginator.count }}</strong> registros en el filtro{% if total_amount != None %} · Total del filtro: <strong>S/ {{ total_amount|floatformat:2 }}</strong>{% endif %}</div><a href="{{ panel_url }}">← Volver al panel</a></div>
+    <div class="card"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+        <thead><tr><th>Sede</th><th>Código</th><th>Abonado</th>
+            {% if kind == 'active' %}<th>Distrito</th><th>Dirección</th>
+            {% elif kind == 'income' %}<th>Fecha de pago</th><th>Recibo interno</th><th>Medio</th><th class="text-end">Monto</th>
+            {% elif kind == 'debt' %}<th>Vencimiento más antiguo</th><th>Días</th><th class="text-end">Deuda vencida</th>
+            {% else %}<th>Tipo</th><th>Orden</th><th>Estado</th><th>Emisión</th><th>Horas</th>{% endif %}
+        </tr></thead>
+        <tbody>{% for row in rows %}<tr><td>{{ row.branch }}</td><td>{% if row.customer_url %}<a href="{{ row.customer_url }}">{{ row.code }}</a>{% else %}{{ row.code }}{% endif %}</td><td>{{ row.customer }}</td>
+            {% if kind == 'active' %}<td>{{ row.district }}</td><td>{{ row.address }}</td>
+            {% elif kind == 'income' %}<td>{{ row.date|date:'d/m/Y H:i' }}</td><td>{% if row.record_url %}<a href="{{ row.record_url }}">{{ row.document }}</a>{% else %}{{ row.document }}{% endif %}</td><td>{{ row.method }}</td><td class="text-end">S/ {{ row.amount|floatformat:2 }}</td>
+            {% elif kind == 'debt' %}<td>{{ row.date|date:'d/m/Y' }}</td><td>{{ row.days }}</td><td class="text-end">S/ {{ row.amount|floatformat:2 }}</td>
+            {% else %}<td>{{ row.type }}</td><td>{% if row.record_url %}<a href="{{ row.record_url }}">{{ row.document }}</a>{% else %}{{ row.document }}{% endif %}</td><td>{{ row.status }}</td><td>{{ row.date|date:'d/m/Y H:i' }}</td><td>{{ row.hours|floatformat:1 }}</td>{% endif %}
+        </tr>{% empty %}<tr><td colspan="9" class="text-center text-muted py-4">No hay registros para estos filtros.</td></tr>{% endfor %}</tbody>
+    </table></div></div>
+    <nav class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3" aria-label="Páginas del listado">
+        <span>{{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} · Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        <div class="btn-group">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}{% if page_obj.has_next %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</div>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}
