@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# El App Service de pruebas conserva el perfil de seguridad de producción.
+# Esta excepción se limita al recurso QA existente; otros despliegues no migran
+# automáticamente ni habilitan las simulaciones.
+if [[ "${WEBSITE_SITE_NAME:-}" == "sicv-telecable-qa" ]]; then
+  export DJANGO_FISCAL_SIMULATION_ENABLED=True
+  export DJANGO_FISCAL_QA_SIMULATION=True
+  echo "[SICV QA] Aplicando migraciones pendientes..."
+  python manage.py migrate --noinput
+  echo "[SICV QA] Preparando muestras autorizadas del abonado de Huancayo..."
+  python manage.py preparar_muestras_abonado_qa \
+    --customer-code HY01-A0000001 --actor admin_sicv --if-present --billing-examples \
+    --status-output apps/customers/static/customers/qa-sample-status.json
+fi
+
 echo "[SICV] Recolectando archivos estaticos..."
 python manage.py collectstatic --noinput
 

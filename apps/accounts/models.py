@@ -68,6 +68,8 @@ class User(AbstractUser):
 
     ADMIN_EXTRA_PERMISSIONS = frozenset(
         {
+            "organization.view_operational_dashboard",
+            "organization.view_consolidated_dashboard",
             "accounts.view_user",
             "accounts.add_user",
             "accounts.change_user",

@@ -105,7 +105,7 @@ def receipt_lines(receipt):
 
         descripcion = f"COD {customer.code} {charge.description}"
 
-        componentes = list(charge.components.all())
+        componentes = sorted(charge.components.all(), key=lambda c: (c.kind != "MAIN", c.pk))
         if len(componentes) > 1:
             detalle_componentes = " + ".join(
                 f"{component.description} S/{component.amount:.2f}"

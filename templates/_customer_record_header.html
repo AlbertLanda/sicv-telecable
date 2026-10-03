@@ -23,23 +23,23 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
 {% endcomment %}
 
 <div class="tc-toolbar">
-    <div class="tc-breadcrumb" style="margin-bottom:0;">
+    <nav class="tc-breadcrumb" aria-label="Ubicación en la ficha" style="margin-bottom:0;">
         <a href="{% url 'customers:search' %}">Clientes</a>
         &nbsp;›&nbsp;
         <a href="{% url 'customers:detail' pk=customer.pk %}">{{ customer.code }}</a>
         &nbsp;›&nbsp;
         <strong>{{ record_title|default:"Información" }}</strong>
-    </div>
+    </nav>
 
     <div class="tc-toolbar-actions">
         {% if perms.customers.change_customer %}
             <a href="{% url 'customers:general_edit' customer_pk=customer.pk %}" class="tc-btn">
-                <i class="bi bi-pencil"></i>Editar datos
+                <i class="bi bi-pencil" aria-hidden="true"></i>Editar datos
             </a>
         {% endif %}
 
         <button class="tc-btn muted" type="button" onclick="window.print()">
-            <i class="bi bi-printer"></i>Imprimir
+            <i class="bi bi-printer" aria-hidden="true"></i>Imprimir
         </button>
 
         {% comment %}
@@ -55,7 +55,7 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
                     data-bs-toggle="dropdown"
                     aria-expanded="false"
                     aria-label="Más opciones">
-                <i class="bi bi-three-dots-vertical"></i>
+                <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end tc-menu">
                 {% comment %}
@@ -67,28 +67,28 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
                 {% if perms.payments.add_payment %}
                     <li>
                         <a class="dropdown-item" href="{% url 'payments:register' pk=customer.pk %}">
-                            <i class="bi bi-cash-coin"></i>Registrar cobro
+                            <i class="bi bi-cash-coin" aria-hidden="true"></i>Registrar cobro
                         </a>
                     </li>
                 {% endif %}
                 {% if perms.work_orders.add_workorder %}
                     <li>
                         <a class="dropdown-item" href="{% url 'work_orders:create' customer.pk %}">
-                            <i class="bi bi-wrench-adjustable"></i>Nueva orden de trabajo
+                            <i class="bi bi-wrench-adjustable" aria-hidden="true"></i>Nueva orden de trabajo
                         </a>
                     </li>
                 {% endif %}
                 {% if perms.payments.add_charge %}
                     <li>
                         <a class="dropdown-item" href="{% url 'payments:charge_create' pk=customer.pk %}">
-                            <i class="bi bi-cash-stack"></i>Nueva deuda
+                            <i class="bi bi-cash-stack" aria-hidden="true"></i>Nueva deuda
                         </a>
                     </li>
                 {% endif %}
                 {% if perms.customers.add_customeraddress %}
                     <li>
                         <a class="dropdown-item" href="{% url 'customers:address_create' customer.pk %}">
-                            <i class="bi bi-geo-alt"></i>Nueva dirección
+                            <i class="bi bi-geo-alt" aria-hidden="true"></i>Nueva dirección
                         </a>
                     </li>
                 {% endif %}
@@ -99,5 +99,14 @@ Espera `customer`, `active_tab` y `record_title` (la hoja de la miga de pan).
 </div>
 
 {% customer_hero customer heading_level=1 %}
+
+{% customer_has_qa_samples customer as has_qa_samples %}
+{% if has_qa_samples %}
+<div class="alert alert-info mt-3" role="status">
+    <strong>Muestras de QA.</strong> Este abonado contiene ejemplos identificados como
+    MUESTRA QA para revisar deuda, pagos, comprobantes internos y órdenes.
+    Los movimientos de ejemplo son ficticios y no tienen validez tributaria.
+</div>
+{% endif %}
 
 {% include "_account_tabs.html" %}

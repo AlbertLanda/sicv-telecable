@@ -119,9 +119,11 @@ class MonthlyChargeGenerationTests(PaymentsTestCase):
 
         charge = generate_monthly_charges(PERIOD)["created"][0]
 
-        self.assertEqual(charge.due_date, date(2026, 9, 15))
-        self.assertEqual(charge.discount_deadline, date(2026, 9, 12))
-        self.assertEqual(charge.cut_date, date(2026, 9, 25))
+        self.assertEqual(charge.period_start, date(2026, 9, 15))
+        self.assertEqual(charge.period_end, date(2026, 10, 14))
+        self.assertEqual(charge.due_date, date(2026, 10, 14))
+        self.assertEqual(charge.discount_deadline, date(2026, 10, 11))
+        self.assertEqual(charge.cut_date, date(2026, 10, 24))
 
     def test_running_it_twice_does_not_duplicate_the_debt(self):
         generate_monthly_charges(PERIOD)

@@ -49,6 +49,7 @@ from .models import (
     PaymentCommitment,
     ProposedCharge,
     Receipt,
+    ReceiptSequence,
     ZERO,
     format_receipt_number,
 )
@@ -733,7 +734,11 @@ class ReceiptPdfView(
 
     def render_to_response(self, context, **kwargs):
         buffer = BytesIO()
-        nombre = render_receipt(self.object, buffer)
+        print_format = self.request.GET.get("formato")
+        if print_format not in (None, *ReceiptSequence.PrintFormat.values):
+            from django.http import HttpResponseBadRequest
+            return HttpResponseBadRequest("Formato de comprobante desconocido.")
+        nombre = render_receipt(self.object, buffer, print_format=print_format)
         buffer.seek(0)
 
         return FileResponse(

@@ -87,6 +87,7 @@ aspecto de editable, que invita a intentarlo.
         </div>
 
         <div class="tc-section-body">
+            <p class="fw-semibold">{{ receipt.sequence.document_title }}</p>
             <div class="tc-form">
 
                 <div class="tc-form-label">Código</div>
@@ -298,6 +299,14 @@ aspecto de editable, que invita a intentarlo.
                target="_blank" rel="noopener"
                class="tc-btn primary">
                 <i class="bi bi-printer"></i>Imprimir
+            </a>
+            <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1&amp;formato=TICKET"
+               target="_blank" rel="noopener" class="tc-btn">
+                <i class="bi bi-receipt"></i>Ticket vertical
+            </a>
+            <a href="{% url 'payments:receipt_pdf' pk=receipt.pk %}?ver=1&amp;formato=SHEET"
+               target="_blank" rel="noopener" class="tc-btn">
+                <i class="bi bi-file-earmark"></i>Media hoja horizontal
             </a>
             <a href="{% url 'payments:history' pk=customer.pk %}" class="tc-btn muted">
                 Volver

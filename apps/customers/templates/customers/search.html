@@ -6,7 +6,12 @@ SICV - Buscar abonado
 
 {% block content %}
 
-<div class="py-3">
+<div class="sicv-page">
+
+    <header class="sicv-page-heading">
+        <div><h1>Abonados</h1><p>{% if active_branch %}{{ active_branch.name }} · {% endif %}Busca un abonado y abre su ficha para consultar servicios, deuda y pagos.</p></div>
+        {% if perms.customers.add_customer %}<a href="{% url 'customers:create' %}" class="btn btn-primary sicv-heading-action"><i class="bi bi-plus-lg" aria-hidden="true"></i>Nuevo abonado</a>{% endif %}
+    </header>
 
     <!-- ===================================================== -->
     <!-- BUSCAR ABONADO -->
@@ -14,16 +19,14 @@ SICV - Buscar abonado
 
     <div class="card card-custom mb-3">
 
-        <div class="card-header panel-head">
-            Buscar abonado
-        </div>
-
-        <div class="card-body">
+        <div class="card-body sicv-customer-search">
 
             <form method="get" class="d-flex flex-wrap align-items-center gap-2">
 
+                <label for="customerSearch" class="visually-hidden">Buscar abonado por código, documento, nombre, teléfono o dirección</label>
                 <input
                     type="text"
+                    id="customerSearch"
                     name="q"
                     value="{{ current_query }}"
                     class="form-control search-field"
@@ -33,18 +36,12 @@ SICV - Buscar abonado
                 >
 
                 <button type="submit" class="btn btn-primary">
-                    Buscar
+                    <i class="bi bi-search" aria-hidden="true"></i>Buscar
                 </button>
 
                 {% if current_query %}
                     <a href="{% url 'customers:search' %}" class="btn btn-outline-secondary">
                         Limpiar
-                    </a>
-                {% endif %}
-
-                {% if perms.customers.add_customer %}
-                    <a href="{% url 'customers:create' %}" class="btn btn-primary">
-                        Nuevo
                     </a>
                 {% endif %}
 
@@ -62,16 +59,17 @@ SICV - Buscar abonado
     <div class="card card-custom">
 
         <div class="card-header panel-head d-flex justify-content-between align-items-center">
-            <span>Listar</span>
+            <h2 class="sicv-search-title">{% if current_query %}Resultados de búsqueda{% else %}Padrón de abonados{% endif %}</h2>
 
             {% if active_branch %}
                 <span class="panel-head-note">{{ active_branch.name }}</span>
             {% endif %}
         </div>
 
-        <div class="table-responsive">
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Listado de abonados">
 
-            <table class="table table-hover align-middle mb-0 sicv-table">
+            <table class="table table-hover align-middle mb-0 sicv-table sicv-customer-table">
 
                 <thead>
                     <tr>
@@ -108,7 +106,7 @@ SICV - Buscar abonado
                                     {% endfor %}
                                 </td>
 
-                                <td>{{ customer }}</td>
+                                <td><a class="sicv-customer-link" href="{% url 'customers:detail' customer.pk %}">{{ customer }}<span class="sicv-open-record">Abrir ficha <span aria-hidden="true">→</span></span></a></td>
 
                                 <td class="text-nowrap">
                                     {{ customer.get_document_type_display }}
@@ -226,15 +224,15 @@ SICV - Buscar abonado
                 </span>
 
                 {% if is_paginated %}
-                    <nav>
+                    <nav aria-label="Páginas de abonados">
                         <ul class="pagination pagination-sm mb-0">
 
                             {% if page_obj.has_previous %}
                                 <li class="page-item">
-                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page=1">&laquo;</a>
+                                    <a class="page-link" aria-label="Primera página" href="?{% if current_query %}q={{ current_query|urlencode }}&amp;{% endif %}page=1">&laquo;</a>
                                 </li>
                                 <li class="page-item">
-                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">&lsaquo;</a>
+                                    <a class="page-link" aria-label="Página anterior" href="?{% if current_query %}q={{ current_query|urlencode }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">&lsaquo;</a>
                                 </li>
                             {% endif %}
 
@@ -244,10 +242,10 @@ SICV - Buscar abonado
 
                             {% if page_obj.has_next %}
                                 <li class="page-item">
-                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">&rsaquo;</a>
+                                    <a class="page-link" aria-label="Página siguiente" href="?{% if current_query %}q={{ current_query|urlencode }}&amp;{% endif %}page={{ page_obj.next_page_number }}">&rsaquo;</a>
                                 </li>
                                 <li class="page-item">
-                                    <a class="page-link" href="?{% if current_query %}q={{ current_query }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}">&raquo;</a>
+                                    <a class="page-link" aria-label="Última página" href="?{% if current_query %}q={{ current_query|urlencode }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}">&raquo;</a>
                                 </li>
                             {% endif %}
 

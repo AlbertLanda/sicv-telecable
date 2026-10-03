@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block title %}Panel administrador — SICV{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading">
+        <div>
+            <h1>Panel administrador</h1>
+            {% if dashboard_data %}<p>{{ scope_label }} · Consultado {{ dashboard_data.now|date:'d/m/Y H:i:s' }}<br>Recaudación de {{ dashboard_data.month|date:'m/Y' }}</p>{% endif %}
+        </div>
+        <a class="btn btn-outline-primary sicv-heading-action" href="{% url 'customers:search' %}"><i class="bi bi-search" aria-hidden="true"></i>Buscar abonado</a>
+    </header>
+    {% include 'reports/_dashboard_filters.html' %}
+    {% if dashboard_data %}
+    {% if summary.undated_payments %}<div class="alert alert-warning" role="status">Hay {{ summary.undated_payments }} pagos confirmados en este alcance sin fecha real de pago. No se incluyen en la recaudación mensual hasta completar ese dato.</div>{% endif %}
+    <div class="dashboard-metrics" aria-label="Indicadores del alcance seleccionado">
+        <section class="dashboard-metric">
+            <h2>Abonados activos</h2><div class="dashboard-number">{{ summary.active }}</div>
+            <span class="small text-muted">Fichas habilitadas en el padrón.</span><a href="{{ links.active }}">Ver abonados <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric">
+            <h2>Recaudación del mes</h2><div class="dashboard-number">S/ {{ summary.income|floatformat:2 }}</div>
+            <span class="small text-muted">{{ summary.payment_count }} pagos confirmados · Fecha real de pago.</span><a href="{{ links.income }}">Ver cobros <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric">
+            <h2>Cartera vencida</h2><div class="dashboard-number">S/ {{ summary.debt|floatformat:2 }}</div>
+            <span class="small text-muted">{{ summary.debtor_count }} abonados{% if summary.debt_rate != None %} · {{ summary.debt_rate|floatformat:2 }}% del padrón activo{% endif %}.</span><a href="{{ links.debt }}">Ver deudores <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric dashboard-critical">
+            <h2>Órdenes con más de 48 h</h2><div class="dashboard-number">{{ summary.critical_orders }}</div>
+            <span class="small text-muted">{{ summary.pending_orders }} pendientes · Máxima {{ summary.oldest_hours|floatformat:1 }} horas.</span><a href="{{ links.orders }}">Ver órdenes críticas <span aria-hidden="true">→</span></a>
+            <a class="small pt-2" href="{{ all_orders_url }}">Todas las pendientes</a>
+        </section>
+    </div>
+    <div class="dashboard-columns">
+        <section class="dashboard-section">
+            <div class="dashboard-section-heading"><h2>Recaudación de los últimos seis meses</h2><p>Pagos confirmados por fecha de pago. El mes actual está en curso.</p></div>
+            <div class="dashboard-section-body">
+                {% for item in trend %}<a href="{{ item.url }}" class="dashboard-trend-row" aria-label="Ver cobros de {{ item.month|date:'m/Y' }}">
+                    <span class="dashboard-period">{{ item.month|date:'m/Y' }}{% if item.partial %}<small>En curso</small>{% endif %}</span>
+                    <span class="dashboard-bar" aria-hidden="true"><span style="width:{{ item.width }}%"></span></span>
+                    <span class="dashboard-trend-amount">S/ {{ item.amount|floatformat:2 }}</span>
+                </a>{% endfor %}
+            </div>
+        </section>
+        <section class="dashboard-section">
+            <div class="dashboard-section-heading"><h2>Antigüedad de cartera</h2><p>Saldo vencido del abonado, agrupado por su vencimiento más antiguo.</p></div>
+            <div class="dashboard-section-body">
+                {% for item in debt_ages %}<a class="dashboard-age" href="{{ item.url }}">
+                    <span>{{ item.label }}<small>{{ item.count }} abonados</small></span><strong>S/ {{ item.amount|floatformat:2 }}</strong>
+                </a>{% endfor %}
+            </div>
+            <details class="dashboard-method small"><summary>Cómo se calculan los indicadores</summary>
+                <p class="mt-2 mb-0">Activos cuenta fichas habilitadas, incluidas preventas; no representa servicios instalados. La sede del abonado es la de su ficha. Recaudación usa la sede que recibió el pago y excluye pagos pendientes o anulados. Cartera suma saldos de cargos abiertos cuyo vencimiento ya pasó, descontando pagos confirmados y descuentos concedidos. Órdenes pendientes incluye pendientes, asignadas, derivadas, en atención y reprogramadas.</p>
+            </details>
+        </section>
+    </div>
+    {% if branch_comparison %}
+    <section class="dashboard-section mt-4">
+        <div class="dashboard-section-heading"><h2>Comparativo por sede</h2><p>Consulta la misma información en cada sede del alcance seleccionado.</p></div>
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Comparativo por sede"><table class="table table-hover mb-0">
+            <thead><tr><th scope="col">Sede</th><th scope="col" class="text-end">Activos</th><th scope="col" class="text-end">Recaudación</th><th scope="col" class="text-end">Pagos</th><th scope="col" class="text-end">Cartera vencida</th><th scope="col" class="text-end">Deudores</th><th scope="col" class="text-end">Órdenes &gt;48 h</th></tr></thead>
+            <tbody>{% for item in branch_comparison %}<tr><td><a href="{{ item.url }}">{{ item.branch.name }}</a></td><td class="text-end">{{ item.summary.active }}</td><td class="text-end text-nowrap">S/ {{ item.summary.income|floatformat:2 }}</td><td class="text-end">{{ item.summary.payment_count }}</td><td class="text-end text-nowrap">S/ {{ item.summary.debt|floatformat:2 }}</td><td class="text-end">{{ item.summary.debtor_count }}</td><td class="text-end">{{ item.summary.critical_orders }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
