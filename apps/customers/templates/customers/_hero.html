@@ -31,8 +31,8 @@
             </div>
 
             <div class="tc-contact">
-                <span><i class="bi bi-telephone-fill"></i>{{ customer.phone|default:"No registrado" }}</span>
-                <span><i class="bi bi-envelope"></i>{{ customer.email|default:"No registrado" }}</span>
+                <span><i class="bi bi-telephone-fill" aria-hidden="true"></i>{{ customer.phone|default:"No registrado" }}</span>
+                <span><i class="bi bi-envelope" aria-hidden="true"></i>{{ customer.email|default:"No registrado" }}</span>
             </div>
 
             {% comment %}
@@ -50,11 +50,11 @@
             {% endcomment %}
             <div class="tc-meta">
                 <span>
-                    <i class="bi bi-calendar3"></i>Ciclo de facturación:
+                    <i class="bi bi-calendar3" aria-hidden="true"></i>Ciclo de facturación:
                     <strong>{{ billing_cycle_label|default:"No registrado" }}</strong>
                 </span>
                 <span>
-                    <i class="bi bi-cash-coin"></i>Deuda:
+                    <i class="bi bi-cash-coin" aria-hidden="true"></i>Deuda:
                     <strong>S/ {{ debt_total|floatformat:2 }}</strong>
                 </span>
             </div>
@@ -63,7 +63,7 @@
 
         {% if primary_address %}
         <div class="tc-location">
-            <i class="bi bi-geo-alt-fill"></i>
+            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
             <div><strong>{{ primary_address.district|default:customer.branch.name }}</strong>{{ primary_address.address }}{% if primary_address.district %}<br>{{ primary_address.district }}{% endif %}</div>
         </div>
         {% endif %}
@@ -71,8 +71,8 @@
     </div>
 
     <div class="tc-stats">
-        <div class="tc-stat"><div class="metric">{{ active_subscription_count }} <i class="bi bi-wifi"></i></div><div class="label">Servicio activo</div></div>
-        <div class="tc-stat"><div class="metric">{{ open_order_count }} <i class="bi bi-tools"></i></div><div class="label">OT abierta</div></div>
+        <div class="tc-stat"><div class="metric">{{ active_subscription_count }} <i class="bi bi-wifi" aria-hidden="true"></i></div><div class="label">Servicio activo</div></div>
+        <div class="tc-stat"><div class="metric">{{ open_order_count }} <i class="bi bi-tools" aria-hidden="true"></i></div><div class="label">OT abierta</div></div>
     </div>
 
 </section>

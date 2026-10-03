@@ -1,65 +1,68 @@
 {% extends 'base.html' %}
 {% block title %}Panel administrador — SICV{% endblock %}
-{% block extra_css %}
-<style>
-.dashboard-card { height:100%; border-top:3px solid #176ba3; }
-.dashboard-number { font-size:clamp(1.7rem,3vw,2.3rem); font-weight:750; color:#173d5b; }
-.dashboard-card .card-body { display:flex; flex-direction:column; gap:.35rem; }
-.dashboard-card a { margin-top:auto; padding-top:1rem; font-weight:600; }
-.dashboard-bar { height:14px; background:#eaf0f6; border-radius:5px; overflow:hidden; }
-.dashboard-bar span { display:block; height:100%; background:#2c79aa; }
-.dashboard-period { white-space:nowrap; }
-</style>
-{% endblock %}
 {% block content %}
-<div class="container-fluid py-3">
-    <h1 class="h3">Panel administrador</h1>
-    {% if dashboard_data %}<p class="text-muted">{{ scope_label }} · Consultado {{ dashboard_data.now|date:'d/m/Y H:i:s' }} · Recaudación de {{ dashboard_data.month|date:'m/Y' }}</p>{% endif %}
+<div class="sicv-page">
+    <header class="sicv-page-heading">
+        <div>
+            <h1>Panel administrador</h1>
+            {% if dashboard_data %}<p>{{ scope_label }} · Consultado {{ dashboard_data.now|date:'d/m/Y H:i:s' }}<br>Recaudación de {{ dashboard_data.month|date:'m/Y' }}</p>{% endif %}
+        </div>
+        <a class="btn btn-outline-primary sicv-heading-action" href="{% url 'customers:search' %}"><i class="bi bi-search" aria-hidden="true"></i>Buscar abonado</a>
+    </header>
     {% include 'reports/_dashboard_filters.html' %}
     {% if dashboard_data %}
     {% if summary.undated_payments %}<div class="alert alert-warning" role="status">Hay {{ summary.undated_payments }} pagos confirmados en este alcance sin fecha real de pago. No se incluyen en la recaudación mensual hasta completar ese dato.</div>{% endif %}
-    <div class="row g-3 mb-4">
-        <div class="col-md-6 col-xl-3"><section class="card dashboard-card"><div class="card-body">
-            <h2 class="h6 text-uppercase">Abonados activos</h2><div class="dashboard-number">{{ summary.active }}</div>
-            <span class="small text-muted">Fichas habilitadas en el padrón.</span><a href="{{ links.active }}">Ver abonados →</a>
-        </div></section></div>
-        <div class="col-md-6 col-xl-3"><section class="card dashboard-card"><div class="card-body">
-            <h2 class="h6 text-uppercase">Recaudación del mes</h2><div class="dashboard-number">S/ {{ summary.income|floatformat:2 }}</div>
-            <span class="small text-muted">{{ summary.payment_count }} pagos confirmados · Fecha real de pago.</span><a href="{{ links.income }}">Ver cobros →</a>
-        </div></section></div>
-        <div class="col-md-6 col-xl-3"><section class="card dashboard-card"><div class="card-body">
-            <h2 class="h6 text-uppercase">Cartera vencida</h2><div class="dashboard-number">S/ {{ summary.debt|floatformat:2 }}</div>
-            <span class="small text-muted">{{ summary.debtor_count }} abonados{% if summary.debt_rate != None %} · {{ summary.debt_rate|floatformat:2 }}% del padrón activo{% endif %}.</span><a href="{{ links.debt }}">Ver deudores →</a>
-        </div></section></div>
-        <div class="col-md-6 col-xl-3"><section class="card dashboard-card"><div class="card-body">
-            <h2 class="h6 text-uppercase">Órdenes con más de 48 h</h2><div class="dashboard-number">{{ summary.critical_orders }}</div>
-            <span class="small text-muted">{{ summary.pending_orders }} pendientes · Máxima {{ summary.oldest_hours|floatformat:1 }} horas.</span><a href="{{ links.orders }}">Ver órdenes críticas →</a>
-            <a class="small pt-0" href="{{ all_orders_url }}">Todas las pendientes</a>
-        </div></section></div>
+    <div class="dashboard-metrics" aria-label="Indicadores del alcance seleccionado">
+        <section class="dashboard-metric">
+            <h2>Abonados activos</h2><div class="dashboard-number">{{ summary.active }}</div>
+            <span class="small text-muted">Fichas habilitadas en el padrón.</span><a href="{{ links.active }}">Ver abonados <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric">
+            <h2>Recaudación del mes</h2><div class="dashboard-number">S/ {{ summary.income|floatformat:2 }}</div>
+            <span class="small text-muted">{{ summary.payment_count }} pagos confirmados · Fecha real de pago.</span><a href="{{ links.income }}">Ver cobros <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric">
+            <h2>Cartera vencida</h2><div class="dashboard-number">S/ {{ summary.debt|floatformat:2 }}</div>
+            <span class="small text-muted">{{ summary.debtor_count }} abonados{% if summary.debt_rate != None %} · {{ summary.debt_rate|floatformat:2 }}% del padrón activo{% endif %}.</span><a href="{{ links.debt }}">Ver deudores <span aria-hidden="true">→</span></a>
+        </section>
+        <section class="dashboard-metric dashboard-critical">
+            <h2>Órdenes con más de 48 h</h2><div class="dashboard-number">{{ summary.critical_orders }}</div>
+            <span class="small text-muted">{{ summary.pending_orders }} pendientes · Máxima {{ summary.oldest_hours|floatformat:1 }} horas.</span><a href="{{ links.orders }}">Ver órdenes críticas <span aria-hidden="true">→</span></a>
+            <a class="small pt-2" href="{{ all_orders_url }}">Todas las pendientes</a>
+        </section>
     </div>
-    <div class="row g-4">
-        <div class="col-lg-7"><section class="card h-100"><div class="card-body">
-            <h2 class="h5">Recaudación de los últimos seis meses</h2><p class="small text-muted">Pagos confirmados por fecha de pago. El mes actual está en curso.</p>
-            {% for item in trend %}<a href="{{ item.url }}" class="d-block text-decoration-none mb-3" aria-label="Ver cobros de {{ item.month|date:'m/Y' }}">
-                <div class="d-flex justify-content-between gap-2 mb-1"><span class="dashboard-period">{{ item.month|date:'m/Y' }}{% if item.partial %} · En curso{% endif %}</span><span>S/ {{ item.amount|floatformat:2 }}</span></div>
-                <div class="dashboard-bar"><span style="width:{{ item.width }}%"></span></div>
-            </a>{% endfor %}
-        </div></section></div>
-        <div class="col-lg-5"><section class="card h-100"><div class="card-body">
-            <h2 class="h5">Antigüedad de cartera</h2><p class="small text-muted">Saldo vencido del abonado, agrupado por su vencimiento más antiguo.</p>
-            {% for item in debt_ages %}<a class="d-flex justify-content-between align-items-center border-bottom py-3 text-decoration-none" href="{{ item.url }}">
-                <span>{{ item.label }}<small class="d-block text-muted">{{ item.count }} abonados</small></span><strong>S/ {{ item.amount|floatformat:2 }}</strong>
-            </a>{% endfor %}
-            <details class="mt-4 small"><summary>Cómo se calculan los indicadores</summary>
-                <p class="mt-2">Activos cuenta fichas habilitadas, incluidas preventas; no representa servicios instalados. La sede del abonado es la de su ficha. Recaudación usa la sede que recibió el pago y excluye pagos pendientes o anulados. Cartera suma saldos de cargos abiertos cuyo vencimiento ya pasó, descontando pagos confirmados y descuentos concedidos. Órdenes pendientes incluye pendientes, asignadas, derivadas, en atención y reprogramadas.</p>
+    <div class="dashboard-columns">
+        <section class="dashboard-section">
+            <div class="dashboard-section-heading"><h2>Recaudación de los últimos seis meses</h2><p>Pagos confirmados por fecha de pago. El mes actual está en curso.</p></div>
+            <div class="dashboard-section-body">
+                {% for item in trend %}<a href="{{ item.url }}" class="dashboard-trend-row" aria-label="Ver cobros de {{ item.month|date:'m/Y' }}">
+                    <span class="dashboard-period">{{ item.month|date:'m/Y' }}{% if item.partial %}<small>En curso</small>{% endif %}</span>
+                    <span class="dashboard-bar" aria-hidden="true"><span style="width:{{ item.width }}%"></span></span>
+                    <span class="dashboard-trend-amount">S/ {{ item.amount|floatformat:2 }}</span>
+                </a>{% endfor %}
+            </div>
+        </section>
+        <section class="dashboard-section">
+            <div class="dashboard-section-heading"><h2>Antigüedad de cartera</h2><p>Saldo vencido del abonado, agrupado por su vencimiento más antiguo.</p></div>
+            <div class="dashboard-section-body">
+                {% for item in debt_ages %}<a class="dashboard-age" href="{{ item.url }}">
+                    <span>{{ item.label }}<small>{{ item.count }} abonados</small></span><strong>S/ {{ item.amount|floatformat:2 }}</strong>
+                </a>{% endfor %}
+            </div>
+            <details class="dashboard-method small"><summary>Cómo se calculan los indicadores</summary>
+                <p class="mt-2 mb-0">Activos cuenta fichas habilitadas, incluidas preventas; no representa servicios instalados. La sede del abonado es la de su ficha. Recaudación usa la sede que recibió el pago y excluye pagos pendientes o anulados. Cartera suma saldos de cargos abiertos cuyo vencimiento ya pasó, descontando pagos confirmados y descuentos concedidos. Órdenes pendientes incluye pendientes, asignadas, derivadas, en atención y reprogramadas.</p>
             </details>
-        </div></section></div>
+        </section>
     </div>
     {% if branch_comparison %}
-    <section class="card mt-4"><div class="card-body"><h2 class="h5">Comparativo por sede</h2></div><div class="table-responsive"><table class="table table-hover mb-0">
-        <thead><tr><th>Sede</th><th>Activos</th><th>Recaudación</th><th>Pagos</th><th>Cartera vencida</th><th>Deudores</th><th>Órdenes &gt;48 h</th></tr></thead>
-        <tbody>{% for item in branch_comparison %}<tr><td><a href="{{ item.url }}">{{ item.branch.name }}</a></td><td>{{ item.summary.active }}</td><td>S/ {{ item.summary.income|floatformat:2 }}</td><td>{{ item.summary.payment_count }}</td><td>S/ {{ item.summary.debt|floatformat:2 }}</td><td>{{ item.summary.debtor_count }}</td><td>{{ item.summary.critical_orders }}</td></tr>{% endfor %}</tbody>
-    </table></div></section>
+    <section class="dashboard-section mt-4">
+        <div class="dashboard-section-heading"><h2>Comparativo por sede</h2><p>Consulta la misma información en cada sede del alcance seleccionado.</p></div>
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Comparativo por sede"><table class="table table-hover mb-0">
+            <thead><tr><th scope="col">Sede</th><th scope="col" class="text-end">Activos</th><th scope="col" class="text-end">Recaudación</th><th scope="col" class="text-end">Pagos</th><th scope="col" class="text-end">Cartera vencida</th><th scope="col" class="text-end">Deudores</th><th scope="col" class="text-end">Órdenes &gt;48 h</th></tr></thead>
+            <tbody>{% for item in branch_comparison %}<tr><td><a href="{{ item.url }}">{{ item.branch.name }}</a></td><td class="text-end">{{ item.summary.active }}</td><td class="text-end text-nowrap">S/ {{ item.summary.income|floatformat:2 }}</td><td class="text-end">{{ item.summary.payment_count }}</td><td class="text-end text-nowrap">S/ {{ item.summary.debt|floatformat:2 }}</td><td class="text-end">{{ item.summary.debtor_count }}</td><td class="text-end">{{ item.summary.critical_orders }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
     {% endif %}
     {% endif %}
 </div>

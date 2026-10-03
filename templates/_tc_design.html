@@ -7,7 +7,8 @@ habria obligado a copiarlo, y dos copias del mismo CSS se separan al primer
 ajuste. Las pantallas lo cargan desde su bloque extra_css.
 {% endcomment %}
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+{% load static %}
+<link rel="stylesheet" href="{% static 'reports/vendor/bootstrap-icons.css' %}">
 <style>
     :root {
         --tc-blue: #0f4c7f;

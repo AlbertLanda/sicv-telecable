@@ -118,7 +118,8 @@ comercial ni registrar direcciones, suscripciones o contratos.
                 <a class="tc-btn" href="{% url 'customers:address_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva dirección</a>
             {% endif %}
         </div>
-        <div class="table-responsive">
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Direcciones del abonado">
             <table class="tc-table">
                 <thead>
                     <tr>
@@ -155,7 +156,8 @@ comercial ni registrar direcciones, suscripciones o contratos.
                 <a class="tc-btn" href="{% url 'services:subscription_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nueva suscripción</a>
             {% endif %}
         </div>
-        <div class="table-responsive">
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Servicios contratados del abonado">
             <table class="tc-table">
                 <thead>
                     <tr>
@@ -198,7 +200,8 @@ comercial ni registrar direcciones, suscripciones o contratos.
                 <a class="tc-btn" href="{% url 'contracts:contract_create' customer.pk %}"><i class="bi bi-plus-lg"></i>Nuevo contrato</a>
             {% endif %}
         </div>
-        <div class="table-responsive">
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Contratos del abonado">
             <table class="tc-table">
                 <thead>
                     <tr>

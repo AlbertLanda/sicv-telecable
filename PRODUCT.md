@@ -24,11 +24,11 @@ Django modular con plantillas; Python 3.11 en CI/Azure y PostgreSQL en nube. El 
 
 ## Brand Commitments
 
-Nombre Telecable, logo existente en `apps/work_orders/static/work_orders/branding/telecable-logo.jpg`. El usuario solicita apariencia empresarial, uso rápido e identidad propia. La paleta, tipografía y composición definitivas quedan pendientes de elegir entre propuestas.
+Nombre Telecable, logo existente en `apps/work_orders/static/work_orders/branding/telecable-logo.jpg`. El usuario solicita apariencia empresarial, uso rápido e identidad propia y delegó la selección de la referencia. Dirección elegida: criterios empresariales del kit público Carbon para Figma, adaptados a Telecable; azul para acciones, verde de marca, navegación de tinta y superficies neutras. Inter y el stack actual se conservan. Véase `docs/design/corporate-ui-direction.md` para alcance y limitaciones de acceso a Figma.
 
 ## Evidence on Hand
 
-Panel y detalles existentes en `apps/reports/`, documentación en `docs/administrative_dashboard.md`, logo corporativo. Las propuestas visuales utilizan datos ficticios etiquetados; sus cifras no representan la operación real.
+Panel y detalles existentes en `apps/reports/`, documentación en `docs/administrative_dashboard.md`, logo corporativo. Las propuestas visuales y capturas de validación utilizan datos ficticios etiquetados; sus cifras no representan la operación real. La interfaz integrada consulta los datos reales del entorno correspondiente.
 
 ## Product Principles
 
