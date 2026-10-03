@@ -118,7 +118,7 @@ class TheFichaOffersTheAccountTests(PaymentsTestCase):
         self.assertContains(response, url, count=1)
         self.assertInHTML(
             '<a class="dropdown-item" href="%s">'
-            '<i class="bi bi-cash-coin"></i>Registrar cobro</a>' % url,
+            '<i class="bi bi-cash-coin" aria-hidden="true"></i>Registrar cobro</a>' % url,
             response.content.decode(),
             count=1,
         )
@@ -177,7 +177,7 @@ class TheAccountScreensStayOnTheCustomerTests(PaymentsTestCase):
 
         self.assertInHTML(
             '<a href="%s" class="active" aria-current="page">'
-            '<i class="bi bi-clock-history"></i>Historial de pagos</a>' % url,
+            '<i class="bi bi-clock-history" aria-hidden="true"></i>Historial de pagos</a>' % url,
             response.content.decode(),
             count=1,
         )

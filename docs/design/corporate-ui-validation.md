@@ -2,13 +2,15 @@
 
 Fecha: 2026-10-03. Rama de trabajo: `feature/corporate-client-ui`, basada en QA `61d1808cc0db5af17f2ee211dc62cff8af58e4b7`.
 
+Las comprobaciones de navegación se ajustaron en `fix/corporate-navigation-checks` para esperar `aria-hidden="true"` en iconos decorativos. Conservan la verificación de URL, texto, ubicación única del cobro y pestaña activa; no se eliminan aserciones ni se modifica la interfaz revisada.
+
 ## Código y datos
 
 La interfaz integra el panel existente, sus detalles, búsqueda y ficha del abonado. No cambian modelos, migraciones, reglas económicas, permisos ni emisión fiscal. Los enlaces de nombre y código conducen a la ruta real de la ficha. La búsqueda conserva y codifica su término al paginar.
 
 ## Pruebas
 
-- Suite Django local: 1.962 pruebas, resultado OK, 7 omitidas por configuración. Después de las correcciones de revisión se repitieron las 40 pruebas existentes de panel, rediseño de ficha, ubicación, consulta NOC y cifras compartidas; resultado OK.
+- Suite Django local final: 1.962 pruebas, resultado OK, 7 omitidas por configuración. Después de las correcciones de revisión se repitieron las 40 pruebas existentes de panel, rediseño de ficha, ubicación, consulta NOC y cifras compartidas; resultado OK. Las 22 pruebas de navegación de cuentas también pasaron tras actualizar las expectativas de los iconos decorativos.
 - `manage.py check`: sin incidencias. `makemigrations --check --dry-run`: sin cambios. `node --check` y `git diff --check`: correctos.
 - `collectstatic` con `CompressedManifestStaticFilesStorage`: recursos copiados y procesados correctamente, incluidas referencias relativas a las fuentes locales.
 - Chromium: ocho vistas autenticadas en cada ancho 390, 1280 y 1440px (24 vistas), sin desbordamiento horizontal del documento, errores JavaScript ni solicitudes fallidas. Inter local cargado.
