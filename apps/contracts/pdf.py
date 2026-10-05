@@ -190,12 +190,10 @@ def _logotipo(lienzo, alto_de_la_pagina):
 
     # El apaisado: la cabecera del contrato es una franja ancha y baja, y
     # el isotipo cuadrado del comprobante ahí sale como un sello suelto.
-    ruta = branding.buscar_logo(stem=branding.STEM_APAISADO)
-
-    if ruta is None:
-        return
-
     try:
+        ruta = branding.buscar_logo(stem=branding.STEM_APAISADO)
+        if ruta is None:
+            return
         dibujo = ImageReader(branding.logo_sin_margen(ruta))
         ancho_px, alto_px = dibujo.getSize()
     except Exception:

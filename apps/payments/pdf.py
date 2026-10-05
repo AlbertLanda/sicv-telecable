@@ -64,7 +64,9 @@ PAGE_SIZE = landscape(A5)
 #
 # Las constantes se conservan con sus nombres porque este módulo las expone a
 # sus pruebas, que mueven `LOGO_DIR` para comprobar qué pasa sin archivo.
-LOGO_DIR = Path(settings.MEDIA_ROOT)
+# None selecciona MEDIA mediante Django; una ruta explícita sigue siendo
+# válida para las pruebas y diagnósticos locales, sin congelar MEDIA_ROOT.
+LOGO_DIR = None
 LOGO_STEM = branding.STEM
 LOGO_PATTERN = branding.PATRON
 LOGO_SUFFIXES = branding.SUFIJOS
@@ -534,12 +536,10 @@ def _logo(alto, *, fallback=None):
     porque falte o se rompa un dibujo. Quien quiera saber si el sistema lo
     encuentra tiene `manage.py comprobar_logo`, que sí lo dice.
     """
-    ruta = find_logo() or fallback
-
-    if ruta is None:
-        return ""
-
     try:
+        ruta = find_logo() or fallback
+        if ruta is None:
+            return ""
         imagen = Image(_sin_margen_blanco(ruta))
         proporcion = imagen.imageWidth / imagen.imageHeight
     except Exception:
