@@ -2,12 +2,14 @@ from django.urls import path
 
 from . import views
 from .dashboard_views import OperationalDashboardView, OperationalDashboardDetailView
+from .customer_quality_views import CustomerQualityView
 
 
 app_name = "reports"
 
 
 urlpatterns = [
+    path("calidad-abonados/", CustomerQualityView.as_view(), name="customer_quality"),
     path("panel/", OperationalDashboardView.as_view(), name="dashboard"),
     path("panel/<str:kind>/", OperationalDashboardDetailView.as_view(), name="dashboard_detail"),
     path(

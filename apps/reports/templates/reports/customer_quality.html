@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Calidad de datos de abonados — SICV{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading">
+        <div>
+            <h1>Calidad de datos de abonados</h1>
+            <p>{{ branch.name|default:'Sin sede activa' }} · Consultado {{ consulted_at|date:'d/m/Y H:i' }}<br>Revisa las alertas y abre la ficha para comprobar los datos con el abonado.</p>
+        </div>
+    </header>
+    <div class="alert alert-info" role="note">
+        Esta revisión consulta los abonados que ya están en SICV. Ayuda a preparar y revisar la migración; no carga datos del sistema anterior.
+        Las alertas no modifican registros. Un posible duplicado requiere revisión antes de tomar una decisión.
+    </div>
+    <form method="get" class="card card-body mb-3">
+        {% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}
+        <div class="row g-3 align-items-end">
+            {% for field in form %}
+            <div class="col-md-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+            <div class="col-md-3 d-flex gap-2"><button class="btn btn-primary" type="submit">Consultar</button><a class="btn btn-outline-secondary" href="{% url 'reports:customer_quality' %}">Limpiar</a></div>
+        </div>
+    </form>
+    {% if summary %}
+    <div class="card card-body mb-3">
+        <p class="mb-2"><strong>{{ summary.total }}</strong> abonados en la sede, estado y búsqueda actuales · <strong>{{ summary.flagged }}</strong> con alertas · <strong>{{ summary.clear }}</strong> sin alertas detectadas.</p>
+        <div class="row g-2">
+            {% for card in cards %}
+            <div class="col-sm-6 col-xl"><a class="d-block border rounded p-3 h-100 text-decoration-none" href="{{ card.url }}"><strong class="d-block fs-4">{{ card.count }}</strong>{{ card.label }}</a></div>
+            {% endfor %}
+        </div>
+        <p class="small text-muted mt-2 mb-0">Un abonado puede aparecer en varias alertas. Los indicadores conservan el estado y la búsqueda; seleccionar una alerta filtra el listado.</p>
+    </div>
+    <div class="card">
+        {% include '_table_scroll_hint.html' %}
+        <div class="table-responsive" tabindex="0" role="region" aria-label="Abonados y alertas de calidad de datos">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th scope="col">Código / ficha</th><th scope="col">Abonado</th><th scope="col">Documento</th><th scope="col">Estado</th><th scope="col">Revisar</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td class="text-nowrap"><a href="{% url 'customers:detail' row.customer.pk %}">{{ row.customer.code }}</a></td>
+                        <td>{{ row.customer }}</td>
+                        <td>{{ row.customer.get_document_type_display }} {{ row.customer.document_number|default:'Sin número' }}</td>
+                        <td>{% if row.customer.is_active %}Activo{% else %}Inactivo{% endif %}</td>
+                        <td>{% if row.issues %}<ul class="mb-0 ps-3">{% for label in row.issues %}<li>{{ label }}</li>{% endfor %}</ul>{% else %}<span class="text-muted">Sin alertas detectadas</span>{% endif %}</td>
+                    </tr>
+                    {% empty %}<tr><td colspan="5" class="text-center text-muted py-4">No hay abonados para estos filtros.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <nav class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3" aria-label="Páginas de calidad de datos">
+        <span>{{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} · Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        <div class="btn-group">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}{% if page_obj.has_next %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</div>
+    </nav>
+    {% endif %}
+    <details class="card card-body mt-3">
+        <summary>Qué revisamos y cómo interpretar las alertas</summary>
+        <dl class="mt-3 mb-0">{% for key, label, description in checks %}<dt>{{ label }}</dt><dd>{{ description }}</dd>{% endfor %}</dl>
+        <p class="small text-muted mb-0">No se verifica la identidad con RENIEC/SUNAT, la vigencia del contacto ni los saldos. Sin alertas no significa que el expediente esté aprobado para migrar. Las coincidencias se buscan solo dentro de esta sede.</p>
+    </details>
+</div>
+{% endblock %}
