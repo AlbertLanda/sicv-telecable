@@ -45,6 +45,11 @@ descarga sobre la misma pantalla, igual que en materiales.
 
             <div class="tc-section-body">
 
+                <div class="alert alert-warning" role="note">
+                    <strong>{{ cash_closing_scope_notice.title }}</strong>
+                    <p class="mb-0">{{ cash_closing_scope_notice.detail }}</p>
+                </div>
+
                 {% if form.non_field_errors %}
                     <div class="alert alert-danger">
                         {% for error in form.non_field_errors %}

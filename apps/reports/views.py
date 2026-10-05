@@ -24,7 +24,11 @@ from django.views.generic import FormView, TemplateView
 from apps.organization.context_processors import get_active_branch, get_active_office
 
 from . import cash_closing_exporters, user_income_exporters
-from .cash_closing import USER_REPORT_TYPE, build_cash_closing
+from .cash_closing import (
+    CASH_CLOSING_SCOPE_NOTICE,
+    USER_REPORT_TYPE,
+    build_cash_closing,
+)
 from .exporters import CONTENT_TYPES, render
 from .forms import (
     VIEWED_FORMATS,
@@ -255,5 +259,6 @@ class CashClosingView(CashClosingPermissionMixin, TemplateView):
                 branch=branch,
                 viewed_formats=VIEWED_FORMATS,
                 user_report_type=USER_REPORT_TYPE,
+                cash_closing_scope_notice=CASH_CLOSING_SCOPE_NOTICE,
             )
         )

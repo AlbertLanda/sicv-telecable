@@ -44,6 +44,19 @@ from apps.payments.models import Payment, Receipt, ReceiptSequence
 ZERO = Decimal("0.00")
 
 
+# Compartido por la pantalla y las exportaciones: los ceros de partidas que
+# aún no se registran no acreditan ausencia de movimientos ni un arqueo.
+CASH_CLOSING_SCOPE_NOTICE = {
+    "title": "Consolidado parcial: no es un cierre de caja completo",
+    "detail": (
+        "SICV aún no registra saldo anterior, garantías, otros ingresos, "
+        "gastos, depósitos ni arqueo. Estas partidas aparecen en cero por "
+        "falta de registro en el sistema; esos ceros no confirman ausencia "
+        "de movimientos."
+    ),
+}
+
+
 # El desplegable «Reporte». SICAV ofrece más de uno; el que Contabilidad usa
 # para cuadrar es el consolidado, y los demás entran cuando se pidan.
 REPORT_TYPES = {
