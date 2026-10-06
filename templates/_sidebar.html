@@ -22,7 +22,7 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
             <input type="search" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." aria-label="Buscar opción del menú" autocomplete="off">
         </div>
 
-        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado calidad datos duplicados">
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado calidad datos duplicados equipos serie mac">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
                 <i class="bi bi-people" aria-hidden="true"></i><span>Clientes</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
@@ -34,6 +34,9 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
                     {% endif %}
                     {% if perms.customers.change_customer %}
                         <a class="sidebar-link{% if request.resolver_match.url_name == 'customer_quality' %} active{% endif %}" href="{% url 'reports:customer_quality' %}"><i class="bi bi-clipboard-check" aria-hidden="true"></i>Calidad de datos</a>
+                    {% endif %}
+                    {% if perms.equipment.view_equipment %}
+                        <a class="sidebar-link{% if request.resolver_match.app_name == 'equipment' %} active{% endif %}" href="{% url 'equipment:list' %}"><i class="bi bi-router" aria-hidden="true"></i>Equipos de abonados</a>
                     {% endif %}
                 </div>
             </div>

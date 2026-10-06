@@ -46,6 +46,8 @@ class User(AbstractUser):
         {
             "customers.add_customer",
             "customers.change_customer",
+            "equipment.view_equipment",
+            "equipment.assign_equipment",
             "customers.add_customeraddress",
             "customers.discard_incomplete_registration",
             "services.add_subscription",
@@ -73,6 +75,8 @@ class User(AbstractUser):
             "accounts.view_user",
             "accounts.add_user",
             "accounts.change_user",
+            "equipment.add_equipment",
+            "equipment.change_equipment",
             "services.view_subscription",
             "services.view_plan",
             "services.view_servicetype",

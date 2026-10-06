@@ -73,6 +73,7 @@ urlpatterns = [
 
     # Preparación fiscal: borradores independientes de pagos y caja.
     path("facturacion/", include("apps.fiscal.urls")),
+    path("equipos/", include("apps.equipment.urls")),
 
     # Reportes operativos. Listas transversales que cruzan a todos los
     # abonados de una sede, a diferencia de las pantallas de cobranza, que

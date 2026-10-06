@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} — SICV{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading"><div><h1>{{ title }}</h1><p>{{ description }}</p></div></header>
+    <form method="post" class="card card-body" style="max-width:760px;">
+        {% csrf_token %}
+        {% for field in form.hidden_fields %}{{ field }}{% for error in field.errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}{% endfor %}
+        {% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}
+        {% for field in form.visible_fields %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span aria-label="obligatorio">*</span>{% endif %}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="text-danger" role="alert">{{ error }}</div>{% endfor %}</div>{% endfor %}
+        <div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" type="submit">{{ submit_label }}</button><a class="btn btn-outline-secondary" href="{{ cancel_url }}">Cancelar</a></div>
+    </form>
+</div>
+{% endblock %}
