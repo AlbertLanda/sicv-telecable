@@ -202,6 +202,7 @@ INSTALLED_APPS = [
     'apps.fiscal',
     'apps.technicians',
     'apps.inventory',
+    'apps.equipment',
     'apps.audit',
     'apps.legacy',
     'apps.reports',

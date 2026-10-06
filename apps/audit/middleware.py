@@ -4,6 +4,10 @@ from .models import AuditEvent
 
 
 ACTION_LABELS = {
+    "equipment:create": "Registró un equipo de abonado",
+    "equipment:assign": "Registró una asignación de equipo",
+    "equipment:remove": "Registró un retiro de equipo",
+    "equipment:review": "Revisó el estado de un equipo",
     "customers:create": "Registró un cliente",
     "contracts:contract_create": "Registró un contrato",
     "contracts:contract_edit": "Editó un contrato",

@@ -1,5 +1,10 @@
 # Diseño del modelo de Equipos / Equipo Susc.
 
+Actualización 06/10/2026: la primera implementación se documenta en
+[customer_equipment.md](customer_equipment.md). El diseño original que sigue
+se conserva como antecedente; disponibilidad de asignación no equivale a stock
+de almacén.
+
 > Documento de diseño — Día 1, Bloque Equipos (27 ago 2026).
 > No implica creación de modelos ni migraciones. La implementación
 > (modelo `Equipment` + migración) corresponde al día 2, en la rama

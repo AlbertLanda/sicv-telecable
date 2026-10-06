@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Equipo {{ equipment.serial_number|default:equipment.mac_address }} — SICV{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading"><div><h1>{{ equipment.brand }} {{ equipment.model }}</h1><p>{{ equipment.get_kind_display }} · {{ equipment.get_status_display }}</p></div><a class="btn btn-outline-primary" href="{% url 'equipment:list' %}">Volver a equipos</a></header>
+    <div class="card card-body mb-3"><dl class="row mb-0"><dt class="col-sm-3">Número de serie</dt><dd class="col-sm-9">{{ equipment.serial_number|default:'No registrado' }}</dd><dt class="col-sm-3">MAC</dt><dd class="col-sm-9">{{ equipment.mac_address|default:'No registrada' }}</dd><dt class="col-sm-3">Registro</dt><dd class="col-sm-9">{{ equipment.created_at|date:'d/m/Y H:i' }} · {{ equipment.created_by.get_full_name|default:equipment.created_by.username }}</dd></dl></div>
+    <h2 class="h5">Historial de asignaciones y retiros</h2>
+    {% include 'equipment/_history.html' %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-4 mb-2"><h2 class="h5 mb-0">Revisiones del equipo</h2>{% if perms.equipment.change_equipment and equipment.status != 'ASSIGNED' %}<a class="btn btn-outline-primary" href="{% url 'equipment:review' equipment.pk %}">Revisar estado</a>{% endif %}</div>
+    <div class="card card-body">
+        {% for review in review_page %}<div class="border-bottom py-2"><strong>{{ review.get_previous_status_display }} → {{ review.get_status_display }}</strong><p class="mb-1">{{ review.reason }}</p><small class="text-muted">{{ review.reviewed_at|date:'d/m/Y H:i' }} · {{ review.reviewed_by.get_full_name|default:review.reviewed_by.username }}</small></div>{% empty %}<span class="text-muted">No hay revisiones registradas.</span>{% endfor %}
+    </div>
+    {% if review_page.has_other_pages %}<nav class="d-flex gap-3 mt-2" aria-label="Páginas de revisiones">{% if review_page.has_previous %}<a href="?page={{ page_obj.number }}&amp;reviews={{ review_page.previous_page_number }}">Revisiones anteriores</a>{% endif %}<span>{{ review_page.number }} / {{ review_page.paginator.num_pages }}</span>{% if review_page.has_next %}<a href="?page={{ page_obj.number }}&amp;reviews={{ review_page.next_page_number }}">Más revisiones</a>{% endif %}</nav>{% endif %}
+</div>
+{% endblock %}

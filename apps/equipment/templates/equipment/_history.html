@@ -1,0 +1,14 @@
+<div class="card"><div class="table-responsive" tabindex="0" role="region" aria-label="Historial de asignaciones y retiros">
+    <table class="table table-hover align-middle mb-0">
+        <thead><tr>{% if customer %}<th scope="col">Equipo</th>{% else %}<th scope="col">Abonado</th>{% endif %}<th scope="col">Servicio</th><th scope="col">Asignación</th><th scope="col">Retiro</th><th scope="col">Detalle</th><th scope="col">Acción</th></tr></thead>
+        <tbody>{% for assignment in page_obj %}<tr>
+            <td>{% if customer %}<a href="{% url 'equipment:detail' assignment.equipment_id %}">{{ assignment.equipment }}</a>{% else %}<a href="{% url 'equipment:customer' assignment.subscription.customer_id %}">{{ assignment.subscription.customer }}</a>{% endif %}</td>
+            <td>{{ assignment.service_code_snapshot }}</td>
+            <td>{{ assignment.assigned_at|date:'d/m/Y H:i' }}<small class="d-block text-muted">{{ assignment.assigned_by.get_full_name|default:assignment.assigned_by.username }}</small></td>
+            <td>{% if assignment.removed_at %}{{ assignment.removed_at|date:'d/m/Y H:i' }}<small class="d-block text-muted">{{ assignment.removed_by.get_full_name|default:assignment.removed_by.username }}</small><span class="d-block">{{ assignment.get_return_status_display }}</span>{% else %}<strong>Asignación vigente</strong>{% endif %}</td>
+            <td>{% if assignment.work_order %}<span class="d-block">OT {{ assignment.work_order.order_number }}</span>{% endif %}{% if assignment.notes %}<span class="d-block">{{ assignment.notes }}</span>{% endif %}{% if assignment.removal_reason %}<span class="d-block">Retiro: {{ assignment.removal_reason }}</span>{% endif %}</td>
+            <td>{% if not assignment.removed_at and perms.equipment.assign_equipment %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'equipment:remove' assignment.pk %}">Registrar retiro</a>{% else %}—{% endif %}</td>
+        </tr>{% empty %}<tr><td colspan="7" class="text-center text-muted py-4">Todavía no hay asignaciones registradas.</td></tr>{% endfor %}</tbody>
+    </table>
+</div></div>
+{% include 'equipment/_pagination.html' %}

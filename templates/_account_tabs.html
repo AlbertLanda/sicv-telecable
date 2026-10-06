@@ -13,7 +13,7 @@ Cada pestaña se esconde si el usuario no puede abrirla, así que el número de
 columnas depende de los permisos y no se puede fijar; de ahí la clase `auto`.
 
 Espera en el contexto `customer` y `active_tab`, uno de:
-info | orders | debt | history | receipts | activity
+info | orders | equipment | debt | history | receipts | activity
 {% endcomment %}
 
 <nav class="tc-tabs auto" aria-label="Secciones del abonado">
@@ -35,6 +35,14 @@ info | orders | debt | history | receipts | activity
            class="{% if active_tab == 'debt' %}active{% endif %}"
            {% if active_tab == 'debt' %}aria-current="page"{% endif %}>
             <i class="bi bi-cash-stack" aria-hidden="true"></i>Deuda
+        </a>
+    {% endif %}
+
+    {% if perms.equipment.view_equipment %}
+        <a href="{% url 'equipment:customer' customer.pk %}"
+           class="{% if active_tab == 'equipment' %}active{% endif %}"
+           {% if active_tab == 'equipment' %}aria-current="page"{% endif %}>
+            <i class="bi bi-router" aria-hidden="true"></i>Equipos
         </a>
     {% endif %}
 

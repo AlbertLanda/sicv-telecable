@@ -47,6 +47,9 @@ def installation_withdrawal_issues(order):
 
     subscription = order.subscription
 
+    if subscription.equipment_assignments.exists():
+        issues.append("El servicio tiene historial de equipos y no puede eliminarse como alta provisional.")
+
     if subscription.status not in WITHDRAWABLE_SUBSCRIPTION_STATUSES:
         issues.append(
             "La suscripción ya no está en preventa/en instalación."

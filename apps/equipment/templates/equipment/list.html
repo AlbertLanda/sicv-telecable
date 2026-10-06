@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Equipos de abonados — SICV{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading">
+        <div><h1>Equipos de abonados</h1><p>{{ branch.name|default:'Sin sede activa' }} · Consulta cada equipo por su serie o MAC y revisa su historial.</p></div>
+        {% if perms.equipment.add_equipment and branch %}<a class="btn btn-primary" href="{% url 'equipment:create' %}">Registrar equipo</a>{% endif %}
+    </header>
+    <form method="get" class="card card-body mb-3">
+        {% for error in form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endfor %}
+        <div class="row g-3 align-items-end">{% for field in form %}<div class="col-md-5"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>{% endfor %}<div class="col-md-2"><button class="btn btn-primary" type="submit">Buscar</button></div></div>
+    </form>
+    <p class="text-muted">Para asignar un equipo, abre la ficha del abonado y selecciona <strong>Equipos</strong>. Este registro muestra disponibilidad de asignación; las existencias y entregas de almacén se gestionan en Logística.</p>
+    {% if page_obj %}
+    <div class="card"><div class="table-responsive" tabindex="0" role="region" aria-label="Listado de equipos"><table class="table table-hover align-middle mb-0">
+        <thead><tr><th scope="col">Serie / MAC</th><th scope="col">Tipo</th><th scope="col">Marca y modelo</th><th scope="col">Estado</th></tr></thead>
+        <tbody>{% for equipment in page_obj %}<tr><td><a href="{% url 'equipment:detail' equipment.pk %}">{{ equipment.serial_number|default:equipment.mac_address }}</a>{% if equipment.serial_number and equipment.mac_address %}<small class="d-block text-muted">{{ equipment.mac_address }}</small>{% endif %}</td><td>{{ equipment.get_kind_display }}</td><td>{{ equipment.brand }} {{ equipment.model }}</td><td>{{ equipment.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4" class="text-center py-4">No hay equipos para estos filtros.</td></tr>{% endfor %}</tbody>
+    </table></div></div>
+    {% include 'equipment/_pagination.html' %}
+    {% elif not form.errors %}<div class="card card-body text-center">No hay equipos para estos filtros.</div>{% endif %}
+</div>
+{% endblock %}
