@@ -1,4 +1,0 @@
-<nav class="d-flex flex-wrap justify-content-between gap-3 mt-3" aria-label="Páginas de equipos">
-    <span>{{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }} · Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
-    <div class="btn-group">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}{% if page_obj.has_next %}<a class="btn btn-outline-secondary" href="?{{ page_query }}&amp;page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</div>
-</nav>

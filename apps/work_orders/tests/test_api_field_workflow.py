@@ -9,6 +9,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from apps.inventory.models import Material, WorkOrderMaterialMovement
+from apps.equipment.models import Equipment
 from apps.payments.models import Charge, ChargeConcept
 from apps.services.models import Subscription
 from apps.work_orders.models import (
@@ -435,6 +436,34 @@ class TechnicianFieldWorkflowAPITests(WorkOrderTestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         order.refresh_from_db()
         self.assertEqual(order.status, WorkOrder.Status.IN_PROGRESS)
+
+    def test_four_digit_equipment_reference_flows_to_liquidation_without_registry(self):
+        equipment_count = Equipment.objects.count()
+        order = self.create_order_in_progress()
+        response = self.api.patch(
+            self.url("field_sheet", order),
+            {"equipment_code": "0123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(WorkOrderFieldSheet.objects.get(work_order=order).equipment_code, "0123")
+        self.ensure_signed_installation_contract(order)
+        completed = self.api.post(
+            self.url("complete", order),
+            {"result_id": self.installation_success.pk},
+            format="json",
+        )
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
+        liquidated = self.api.post(
+            self.url("liquidate", order),
+            {"resolution_detail": "Servicio operativo. Referencia de equipo registrada en campo."},
+            format="json",
+        )
+        self.assertEqual(liquidated.status_code, status.HTTP_200_OK)
+        order.refresh_from_db()
+        self.assertEqual(order.status, WorkOrder.Status.LIQUIDATED)
+        self.assertEqual(order.liquidation.equipment_serial, "0123")
+        self.assertEqual(Equipment.objects.count(), equipment_count)
 
     def test_liquidation_consolidates_field_sheet_and_material_movements(self):
         order = self.create_order_in_progress()

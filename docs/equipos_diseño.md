@@ -1,51 +1,12 @@
-# Diseño del modelo de Equipos / Equipo Susc.
+# Equipos — decisión funcional vigente
 
-Actualización 06/10/2026: la primera implementación se documenta en
-[customer_equipment.md](customer_equipment.md). El diseño original que sigue
-se conserva como antecedente; disponibilidad de asignación no equivale a stock
-de almacén.
+El diseño de un catálogo independiente de equipos por abonado queda
+**descartado por Telecable el 2026-10-06**. No debe retomarse como requisito
+pendiente ni reproducirse desde el sistema antiguo.
 
-> Documento de diseño — Día 1, Bloque Equipos (27 ago 2026).
-> No implica creación de modelos ni migraciones. La implementación
-> (modelo `Equipment` + migración) corresponde al día 2, en la rama
-> `feature/equipos-base`.
+El técnico registra los últimos cuatro dígitos en la ficha de la orden y el
+dato pasa a la liquidación para apoyar el registro operativo. No corresponde
+agregar un alta y una asignación manual por ATC o Administración.
 
-## Contexto
-
-El sistema anterior (telecable.cableoperador.com) expone en el menú de
-cliente los módulos "Equipos" y "Equipo Susc.". Un equipo (decodificador,
-router, ONT/módem) se asocia a una **suscripción** del cliente, no
-directamente al cliente, para resolver sin ambigüedad qué equipo
-corresponde a qué servicio cuando el cliente tiene más de una suscripción.
-
-## Entidad: Equipo
-
-| Campo | Tipo propuesto | Descripción |
-|---|---|---|
-| tipo | choice | Decodificador, Router, ONT/Módem, ... |
-| marca | string | Marca del fabricante |
-| modelo | string | Modelo comercial |
-| numero_serie_mac | string (único) | Número de serie o dirección MAC |
-| estado | choice | En stock, Asignado, Retirado, Dañado/Baja |
-
-## Asociación: Equipo ↔ Suscripción (Equipo Susc.)
-
-| Campo | Tipo propuesto | Descripción |
-|---|---|---|
-| equipo | FK a Equipo | Equipo asignado |
-| suscripcion | FK a Subscription | Suscripción a la que se asocia |
-| fecha_asignacion | date | Fecha en que se asignó el equipo |
-| fecha_retiro | date (nullable) | Fecha de retiro, si aplica |
-| tecnico_instalador | FK a User (nullable) | Técnico que instaló el equipo, si aplica |
-
-## Referencia al sistema anterior
-
-- Columna "Equipos": listado de equipos por tipo/estado.
-- Columna "Equipo Susc.": vínculo equipo-suscripción con fechas de
-  asignación/retiro y técnico instalador.
-
-## Siguiente paso
-
-Día 2 del bloque: crear el modelo `Equipment` (tipo, marca/modelo,
-número de serie, estado) y su migración correspondiente, en la rama
-`feature/equipos-base`, a partir de este diseño aprobado.
+Consulta el flujo y las medidas de conservación de datos en
+[Equipos: registro desde la liquidación técnica](customer_equipment.md).

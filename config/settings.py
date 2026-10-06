@@ -202,7 +202,7 @@ INSTALLED_APPS = [
     'apps.fiscal',
     'apps.technicians',
     'apps.inventory',
-    'apps.equipment',
+    'apps.equipment',  # Archivo histórico; sin registro operativo ni rutas web.
     'apps.audit',
     'apps.legacy',
     'apps.reports',
