@@ -4,6 +4,7 @@ from .models import AuditEvent
 
 
 ACTION_LABELS = {
+    # Se conservan las etiquetas del registro de equipos retirado como historia.
     "equipment:create": "Registró un equipo de abonado",
     "equipment:assign": "Registró una asignación de equipo",
     "equipment:remove": "Registró un retiro de equipo",

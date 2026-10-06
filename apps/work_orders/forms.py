@@ -1230,7 +1230,7 @@ class WorkOrderFieldSheetForm(forms.ModelForm):
             "equipment_code": forms.TextInput(
                 attrs={
                     "class": "form-control",
-                    "placeholder": "Ej: AA:BB:CC:DD:EE:FF o serie del equipo",
+                    "placeholder": "Últimos 4 dígitos. Ej: 0123",
                 }
             ),
             "seal_number": forms.TextInput(
@@ -1251,7 +1251,7 @@ class WorkOrderFieldSheetForm(forms.ModelForm):
         labels = {
             "nap": "NAP",
             "terminal": "Borne",
-            "equipment_code": "MAC / Equipo",
+            "equipment_code": "Equipo — últimos 4 dígitos",
             "seal_number": "Precinto",
             "notes": "Observaciones",
         }

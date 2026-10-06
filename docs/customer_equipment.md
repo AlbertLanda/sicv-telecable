@@ -1,91 +1,51 @@
-# Equipos por abonado — primera entrega
+# Equipos: registro desde la liquidación técnica
 
-Base: Azure QA `060ca58d2f024a6948f325387938b92dec98a1a3`.
-Rama: `feature/customer-equipment`.
+## Decisión funcional vigente — 2026-10-06
 
-## Flujo operativo
+Telecable confirmó que el registro independiente de equipos por abonado no
+corresponde al nuevo sistema: genera una carga manual que ya se descartó.
+El técnico registra los **últimos cuatro dígitos** del equipo durante su
+atención/liquidación y ese dato sirve para completar el registro operativo.
+Esta decisión reemplaza la propuesta y entrega del PR #39.
 
-1. Administración abre **Clientes → Equipos de abonados → Registrar equipo**.
-   Registra tipo, marca, modelo y al menos serie o MAC, leyendo la etiqueta.
-   La sede proviene de la barra superior. Serie y MAC no pueden repetirse,
-   incluso en otra sede; la serie se guarda en mayúsculas y la MAC con dos
-   caracteres por segmento.
-2. ATC o Administración abre la ficha del abonado, pestaña **Equipos**,
-   selecciona **Asignar equipo**, elige el equipo y el servicio. Puede
-   relacionar una OT del mismo servicio y escribir una observación.
-3. Al retirarlo, registra un motivo y el estado posterior: disponible para
-   asignar, retirado/por revisar o dañado. El movimiento permanece visible.
-4. Administración puede revisar un equipo sin asignación vigente, registrar
-   el resultado y cambiar su estado; por ejemplo, devolverlo a disponible.
-5. Un reemplazo consta de retirar el anterior y asignar el nuevo. Son dos
-   movimientos explícitos, no una sustitución que borra el pasado.
+## Flujo que se conserva
 
-La lista permite búsqueda por serie, MAC, marca/modelo y estado. Los
-historiales se paginan. La ficha del equipo conserva sus asignaciones a
-distintos servicios, revisiones, fechas y usuarios. La ficha del abonado
-reúne los equipos de sus servicios. Las fechas corresponden al registro de
-la operación en SICV; no se presentan como fechas históricas de instalación.
+1. El técnico asignado completa la ficha técnica de la misma OT. El campo
+   de equipo indica «Equipo — últimos 4 dígitos» y admite valores como `0123`.
+2. Al liquidar, `liquidation_technical_data_from_field()` copia
+   `WorkOrderFieldSheet.equipment_code` a
+   `WorkOrderLiquidation.equipment_serial`.
+3. El dato continúa disponible en el contexto técnico de la OT y en los
+   flujos existentes de revisión. No se requiere que ATC o Administración
+   creen un equipo ni que lo asignen en un catálogo adicional.
 
-## Permisos y alcance
+El valor se mantiene como texto, conservando ceros iniciales. Se conservan los
+valores completos anteriores y el contrato de la API; no se truncan datos ni
+se añade una validación que obligue a reescribirlos. Cuatro dígitos son una
+referencia parcial: no se inventa una serie/MAC completa ni se usa ese sufijo
+como identificador único global o para resolver automáticamente un equipo.
 
-| Acción | Permiso | Rol incluido |
-|---|---|---|
-| Consultar | `equipment.view_equipment` | ATC y Administración |
-| Registrar equipo | `equipment.add_equipment` + consulta | Administración |
-| Asignar y retirar | `equipment.assign_equipment` + consulta | ATC y Administración |
-| Revisar estado | `equipment.change_equipment` + consulta | Administración |
+## Retiro del apartado independiente
 
-Las URLs y consultas exigen la sede activa; cambiar parámetros no abre otras
-sedes. Los servicios de dominio vuelven a validar permiso, sede, disponibilidad
-y estado del servicio. Las capacidades pueden concederse explícitamente con
-los permisos habituales de Django. No se incorporan a Contabilidad ni al
-canal de técnicos automáticamente.
+Se retiran el menú «Equipos de abonados», la pestaña «Equipos», sus formularios,
+rutas y servicios de alta/asignación/retiro/revisión. Las antiguas URLs
+`/equipos/…` dejan de estar disponibles, también para superusuarios. Se
+eliminan las capacidades automáticas de ese módulo en los roles ATC/Admin.
 
-## Integridad
+Los modelos y la migración ya aplicada se conservan únicamente como archivo
+para no destruir posibles registros anteriores. El admin mantiene consulta
+sin alta, edición ni borrado. Se mantienen las protecciones de históricos
+frente al borrado de altas provisionales. Este archivo no participa en la
+liquidación técnica ni requiere trabajo operativo.
 
-- Una restricción de base de datos admite una sola asignación vigente por
-  equipo; las operaciones bloquean el equipo dentro de una transacción.
-- No se asigna a un abonado inactivo ni a un servicio inactivo o cancelado.
-- Un servicio cancelado puede conservar un equipo físicamente pendiente de
-  retiro. Su retiro no exige reactivar el servicio.
-- Una clave de operación evita duplicar asignaciones o revisiones al
-  reenviar formularios. Reenviar una asignación ya retirada no la reactiva.
-  Repetir el retiro antiguo no afecta una asignación posterior.
-- Los retiros exigen motivo, usuario, fecha y estado posterior. Una revisión
-  no puede cambiar el estado de un equipo que continúa asignado.
-- El historial protege equipos, suscripciones y órdenes referenciadas frente
-  a borrado. Descartar altas o desistir de instalaciones detecta este historial
-  y rechaza la eliminación provisional con un mensaje explicativo.
-- El admin Django expone estas entidades como consulta. No ofrece edición
-  libre ni borrado del historial o de los identificadores.
+No hay migración destructiva, conversión de registros a partir de coincidencias
+de cuatro dígitos ni integración nueva con almacén. Los movimientos de
+materiales y su API de Logística mantienen su flujo actual.
 
-## Alcance de esta entrega
+## Verificación
 
-Es seguimiento del equipo físico ligado al servicio. La venta del producto
-existente, los materiales declarados en campo y el stock de Logística siguen
-siendo flujos separados. No descuenta existencias, no genera deuda ni cambia
-automáticamente estados de órdenes.
-
-No convierte los campos libres de serie/MAC de OTs antiguas en equipos: esa
-vinculación necesita revisión para no inventar asignaciones. Tampoco importa
-historial del legado, transfiere equipos entre sedes ni sincroniza todavía
-este registro desde el portal técnico. El técnico que ejecutó la orden puede
-consultarse en la OT de referencia; `assigned_by` identifica a quien registró
-la asignación en SICV, no necesariamente al instalador.
-
-## Despliegue y pruebas
-
-La migración `equipment.0001_initial` crea tres tablas y restricciones. No
-modifica ni borra datos existentes. El arranque de `sicv-telecable-qa` aplica
-las migraciones según el procedimiento ya configurado. Otros entornos siguen
-requiriendo su proceso habitual de migración.
-
-Pruebas: `python manage.py test apps.equipment`.
-La prueba de dos asignaciones simultáneas requiere PostgreSQL y se incorpora
-al job PostgreSQL de CI. Las demás cubren normalización, duplicados, ciclo de
-uso, reenvíos, permisos, sede, integridad, protección de historial, formularios,
-CSRF, escape de textos y paginación. Datos exclusivamente ficticios.
-
-Para validar visualmente en QA: registrar un equipo ficticio, asignarlo a un
-servicio de prueba, retirarlo por revisión, devolverlo a disponible y asignarlo
-de nuevo. Confirmar ambas asignaciones y la revisión en su historial.
+Las pruebas comprueban que las URLs retiradas no permiten lectura ni escritura,
+que no quedan enlaces del registro manual y que el archivo no permite editar
+por admin. Una prueba de integración del canal técnico registra `0123`, termina
+la atención y liquida la OT conservando ese valor sin crear un registro de
+equipo independiente. Se ejecuta también en PostgreSQL.

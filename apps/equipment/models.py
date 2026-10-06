@@ -1,3 +1,5 @@
+"""Archivo del registro manual retirado; la operación vive en las OTs."""
+
 import re
 import uuid
 

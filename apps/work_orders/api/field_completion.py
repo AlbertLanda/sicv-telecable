@@ -91,7 +91,12 @@ def liquidation_items_from_field(order: WorkOrder):
 
 
 def liquidation_technical_data_from_field(order: WorkOrder):
-    """Reutiliza la ficha técnica como snapshot base de la liquidación."""
+    """Reutiliza la ficha técnica como snapshot base de la liquidación.
+
+    equipment_code puede contener los últimos cuatro dígitos registrados
+    por el técnico. Se conserva como texto, sin resolverlo contra un catálogo
+    independiente ni convertirlo en número (puede empezar por cero).
+    """
     try:
         sheet = order.field_sheet
     except WorkOrder.field_sheet.RelatedObjectDoesNotExist:
