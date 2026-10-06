@@ -10,17 +10,19 @@ anterior.
 Vive en `organization` porque son de la empresa, no de cobranza ni de
 contratos: los dos son consumidores, ninguno es su dueño.
 
-Los archivos se dejan en MEDIA_ROOT y no vienen con el código: los pone
-administración y los cambia sin pasar por un despliegue. Es provisional a
+Los archivos se dejan en la raíz del almacenamiento MEDIA y no vienen con el
+código: los pone administración y los cambia sin pasar por un despliegue. Es provisional a
 propósito -está pendiente decidir si cada razón social lleva los suyos, y
 entonces serán campos del emisor y no rutas fijas-, así que la carpeta se
 declara en un solo sitio.
 """
 
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files.storage import Storage, default_storage
 
 
 # La marca tiene dos dibujos y no son intercambiables:
@@ -71,9 +73,29 @@ UMBRAL_BLANCO = 18
 
 
 def directorio_de_las_imagenes():
-    """Dónde se busca. Se lee al llamar para que las pruebas puedan moverlo."""
+    """Ruta local de compatibilidad; no representa un backend remoto."""
 
     return Path(settings.MEDIA_ROOT)
+
+
+@dataclass(frozen=True)
+class ImagenAlmacenada:
+    """Referencia privada de MEDIA: nunca requiere una ruta o URL pública."""
+
+    name: str
+    storage: Storage
+
+    def read_bytes(self):
+        with self.storage.open(self.name, "rb") as archivo:
+            return archivo.read()
+
+
+def fuente_de_imagen(archivo):
+    """Fuente para Pillow/ReportLab, manteniendo los blobs solo en memoria."""
+
+    if isinstance(archivo, ImagenAlmacenada):
+        return BytesIO(archivo.read_bytes())
+    return str(archivo)
 
 
 def buscar_imagen(stem, directorio=None):
@@ -91,28 +113,37 @@ def buscar_imagen(stem, directorio=None):
     distingue y el servidor sí: un archivo guardado como «Logo-...» dejaría
     el papel bien en el portátil de quien lo prueba y sin logotipo en
     producción, que es el peor sitio donde descubrirlo.
+
+    Sin directorio explícito consulta el backend de MEDIA configurado en
+    Django. Devuelve una referencia con `name` y `read_bytes()`. Un directorio
+    explícito conserva la búsqueda local y el retorno Path para diagnósticos.
     """
 
-    carpeta = (
-        Path(directorio) if directorio is not None else directorio_de_las_imagenes()
-    )
-
-    if not carpeta.exists():
-        return None
-
     principio = stem.lower()
-
-    candidatos = [
-        ruta
-        for ruta in carpeta.iterdir()
-        if ruta.is_file() and ruta.name.lower().startswith(principio)
-    ]
+    if directorio is not None:
+        carpeta = Path(directorio)
+        if not carpeta.exists():
+            return None
+        candidatos = [
+            ruta for ruta in carpeta.iterdir()
+            if ruta.is_file() and ruta.name.lower().startswith(principio)
+        ]
+    else:
+        try:
+            _, nombres = default_storage.listdir("")
+        except FileNotFoundError:
+            # Un MEDIA_ROOT local todavía vacío puede no existir.
+            return None
+        candidatos = [
+            ImagenAlmacenada(nombre, default_storage)
+            for nombre in nombres if nombre.lower().startswith(principio)
+        ]
 
     if not candidatos:
         return None
 
     def preferencia(ruta):
-        suffix = ruta.suffix.lower()
+        suffix = Path(ruta.name).suffix.lower()
         puesto = SUFIJOS.index(suffix) if suffix in SUFIJOS else len(SUFIJOS)
 
         return (puesto, len(ruta.name), ruta.name)
@@ -146,13 +177,21 @@ def logo_sin_margen(ruta, umbral=UMBRAL_BLANCO):
     poco caído es mejor que un papel que no se puede entregar.
     """
 
+    fuente = fuente_de_imagen(ruta)
+
+    def sin_recortar():
+        if hasattr(fuente, "seek"):
+            fuente.seek(0)
+        return fuente
+
     try:
         from PIL import Image, ImageChops
     except Exception:
-        return str(ruta)
+        return sin_recortar()
 
     try:
-        original = Image.open(ruta).convert("RGB")
+        with Image.open(fuente) as imagen:
+            original = imagen.convert("RGB")
         blanco = Image.new("RGB", original.size, (255, 255, 255))
         mascara = (
             ImageChops.difference(original, blanco)
@@ -161,11 +200,11 @@ def logo_sin_margen(ruta, umbral=UMBRAL_BLANCO):
         )
         caja = mascara.getbbox()
     except Exception:
-        return str(ruta)
+        return sin_recortar()
 
     # Sin caja el dibujo es todo blanco; recortarlo lo dejaría en nada.
     if caja is None:
-        return str(ruta)
+        return sin_recortar()
 
     # Como archivo en memoria y no como imagen de PIL: los renderizadores de
     # PDF esperan una ruta o algo que se pueda abrir, y una imagen de PIL la

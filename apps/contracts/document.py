@@ -120,7 +120,7 @@ def sello_de_la_empresa(empresa):
     siempre la misma y va impresa, como en los contratos que se entregaban
     en papel con el sello puesto.
 
-    El archivo lo deja administración en MEDIA_ROOT, uno por código de
+    El archivo lo deja administración en la raíz de MEDIA, uno por código de
     empresa emisora (`firma_INV.png`), y tiene que ser un **PNG recortado y
     con fondo transparente**: el sello se apoya sobre la línea de firma, y un
     fondo blanco la taparía dejando el recuadro a la vista.

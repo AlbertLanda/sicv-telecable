@@ -6,16 +6,23 @@ mirar el papel no distingue «falta la imagen» de «está mal puesta». Esto lo
 dice en una línea, sin generar un comprobante ni abrirlo.
 """
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
-from apps.payments.pdf import LOGO_DIR, LOGO_STEM, LOGO_SUFFIXES, find_logo
+from apps.organization import branding
+from apps.payments.pdf import LOGO_STEM, LOGO_SUFFIXES, find_logo
 
 
 class Command(BaseCommand):
     help = "Comprueba si el logotipo del comprobante está donde se le espera."
 
     def handle(self, *args, **options):
-        ruta = find_logo()
+        try:
+            ruta = find_logo()
+        except Exception:
+            raise CommandError(
+                "No se pudo consultar el almacenamiento MEDIA. Revise su "
+                "configuración, disponibilidad y permisos de lectura/listado."
+            ) from None
 
         if ruta is None:
             self.stdout.write(self.style.WARNING(
@@ -23,23 +30,13 @@ class Command(BaseCommand):
             ))
             self.stdout.write("")
             self.stdout.write(
-                f"  Guarde la imagen aquí:  {LOGO_DIR / (LOGO_STEM + '.png')}"
+                f"  Guarde {LOGO_STEM}.png en la raíz del almacenamiento MEDIA "
+                "configurado en Django (disco local o contenedor privado)."
             )
             self.stdout.write(
                 f"  Vale cualquier extensión ({', '.join(LOGO_SUFFIXES)}) y lo "
                 f"que el navegador le pegue detrás del nombre."
             )
-            self.stdout.write("")
-
-            existentes = sorted(
-                p.name for p in LOGO_DIR.glob("*") if p.is_file()
-            ) if LOGO_DIR.exists() else []
-
-            self.stdout.write(
-                f"  En {LOGO_DIR} hay ahora: "
-                f"{', '.join(existentes) if existentes else '(nada)'}"
-            )
-
             return
 
         # Se abre de verdad, no solo se comprueba que el archivo exista: un
@@ -48,17 +45,14 @@ class Command(BaseCommand):
         try:
             from reportlab.platypus import Image
 
-            imagen = Image(str(ruta))
+            imagen = Image(branding.fuente_de_imagen(ruta))
             medidas = f"{imagen.imageWidth}x{imagen.imageHeight} px"
-        except Exception as error:
-            self.stdout.write(self.style.ERROR(
-                f"El archivo {ruta.name} está, pero no se puede leer como "
-                f"imagen: {error}"
-            ))
-
-            return
+        except Exception:
+            raise CommandError(
+                "Se encontró el logotipo, pero no se pudo leer como imagen. "
+                "Revise el archivo y los permisos de lectura de MEDIA."
+            ) from None
 
         self.stdout.write(self.style.SUCCESS(
             f"Logotipo listo: {ruta.name} ({medidas})"
         ))
-        self.stdout.write(f"  {ruta}")
