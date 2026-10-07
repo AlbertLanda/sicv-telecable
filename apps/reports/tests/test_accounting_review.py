@@ -182,7 +182,7 @@ class AccountingReviewTests(TestCase):
         self.client.force_login(self.admin)
         links = self.client.get(self.url).context["sample_links"]
         self.assertEqual(links[0]["url"], reverse("payments:receipts", kwargs={"pk": customer.pk}))
-        other_branch = Branch.objects.create(code="REVIEW-OTHER", name="Otra sede sintética")
+        other_branch = Branch.objects.create(code="REV-OTHER", name="Otra sede sintética")
         session = self.client.session
         session[ACTIVE_BRANCH_SESSION_KEY] = other_branch.pk
         session.save()
