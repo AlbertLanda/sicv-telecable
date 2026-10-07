@@ -136,6 +136,7 @@ jobs:
           apps.payments.tests.test_confirmed_billing_rules
           apps.reports.tests.test_dashboard
           apps.reports.tests.test_customer_quality
+          apps.reports.tests.test_accounting_review
           apps.equipment
           apps.work_orders.tests.test_api_field_workflow.TechnicianFieldWorkflowAPITests.test_four_digit_equipment_reference_flows_to_liquidation_without_registry
           apps.work_orders.tests.test_results

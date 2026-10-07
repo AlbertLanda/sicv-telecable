@@ -1,3 +1,5 @@
+{% load accounting_review_ui %}
+{% accounting_review_available as can_review_accounting %}
 {% comment %}
 Navegación lateral global del SICV.
 
@@ -123,12 +125,15 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
         {% endif %}
 
         {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent or perms.payments.view_cash_closing %}
-        <section class="sidebar-section" data-sidebar-section="reportes ventas materiales cierre de caja consolidado emision actividad reciente auditoria">
+        <section class="sidebar-section" data-sidebar-section="reportes ventas materiales cierre de caja consolidado emision actividad reciente auditoria revision contable ejemplos qa">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
                 <i class="bi bi-pie-chart" aria-hidden="true"></i><span>Reportes</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarReportes">
                 <div class="sidebar-links">
+                    {% if can_review_accounting %}
+                        <a class="sidebar-link" href="{% url 'reports:accounting_review' %}"><i class="bi bi-journal-check" aria-hidden="true"></i>Revisión contable · QA</a>
+                    {% endif %}
                     {% if perms.services.view_subscription %}
                         <a class="sidebar-link" href="{% url 'reports:sales' %}"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>Ventas por vendedor</a>
                     {% endif %}
