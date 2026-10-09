@@ -587,6 +587,11 @@ def register_payment(
             f"número del comprobante."
         )
 
+    from .cash import lock_payment_session, book_payment
+    cash_session = lock_payment_session(
+        office=office, cashier=user, paid_at=paid_at or received_at,
+    ) if settled else None
+
     payment = Payment(
         customer=customer,
         amount=amount,
@@ -626,6 +631,8 @@ def register_payment(
         number=issue_receipt_number(sequence, number),
         issued_at=payment.received_at,
     )
+
+    book_payment(payment, cash_session, user)
 
     PaymentOperationEvent.objects.create(
         payment=payment, actor=user,

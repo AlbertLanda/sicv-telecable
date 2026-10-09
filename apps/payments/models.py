@@ -28,6 +28,7 @@ from django.utils import timezone
 from apps.customers.models import Customer
 from apps.organization.models import Branch, Office
 from apps.services.models import Subscription
+from .cash_models import CashClose, CashEntry, CashEvent, CashSession  # noqa: F401
 
 
 ZERO = Decimal("0.00")

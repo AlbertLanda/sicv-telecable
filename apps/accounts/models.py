@@ -64,6 +64,7 @@ class User(AbstractUser):
             "payments.view_payment",
             "payments.view_receipt",
             "payments.add_payment",
+            "payments.operate_cash",
         }
     )
 
@@ -80,6 +81,7 @@ class User(AbstractUser):
             "contracts.change_contract",
             "payments.view_paymentcommitment",
             "payments.view_cash_closing",
+            "payments.review_cash",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
             "accounting.view_workspace",
@@ -94,6 +96,7 @@ class User(AbstractUser):
     ACCOUNTING_BASELINE_PERMISSIONS = frozenset(
         {
             "payments.view_cash_closing",
+            "payments.review_cash",
             "accounting.view_workspace",
             "accounting.import_reports",
             "accounting.review_documents",

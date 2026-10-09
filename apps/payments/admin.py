@@ -202,6 +202,12 @@ class CollectionReadOnlyAdmin(admin.ModelAdmin):
         return False
 
 
+from .models import CashClose, CashEntry, CashEvent, CashSession
+
+for cash_model in (CashSession, CashEntry, CashClose, CashEvent):
+    admin.site.register(cash_model, CollectionReadOnlyAdmin)
+
+
 @admin.register(Payment)
 class PaymentAdmin(CollectionReadOnlyAdmin):
     list_display = [
