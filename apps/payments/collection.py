@@ -118,6 +118,8 @@ def confirm_payment(*, payment_id, paid_at=None, actor=None):
     if payment.status != Payment.Status.PENDING:
         raise ValidationError("Solo un pago pendiente se puede confirmar.")
     timestamp = paid_at or timezone.now()
+    from .cash import lock_payment_session, book_payment
+    cash_session = lock_payment_session(office=payment.office, cashier=payment.received_by, paid_at=timestamp)
     day = timezone.localtime(timestamp).date()
     allocations = list(payment.allocations.order_by("charge_id"))
     charges = {c.pk: c for c in Charge.objects.select_for_update().filter(
@@ -134,6 +136,7 @@ def confirm_payment(*, payment_id, paid_at=None, actor=None):
     payment.status = Payment.Status.REGISTERED
     payment.paid_at = timestamp
     payment.save(update_fields=["status", "paid_at", "updated_at"])
+    book_payment(payment, cash_session, actor or payment.received_by)
     for charge in charges.values():
         charge.refresh_status(day)
     PaymentOperationEvent.objects.create(payment=payment, action="CONFIRMED", actor=actor)
@@ -148,6 +151,8 @@ def void_payment(*, payment_id, actor, reason):
     payment = _lock_payment(payment_id)
     if payment.status == Payment.Status.VOIDED:
         raise ValidationError("El pago ya está anulado.")
+    from .cash import book_void
+    book_void(payment, actor, reason)
     charges = list(Charge.objects.select_for_update().filter(
         pk__in=payment.allocations.values_list("charge_id", flat=True),
     ).order_by("pk"))

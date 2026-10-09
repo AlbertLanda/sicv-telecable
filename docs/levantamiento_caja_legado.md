@@ -2,6 +2,12 @@
 
 Entregable del issue #22. Actualizado: 2026-10-01.
 
+**Actualización 2026-10-09:** la nueva [Caja operativa](caja_operativa.md) cubre
+apertura, gastos, depósitos, arqueo, versiones y aprobación por cajero/oficina.
+Las fichas siguientes conservan el estado del levantamiento original. El
+consolidado por emisión sigue separado de la caja física. SUNAT/SIRE automáticos
+permanecen pendientes por decisión del usuario.
+
 **Fuentes.** Validaciones funcionales con las áreas usuarias, navegación de solo
 lectura del SICV legado y revisión del código del SICV nuevo en
 `feature/reporte-ingresos-usuario`.

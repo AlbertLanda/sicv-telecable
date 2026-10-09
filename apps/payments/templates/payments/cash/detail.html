@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Caja #{{ cash.pk }} - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <div class="tc-breadcrumb"><a href="{% url 'payments:cash_workspace' %}">Caja operativa</a> &rsaquo; <strong>#{{ cash.pk }}</strong></div>
+  <section class="tc-card tc-section tc-full">
+    <div class="tc-section-head banner"><h1 class="tc-section-title">Caja #{{ cash.pk }} · {{ cash.get_status_display }}</h1><a class="tc-btn" href="{% url 'payments:cash_export' cash.pk %}">Descargar Excel</a></div>
+    <div class="tc-section-body">
+      <p>{{ cash.business_date|date:"d/m/Y" }} · {{ snapshot.office }} · {{ snapshot.cashier }}</p>
+      <div class="row g-3">
+        <div class="col-sm-3"><span class="text-muted">Fondo inicial</span><div class="fs-4">S/ {{ snapshot.opening|floatformat:2 }}</div></div>
+        <div class="col-sm-3"><span class="text-muted">Efectivo esperado</span><div class="fs-4">S/ {{ snapshot.expected_cash|floatformat:2 }}</div></div>
+        {% if cash.status != 'OPEN' %}<div class="col-sm-3"><span class="text-muted">Efectivo contado</span><div class="fs-4">S/ {{ snapshot.declared_cash|floatformat:2 }}</div></div><div class="col-sm-3"><span class="text-muted">Diferencia</span><div class="fs-4">S/ {{ snapshot.difference|floatformat:2 }}</div></div>{% endif %}
+      </div>
+      <p class="small mt-3">Apertura: {{ snapshot.opening_reason|default:"Saldo contado del cierre anterior" }}{% if snapshot.previous_session_id %} · Caja anterior #{{ snapshot.previous_session_id }}{% endif %}</p>
+      <p class="text-muted small">Efectivo esperado = fondo inicial + cobros e ingresos en efectivo − gastos − depósitos, con sus reversiones. Otros medios se muestran aparte y no aumentan el efectivo físico. Este cierre no acredita conciliación bancaria ni aceptación fiscal.</p>
+      {% if cash.status == 'OPEN' %}<div class="alert alert-info">Caja abierta: los totales son provisionales. Al enviar el arqueo se bloquean los movimientos hasta la revisión.</div>{% else %}<div class="alert alert-info">Versión {{ latest.revision }} conservada desde {{ latest.submitted_at|date:"d/m/Y H:i" }}. {{ latest.explanation }}</div>{% endif %}
+      <div class="row"><div class="col-md-6"><h2 class="h6">Movimientos netos por medio</h2><ul>{% for item in methods %}<li>{{ item.name }}: S/ {{ item.total|floatformat:2 }}</li>{% empty %}<li>Sin movimientos.</li>{% endfor %}</ul></div><div class="col-md-6"><h2 class="h6">Movimientos netos por empresa (sin fondo inicial)</h2><ul>{% for item in snapshot.issuers %}<li>{{ item.name }} · {{ item.ruc }}: S/ {{ item.net|floatformat:2 }}</li>{% empty %}<li>Sin movimientos.</li>{% endfor %}</ul></div></div>
+    </div>
+  </section>
+  {% if can_operate %}
+  <section class="tc-card tc-section tc-full"><div class="tc-section-body">
+    <details {% if forms.movement.errors %}open{% endif %}><summary class="fw-bold mb-3">Registrar gasto, depósito u otro ingreso</summary>
+      <p class="text-muted">Registre aquí dinero que entra o sale físicamente de caja. El pago bancario de un abonado se registra desde su cobro. Las garantías se distinguen de los ingresos por ventas.</p>
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="movement">{% include "payments/cash/_form.html" with form=forms.movement %}<button type="submit" class="tc-btn primary">Guardar movimiento</button></form>
+    </details>
+    <hr>
+    <details {% if forms.count.errors %}open{% endif %}><summary class="fw-bold mb-3">Arqueo y envío a revisión</summary>
+      <p>Cuente billetes y monedas. Indique cero para cada denominación que no tenga. Cheques, vales y pagos digitales no son efectivo contado. Si existe diferencia, explique el motivo.</p>
+      <form method="post" id="cash-count" data-expected="{{ snapshot.expected_cash }}">{% csrf_token %}<input type="hidden" name="action" value="count"><div class="row"><div class="col-md-6">{% include "payments/cash/_form.html" with form=forms.count %}</div><div class="col-md-6"><div class="alert alert-light sticky-top" aria-live="polite"><p>Total contado: <strong id="cash-count-total">S/ 0.00</strong></p><p>Diferencia: <strong id="cash-count-difference">Complete el conteo</strong></p></div></div></div><button type="submit" class="tc-btn primary">Guardar arqueo y enviar cierre</button></form>
+    </details>
+    <hr>
+    <details {% if forms.reverse.errors %}open{% endif %}><summary class="fw-bold mb-3">Corregir un movimiento</summary>
+      <p>La reversión conserva el registro original y añade el importe contrario. Puede referenciar un gasto, depósito, ingreso o garantía de esta caja o de una caja anterior aprobada del mismo cajero y oficina. Solo úsela si el dinero también se regularizó; no registra por sí sola una devolución bancaria.</p>
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="reverse">{% include "payments/cash/_form.html" with form=forms.reverse %}<button type="submit" class="tc-btn">Registrar reversión</button></form>
+    </details>
+  </div></section>
+  {% endif %}
+  {% if can_review %}<section class="tc-card tc-section tc-full"><div class="tc-section-head"><h2 class="tc-section-title">Revisar cierre</h2></div><div class="tc-section-body"><p>Revise movimientos, efectivo contado y explicación de diferencias. La aprobación conserva esta versión; no permite editarla después.</p><form method="post">{% csrf_token %}<input type="hidden" name="action" value="review">{% include "payments/cash/_form.html" with form=forms.review %}<button type="submit" class="tc-btn primary">Registrar decisión</button></form></div></section>{% endif %}
+  <section class="tc-card tc-section tc-full"><div class="tc-section-head"><h2 class="tc-section-title">Movimientos</h2></div><div class="tc-section-body">
+    <div class="table-responsive"><table class="table table-sm align-middle"><thead><tr><th>ID</th><th>Tipo</th><th>Empresa</th><th>Motivo / referencia</th><th>Medio</th><th>Importe S/</th><th>Saldo efectivo S/</th></tr></thead><tbody>
+      {% for item in entry_page %}<tr><td>#{{ item.id }}</td><td>{{ item.kind }}</td><td>{{ item.issuer }}<br><small>{{ item.ruc }}</small></td><td>{{ item.description }}<br><small>{{ item.reference }} {{ item.document_type }} {{ item.document_number }}{% if item.bank %} · {{ item.bank }} / {{ item.account }}{% endif %}</small></td><td>{{ item.method }}</td><td>{{ item.amount|floatformat:2 }}</td><td>{{ item.cash_balance|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="7">Sin movimientos.</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if entry_page.has_previous %}<a href="?page={{ entry_page.previous_page_number }}">Anterior</a>{% endif %} <span>Página {{ entry_page.number }} de {{ entry_page.paginator.num_pages }}</span> {% if entry_page.has_next %}<a href="?page={{ entry_page.next_page_number }}">Siguiente</a>{% endif %}
+  </div></section>
+  <section class="tc-card tc-section tc-full"><div class="tc-section-head"><h2 class="tc-section-title">Historial y versiones</h2></div><div class="tc-section-body">
+    <ul>{% for close in closes %}<li><a href="{% url 'payments:cash_export' cash.pk %}?revision={{ close.revision }}">Versión {{ close.revision }} · {{ close.submitted_at|date:"d/m/Y H:i" }}</a> · Diferencia S/ {{ close.difference|floatformat:2 }}</li>{% empty %}<li>Todavía no se ha enviado un cierre.</li>{% endfor %}</ul>
+    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>Acción</th><th>Persona</th><th>Detalle</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at|date:"d/m/Y H:i" }}</td><td>{{ event.action }}</td><td>{{ event.actor }}</td><td>{{ event.reason }}</td></tr>{% endfor %}</tbody></table></div>
+  </div></section>
+</div>
+<script src="{% static 'payments/cash-count.js' %}" defer></script>
+{% endblock %}

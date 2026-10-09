@@ -1,12 +1,16 @@
 from django.urls import path
 
 from . import views
+from .cash_views import CashDetailView, CashExportView, CashWorkspaceView
 
 
 app_name = "payments"
 
 
 urlpatterns = [
+    path("caja/", CashWorkspaceView.as_view(), name="cash_workspace"),
+    path("caja/<int:pk>/", CashDetailView.as_view(), name="cash_detail"),
+    path("caja/<int:pk>/exportar/", CashExportView.as_view(), name="cash_export"),
     path("pagos/<int:pk>/confirmar/", views.PaymentConfirmView.as_view(), name="confirm"),
 
     # Vistas administrativas transversales.

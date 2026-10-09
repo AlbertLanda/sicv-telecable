@@ -41,13 +41,16 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
             </div>
         </section>
 
-        {% if user.role == "ADMIN" or user.role == "ACCOUNTING" %}
+        {% if user.role == "ADMIN" or user.role == "ACCOUNTING" or perms.payments.operate_cash or perms.payments.review_cash %}
         <section class="sidebar-section" data-sidebar-section="cobranza caja compromisos recaudacion">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarCobranza" aria-expanded="true">
                 <i class="bi bi-cash-coin" aria-hidden="true"></i><span>Cobranza</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarCobranza">
                 <div class="sidebar-links">
+                    {% if perms.payments.operate_cash or perms.payments.review_cash %}
+                        <a class="sidebar-link" href="{% url 'payments:cash_workspace' %}"><i class="bi bi-safe" aria-hidden="true"></i>Caja operativa</a>
+                    {% endif %}
                     {% if perms.payments.view_payment %}
                         <a class="sidebar-link" href="{% url 'payments:daily_cash' %}"><i class="bi bi-wallet2" aria-hidden="true"></i>Caja del día</a>
                     {% endif %}
@@ -144,7 +147,7 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
                         <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam" aria-hidden="true"></i>Materiales</a>
                     {% endif %}
                     {% if perms.payments.view_cash_closing %}
-                        <a class="sidebar-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-cash-stack" aria-hidden="true"></i>Cierre de caja</a>
+                        <a class="sidebar-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-cash-stack" aria-hidden="true"></i>Consolidado de emisión</a>
                     {% endif %}
                     {% if perms.audit.view_auditevent %}
                         <a class="sidebar-link" href="{% url 'audit:activity' %}"><i class="bi bi-clock-history" aria-hidden="true"></i>Actividad reciente</a>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Caja operativa - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}
+<div class="tc-content">
+  <div class="tc-breadcrumb">Cobranza &rsaquo; <strong>Caja operativa</strong></div>
+  <section class="tc-card tc-section tc-full">
+    <div class="tc-section-head banner"><h1 class="tc-section-title">Caja operativa</h1></div>
+    <div class="tc-section-body">
+      <p>Apertura, movimientos, arqueo y revisión por cajero y oficina. Los importes están en soles.</p>
+      <p class="text-muted">El cierre físico usa los cobros de la caja. El <a href="{% url 'reports:cash_closing' %}">consolidado de emisión</a> conserva su propia fecha y puede tener totales distintos.</p>
+      {% if perms.payments.operate_cash %}
+      {% if can_open %}
+      <details {% if form.errors %}open{% endif %}>
+        <summary class="fw-bold mb-3">Abrir mi caja del {{ today|date:"d/m/Y" }} · {{ office }}</summary>
+        <div class="alert alert-info">El fondo inicial es el efectivo anterior a los cobros de hoy. Al abrir se incorporan los cobros ya registrados hoy por usted en esta oficina. Desde entonces, debe abrir y cerrar su caja cada día para seguir cobrando aquí.</div>
+        <form method="post">{% csrf_token %}
+          {{ form.non_field_errors }}
+          {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}<div class="form-text">{{ field.help_text }}</div></div>{% endfor %}
+          <button class="tc-btn primary" type="submit">Abrir caja e incorporar cobros de hoy</button>
+        </form>
+      </details>
+      {% else %}<div class="alert alert-warning">Seleccione una oficina física autorizada en la barra superior para abrir su caja.</div>{% endif %}
+      {% endif %}
+    </div>
+  </section>
+  <section class="tc-card tc-section tc-full">
+    <div class="tc-section-head"><h2 class="tc-section-title">Cajas de la sede activa</h2></div>
+    <div class="tc-section-body">
+      <form method="get" class="d-flex gap-2 mb-3"><label class="visually-hidden" for="status">Estado</label><select id="status" name="status" class="form-select"><option value="">Todos los estados</option>{% for key, label in statuses %}<option value="{{ key }}" {% if status_filter == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><button class="tc-btn" type="submit">Filtrar</button></form>
+      <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Caja</th><th>Fecha</th><th>Oficina</th><th>Cajero</th><th>Estado</th><th>Apertura</th></tr></thead><tbody>
+      {% for cash in page %}<tr><td><a href="{% url 'payments:cash_detail' cash.pk %}">#{{ cash.pk }}</a></td><td>{{ cash.business_date|date:"d/m/Y" }}</td><td>{{ cash.office.name }}</td><td>{{ cash.cashier }}</td><td>{{ cash.get_status_display }}</td><td>S/ {{ cash.opening_amount|floatformat:2 }}</td></tr>
+      {% empty %}<tr><td colspan="6">No hay cajas visibles con estos filtros. La revisión se limita a su sede asignada y oficinas autorizadas.</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% if page.has_previous %}<a href="?status={{ status_filter }}&amp;page={{ page.previous_page_number }}">Anterior</a>{% endif %} <span>Página {{ page.number }} de {{ page.paginator.num_pages }}</span> {% if page.has_next %}<a href="?status={{ status_filter }}&amp;page={{ page.next_page_number }}">Siguiente</a>{% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
