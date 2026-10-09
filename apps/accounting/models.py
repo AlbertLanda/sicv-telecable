@@ -57,6 +57,8 @@ class Document(models.Model):
     total = models.DecimalField(max_digits=18, decimal_places=2)
     local_state = models.CharField(max_length=60, blank=True)
     sunat_state = models.CharField(max_length=60, blank=True)
+    sire_state = models.CharField(max_length=60, blank=True)
+    source_details = models.JSONField(default=dict)
     flags = models.JSONField(default=list)
 
     class Meta:

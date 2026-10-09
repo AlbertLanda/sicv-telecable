@@ -4,6 +4,7 @@ import csv
 import hashlib
 import re
 import unicodedata
+import zlib
 from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -33,6 +34,7 @@ LEGACY_HEADERS = ["TipoDocumento", "TipoDocumentoNombre", "FechaEmision", "ID_Co
 RVIE_HEADERS = ["ruc_emisor", "periodo", "tipo", "serie", "numero", "fecha_emision", "moneda",
                 "base_imponible", "igv", "total", "estado_sunat", "documento_cliente", "nombre_cliente"]
 FLAGS = {
+    "NO_SIRE_STATE": "Sin código Est. Comp en el archivo SIRE",
     "TAX_MAPPING": "Base cero e IGV igual al total: verificar fuente",
     "UNKNOWN_CLASS": "Clasificación OSIPTEL por revisar",
     "LOCAL_PENDING": "Pendiente en SICV antiguo",
@@ -230,15 +232,20 @@ def parse_osiptel(raw, filename, ruc, period):
 
 
 def parse_rvie(raw, filename, ruc, period):
-    """Explicit SICV exchange schema, not an assumed SUNAT native layout."""
+    """Dispatch only recognized SICV and observed native RVIE schemas."""
     try:
         decoded = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         raise ValidationError("Guarde el archivo de comparación como CSV UTF-8.") from None
+    if not decoded.strip():
+        raise ValidationError("El CSV no contiene datos.")
     delimiter = ";" if ";" in decoded.splitlines()[0] else ","
     reader = csv.DictReader(StringIO(decoded), delimiter=delimiter)
+    if reader.fieldnames and normalize(reader.fieldnames[0]) == "ruc":
+        from .native_rvie import parse_native
+        return parse_native(decoded, delimiter, ruc, period)
     if reader.fieldnames != RVIE_HEADERS:
-        raise ValidationError("Use la plantilla CSV de comparación RVIE de este panel. El archivo nativo de SIRE requiere validar primero sus columnas.")
+        raise ValidationError("Use el CSV RVIE nativo de 40 columnas o la plantilla CSV de comparación de este panel.")
     docs, seen = [], set()
     for row_number, row in enumerate(reader, 2):
         if row_number > MAX_ROWS + 1:
@@ -276,9 +283,9 @@ def import_report(*, user, issuer, period, source, upload):
     filename = Path(upload.name).name
     if len(filename) > 200:
         raise ValidationError("El nombre del archivo supera 200 caracteres.")
-    extension = ".xlsx" if source == ImportBatch.Source.OSIPTEL else ".csv"
-    if not filename.lower().endswith(extension):
-        raise ValidationError(f"Esta fuente requiere un archivo {extension}.")
+    extensions = (".xlsx",) if source == ImportBatch.Source.OSIPTEL else (".csv", ".zip")
+    if not filename.lower().endswith(extensions):
+        raise ValidationError(f"Esta fuente requiere un archivo {' o '.join(extensions)}.")
     digest = hashlib.sha256(raw).hexdigest()
     filters = dict(issuer=issuer, period=period, source=source, sha256=digest)
     existing = ImportBatch.objects.filter(**filters).first()
@@ -288,16 +295,28 @@ def import_report(*, user, issuer, period, source, upload):
         return existing, False
     try:
         parser = parse_osiptel if source == ImportBatch.Source.OSIPTEL else parse_rvie
-        documents, lines, metadata = parser(raw, filename, issuer.ruc, period)
-    except (BadZipFile, InvalidFileException, KeyError, ValueError, csv.Error, IndexError, ParseError):
+        content, inner_name = raw, filename
+        if source == ImportBatch.Source.RVIE and filename.lower().endswith(".zip"):
+            from .native_rvie import read_zip
+            content, inner_name = read_zip(raw)
+        documents, lines, metadata = parser(content, inner_name, issuer.ruc, period)
+        metadata["content_sha256"] = hashlib.sha256(content).hexdigest()
+        metadata["content_filename"] = inner_name
+    except (BadZipFile, InvalidFileException, KeyError, ValueError, csv.Error, IndexError, ParseError,
+            NotImplementedError, RuntimeError, EOFError, zlib.error):
         raise ValidationError("No se pudo leer el archivo. Verifique el formato y vuelva a exportarlo.") from None
     if not documents:
         raise ValidationError("El archivo no contiene comprobantes. No sustituirá la última carga.")
+    dates = Counter(doc["issue_date"].isoformat() for doc in documents)
+    metadata["issue_dates"] = {"first": min(dates), "last": max(dates), "counts": dict(sorted(dates.items()))}
     # Serialize two concurrent imports of the same issuer; a retry is harmless.
     with transaction.atomic():
-        Issuer.objects.select_for_update().get(pk=issuer.pk)
+        locked_issuer = Issuer.objects.select_for_update().get(pk=issuer.pk)
+        if locked_issuer.ruc != issuer.ruc:
+            raise ValidationError("El RUC cambió durante la carga. Seleccione de nuevo la empresa.")
         require_access(user, issuer, "accounting.import_reports")
-        existing = ImportBatch.objects.filter(**filters).first()
+        existing = ImportBatch.objects.filter(issuer=issuer, issuer_ruc=issuer.ruc, period=period, source=source,
+            metadata__content_sha256=metadata["content_sha256"]).first() or ImportBatch.objects.filter(**filters).first()
         if existing:
             return existing, False
         batch = ImportBatch.objects.create(**filters, issuer_ruc=issuer.ruc, filename=filename,

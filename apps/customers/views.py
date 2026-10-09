@@ -3,7 +3,7 @@ import logging
 from email.quoprimime import quote
 
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.http import JsonResponse
@@ -68,7 +68,11 @@ from apps.work_orders.models import OrderType, WorkOrder
 logger = logging.getLogger(__name__)
 
 
-class CustomerSearchView(LoginRequiredMixin, ListView):
+class CustomerReadPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
+    permission_required = "customers.view_customer"
+
+
+class CustomerSearchView(CustomerReadPermissionMixin, ListView):
     model = Customer
     template_name = "customers/search.html"
     context_object_name = "customers"
@@ -339,7 +343,7 @@ class CustomerSearchView(LoginRequiredMixin, ListView):
 
         return context
 
-class CustomerDocumentLookupView(LoginRequiredMixin, View):
+class CustomerDocumentLookupView(CustomerReadPermissionMixin, View):
     """
     Endpoint AJAX usado por el botón "Obtener datos" de la Pantalla 3
     (Registrar nuevo cliente).
@@ -370,7 +374,7 @@ class CustomerDocumentLookupView(LoginRequiredMixin, View):
 
         return JsonResponse({"ok": True, "data": data})
 
-class SupplyLookupView(LoginRequiredMixin, View):
+class SupplyLookupView(CustomerReadPermissionMixin, View):
     """
     Endpoint AJAX para consultar un suministro eléctrico.
 
@@ -462,7 +466,7 @@ class CustomerInitialCreateView(LoginRequiredMixin, FormView):
             "customers:general_create"
         )
 
-class CustomerUseView(LoginRequiredMixin, DetailView):
+class CustomerUseView(CustomerReadPermissionMixin, DetailView):
     """
     Selecciona un cliente existente para utilizarlo
     en el siguiente flujo del sistema.
@@ -833,7 +837,7 @@ class CustomerGeneralDataEditView(LoginRequiredMixin, UpdateView):
             kwargs={"pk": self.object.pk},
         )
 
-class CustomerDetailView(LoginRequiredMixin, DetailView):
+class CustomerDetailView(CustomerReadPermissionMixin, DetailView):
     model = Customer
     template_name = "customers/detail.html"
     context_object_name = "customer"
@@ -1034,7 +1038,7 @@ class IncompleteRegistrationDiscardView(
         return redirect("customers:search")
 
 
-class CustomerWorkOrderUIPreviewView(LoginRequiredMixin, DetailView):
+class CustomerWorkOrderUIPreviewView(CustomerReadPermissionMixin, DetailView):
     """
     Propuesta visual del futuro formulario de creación de órdenes
     de trabajo (ver actividad "Ajuste funcional y visual del

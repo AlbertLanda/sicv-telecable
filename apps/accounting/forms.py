@@ -43,7 +43,7 @@ class ScopeForm(StyledForm):
 
 class ImportForm(ScopeForm):
     source = forms.ChoiceField(label="Fuente", choices=ImportBatch.Source.choices)
-    file = forms.FileField(label="Archivo", widget=forms.FileInput(attrs={"accept": ".xlsx,.csv"}))
+    file = forms.FileField(label="Archivo", widget=forms.FileInput(attrs={"accept": ".xlsx,.csv,.zip"}))
     confirm = forms.BooleanField(label="Confirmo que corresponde a la empresa y periodo seleccionados; el OSIPTEL está expresado en soles.")
 
 

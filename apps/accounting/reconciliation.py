@@ -36,6 +36,8 @@ def compare(legacy, rvie):
                     differences.append(label + (" sin dato" if a is None or b is None else ""))
             if local.sunat_state and external.sunat_state and local.sunat_state != external.sunat_state:
                 differences.append("Código SUNAT de origen")
+            if local.receiver_document and external.receiver_document and local.receiver_document != external.receiver_document:
+                differences.append("Documento receptor")
             result = "DIFFERENCE" if differences else "MATCH"
         # A matching amount does not certify acceptance or clear source issues.
         flags = sorted(set((local.flags if local else []) + (external.flags if external else [])))

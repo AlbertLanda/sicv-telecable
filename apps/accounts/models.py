@@ -44,6 +44,7 @@ class User(AbstractUser):
     # habilitarla para Administración.
     ATC_BASELINE_PERMISSIONS = frozenset(
         {
+            "customers.view_customer",
             "customers.add_customer",
             "customers.change_customer",
             "customers.add_customeraddress",
@@ -105,6 +106,7 @@ class User(AbstractUser):
         Role.ACCOUNTING: ACCOUNTING_BASELINE_PERMISSIONS,
         Role.NOC: frozenset(
             {
+                "customers.view_customer",
                 "work_orders.view_workorder",
                 "work_orders.view_incident",
                 "work_orders.start_incident",
