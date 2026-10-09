@@ -124,12 +124,15 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
         </section>
         {% endif %}
 
-        {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent or perms.payments.view_cash_closing %}
+        {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent or perms.payments.view_cash_closing or perms.accounting.view_workspace %}
         <section class="sidebar-section" data-sidebar-section="reportes ventas materiales cierre de caja consolidado emision actividad reciente auditoria revision contable ejemplos qa">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
                 <i class="bi bi-pie-chart" aria-hidden="true"></i><span>Reportes</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarReportes">
+                    {% if perms.accounting.view_workspace %}
+                        <a class="sidebar-link" href="{% url 'accounting:workspace' %}"><i class="bi bi-intersect" aria-hidden="true"></i>Conciliación contable</a>
+                    {% endif %}
                 <div class="sidebar-links">
                     {% if can_review_accounting %}
                         <a class="sidebar-link" href="{% url 'reports:accounting_review' %}"><i class="bi bi-journal-check" aria-hidden="true"></i>Revisión contable · QA</a>
