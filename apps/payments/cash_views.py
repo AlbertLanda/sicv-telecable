@@ -183,7 +183,7 @@ class CashExportView(CashDetailView):
         audit = book.create_sheet("Revisiones")
         row(audit, ["Fecha", "Acción", "Persona", "Versión", "Comentario"])
         for event in session.events.select_related("actor", "close"):
-            row(audit, [event.created_at.isoformat(), event.action, str(event.actor), event.close.revision if event.close else "", event.reason])
+            row(audit, [event.created_at.isoformat(), event.get_action_display(), str(event.actor), event.close.revision if event.close else "", event.reason])
         for sheet in book:
             sheet.freeze_panes = "A2"
             sheet.auto_filter.ref = sheet.dimensions

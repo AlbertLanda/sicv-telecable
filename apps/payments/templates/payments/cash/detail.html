@@ -17,6 +17,7 @@
       <p class="small mt-3">Apertura: {{ snapshot.opening_reason|default:"Saldo contado del cierre anterior" }}{% if snapshot.previous_session_id %} · Caja anterior #{{ snapshot.previous_session_id }}{% endif %}</p>
       <p class="text-muted small">Efectivo esperado = fondo inicial + cobros e ingresos en efectivo − gastos − depósitos, con sus reversiones. Otros medios se muestran aparte y no aumentan el efectivo físico. Este cierre no acredita conciliación bancaria ni aceptación fiscal.</p>
       {% if cash.status == 'OPEN' %}<div class="alert alert-info">Caja abierta: los totales son provisionales. Al enviar el arqueo se bloquean los movimientos hasta la revisión.</div>{% else %}<div class="alert alert-info">Versión {{ latest.revision }} conservada desde {{ latest.submitted_at|date:"d/m/Y H:i" }}. {{ latest.explanation }}</div>{% endif %}
+      {% if cash.status != 'OPEN' %}<details class="mb-3"><summary class="fw-bold">Ver arqueo guardado</summary><table class="table table-sm"><thead><tr><th>Denominación S/</th><th>Cantidad</th></tr></thead><tbody>{% for value, quantity in snapshot.counts.items %}<tr><td>{{ value }}</td><td>{{ quantity }}</td></tr>{% endfor %}</tbody></table></details>{% endif %}
       <div class="row"><div class="col-md-6"><h2 class="h6">Movimientos netos por medio</h2><ul>{% for item in methods %}<li>{{ item.name }}: S/ {{ item.total|floatformat:2 }}</li>{% empty %}<li>Sin movimientos.</li>{% endfor %}</ul></div><div class="col-md-6"><h2 class="h6">Movimientos netos por empresa (sin fondo inicial)</h2><ul>{% for item in snapshot.issuers %}<li>{{ item.name }} · {{ item.ruc }}: S/ {{ item.net|floatformat:2 }}</li>{% empty %}<li>Sin movimientos.</li>{% endfor %}</ul></div></div>
     </div>
   </section>
@@ -47,7 +48,7 @@
   </div></section>
   <section class="tc-card tc-section tc-full"><div class="tc-section-head"><h2 class="tc-section-title">Historial y versiones</h2></div><div class="tc-section-body">
     <ul>{% for close in closes %}<li><a href="{% url 'payments:cash_export' cash.pk %}?revision={{ close.revision }}">Versión {{ close.revision }} · {{ close.submitted_at|date:"d/m/Y H:i" }}</a> · Diferencia S/ {{ close.difference|floatformat:2 }}</li>{% empty %}<li>Todavía no se ha enviado un cierre.</li>{% endfor %}</ul>
-    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>Acción</th><th>Persona</th><th>Detalle</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at|date:"d/m/Y H:i" }}</td><td>{{ event.action }}</td><td>{{ event.actor }}</td><td>{{ event.reason }}</td></tr>{% endfor %}</tbody></table></div>
+    <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>Acción</th><th>Persona</th><th>Detalle</th></tr></thead><tbody>{% for event in events %}<tr><td>{{ event.created_at|date:"d/m/Y H:i" }}</td><td>{{ event.get_action_display }}</td><td>{{ event.actor }}</td><td>{{ event.reason }}</td></tr>{% endfor %}</tbody></table></div>
   </div></section>
 </div>
 <script src="{% static 'payments/cash-count.js' %}" defer></script>

@@ -316,6 +316,8 @@ class CashSessionTests(CashFixture, PaymentsTestCase):
         self.client.force_login(self.reviewer)
         response = self.client.get(url)
         self.assertContains(response, "Revisar cierre")
+        self.assertContains(response, "Ver arqueo guardado")
+        self.assertContains(response, "Cierre enviado")
         self.assertEqual(self.client.post(url, {"action": "review", "close_id": close.pk, "decision": "APPROVED", "reason": "Revisado"}).status_code, 302)
         response = self.client.get(reverse("payments:cash_export", args=[session.pk]) + "?revision=1")
         self.assertEqual(response.status_code, 200)

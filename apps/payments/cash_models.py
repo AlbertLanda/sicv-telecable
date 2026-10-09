@@ -94,6 +94,10 @@ class CashClose(models.Model):
 
 
 class CashEvent(models.Model):
+    ACTION_LABELS = {
+        "OPENED": "Apertura", "MOVEMENT": "Movimiento registrado", "REVERSED": "Reversión",
+        "SUBMITTED": "Cierre enviado", "APPROVED": "Cierre aprobado", "RETURNED": "Devuelto para corrección",
+    }
     session = models.ForeignKey(CashSession, on_delete=models.PROTECT, related_name="events")
     close = models.ForeignKey(CashClose, on_delete=models.PROTECT, null=True, blank=True, related_name="events")
     action = models.CharField(max_length=20)
@@ -103,3 +107,6 @@ class CashEvent(models.Model):
 
     class Meta:
         ordering = ["pk"]
+
+    def get_action_display(self):
+        return self.ACTION_LABELS.get(self.action, self.action)
