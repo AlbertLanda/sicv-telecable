@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection, close_old_connections
+from django.db import connections, close_old_connections
 from django.test import Client, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
 from openpyxl import Workbook, load_workbook
@@ -135,8 +135,10 @@ class AccountingTests(TestCase):
         self.assertEqual(Charge.objects.count() + Payment.objects.count() + Receipt.objects.count(), 0)
 
     def test_import_is_idempotent_and_preserves_revisions(self):
-        first = self.load()
-        again = self.load()
+        # Reuse the actual bytes: regenerating XLSX changes ZIP timestamps.
+        raw = legacy_bytes()
+        first = self.load(raw)
+        again = self.load(raw)
         newer = self.load(legacy_bytes([legacy_row(total=119)]))
         self.assertEqual(first.pk, again.pk)
         self.assertNotEqual(first.pk, newer.pk)
@@ -337,7 +339,7 @@ class ConcurrentImportTests(TransactionTestCase):
                     period=PERIOD, source="OSIPTEL", upload=SimpleUploadedFile(FILENAME, raw))
                 return batch.pk
             finally:
-                close_old_connections()
+                connections.close_all()
         with ThreadPoolExecutor(max_workers=2) as pool:
             ids = list(pool.map(lambda _: worker(), range(2)))
         self.assertEqual(ids[0], ids[1])
