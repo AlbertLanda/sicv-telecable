@@ -111,3 +111,14 @@ class PaymentsTestCase(TestCase):
         session = self.client.session
         session[ACTIVE_BRANCH_SESSION_KEY] = self.branch.pk
         session.save()
+
+
+class CustomerReadingPaymentsTestCase(PaymentsTestCase):
+    """Navigation/design fixtures can read customers; payment grants stay explicit."""
+
+    def make_user(self, username, permissions=(), role=None):
+        user = super().make_user(username, permissions=permissions, role=role)
+        user.user_permissions.add(Permission.objects.get(
+            codename="view_customer", content_type__app_label="customers",
+        ))
+        return user

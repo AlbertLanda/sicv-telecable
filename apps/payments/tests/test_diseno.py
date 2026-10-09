@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from apps.payments.models import Charge, Payment
 from apps.payments.services import register_payment
-from apps.payments.tests.base import PaymentsTestCase
+from apps.payments.tests.base import CustomerReadingPaymentsTestCase as PaymentsTestCase
 
 
 DESIGN_PARTIAL = "_tc_design.html"

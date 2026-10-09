@@ -1639,6 +1639,9 @@ class CustomerRecentActivityTests(TestCase):
         self.user.save(update_fields=["role"])
 
         self.user.user_permissions.clear()
+        self.user.user_permissions.add(Permission.objects.get(
+            codename="view_customer", content_type__app_label="customers",
+        ))
 
         self.client.logout()
         self.client.login(
