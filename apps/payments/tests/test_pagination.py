@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from apps.customers.dashboard_views import ROWS_PER_PAGE
 from apps.payments.models import Charge
-from apps.payments.tests.base import PaymentsTestCase
+from apps.payments.tests.base import CustomerReadingPaymentsTestCase as PaymentsTestCase
 from apps.work_orders.models import OrderType, WorkOrder
 
 

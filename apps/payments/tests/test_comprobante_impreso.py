@@ -110,6 +110,21 @@ class DesgloseDelPapelTests(PaymentsTestCase):
         self.assertIn(Decimal("25.423729"), unitarios)
         self.assertIn(Decimal("66.949153"), unitarios)
 
+    def test_multiple_and_fractional_quantities_keep_line_totals_and_discounts(self):
+        original = receipt_lines(self.receipt)
+        for quantity in (Decimal("2"), Decimal("0.5")):
+            for charge in self.cargos:
+                charge.quantity = quantity
+                charge.save(update_fields=["quantity"])
+            lines = receipt_lines(self.receipt)
+            for before, line in zip(original, lines):
+                self.assertEqual((line["total"], line["discount"]), (before["total"], before["discount"]))
+                self.assertEqual((line["unit_price"] * quantity).quantize(Decimal("0.01")) - line["discount"], line["total"])
+            self.assertEqual(receipt_totals(self.receipt, lines)["total"], Decimal("104.00"))
+            buffer = BytesIO()
+            render_receipt(self.receipt, buffer)
+            self.assertTrue(buffer.getvalue().startswith(b"%PDF"))
+
     def test_each_line_adds_up_by_itself(self):
         """Precio redondeado menos descuento es exactamente el total.
 
@@ -615,14 +630,32 @@ class LasCajasVanRedondeadasTests(PaymentsTestCase):
 
 
 class EmpresaEmisoraTests(PaymentsTestCase):
+    def test_econet_seed_is_idempotent_and_preserves_manual_configuration(self):
+        from importlib import import_module
+        from types import SimpleNamespace
+        from django.apps import apps
+        from django.db import connection
+        seed = import_module("apps.payments.migrations.0024_seed_econet").seed_econet
+        issuer = Issuer.objects.get(code="ECO")
+        self.assertEqual(issuer.ruc, "20615039757")
+        issuer.business_name = "Nombre configurado manualmente"
+        issuer.is_active = False
+        issuer.save()
+        seed(apps, SimpleNamespace(connection=connection))
+        seed(apps, SimpleNamespace(connection=connection))
+        issuer.refresh_from_db()
+        self.assertEqual(issuer.business_name, "Nombre configurado manualmente")
+        self.assertFalse(issuer.is_active)
+        self.assertEqual(Issuer.objects.filter(ruc="20615039757").count(), 1)
+        self.assertFalse(issuer.sequences.exists())
+
     """El modelo de la razón social."""
 
     def test_the_companies_of_the_group_are_seeded(self):
-        """Las cinco que emiten. ECO NET no entra: no tiene talonario, y una
-        emisora sin talonario no llega a imprimirse en ningún sitio."""
+        """Las seis emisoras identificadas; sus series se configuran aparte."""
         self.assertEqual(
             set(Issuer.objects.values_list("code", flat=True)),
-            {"CLA", "INV", "SPQ", "VEL", "ROP"},
+            {"CLA", "INV", "SPQ", "VEL", "ROP", "ECO"},
         )
 
     def test_no_company_keeps_a_placeholder_ruc(self):

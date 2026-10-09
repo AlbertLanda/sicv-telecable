@@ -273,7 +273,10 @@ def generate_monthly_charges(period, branch=None, dry_run=False):
     )
 
     if branch is not None:
-        subscriptions = subscriptions.filter(address__branch=branch)
+        subscriptions = subscriptions.filter(
+            Q(address__zone__branch=branch)
+            | Q(address__zone__isnull=True, address__customer__branch=branch)
+        )
 
     already_charged = set(
         Charge.objects.filter(

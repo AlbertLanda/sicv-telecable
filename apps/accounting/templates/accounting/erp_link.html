@@ -1,0 +1,12 @@
+<span class="acc-tag {% if erp.status != 'LINKED' %}warn{% endif %}">{{ erp.label }}</span>
+{% if erp.customer_id %}
+<small class="d-block"><strong>{{ erp.customer_code }}</strong> · {{ erp.customer_name }}</small>
+<small class="d-block">Documento: {{ erp.customer_document }}</small>
+<small class="d-block">Sede del abonado: {{ erp.customer_branch }}</small>
+{% if erp.service_branches %}<small class="d-block">Sede del servicio: {{ erp.service_branches }}</small>{% endif %}
+<small class="d-block">Servicio/concepto: {{ erp.services|default:'Sin detalle de cargos' }}</small>
+<small class="d-block">Cobro: {{ erp.payment_state }} · {{ erp.collection_branch }}</small>
+{% if perms.customers.view_customer %}<small class="d-block"><a href="{% url 'customers:detail' erp.customer_id %}">Abrir ficha del abonado</a></small>{% endif %}
+{% endif %}
+<small class="d-block">Estado fiscal: {{ erp.fiscal_state|default:'No acreditado por este cruce' }}</small>
+{% for warning in erp.warnings %}<small class="d-block text-warning-emphasis">{{ warning }}</small>{% endfor %}

@@ -98,7 +98,9 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16
+        # Docker Official Image via ECR Public; avoids Docker Hub pull limits
+        # on shared runners. https://gallery.ecr.aws/docker/library/postgres
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_DB: sicv_collection_ci
           POSTGRES_USER: postgres

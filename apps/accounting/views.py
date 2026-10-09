@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from apps.audit.models import AuditEvent
 from .access import available_issuers, require_access
 from .exporters import export_workbook
+from .erp_links import receipt_links
 from .forms import AccessForm, ImportForm, ReviewForm, ScopeForm
 from .importers import FLAGS, RVIE_HEADERS, import_report
 from .models import CompanyAccess, Document, ImportBatch, Review
@@ -67,6 +68,9 @@ def workspace(request):
     issuer, period = form.cleaned_data["issuer"], form.cleaned_data["period"]
     legacy, rvie = selected_batches(request.GET, issuer, period)
     rows = compare(legacy, rvie)
+    links = receipt_links(user=request.user, issuer=issuer, documents=[row["rvie"] or row["document"] for row in rows])
+    for row in rows:
+        row["erp"] = links[row["document"].key]
     selected_ids = [b.pk for b in (legacy, rvie) if b]
     last_review = Review.objects.filter(document__batch_id__in=selected_ids).aggregate(last=Max("pk"))["last"] or 0
     cutoff = numeric_param(request.GET["reviews"]) if "reviews" in request.GET else last_review
@@ -89,7 +93,11 @@ def workspace(request):
     elif result:
         filtered = [row for row in rows if row["result"] == result]
     if query:
-        filtered = [row for row in filtered if query in (row["document"].label + " " + row["document"].receiver_name + " " + row["document"].receiver_document).casefold()]
+        filtered = [row for row in filtered if query in " ".join([
+            row["document"].label, row["document"].receiver_name, row["document"].receiver_document,
+            row["erp"].get("customer_code", ""), row["erp"].get("customer_name", ""),
+            row["erp"].get("customer_document", ""), row["erp"].get("service_branches", ""),
+        ]).casefold()]
     lines = classified_lines(legacy, cutoff=cutoff)
     context.update({"issuer": issuer, "period": period, "legacy": legacy, "rvie": rvie,
         "page": Paginator(filtered, 50).get_page(request.GET.get("page")), "row_count": len(rows),
@@ -119,7 +127,7 @@ def import_view(request):
             form.add_error("file", error)
         else:
             messages.success(request, f"Versión {batch.pk}: {batch.document_count} comprobantes, {batch.line_count} líneas." if created
-                             else f"Este archivo ya fue importado como versión {batch.pk}; no se duplicó.")
+                             else f"Este contenido ya fue importado como versión {batch.pk}; no se duplicó.")
             source_param = "legacy" if batch.source == "OSIPTEL" else "rvie"
             return redirect(scope_url(batch.issuer, batch.period, **{source_param: batch.pk}))
     return render(request, "accounting/import.html", {"form": form}, status=400 if request.method == "POST" else 200)
@@ -142,6 +150,8 @@ def document_view(request, pk):
             messages.success(request, "Observación conservada. Los importes y estados de origen no se modificaron.")
             return redirect("accounting:document", pk=doc.pk)
     return render(request, "accounting/document.html", {"document": doc, "batch": doc.batch, "form": form,
+        "erp": receipt_links(user=request.user, issuer=doc.batch.issuer, documents=[doc]).get(doc.key)
+               if doc.batch.issuer_ruc == doc.batch.issuer.ruc else {"label": "El RUC configurado cambió; revise la empresa"},
         "flags": [FLAGS.get(flag, flag) for flag in doc.flags], "lines": doc.lines.all(),
         "reviews": doc.reviews.select_related("actor", "line"),
         "back_url": scope_url(doc.batch.issuer, doc.batch.period, **{("legacy" if doc.batch.source == "OSIPTEL" else "rvie"): doc.batch_id})},

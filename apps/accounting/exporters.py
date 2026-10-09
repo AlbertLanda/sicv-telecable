@@ -7,6 +7,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .models import Review
+from .native_rvie import NATIVE_HEADERS
 from .reconciliation import classified_lines, osiptel_summary
 
 
@@ -27,6 +28,7 @@ def export_workbook(*, issuer, period, legacy, rvie, rows, cutoff):
                 ("Alcance", "Comparación de archivos importados; no acredita aceptación SUNAT ni genera registros SIRE"),
                 ("Importes", "Se conservan signo e importes originales. Sin recalcular IGV ni convertir monedas."),
                 ("Notas de crédito", "No se deduce su ausencia del archivo. Los importes se suman con el signo recibido."),
+                ("Vínculo ERP", "Consulta al momento de exportar, por empresa, tipo, serie y número del talonario actual. No acredita emisión fiscal."),
                 ("Revisiones hasta ID", cutoff), ("Exportado (Lima)", timezone.localtime().strftime("%Y-%m-%d %H:%M:%S"))]:
         add_row(control, list(row))
     for batch in (legacy, rvie):
@@ -38,17 +40,34 @@ def export_workbook(*, issuer, period, legacy, rvie, rows, cutoff):
                 add_row(control, [key, value])
             for warning in batch.metadata.get("warnings", []):
                 add_row(control, ["Observación de archivo", warning])
+            dates = batch.metadata.get("issue_dates", {})
+            if dates:
+                add_row(control, ["Fechas de emisión presentes", f"{dates['first']} a {dates['last']}"])
     sheet = book.create_sheet("Conciliación")
     add_row(sheet, ["Tipo", "Serie", "Número", "Resultado", "Diferencias", "Moneda SICV", "Total SICV", "Base SICV", "IGV SICV",
                     "Estado local SICV", "Código SUNAT en SICV", "Moneda SIRE", "Total SIRE", "Base SIRE", "IGV SIRE",
-                    "Código SUNAT en archivo SIRE", "Diferencia SICV-SIRE", "Alertas de origen"])
+                    "Código SUNAT en plantilla", "Diferencia SICV-SIRE", "Alertas de origen",
+                    "Est. Comp SIRE", "Receptor de origen", "Documento receptor", "Vínculo ERP",
+                    "Código abonado", "Abonado ERP", "Documento abonado", "Sede abonado", "Sede servicio",
+                    "Servicio / concepto", "Sede cobro", "Estado cobro", "Estado fiscal", "Alertas vínculo"])
     for row in rows:
         doc, local, external = row["document"], row["local"], row["rvie"]
+        erp = row.get("erp", {})
         add_row(sheet, [doc.document_type, doc.series, doc.number, row["label"], "; ".join(row["differences"]),
                         local.currency if local else "", local.total if local else None, local.base if local else None,
                         local.tax if local else None, local.local_state if local else "", local.sunat_state if local else "",
                         external.currency if external else "", external.total if external else None, external.base if external else None,
-                        external.tax if external else None, external.sunat_state if external else "", row["delta"], "; ".join(row["flags"])])
+                        external.tax if external else None, external.sunat_state if external else "", row["delta"], "; ".join(row["flags"]),
+                        external.sire_state if external else "", doc.receiver_name, doc.receiver_document, erp.get("label", ""),
+                        *[erp.get(field, "") for field in ("customer_code", "customer_name", "customer_document", "customer_branch",
+                            "service_branches", "services", "collection_branch", "payment_state", "fiscal_state")],
+                        "; ".join(erp.get("warnings", []))])
+    native = book.create_sheet("Detalle SIRE")
+    add_row(native, ["Fila de origen", *NATIVE_HEADERS])
+    if rvie:
+        for doc in rvie.documents.all():
+            if doc.source_details.get("fields"):
+                add_row(native, [doc.source_details["row"], *[doc.source_details["fields"].get(h, "") for h in NATIVE_HEADERS]])
     lines = classified_lines(legacy, cutoff=cutoff)
     detail = book.create_sheet("Detalle OSIPTEL")
     add_row(detail, ["Tipo", "Serie", "Número", "Fila origen", "Descripción", "Concepto original", "Tecnología original",

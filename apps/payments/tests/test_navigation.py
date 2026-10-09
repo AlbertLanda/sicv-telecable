@@ -12,7 +12,7 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 from apps.customers.models import Customer
-from apps.payments.tests.base import PaymentsTestCase
+from apps.payments.tests.base import CustomerReadingPaymentsTestCase as PaymentsTestCase
 
 
 class TheFichaOffersTheAccountTests(PaymentsTestCase):
