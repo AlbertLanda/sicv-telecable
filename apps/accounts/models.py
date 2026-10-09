@@ -81,16 +81,21 @@ class User(AbstractUser):
             "payments.view_cash_closing",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
+            "accounting.view_workspace",
+            "accounting.import_reports",
+            "accounting.review_documents",
+            "accounting.manage_access",
         }
     )
 
-    # Contabilidad saca el cierre de caja de cada sede y nada más por ahora.
-    # No registra ni anula cobros, y tampoco hereda la consulta de pagos:
-    # las pruebas de cobranza usan este rol como el que no trae permisos de
-    # pagos para aislar cada uno.
+    # La conciliación trabaja con evidencia importada y acceso explícito por
+    # empresa. No concede registro, anulación ni consulta operativa de pagos.
     ACCOUNTING_BASELINE_PERMISSIONS = frozenset(
         {
             "payments.view_cash_closing",
+            "accounting.view_workspace",
+            "accounting.import_reports",
+            "accounting.review_documents",
         }
     )
 

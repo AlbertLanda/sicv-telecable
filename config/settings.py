@@ -200,6 +200,7 @@ INSTALLED_APPS = [
     'apps.work_orders',
     'apps.payments',
     'apps.fiscal',
+    'apps.accounting',
     'apps.technicians',
     'apps.inventory',
     'apps.equipment',  # Archivo histórico; sin registro operativo ni rutas web.

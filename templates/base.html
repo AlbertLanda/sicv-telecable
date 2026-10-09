@@ -438,6 +438,8 @@
             <a class="sicv-topnav-link" href="{% url 'reports:sales' %}"><i class="bi bi-bar-chart" aria-hidden="true"></i> Reportes</a>
             {% elif perms.inventory.view_workordermaterialmovement %}
             <a class="sicv-topnav-link" href="{% url 'reports:materials' %}"><i class="bi bi-bar-chart" aria-hidden="true"></i> Reportes</a>
+            {% elif perms.accounting.view_workspace %}
+            <a class="sicv-topnav-link" href="{% url 'accounting:workspace' %}"><i class="bi bi-intersect" aria-hidden="true"></i> Contabilidad</a>
             {% elif perms.payments.view_cash_closing %}
             <a class="sicv-topnav-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-bar-chart" aria-hidden="true"></i> Reportes</a>
             {% else %}
