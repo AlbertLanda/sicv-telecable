@@ -86,6 +86,8 @@ class User(AbstractUser):
             "payments.review_debt_adjustment",
             "accounting.view_bank",
             "accounting.manage_bank_accounts",
+            "accounting.view_revenue",
+            "accounting.manage_revenue_rules",
             "accounting.import_bank",
             "accounting.reconcile_bank",
             "inventory.view_workordermaterialmovement",
@@ -101,6 +103,7 @@ class User(AbstractUser):
     # empresa. No concede registro, anulación ni consulta operativa de pagos.
     ACCOUNTING_BASELINE_PERMISSIONS = frozenset(
         {
+            "accounting.view_revenue",
             "payments.view_cash_closing",
             "payments.review_cash",
             "payments.request_debt_adjustment",

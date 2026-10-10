@@ -1,9 +1,12 @@
 from django.urls import path
 from . import views
 from . import bank_views
+from . import revenue_views
 
 app_name = "accounting"
 urlpatterns = [
+    path("recaudacion/", revenue_views.workspace, name="revenue"),
+    path("recaudacion/alertas/<int:pk>/", revenue_views.rules, name="revenue_rules"),
     path("bancos/", bank_views.bank_workspace, name="bank_workspace"),
     path("bancos/<int:pk>/", bank_views.bank_account, name="bank_account"),
     path("bancos/<int:pk>/plantilla/", bank_views.bank_template, name="bank_template"),

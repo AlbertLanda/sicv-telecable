@@ -762,6 +762,7 @@ class Payment(models.Model):
         verbose_name = "Pago"
         verbose_name_plural = "Pagos"
         ordering = ["-received_at", "-pk"]
+        indexes = [models.Index(fields=["status", "paid_at"], name="payment_status_paid_idx")]
         constraints = [
             models.CheckConstraint(
                 condition=Q(amount__gt=0),

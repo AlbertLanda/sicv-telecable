@@ -138,6 +138,7 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
                         <a class="sidebar-link" href="{% url 'accounting:workspace' %}"><i class="bi bi-intersect" aria-hidden="true"></i>Conciliación contable</a>
                     {% endif %}
                     {% if perms.accounting.view_bank %}<a class="sidebar-link" href="{% url 'accounting:bank_workspace' %}"><i class="bi bi-bank" aria-hidden="true"></i>Conciliación bancaria</a>{% endif %}
+                    {% if perms.accounting.view_revenue %}<a class="sidebar-link" href="{% url 'accounting:revenue' %}"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Recaudación por empresa</a>{% endif %}
                 <div class="sidebar-links">
                     {% if can_review_accounting %}
                         <a class="sidebar-link" href="{% url 'reports:accounting_review' %}"><i class="bi bi-journal-check" aria-hidden="true"></i>Revisión contable · QA</a>
