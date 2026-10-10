@@ -13,7 +13,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce, Greatest
 
-from .models import Payment, PaymentAllocation, ZERO
+from .models import DebtAdjustment, Payment, PaymentAllocation, ZERO
 
 
 def with_charge_balances(charges, day):
@@ -28,17 +28,19 @@ def with_charge_balances(charges, day):
         .annotate(cash=Sum("amount"), discount=Sum("discount"))
     )
     zero = Value(ZERO, output_field=money)
-    due = Case(
-        When(discount_deadline__gte=day, then=F("amount") - F("early_discount")),
-        default=F("amount"),
+    adjustments = DebtAdjustment.objects.filter(charge_id=OuterRef("pk"), status="APPROVED").order_by().values("charge_id").annotate(total=Sum("amount"))
+    offered_discount = Case(
+        When(discount_deadline__gte=day, then=F("early_discount")),
+        default=zero,
         output_field=money,
     )
     return charges.annotate(
         dashboard_balance=Greatest(
             ExpressionWrapper(
-                due
+                F("amount")
+                - Coalesce(Subquery(adjustments.values("total")[:1]), zero)
                 - Coalesce(Subquery(applied.values("cash")[:1]), zero)
-                - Coalesce(Subquery(applied.values("discount")[:1]), zero),
+                - Greatest(offered_discount, Coalesce(Subquery(applied.values("discount")[:1]), zero)),
                 output_field=money,
             ),
             zero,

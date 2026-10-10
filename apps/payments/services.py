@@ -467,10 +467,10 @@ def discount_for(charge, applied, day=None):
     if due >= charge.amount:
         return ZERO
 
-    if applied < due - charge.paid_amount:
+    if applied < charge.balance_on(day):
         return ZERO
 
-    return charge.amount - due
+    return min(charge.amount - due, max(ZERO, charge.nominal_balance - applied))
 
 
 def payment_money(value):

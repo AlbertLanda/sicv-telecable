@@ -151,6 +151,8 @@ def void_payment(*, payment_id, actor, reason):
     payment = _lock_payment(payment_id)
     if payment.status == Payment.Status.VOIDED:
         raise ValidationError("El pago ya está anulado.")
+    if payment.bank_matches.filter(active=True).exists():
+        raise ValidationError("Contabilidad debe deshacer la conciliación bancaria antes de anular este cobro.")
     from .cash import book_void
     book_void(payment, actor, reason)
     charges = list(Charge.objects.select_for_update().filter(

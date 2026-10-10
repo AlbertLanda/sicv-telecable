@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from . import adjustment_views
 from .cash_views import CashDetailView, CashExportView, CashWorkspaceView
 
 
@@ -8,6 +9,8 @@ app_name = "payments"
 
 
 urlpatterns = [
+    path("ajustes/", adjustment_views.adjustment_workspace, name="adjustments"),
+    path("ajustes/cargos/<int:pk>/", adjustment_views.adjustment_charge, name="adjustment_charge"),
     path("caja/", CashWorkspaceView.as_view(), name="cash_workspace"),
     path("caja/<int:pk>/", CashDetailView.as_view(), name="cash_detail"),
     path("caja/<int:pk>/exportar/", CashExportView.as_view(), name="cash_export"),

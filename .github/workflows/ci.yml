@@ -136,6 +136,7 @@ jobs:
           apps.customers.test_qa_samples
           apps.customers.test_qa_billing_examples
           apps.payments.tests.test_confirmed_billing_rules
+          apps.payments.tests.test_debt_adjustments
           apps.reports.tests.test_dashboard
           apps.reports.tests.test_customer_quality
           apps.reports.tests.test_accounting_review

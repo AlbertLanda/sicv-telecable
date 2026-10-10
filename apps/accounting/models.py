@@ -1,6 +1,7 @@
 """Evidence imported for reconciliation; never changes fiscal or collection records."""
 from django.conf import settings
 from django.db import models
+from .bank_models import BankAccount, BankEvent, BankLine, BankMatch, BankStatement  # noqa: F401
 
 
 class CompanyAccess(models.Model):

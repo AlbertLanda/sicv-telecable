@@ -65,6 +65,7 @@ class User(AbstractUser):
             "payments.view_receipt",
             "payments.add_payment",
             "payments.operate_cash",
+            "payments.request_debt_adjustment",
         }
     )
 
@@ -82,6 +83,11 @@ class User(AbstractUser):
             "payments.view_paymentcommitment",
             "payments.view_cash_closing",
             "payments.review_cash",
+            "payments.review_debt_adjustment",
+            "accounting.view_bank",
+            "accounting.manage_bank_accounts",
+            "accounting.import_bank",
+            "accounting.reconcile_bank",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
             "accounting.view_workspace",
@@ -97,6 +103,11 @@ class User(AbstractUser):
         {
             "payments.view_cash_closing",
             "payments.review_cash",
+            "payments.request_debt_adjustment",
+            "payments.review_debt_adjustment",
+            "accounting.view_bank",
+            "accounting.import_bank",
+            "accounting.reconcile_bank",
             "accounting.view_workspace",
             "accounting.import_reports",
             "accounting.review_documents",
