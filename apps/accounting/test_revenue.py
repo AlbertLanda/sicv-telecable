@@ -31,7 +31,7 @@ class RevenueFixture(CashFixture):
         self.setup_cash()
         self.admin = get_user_model().objects.create_user(username="revenue-admin", role="ADMIN", branch=self.branch)
         CompanyAccess.objects.create(user=self.reviewer, issuer=self.issuer, updated_by=self.admin)
-        self.foreign = Issuer.objects.create(code="REVENUE-OTHER", business_name="Empresa ajena", ruc="20000000002")
+        self.foreign = Issuer.objects.create(code="RV-OTHER", business_name="Empresa ajena", ruc="20000000002")
         self.other_sequence = ReceiptSequence.objects.create(code="REVENUE-OTHER", series="OTHER", label="Otra", issuer=self.foreign)
 
     def report(self, **kwargs):
