@@ -1,0 +1,38 @@
+{% if examples %}
+<section class="tc-card tc-section tc-full">
+    <div class="tc-section-head">
+        <h2 class="tc-section-title"><i class="bi bi-easel"></i>Ejemplos de facturación para presentación</h2>
+    </div>
+    <p class="px-3">Muestras QA con paquete de S/89. En los casos 2026: servicio S/81,50 + APP S/7,50.
+        Los cortes y movimientos de dinero de estos ejemplos son simulados.</p>
+    <div class="table-responsive">
+        <table class="tc-table">
+            <thead><tr><th>Caso</th><th>Cobertura</th><th>Vencimiento</th><th>Pronto pago hasta</th><th>Reconexión</th><th>Total del ejemplo</th><th>Estado</th><th>Comprobante</th></tr></thead>
+            <tbody>
+            {% for example in examples %}
+                <tr>
+                    <td>{{ example.label }}</td>
+                    <td>{{ example.charge.period_label }}</td>
+                    <td>{{ example.charge.due_date|date:"d/m/Y" }}</td>
+                    <td>{{ example.charge.discount_deadline|date:"d/m/Y" }}</td>
+                    <td>S/ {{ example.fee|floatformat:2 }}</td>
+                    <td><strong>S/ {{ example.total|floatformat:2 }}</strong></td>
+                    <td>{{ example.status }}</td>
+                    <td>
+                    {% if example.receipt %}
+                        <a href="{% url 'payments:receipt_detail' pk=example.receipt.pk %}">{{ example.receipt.full_number }}</a>
+                        <div class="d-flex gap-1 mt-1">
+                            <a class="tc-btn" href="{% url 'payments:receipt_pdf' pk=example.receipt.pk %}?ver=1&amp;formato=TICKET" target="_blank" rel="noopener">Vertical</a>
+                            <a class="tc-btn" href="{% url 'payments:receipt_pdf' pk=example.receipt.pk %}?ver=1&amp;formato=SHEET" target="_blank" rel="noopener">Horizontal</a>
+                        </div>
+                    {% else %}
+                        Por cobrar en Deuda
+                    {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}

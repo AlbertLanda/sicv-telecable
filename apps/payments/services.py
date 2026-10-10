@@ -10,7 +10,7 @@ cuadrar.
 """
 
 import calendar
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.contrib.auth import get_user_model
@@ -66,6 +66,37 @@ def paid_between(date_from, date_to, prefix=""):
 DEFAULT_RECEIPT_SERIES = "R001"
 
 
+@transaction.atomic
+def ensure_reconnection_charge(order):
+    """Una deuda fija por corte de morosidad ejecutado, nunca por mero atraso."""
+    if (order.order_type.code != "CUT" or not order.result
+            or order.result.code != "SUCCESSFUL" or not order.reason
+            or order.reason.code not in {"DELINQUENCY", "NON_PAYMENT"}):
+        return None
+    Customer.objects.select_for_update().get(pk=order.subscription.customer_id)
+    subscription = Subscription.objects.select_for_update(of=("self",)).select_related("billing_policy").get(pk=order.subscription_id)
+    if subscription.status != Subscription.Status.SUSPENDED or subscription.cut_date is None:
+        return None
+    amount = subscription.billing_policy.reconnection_fee if subscription.billing_policy else Decimal("15.00")
+    if amount <= ZERO:
+        return None
+    today = timezone.localdate()
+    charge, created = Charge.objects.get_or_create(
+        source_cut_order=order,
+        defaults={
+            "customer": subscription.customer, "subscription": subscription,
+            "concept": Charge.Concept.OTHER,
+            "concept_item": ChargeConcept.objects.filter(code="reconexion", is_active=True).first(),
+            "description": f"Reconexión por corte de morosidad · {order.order_number}",
+            "amount": amount, "due_date": today, "issued_on": today,
+            "auto_update": False,
+        },
+    )
+    if created:
+        charge.full_clean()
+    return charge
+
+
 def first_day_of(day):
     """El periodo al que pertenece una fecha."""
     return date(day.year, day.month, 1)
@@ -78,20 +109,29 @@ def _day_in_month(period, day):
     return date(period.year, period.month, min(day, last_day))
 
 
+def monthly_coverage(policy, period, subscription):
+    """Mes de referencia estable y fechas efectivas del ciclo contratado."""
+    period = first_day_of(period)
+    if policy.billing_mode == policy.Mode.ANNIVERSARY:
+        anchor = subscription.billing_cycle or (
+            subscription.installation_date.day if subscription.installation_date else None
+        )
+        if not anchor or not 1 <= anchor <= 31:
+            raise ValidationError("El servicio por aniversario requiere un ciclo entre 1 y 31.")
+        next_month = first_day_of(period + timedelta(days=32))
+        start = _day_in_month(period, anchor)
+        end = _day_in_month(next_month, anchor) - timedelta(days=1)
+    else:
+        start = period
+        end = date(period.year, period.month, calendar.monthrange(period.year, period.month)[1])
+    if subscription.installation_date and start < subscription.installation_date <= end:
+        start = subscription.installation_date
+    return start, end
+
+
 def monthly_due_date(policy, period, subscription):
-    """Cuándo vence la mensualidad de ese periodo.
-
-    Por mes calendario vence al cerrar el mes facturado. Por aniversario vence
-    el mismo día del mes en que se instaló el servicio: es la fecha que el
-    abonado tiene interiorizada, y moverla al fin de mes le cambiaría el
-    compromiso sin avisarle.
-    """
-    if policy.billing_mode == policy.Mode.ANNIVERSARY and subscription.installation_date:
-        return _day_in_month(period, subscription.installation_date.day)
-
-    last_day = calendar.monthrange(period.year, period.month)[1]
-
-    return date(period.year, period.month, last_day)
+    """La mensualidad vence el último día que cubre: 14/09–13/10 vence 13/10."""
+    return monthly_coverage(policy, period, subscription)[1]
 
 
 def build_monthly_charge(subscription, period):
@@ -120,6 +160,13 @@ def build_monthly_charge(subscription, period):
         if subscription.installation_date > date(period.year, period.month, last_day):
             return None
 
+    if (policy.billing_mode == policy.Mode.ANNIVERSARY
+            and not subscription.billing_cycle and not subscription.installation_date):
+        return None
+    coverage_start, coverage_end = monthly_coverage(policy, period, subscription)
+    if policy.billing_mode == policy.Mode.CALENDAR_MONTH and coverage_start > period:
+        amount = prorated_amount(amount, (coverage_end - coverage_start).days + 1)
+
     due_date = monthly_due_date(policy, period, subscription)
     discount_deadline = policy.discount_deadline_for(due_date)
 
@@ -131,8 +178,6 @@ def build_monthly_charge(subscription, period):
         early_discount = ZERO
         discount_deadline = None
 
-    last_day = calendar.monthrange(period.year, period.month)[1]
-
     return Charge(
         customer=subscription.customer,
         subscription=subscription,
@@ -142,9 +187,10 @@ def build_monthly_charge(subscription, period):
         # «01/09/2026 - 30/09/2026»-, asi que repetir el mes en el detalle
         # solo lo haria mas largo de leer.
         description=subscription.plan.name,
-        issued_on=period,
+        issued_on=coverage_start,
         period=period,
-        period_end=date(period.year, period.month, last_day),
+        period_start=coverage_start,
+        period_end=coverage_end,
         amount=amount,
         due_date=due_date,
         early_discount=early_discount,
@@ -227,7 +273,10 @@ def generate_monthly_charges(period, branch=None, dry_run=False):
     )
 
     if branch is not None:
-        subscriptions = subscriptions.filter(address__branch=branch)
+        subscriptions = subscriptions.filter(
+            Q(address__zone__branch=branch)
+            | Q(address__zone__isnull=True, address__customer__branch=branch)
+        )
 
     already_charged = set(
         Charge.objects.filter(
@@ -418,10 +467,10 @@ def discount_for(charge, applied, day=None):
     if due >= charge.amount:
         return ZERO
 
-    if applied < due - charge.paid_amount:
+    if applied < charge.balance_on(day):
         return ZERO
 
-    return charge.amount - due
+    return min(charge.amount - due, max(ZERO, charge.nominal_balance - applied))
 
 
 def payment_money(value):
@@ -538,6 +587,11 @@ def register_payment(
             f"número del comprobante."
         )
 
+    from .cash import lock_payment_session, book_payment
+    cash_session = lock_payment_session(
+        office=office, cashier=user, paid_at=paid_at or received_at,
+    ) if settled else None
+
     payment = Payment(
         customer=customer,
         amount=amount,
@@ -577,6 +631,8 @@ def register_payment(
         number=issue_receipt_number(sequence, number),
         issued_at=payment.received_at,
     )
+
+    book_payment(payment, cash_session, user)
 
     PaymentOperationEvent.objects.create(
         payment=payment, actor=user,

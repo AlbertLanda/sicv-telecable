@@ -710,6 +710,7 @@ class WorkOrderStartAttentionView(
         # ofrece el envío. La regla se consulta al modelo, no se reescribe
         # aquí, y la comprobación real la sigue haciendo el dominio.
         context["can_start_attention"] = order.can_start_attention
+        context["return_url"] = self.get_success_url()
 
         # Cuál de las dos condiciones falló, para explicar en pantalla la
         # razón correcta. Se lee la misma lista del dominio que consulta
@@ -756,20 +757,15 @@ class WorkOrderStartAttentionView(
         return redirect(self.get_success_url())
 
     def get_success_url(self):
-        """
-        Vuelta a la ficha del cliente, que es donde vive la orden.
-
-        Era el destino de reserva mientras existió la bandeja de despacho:
-        se usaba para quien podía iniciar una atención pero no ver la
-        bandeja -son permisos distintos-, porque redirigir a una pantalla
-        prohibida convertiría un éxito en un 403. Retirada la bandeja, pasa
-        a ser el único destino, y sigue cumpliendo lo mismo: solo exige
-        estar autenticado.
-        """
-        return reverse(
-            "customers:detail",
-            kwargs={"pk": self.get_work_order().subscription.customer_id},
-        )
+        """Return only to a screen the operator is authorized to read."""
+        user, order = self.request.user, self.get_work_order()
+        if user.has_perm("customers.view_customer"):
+            return reverse("customers:detail", kwargs={"pk": order.subscription.customer_id})
+        if (user.has_perm("work_orders.view_workorder") or order.assigned_technician_id == user.pk):
+            if order.order_type.code != "INCIDENT" or user.has_perm("work_orders.view_incident"):
+                return reverse("work_orders:detail", kwargs={"pk": order.pk})
+        # The start permission already authorizes this read-only confirmation.
+        return reverse("work_orders:start", kwargs={"pk": order.pk})
 
 class WorkOrderCancelView(
     LoginRequiredMixin,

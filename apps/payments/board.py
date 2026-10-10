@@ -155,7 +155,7 @@ def charge_period(charge):
     El mismo idioma que las fechas de la tabla. «01/09/2026 - 30/09/2026»
     ocupaba el doble para decir un mes.
     """
-    start, end = charge.period, charge.period_end
+    start, end = charge.coverage_start, charge.period_end
 
     if not start:
         return ""

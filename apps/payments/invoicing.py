@@ -91,21 +91,16 @@ def receipt_lines(receipt):
     for allocation in receipt.payment.allocations.all():
         charge = allocation.charge
 
-        unitario = _round(net_of_tax(allocation.gross_amount), UNIT_PRICE_PLACES)
-
-        # El total sale de restar el descuento SIN redondear y redondear
-        # despues; el descuento que se imprime se deriva de esa resta. Al
-        # reves -redondear el descuento y luego restar- la columna se
-        # desviaba un centimo por linea, y con tres lineas el recuadro de
-        # importes acababa diciendo un sol distinto del que entrego el
-        # abonado. Asi, ademas, las tres columnas cuadran por construccion:
-        # precio redondeado menos descuento es exactamente el total.
-        total = _round(unitario - net_of_tax(allocation.discount))
-        descuento = _round(unitario) - total
+        bruto_neto = net_of_tax(allocation.gross_amount)
+        unitario = _round(bruto_neto / charge.quantity, UNIT_PRICE_PLACES)
+        # La asignación contiene el importe de toda la línea. Solo el precio
+        # unitario se divide por cantidad; descuento y total son de la línea.
+        total = _round(bruto_neto - net_of_tax(allocation.discount))
+        descuento = _round(bruto_neto) - total
 
         descripcion = f"COD {customer.code} {charge.description}"
 
-        componentes = list(charge.components.all())
+        componentes = sorted(charge.components.all(), key=lambda c: (c.kind != "MAIN", c.pk))
         if len(componentes) > 1:
             detalle_componentes = " + ".join(
                 f"{component.description} S/{component.amount:.2f}"

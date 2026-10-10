@@ -6,13 +6,14 @@ apps/work_orders/services.py. Las reglas de negocio no se replican aquí:
 solo se verifican sus efectos.
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.services.models import Subscription
-from apps.work_orders.models import CutDetail, TransferDetail, WorkOrder
+from apps.work_orders.models import CutDetail, OrderReason, TransferDetail, WorkOrder
 from apps.work_orders.services import (
     apply_order_result,
     attend_order,
@@ -22,6 +23,71 @@ from apps.work_orders.tests.base import WorkOrderTestCase
 
 
 class OrderResultTests(WorkOrderTestCase):
+
+    def delinquency_cut(self):
+        self.subscription.status = Subscription.Status.ACTIVE
+        self.subscription.save(update_fields=["status"])
+        order = self.create_order_in_progress(order_type=self.cut_type, reason=self.cut_reason)
+        CutDetail.objects.create(work_order=order, expected_return_date=timezone.localdate() + timedelta(days=30))
+        attend_order(order, result=self.cut_success, user=self.technician)
+        return order
+
+    def test_delinquency_cut_generates_one_fixed_reconnection_charge(self):
+        from apps.payments.models import Charge
+        order = self.delinquency_cut()
+        charge = Charge.objects.get(source_cut_order=order)
+        self.assertEqual(charge.amount, Decimal("15.00"))
+        self.assertEqual(charge.subscription, self.subscription)
+        self.assertFalse(charge.auto_update)
+        self.assertEqual(charge.early_discount, 0)
+        apply_order_result(order)
+        self.assertEqual(Charge.objects.filter(source_cut_order=order).count(), 1)
+
+    def test_voluntary_cut_has_no_delinquency_fee(self):
+        from apps.payments.models import Charge
+        reason = OrderReason.objects.create(order_type=self.cut_type, code="VOLUNTARY", name="Voluntario")
+        order = self.create_order_in_progress(order_type=self.cut_type, reason=reason)
+        CutDetail.objects.create(work_order=order, expected_return_date=timezone.localdate() + timedelta(days=30))
+        attend_order(order, result=self.cut_success, user=self.technician)
+        self.assertFalse(Charge.objects.filter(source_cut_order=order).exists())
+
+    def test_reconnection_requires_confirmed_payment_of_fee_and_service_debt(self):
+        from apps.payments.models import Charge, Payment
+        from apps.payments.services import create_manual_charge, register_payment
+        cut = self.delinquency_cut()
+        fee = Charge.objects.get(source_cut_order=cut)
+        today = timezone.localdate()
+        monthly = create_manual_charge(
+            customer=self.customer, subscription=self.subscription, concept=Charge.Concept.MONTHLY,
+            description="Mensualidad pendiente", amount=Decimal("89.00"),
+            due_date=today, period=date(today.year, today.month, 1), auto_update=False,
+        )
+        order = self.create_order_in_progress(order_type=self.reconnection_type)
+        with self.assertRaises(ValidationError):
+            attend_order(order, result=self.reconnection_success, user=self.technician)
+        order.refresh_from_db()
+        self.assertEqual(order.status, WorkOrder.Status.IN_PROGRESS)
+        pending, _ = register_payment(
+            customer=self.customer, branch=self.branch, user=self.atc_user, amount=Decimal("15.00"),
+            method=Payment.Method.CASH, allocations=[(fee, Decimal("15.00"))], settled=False,
+        )
+        register_payment(
+            customer=self.customer, branch=self.branch, user=self.atc_user, amount=Decimal("89.00"),
+            method=Payment.Method.CASH, allocations=[(monthly, Decimal("89.00"))], full_monthly_only=True,
+        )
+        with self.assertRaises(ValidationError):
+            attend_order(order, result=self.reconnection_success, user=self.technician)
+        order.refresh_from_db()
+        pending.confirm(actor=self.atc_user)
+        future = today + timedelta(days=40)
+        create_manual_charge(
+            customer=self.customer, subscription=self.subscription, concept=Charge.Concept.MONTHLY,
+            description="Periodo futuro", amount=Decimal("89.00"), due_date=future,
+            period=date(future.year, future.month, 1), auto_update=False,
+        )
+        attend_order(order, result=self.reconnection_success, user=self.technician)
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, Subscription.Status.ACTIVE)
 
     def test_successful_installation_activates_subscription(self):
         """19. Instalación exitosa activa la suscripción."""

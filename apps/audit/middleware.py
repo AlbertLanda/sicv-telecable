@@ -4,6 +4,12 @@ from .models import AuditEvent
 
 
 ACTION_LABELS = {
+    "reports:accounting_review": "Guardó una revisión de ejemplos contables QA",
+    # Se conservan las etiquetas del registro de equipos retirado como historia.
+    "equipment:create": "Registró un equipo de abonado",
+    "equipment:assign": "Registró una asignación de equipo",
+    "equipment:remove": "Registró un retiro de equipo",
+    "equipment:review": "Revisó el estado de un equipo",
     "customers:create": "Registró un cliente",
     "contracts:contract_create": "Registró un contrato",
     "contracts:contract_edit": "Editó un contrato",

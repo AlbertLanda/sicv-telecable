@@ -44,6 +44,7 @@ class User(AbstractUser):
     # habilitarla para Administración.
     ATC_BASELINE_PERMISSIONS = frozenset(
         {
+            "customers.view_customer",
             "customers.add_customer",
             "customers.change_customer",
             "customers.add_customeraddress",
@@ -63,11 +64,15 @@ class User(AbstractUser):
             "payments.view_payment",
             "payments.view_receipt",
             "payments.add_payment",
+            "payments.operate_cash",
+            "payments.request_debt_adjustment",
         }
     )
 
     ADMIN_EXTRA_PERMISSIONS = frozenset(
         {
+            "organization.view_operational_dashboard",
+            "organization.view_consolidated_dashboard",
             "accounts.view_user",
             "accounts.add_user",
             "accounts.change_user",
@@ -77,18 +82,38 @@ class User(AbstractUser):
             "contracts.change_contract",
             "payments.view_paymentcommitment",
             "payments.view_cash_closing",
+            "payments.review_cash",
+            "payments.review_debt_adjustment",
+            "accounting.view_bank",
+            "accounting.manage_bank_accounts",
+            "accounting.view_revenue",
+            "accounting.manage_revenue_rules",
+            "accounting.import_bank",
+            "accounting.reconcile_bank",
             "inventory.view_workordermaterialmovement",
             "audit.view_auditevent",
+            "accounting.view_workspace",
+            "accounting.import_reports",
+            "accounting.review_documents",
+            "accounting.manage_access",
         }
     )
 
-    # Contabilidad saca el cierre de caja de cada sede y nada más por ahora.
-    # No registra ni anula cobros, y tampoco hereda la consulta de pagos:
-    # las pruebas de cobranza usan este rol como el que no trae permisos de
-    # pagos para aislar cada uno.
+    # La conciliación trabaja con evidencia importada y acceso explícito por
+    # empresa. No concede registro, anulación ni consulta operativa de pagos.
     ACCOUNTING_BASELINE_PERMISSIONS = frozenset(
         {
+            "accounting.view_revenue",
             "payments.view_cash_closing",
+            "payments.review_cash",
+            "payments.request_debt_adjustment",
+            "payments.review_debt_adjustment",
+            "accounting.view_bank",
+            "accounting.import_bank",
+            "accounting.reconcile_bank",
+            "accounting.view_workspace",
+            "accounting.import_reports",
+            "accounting.review_documents",
         }
     )
 
@@ -98,6 +123,7 @@ class User(AbstractUser):
         Role.ACCOUNTING: ACCOUNTING_BASELINE_PERMISSIONS,
         Role.NOC: frozenset(
             {
+                "customers.view_customer",
                 "work_orders.view_workorder",
                 "work_orders.view_incident",
                 "work_orders.start_incident",

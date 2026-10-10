@@ -1454,6 +1454,31 @@ class InstallationWorkOrderCreateTests(TestCase):
         self.assertEqual(order.branch, self.branch)
         self.assertEqual(order.zone, self.zone)
 
+    def test_instalacion_sin_zona_se_genera_y_no_se_duplica_al_reintentar(self):
+        """La zona opcional no impide el alta en PostgreSQL ni habilita duplicados."""
+        self.grant_add_workorder_permission()
+        self.address.zone = None
+        self.address.save(update_fields=["zone"])
+
+        response = self.client.post(self.generate_url)
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "contracts:installation_order_receipt",
+                kwargs={"customer_pk": self.customer.pk, "pk": self.contract.pk},
+            ),
+        )
+        order = WorkOrder.objects.get(subscription=self.subscription)
+        self.assertIsNone(order.zone_id)
+        self.assertEqual(order.branch_id, self.branch.pk)
+        self.assertEqual(order.seller_id, self.seller.pk)
+        self.assertEqual(order.status, WorkOrder.Status.PENDING)
+
+        retry = self.client.post(self.generate_url)
+        self.assertRedirects(retry, self.summary_url)
+        self.assertEqual(WorkOrder.objects.filter(subscription=self.subscription).count(), 1)
+
     def test_la_orden_hereda_el_vendedor_registrado_en_la_venta(self):
         self.grant_add_workorder_permission()
         self.subscription.seller = self.seller

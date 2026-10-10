@@ -1,0 +1,8 @@
+/* Inter variable, Latin subset (including Spanish). SIL Open Font License. */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./fonts/inter-latin-variable.woff2') format('woff2');
+}

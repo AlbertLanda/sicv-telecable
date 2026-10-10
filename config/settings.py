@@ -200,8 +200,10 @@ INSTALLED_APPS = [
     'apps.work_orders',
     'apps.payments',
     'apps.fiscal',
+    'apps.accounting',
     'apps.technicians',
     'apps.inventory',
+    'apps.equipment',  # Archivo histórico; sin registro operativo ni rutas web.
     'apps.audit',
     'apps.legacy',
     'apps.reports',
@@ -448,7 +450,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = "accounts.User"
 
 # Redirecciones de autenticación
-LOGIN_REDIRECT_URL = '/customers/search/'
+LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 
@@ -467,6 +469,12 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Pruebas OSE locales, deshabilitadas por defecto. El servicio además impide
-# ejecutarlas cuando PRODUCTION=True aunque se configure esta variable.
+# Pruebas OSE deshabilitadas por defecto. QA mantiene PRODUCTION=True para
+# conservar HTTPS/cookies seguras; su excepción requiere el recurso explícito.
 FISCAL_SIMULATION_ENABLED = env_bool('DJANGO_FISCAL_SIMULATION_ENABLED', default=False)
+# Guía y observaciones sobre muestras: disponibles exclusivamente en el recurso QA.
+ACCOUNTING_REVIEW_ENABLED = os.environ.get('WEBSITE_SITE_NAME') == 'sicv-telecable-qa'
+FISCAL_QA_SIMULATION_ALLOWED = (
+    env_bool('DJANGO_FISCAL_QA_SIMULATION', default=False)
+    and os.environ.get('WEBSITE_SITE_NAME') == 'sicv-telecable-qa'
+)

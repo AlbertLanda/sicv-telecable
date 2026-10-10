@@ -25,6 +25,7 @@ class BillingPolicyAdmin(admin.ModelAdmin):
         "discount_days_before_due",
         "cut_day_next_month",
         "cut_days_after_due",
+        "reconnection_fee",
         "is_active",
     )
     list_filter = ("billing_mode", "is_active")

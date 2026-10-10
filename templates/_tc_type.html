@@ -27,14 +27,8 @@ Los pesos son cuatro: 400 texto, 500 interfaz, 600 énfasis y botones, 700
 títulos. La fuente se carga solo en ese rango; pedir 800 dibujaría 700 igual.
 {% endcomment %}
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-{% comment %}
-Inter variable con eje de tamaño óptico: a 11px abre las letras para que se
-lean y a 24px las cierra para que el título no se vea flojo, sin cargar un
-archivo por peso.
-{% endcomment %}
-<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap" rel="stylesheet">
+{% load static %}
+<link href="{% static 'reports/vendor/inter.css' %}" rel="stylesheet">
 <style>
     :root {
         --tc-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;

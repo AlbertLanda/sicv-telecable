@@ -1,0 +1,602 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-03T15:56:04.369470+00:00",
+  "title": "Design System: SICV Telecable",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Azul de acción",
+        "tonalRamp": [
+          "oklch(0.150 0.1471 255.28)",
+          "oklch(0.264 0.1471 255.28)",
+          "oklch(0.379 0.1471 255.28)",
+          "oklch(0.493 0.1471 255.28)",
+          "oklch(0.607 0.1471 255.28)",
+          "oklch(0.721 0.1471 255.28)",
+          "oklch(0.836 0.1471 255.28)",
+          "oklch(0.950 0.1471 255.28)"
+        ]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "Primary hover",
+        "tonalRamp": [
+          "oklch(0.150 0.1211 253.44)",
+          "oklch(0.264 0.1211 253.44)",
+          "oklch(0.379 0.1211 253.44)",
+          "oklch(0.493 0.1211 253.44)",
+          "oklch(0.607 0.1211 253.44)",
+          "oklch(0.721 0.1211 253.44)",
+          "oklch(0.836 0.1211 253.44)",
+          "oklch(0.950 0.1211 253.44)"
+        ]
+      },
+      "primary-dark": {
+        "role": "primary",
+        "displayName": "Primary dark",
+        "tonalRamp": [
+          "oklch(0.150 0.1154 255.41)",
+          "oklch(0.264 0.1154 255.41)",
+          "oklch(0.379 0.1154 255.41)",
+          "oklch(0.493 0.1154 255.41)",
+          "oklch(0.607 0.1154 255.41)",
+          "oklch(0.721 0.1154 255.41)",
+          "oklch(0.836 0.1154 255.41)",
+          "oklch(0.950 0.1154 255.41)"
+        ]
+      },
+      "brand-green": {
+        "role": "secondary",
+        "displayName": "Verde Telecable",
+        "tonalRamp": [
+          "oklch(0.150 0.1559 137.45)",
+          "oklch(0.264 0.1559 137.45)",
+          "oklch(0.379 0.1559 137.45)",
+          "oklch(0.493 0.1559 137.45)",
+          "oklch(0.607 0.1559 137.45)",
+          "oklch(0.721 0.1559 137.45)",
+          "oklch(0.836 0.1559 137.45)",
+          "oklch(0.950 0.1559 137.45)"
+        ]
+      },
+      "navigation-marker": {
+        "role": "secondary",
+        "displayName": "Navigation marker",
+        "tonalRamp": [
+          "oklch(0.150 0.1894 130.89)",
+          "oklch(0.264 0.1894 130.89)",
+          "oklch(0.379 0.1894 130.89)",
+          "oklch(0.493 0.1894 130.89)",
+          "oklch(0.607 0.1894 130.89)",
+          "oklch(0.721 0.1894 130.89)",
+          "oklch(0.836 0.1894 130.89)",
+          "oklch(0.950 0.1894 130.89)"
+        ]
+      },
+      "critical": {
+        "role": "tertiary",
+        "displayName": "Ámbar de atención",
+        "tonalRamp": [
+          "oklch(0.150 0.1207 73.05)",
+          "oklch(0.264 0.1207 73.05)",
+          "oklch(0.379 0.1207 73.05)",
+          "oklch(0.493 0.1207 73.05)",
+          "oklch(0.607 0.1207 73.05)",
+          "oklch(0.721 0.1207 73.05)",
+          "oklch(0.836 0.1207 73.05)",
+          "oklch(0.950 0.1207 73.05)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Lienzo frío",
+        "tonalRamp": [
+          "oklch(0.150 0.0029 264.54)",
+          "oklch(0.264 0.0029 264.54)",
+          "oklch(0.379 0.0029 264.54)",
+          "oklch(0.493 0.0029 264.54)",
+          "oklch(0.607 0.0029 264.54)",
+          "oklch(0.721 0.0029 264.54)",
+          "oklch(0.836 0.0029 264.54)",
+          "oklch(0.950 0.0029 264.54)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Superficie",
+        "tonalRamp": [
+          "oklch(0.150 0.0000 0.00)",
+          "oklch(0.264 0.0000 0.00)",
+          "oklch(0.379 0.0000 0.00)",
+          "oklch(0.493 0.0000 0.00)",
+          "oklch(0.607 0.0000 0.00)",
+          "oklch(0.721 0.0000 0.00)",
+          "oklch(0.836 0.0000 0.00)",
+          "oklch(0.950 0.0000 0.00)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinta de lectura",
+        "tonalRamp": [
+          "oklch(0.150 0.0276 248.81)",
+          "oklch(0.264 0.0276 248.81)",
+          "oklch(0.379 0.0276 248.81)",
+          "oklch(0.493 0.0276 248.81)",
+          "oklch(0.607 0.0276 248.81)",
+          "oklch(0.721 0.0276 248.81)",
+          "oklch(0.836 0.0276 248.81)",
+          "oklch(0.950 0.0276 248.81)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Texto secundario",
+        "tonalRamp": [
+          "oklch(0.150 0.0281 248.38)",
+          "oklch(0.264 0.0281 248.38)",
+          "oklch(0.379 0.0281 248.38)",
+          "oklch(0.493 0.0281 248.38)",
+          "oklch(0.607 0.0281 248.38)",
+          "oklch(0.721 0.0281 248.38)",
+          "oklch(0.836 0.0281 248.38)",
+          "oklch(0.950 0.0281 248.38)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "tonalRamp": [
+          "oklch(0.150 0.0116 252.10)",
+          "oklch(0.264 0.0116 252.10)",
+          "oklch(0.379 0.0116 252.10)",
+          "oklch(0.493 0.0116 252.10)",
+          "oklch(0.607 0.0116 252.10)",
+          "oklch(0.721 0.0116 252.10)",
+          "oklch(0.836 0.0116 252.10)",
+          "oklch(0.950 0.0116 252.10)"
+        ]
+      },
+      "input-border": {
+        "role": "neutral",
+        "displayName": "Input border",
+        "tonalRamp": [
+          "oklch(0.150 0.0224 245.92)",
+          "oklch(0.264 0.0224 245.92)",
+          "oklch(0.379 0.0224 245.92)",
+          "oklch(0.493 0.0224 245.92)",
+          "oklch(0.607 0.0224 245.92)",
+          "oklch(0.721 0.0224 245.92)",
+          "oklch(0.836 0.0224 245.92)",
+          "oklch(0.950 0.0224 245.92)"
+        ]
+      },
+      "soft": {
+        "role": "primary",
+        "displayName": "Soft",
+        "tonalRamp": [
+          "oklch(0.150 0.0114 252.09)",
+          "oklch(0.264 0.0114 252.09)",
+          "oklch(0.379 0.0114 252.09)",
+          "oklch(0.493 0.0114 252.09)",
+          "oklch(0.607 0.0114 252.09)",
+          "oklch(0.721 0.0114 252.09)",
+          "oklch(0.836 0.0114 252.09)",
+          "oklch(0.950 0.0114 252.09)"
+        ]
+      },
+      "control-ink": {
+        "role": "neutral",
+        "displayName": "Control ink",
+        "tonalRamp": [
+          "oklch(0.150 0.0378 250.27)",
+          "oklch(0.264 0.0378 250.27)",
+          "oklch(0.379 0.0378 250.27)",
+          "oklch(0.493 0.0378 250.27)",
+          "oklch(0.607 0.0378 250.27)",
+          "oklch(0.721 0.0378 250.27)",
+          "oklch(0.836 0.0378 250.27)",
+          "oklch(0.950 0.0378 250.27)"
+        ]
+      },
+      "table-head": {
+        "role": "neutral",
+        "displayName": "Table head",
+        "tonalRamp": [
+          "oklch(0.150 0.0093 242.84)",
+          "oklch(0.264 0.0093 242.84)",
+          "oklch(0.379 0.0093 242.84)",
+          "oklch(0.493 0.0093 242.84)",
+          "oklch(0.607 0.0093 242.84)",
+          "oklch(0.721 0.0093 242.84)",
+          "oklch(0.836 0.0093 242.84)",
+          "oklch(0.950 0.0093 242.84)"
+        ]
+      },
+      "table-border": {
+        "role": "neutral",
+        "displayName": "Table border",
+        "tonalRamp": [
+          "oklch(0.150 0.0098 252.81)",
+          "oklch(0.264 0.0098 252.81)",
+          "oklch(0.379 0.0098 252.81)",
+          "oklch(0.493 0.0098 252.81)",
+          "oklch(0.607 0.0098 252.81)",
+          "oklch(0.721 0.0098 252.81)",
+          "oklch(0.836 0.0098 252.81)",
+          "oklch(0.950 0.0098 252.81)"
+        ]
+      },
+      "table-hover": {
+        "role": "neutral",
+        "displayName": "Table hover",
+        "tonalRamp": [
+          "oklch(0.150 0.0051 247.88)",
+          "oklch(0.264 0.0051 247.88)",
+          "oklch(0.379 0.0051 247.88)",
+          "oklch(0.493 0.0051 247.88)",
+          "oklch(0.607 0.0051 247.88)",
+          "oklch(0.721 0.0051 247.88)",
+          "oklch(0.836 0.0051 247.88)",
+          "oklch(0.950 0.0051 247.88)"
+        ]
+      },
+      "navigation": {
+        "role": "neutral",
+        "displayName": "Tinta de navegación",
+        "tonalRamp": [
+          "oklch(0.150 0.0311 247.22)",
+          "oklch(0.264 0.0311 247.22)",
+          "oklch(0.379 0.0311 247.22)",
+          "oklch(0.493 0.0311 247.22)",
+          "oklch(0.607 0.0311 247.22)",
+          "oklch(0.721 0.0311 247.22)",
+          "oklch(0.836 0.0311 247.22)",
+          "oklch(0.950 0.0311 247.22)"
+        ]
+      },
+      "navigation-text": {
+        "role": "neutral",
+        "displayName": "Navigation text",
+        "tonalRamp": [
+          "oklch(0.150 0.0183 245.41)",
+          "oklch(0.264 0.0183 245.41)",
+          "oklch(0.379 0.0183 245.41)",
+          "oklch(0.493 0.0183 245.41)",
+          "oklch(0.607 0.0183 245.41)",
+          "oklch(0.721 0.0183 245.41)",
+          "oklch(0.836 0.0183 245.41)",
+          "oklch(0.950 0.0183 245.41)"
+        ]
+      },
+      "navigation-hover": {
+        "role": "neutral",
+        "displayName": "Navigation hover",
+        "tonalRamp": [
+          "oklch(0.150 0.0389 246.27)",
+          "oklch(0.264 0.0389 246.27)",
+          "oklch(0.379 0.0389 246.27)",
+          "oklch(0.493 0.0389 246.27)",
+          "oklch(0.607 0.0389 246.27)",
+          "oklch(0.721 0.0389 246.27)",
+          "oklch(0.836 0.0389 246.27)",
+          "oklch(0.950 0.0389 246.27)"
+        ]
+      },
+      "navigation-active": {
+        "role": "neutral",
+        "displayName": "Navigation active",
+        "tonalRamp": [
+          "oklch(0.150 0.0431 245.44)",
+          "oklch(0.264 0.0431 245.44)",
+          "oklch(0.379 0.0431 245.44)",
+          "oklch(0.493 0.0431 245.44)",
+          "oklch(0.607 0.0431 245.44)",
+          "oklch(0.721 0.0431 245.44)",
+          "oklch(0.836 0.0431 245.44)",
+          "oklch(0.950 0.0431 245.44)"
+        ]
+      },
+      "navigation-focus": {
+        "role": "neutral",
+        "displayName": "Navigation focus",
+        "tonalRamp": [
+          "oklch(0.150 0.0767 251.09)",
+          "oklch(0.264 0.0767 251.09)",
+          "oklch(0.379 0.0767 251.09)",
+          "oklch(0.493 0.0767 251.09)",
+          "oklch(0.607 0.0767 251.09)",
+          "oklch(0.721 0.0767 251.09)",
+          "oklch(0.836 0.0767 251.09)",
+          "oklch(0.950 0.0767 251.09)"
+        ]
+      },
+      "success-ink": {
+        "role": "secondary",
+        "displayName": "Success ink",
+        "tonalRamp": [
+          "oklch(0.150 0.1083 151.33)",
+          "oklch(0.264 0.1083 151.33)",
+          "oklch(0.379 0.1083 151.33)",
+          "oklch(0.493 0.1083 151.33)",
+          "oklch(0.607 0.1083 151.33)",
+          "oklch(0.721 0.1083 151.33)",
+          "oklch(0.836 0.1083 151.33)",
+          "oklch(0.950 0.1083 151.33)"
+        ]
+      },
+      "success-surface": {
+        "role": "secondary",
+        "displayName": "Success surface",
+        "tonalRamp": [
+          "oklch(0.150 0.0157 160.62)",
+          "oklch(0.264 0.0157 160.62)",
+          "oklch(0.379 0.0157 160.62)",
+          "oklch(0.493 0.0157 160.62)",
+          "oklch(0.607 0.0157 160.62)",
+          "oklch(0.721 0.0157 160.62)",
+          "oklch(0.836 0.0157 160.62)",
+          "oklch(0.950 0.0157 160.62)"
+        ]
+      },
+      "success-border": {
+        "role": "secondary",
+        "displayName": "Success border",
+        "tonalRamp": [
+          "oklch(0.150 0.0486 158.38)",
+          "oklch(0.264 0.0486 158.38)",
+          "oklch(0.379 0.0486 158.38)",
+          "oklch(0.493 0.0486 158.38)",
+          "oklch(0.607 0.0486 158.38)",
+          "oklch(0.721 0.0486 158.38)",
+          "oklch(0.836 0.0486 158.38)",
+          "oklch(0.950 0.0486 158.38)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection",
+        "tonalRamp": [
+          "oklch(0.150 0.0412 249.42)",
+          "oklch(0.264 0.0412 249.42)",
+          "oklch(0.379 0.0412 249.42)",
+          "oklch(0.493 0.0412 249.42)",
+          "oklch(0.607 0.0412 249.42)",
+          "oklch(0.721 0.0412 249.42)",
+          "oklch(0.836 0.0412 249.42)",
+          "oklch(0.950 0.0412 249.42)"
+        ]
+      },
+      "selection-ink": {
+        "role": "neutral",
+        "displayName": "Selection ink",
+        "tonalRamp": [
+          "oklch(0.150 0.0501 249.06)",
+          "oklch(0.264 0.0501 249.06)",
+          "oklch(0.379 0.0501 249.06)",
+          "oklch(0.493 0.0501 249.06)",
+          "oklch(0.607 0.0501 249.06)",
+          "oklch(0.721 0.0501 249.06)",
+          "oklch(0.836 0.0501 249.06)",
+          "oklch(0.950 0.0501 249.06)"
+        ]
+      },
+      "scrollbar": {
+        "role": "neutral",
+        "displayName": "Scrollbar",
+        "tonalRamp": [
+          "oklch(0.150 0.0353 248.33)",
+          "oklch(0.264 0.0353 248.33)",
+          "oklch(0.379 0.0353 248.33)",
+          "oklch(0.493 0.0353 248.33)",
+          "oklch(0.607 0.0353 248.33)",
+          "oklch(0.721 0.0353 248.33)",
+          "oklch(0.836 0.0353 248.33)",
+          "oklch(0.950 0.0353 248.33)"
+        ]
+      },
+      "scrollbar-track": {
+        "role": "neutral",
+        "displayName": "Scrollbar track",
+        "tonalRamp": [
+          "oklch(0.150 0.0069 247.90)",
+          "oklch(0.264 0.0069 247.90)",
+          "oklch(0.379 0.0069 247.90)",
+          "oklch(0.493 0.0069 247.90)",
+          "oklch(0.607 0.0069 247.90)",
+          "oklch(0.721 0.0069 247.90)",
+          "oklch(0.836 0.0069 247.90)",
+          "oklch(0.950 0.0069 247.90)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline"
+      },
+      "title": {
+        "displayName": "Title"
+      },
+      "customer-name": {
+        "displayName": "Customer name"
+      },
+      "metric": {
+        "displayName": "Metric"
+      },
+      "body": {
+        "displayName": "Body"
+      },
+      "table": {
+        "displayName": "Table"
+      },
+      "label": {
+        "displayName": "Label"
+      },
+      "small": {
+        "displayName": "Small"
+      },
+      "button": {
+        "displayName": "Button"
+      },
+      "button-secondary": {
+        "displayName": "Button secondary"
+      }
+    },
+    "shadows": [
+      {
+        "name": "flat-surface",
+        "value": "none",
+        "purpose": "Tarjetas, resumen y barra corporativa."
+      },
+      {
+        "name": "field-focus",
+        "value": "0 0 0 .25rem rgba(13,110,253,.25)",
+        "purpose": "Halo Bootstrap heredado de campos; adicional al contorno corporativo."
+      },
+      {
+        "name": "button-press",
+        "value": "inset 0 1px 3px rgba(10,59,102,.25)",
+        "purpose": "Pulsación heredada del botón compartido de ficha."
+      },
+      {
+        "name": "record-menu",
+        "value": "0 8px 24px rgba(20,52,88,.12)",
+        "purpose": "Menú de acciones de la ficha, conservado del estilo compartido."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-state",
+        "value": ".15s ease",
+        "purpose": "Cambio de color, borde y respuesta funcional del botón compartido."
+      },
+      {
+        "name": "bootstrap-control-state",
+        "value": ".15s ease-in-out",
+        "purpose": "Color de botones y borde/halo de campos Bootstrap."
+      },
+      {
+        "name": "shell-toggle",
+        "value": "none",
+        "purpose": "El marco no anima cambios del menú."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0s",
+        "purpose": "Desactivar transiciones/animaciones y usar scroll-behavior:auto al solicitar reducción."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "summary-stack",
+        "value": "1199.98px"
+      },
+      {
+        "name": "mobile-navigation",
+        "value": "991.98px"
+      },
+      {
+        "name": "compact",
+        "value": "575.98px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal Bootstrap: consultar o actualizar.",
+      "html": "<button class=\"ds-primary\" type=\"button\">Buscar</button>",
+      "css": ".ds-primary{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:.375rem .75rem;font-size:.875rem;font-weight:600;line-height:1.5;border:1px solid var(--sicv-primary,#0755a6);border-radius:4px;background:var(--sicv-primary,#0755a6);color:#fff;cursor:pointer;transition:color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out}.ds-primary:hover,.ds-primary:focus{background:var(--sicv-primary-dark,#053c78);border-color:var(--sicv-primary-dark,#053c78)}.ds-primary:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;box-shadow:0 0 0 .25rem rgba(49,132,253,.5)}.ds-primary:active{background:#0a58ca;border-color:#0a53be}@media(max-width:575.98px){.ds-primary{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-primary{transition-duration:0s}}"
+    },
+    {
+      "name": "Botón secundario de ficha",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acción contextual: editar datos del abonado.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">Editar datos</button>",
+      "css": ".ds-secondary{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 14px;font-size:.875rem;font-weight:500;line-height:1.5;border:1px solid #aebbc7;border-radius:4px;background:#fff;color:var(--sicv-primary,#0755a6);cursor:pointer;transition:background-color .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease}.ds-secondary:hover{background:var(--sicv-soft,#edf3fa);border-color:#aebbc7;color:var(--sicv-primary,#0755a6);box-shadow:none}.ds-secondary:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}.ds-secondary:active{box-shadow:inset 0 1px 3px rgba(10,59,102,.25)}@media(max-width:575.98px){.ds-secondary{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-secondary{transition-duration:0s}}"
+    },
+    {
+      "name": "Campo de búsqueda",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Campo con etiqueta accesible y foco corporativo sobre Bootstrap.",
+      "html": "<label class=\"ds-search-label\" for=\"ds-customer-query\">Buscar abonado</label><input class=\"ds-search\" id=\"ds-customer-query\" type=\"text\" placeholder=\"Código, documento o nombre\">",
+      "css": ".ds-search-label{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);display:block;margin-bottom:8px;color:var(--sicv-text,#202c38);font-size:.8125rem;line-height:1.5}.ds-search{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);display:block;width:100%;min-height:40px;padding:.375rem .75rem;font-size:.875rem;font-weight:400;line-height:1.5;color:var(--sicv-text,#202c38);background:var(--sicv-bg,#f3f4f6);border:1px solid #aebbc7;border-radius:4px;caret-color:#0755a6;transition:border-color .15s ease-in-out,box-shadow .15s ease-in-out}.ds-search::placeholder{color:rgba(33,37,41,.75)}.ds-search:hover{border-color:#aebbc7}.ds-search:focus{border-color:#86b7fe;box-shadow:0 0 0 .25rem rgba(13,110,253,.25)}.ds-search:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}.ds-search::selection{background:#c9e0f8;color:#142b41}@media(max-width:575.98px){.ds-search{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-search{transition-duration:0s}}"
+    },
+    {
+      "name": "Navegación global",
+      "kind": "nav",
+      "refersTo": "navigation-link",
+      "description": "Menú oscuro con opción actual y marcador de marca.",
+      "html": "<nav class=\"ds-navigation\" aria-label=\"Ejemplo de navegación\"><a class=\"ds-navigation-link ds-current\" href=\"#panel\" aria-current=\"page\">Panel administrador</a><a class=\"ds-navigation-link\" href=\"#abonados\">Buscar cliente</a></nav>",
+      "css": ".ds-navigation{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);width:240px;padding:18px 12px 24px;background:var(--sicv-sidebar,#192734)}.ds-navigation-link{display:flex;align-items:center;min-height:40px;padding:8px 10px 8px 36px;margin:1px 0;border-radius:3px;color:#cad5df;font-size:.8125rem;font-weight:400;line-height:1.5;text-decoration:none}.ds-navigation-link:hover{color:#fff;background:#26394a}.ds-navigation-link.ds-current{background:#2a4053;color:#fff;box-shadow:inset 3px 0 #8acd36;font-weight:600}.ds-navigation-link:focus-visible{outline:2px solid #a9d2ff;outline-offset:3px}"
+    },
+    {
+      "name": "Etiqueta de servicio",
+      "kind": "chip",
+      "refersTo": "service-tag",
+      "description": "Información estática compacta, sin comportamiento de filtro.",
+      "html": "<span class=\"ds-service-tag\">Duo</span>",
+      "css": ".ds-service-tag{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);display:inline-block;padding:2px 8px;font-size:.6875rem;font-weight:600;line-height:1.5;color:#344557;background:#edf1f5;border:1px solid #d8dee5;border-radius:3px}.ds-service-tag:hover{color:#344557;background:#edf1f5}.ds-service-tag:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}"
+    },
+    {
+      "name": "Sección plana",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Contenedor de consulta con acción explícita y foco propio.",
+      "html": "<section class=\"ds-card\" aria-labelledby=\"ds-card-title\"><header class=\"ds-card-head\"><h2 id=\"ds-card-title\">Datos del cliente</h2><a class=\"ds-card-link\" href=\"#ficha\">Abrir ficha</a></header><div class=\"ds-card-body\"><div class=\"ds-card-label\">Nombre completo</div><div class=\"ds-card-value\">María Muestra QA</div></div></section>",
+      "css": ".ds-card{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);border:1px solid var(--sicv-line,#d8dee5);border-radius:4px;background:#fff;color:var(--sicv-text,#202c38);box-shadow:none}.ds-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:18px 20px}.ds-card-head h2{font-size:1rem;font-weight:600;line-height:1.2;margin:0}.ds-card-link{color:var(--sicv-primary,#0755a6);font-size:.8125rem;font-weight:600;text-decoration:none;text-underline-offset:3px}.ds-card-link:hover{text-decoration:underline}.ds-card-link:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}.ds-card-body{padding:0 20px 16px}.ds-card-label{color:var(--sicv-muted,#596775);font-size:.75rem;line-height:1.5;margin-bottom:2px}.ds-card-value{font-size:.875rem;font-weight:500;line-height:1.5;overflow-wrap:anywhere}@media(max-width:575.98px){.ds-card-head{padding:16px}.ds-card-body{padding-left:16px;padding-right:16px}}"
+    },
+    {
+      "name": "Tabla desplazable de consulta",
+      "kind": "custom",
+      "refersTo": "table-cell",
+      "description": "Región nombrada y enfocable; los enlaces mantienen destinos explícitos.",
+      "html": "<p class=\"ds-table-hint\">Desliza o usa las flechas para ver más columnas.</p><div class=\"ds-table-region\" tabindex=\"0\" role=\"region\" aria-label=\"Ejemplo de abonados\"><table class=\"ds-table\"><thead><tr><th>Abonado</th><th class=\"ds-num\">Deuda</th><th>Dirección</th></tr></thead><tbody><tr><td><a class=\"ds-table-link\" href=\"#ficha\">María Muestra QA</a></td><td class=\"ds-num\">S/ 203,00</td><td>Av. de demostración 123</td></tr></tbody></table></div>",
+      "css": ".ds-table-hint{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);color:var(--sicv-muted,#596775);font-size:.75rem;line-height:1.6;padding:0 16px 12px;margin:0}.ds-table-region{overflow-x:auto;scrollbar-color:#8da0b3 #edf1f5;scrollbar-width:auto}.ds-table-region:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}.ds-table{font-family:var(--tc-font,Inter,system-ui,-apple-system,'Segoe UI',sans-serif);width:100%;min-width:1100px;border-collapse:collapse;font-size:.8125rem;line-height:1.5}.ds-table th{background:#eaf0f5;color:#344557;font-weight:600;text-align:left;padding:13px 16px;border-bottom:1px solid #d8dee5}.ds-table td{color:var(--sicv-text,#202c38);padding:13px 16px;border-bottom:1px solid #e2e7ed}.ds-table tbody tr:hover{background:#f5f8fb}.ds-table .ds-num{text-align:right;font-variant-numeric:tabular-nums}.ds-table-link{color:var(--sicv-primary,#0755a6);font-weight:600;text-decoration:none;text-underline-offset:3px}.ds-table-link:hover{text-decoration:underline}.ds-table-link:focus-visible{outline:2px solid var(--sicv-primary,#0755a6);outline-offset:3px;}.ds-table ::selection{background:#c9e0f8;color:#142b41}"
+    }
+  ],
+  "narrative": {
+    "northStar": "SICV Telecable",
+    "overview": "Una interfaz empresarial sobria para el trabajo diario de ATC, Contabilidad y Administración. La barra blanca identifica Telecable y la sede; la navegación de tinta separa las opciones globales del contenido neutro. El azul señala acciones y selección; el verde conserva la identidad de marca y la confirmación.\n\nLa densidad favorece consulta rápida, con jerarquía corta, separadores finos y cifras alineadas. La referencia es la documentación pública de Carbon adaptada a Django y Bootstrap, sin extracción de nodos de Figma ni reproducción de una pantalla de su kit. La evidencia visual revisada cubre panel, búsqueda de abonados, Información de la ficha y marco compartido; las composiciones de otros módulos y la preparación fiscal requieren revisión propia antes de extenderlas.",
+    "keyCharacteristics": [
+      "Jerarquía corta y texto en español claro.",
+      "Superficies neutras, bordes finos y esquinas discretas.",
+      "Acciones azules, marca verde y navegación de tinta.",
+      "Tablas con enlaces explícitos y navegación por teclado."
+    ],
+    "rules": [
+      {
+        "name": "Acción reconocible",
+        "body": "Reservar el azul para enlaces, acciones y selección; el ámbar marca la atención crítica y no decora las superficies.",
+        "section": "colors"
+      },
+      {
+        "name": "Cifras en columna",
+        "body": "Usar numerales tabulares en importes, métricas y columnas numéricas; conservar cifras proporcionales en códigos y texto corriente.",
+        "section": "typography"
+      },
+      {
+        "name": "Plano por defecto",
+        "body": "Separar contenido mediante tono, borde y espacio; no añadir sombras decorativas ni animaciones de entrada.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do conservar Inter, la identidad Telecable y las funciones reales de cada enlace.",
+      "Do mantener un encabezado principal, etiquetas accesibles y foco visible.",
+      "Do nombrar y hacer enfocables los contenedores de tablas anchas, con aviso móvil solo cuando hay desbordamiento.",
+      "Do revisar cada nueva composición de módulo en escritorio y móvil antes de declararla aprobada."
+    ],
+    "donts": [
+      "Don't convertir filas completas en controles ambiguos: enlazar el nombre o código y la acción pertinente.",
+      "Don't usar color como único indicador de estado ni eliminar el foco del teclado.",
+      "Don't añadir mayúsculas decorativas, sombras de tarjeta o animaciones de entrada al marco corporativo.",
+      "Don't presentar las muestras QA como datos reales ni la preparación fiscal como emisión tributaria validada."
+    ]
+  }
+}

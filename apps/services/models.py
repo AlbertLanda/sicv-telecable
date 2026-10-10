@@ -56,6 +56,11 @@ class BillingPolicy(models.Model):
         default=True,
         verbose_name="Exige primera mensualidad al instalar",
     )
+    reconnection_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("15.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Reconexión tras corte por morosidad",
+    )
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

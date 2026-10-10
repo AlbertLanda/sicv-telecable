@@ -278,7 +278,7 @@ class WorkOrderStartAttentionSuccessTests(WorkOrderWebStartAttentionTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.redirect_chain[0][0],
-            self.customer_url,
+            reverse("work_orders:detail", args=[self.order.pk]),
         )
 
         text = " ".join(
@@ -288,7 +288,7 @@ class WorkOrderStartAttentionSuccessTests(WorkOrderWebStartAttentionTestCase):
         self.assertIn(self.order.order_number, text)
         self.assertIn("iniciada", text.lower())
 
-    def test_redirect_falls_back_to_the_customer_file(self):
+    def test_redirect_without_read_permissions_stays_on_authorized_confirmation(self):
         """
         Sin view_workorder no se redirige a la bandeja.
 
@@ -302,10 +302,18 @@ class WorkOrderStartAttentionSuccessTests(WorkOrderWebStartAttentionTestCase):
         self.client.logout()
         self.client.login(username="supervisor1", password="test1234")
 
-        response = self.client.post(self.url, self.valid_payload())
+        response = self.client.post(self.url, self.valid_payload(), follow=True)
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], self.customer_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[0][0], self.url)
+
+    def test_explicit_customer_reader_returns_to_customer(self):
+        self.starter.user_permissions.add(Permission.objects.get(
+            codename="view_customer", content_type__app_label="customers",
+        ))
+        response = self.client.post(self.url, self.valid_payload(), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain[0][0], self.customer_url)
 
     def test_subscription_effect_of_the_service_is_applied(self):
         """

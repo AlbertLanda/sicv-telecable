@@ -5,10 +5,11 @@ se dibujan. Ninguna suma por su cuenta: si el Excel pudiera recalcular, el
 Excel y el PDF del mismo periodo acabarían diciendo cifras distintas y
 Contabilidad no sabría cuál vale.
 
-Las dos salidas son la hoja de SICAV tal cual -cabecera, filas y textos-,
-porque Contabilidad la compara renglón por renglón con la suya: nada que la
-hoja de SICAV no tenga. El Excel agrega el detalle comprobante por comprobante
-en una segunda pestaña, para cuadrar sin tocar la primera.
+Las dos salidas conservan las filas del consolidado de SICAV, porque
+Contabilidad las compara renglón por renglón. Antes de los importes incluyen
+el alcance parcial del reporte para distinguir ceros sin registro de un
+cierre completo. El Excel agrega el detalle comprobante por comprobante en
+una segunda pestaña.
 """
 
 from io import BytesIO
@@ -26,6 +27,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .cash_closing import CASH_CLOSING_SCOPE_NOTICE
 from .exporters import MOMENT_FORMAT, TC_BLUE
 
 
@@ -131,6 +133,19 @@ def _consolidated_sheet(sheet, report):
         cell.font = font
         cell.alignment = Alignment(horizontal="center")
         row += 1
+
+    for key, height in (("title", 30), ("detail", 72)):
+        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        cell = sheet.cell(row=row, column=1, value=CASH_CLOSING_SCOPE_NOTICE[key])
+        cell.fill = PatternFill("solid", fgColor="FFF3CD")
+        cell.font = Font(size=10, bold=key == "title", color="664D03")
+        cell.alignment = Alignment(wrap_text=True, vertical="center")
+        sheet.row_dimensions[row].height = height
+        row += 1
+
+    # El alcance debe acompañar los importes al imprimir varias páginas.
+    sheet.print_title_rows = f"1:{row - 1}"
+    row += 1
 
     for line in report["lines"]:
         text, amount, style = line["text"], line["amount"], line["style"]
@@ -238,7 +253,7 @@ def render_excel(report, buffer):
 # ---------------------------------------------------------------------
 
 def render_pdf(report, buffer):
-    """La hoja consolidada en A4 vertical, lista para firmar y archivar.
+    """El consolidado parcial en A4 vertical, con su alcance visible.
 
     Lleva solo el consolidado: el detalle es para cuadrar en el Excel, no
     para imprimirse.
@@ -265,6 +280,12 @@ def render_pdf(report, buffer):
     title = ParagraphStyle(
         "title", fontName="Helvetica-Bold", fontSize=13, alignment=1, leading=16
     )
+    scope = ParagraphStyle(
+        "scope", fontName="Helvetica", fontSize=8.5, leading=11,
+        textColor=colors.HexColor("#664D03"),
+        backColor=colors.HexColor("#FFF3CD"),
+        borderPadding=7, leftIndent=7, rightIndent=7,
+    )
 
     strip = Table(
         [[
@@ -285,7 +306,15 @@ def render_pdf(report, buffer):
         Paragraph(period_text(report), centered),
     ]
 
-    story.append(Spacer(1, 8))
+    story.extend([
+        Spacer(1, 12),
+        Paragraph(
+            f"<b>{escape(CASH_CLOSING_SCOPE_NOTICE['title'])}</b><br/>"
+            f"{escape(CASH_CLOSING_SCOPE_NOTICE['detail'])}",
+            scope,
+        ),
+        Spacer(1, 14),
+    ])
 
     rows = []
     styles = [
@@ -311,7 +340,14 @@ def render_pdf(report, buffer):
     table.setStyle(TableStyle(styles))
     story.append(table)
 
-    document.build(story)
+    def scope_footer(canvas, document):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#664D03"))
+        canvas.drawString(margin, 8 * mm, CASH_CLOSING_SCOPE_NOTICE["title"])
+        canvas.restoreState()
+
+    document.build(story, onFirstPage=scope_footer, onLaterPages=scope_footer)
 
     return filename(report, "pdf")
 

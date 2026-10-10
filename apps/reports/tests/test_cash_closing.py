@@ -755,7 +755,7 @@ class CashClosingAccessTests(CashClosingWebTestCase):
         response = self.client.get(reverse("reports:cash_closing"))
 
         self.assertContains(response, reverse("reports:cash_closing"))
-        self.assertContains(response, "Cierre de caja</a>")
+        self.assertContains(response, "Consolidado de emisión</a>")
 
 
 class CashClosingScreenTests(CashClosingWebTestCase):

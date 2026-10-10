@@ -65,12 +65,50 @@ El vencimiento sale de la modalidad de la política:
 | Modalidad      | Vence                                  |
 |----------------|----------------------------------------|
 | Mes calendario | el último día del mes facturado        |
-| Aniversario    | el día del mes en que se instaló       |
+| Aniversario    | el último día del ciclo contratado     |
 
 El comando es idempotente. La restricción única de `(subscription, period)`
 para mensualidades lo garantiza en la base, no solo en el servicio: si se
 corta a la mitad, se vuelve a lanzar y completa lo que falte sin cobrar dos
 veces el mes.
+
+### Periodos y descuentos confirmados para la operación
+
+`period` mantiene el mes de referencia que impide duplicados. `period_start`
+y `period_end` guardan la cobertura real y son las fechas que muestran el
+historial y el PDF. Los cargos anteriores conservan sus fechas originales.
+
+En la política de aniversario se usa el ciclo registrado del servicio o el
+día de instalación si no existe un ciclo previo. Así, el ciclo 14 de septiembre
+cubre 14/09–13/10 y vence el 13/10. `ANNIVERSARY_PP10` concede S/10 hasta tres
+días antes del vencimiento, incluido ese día: hasta 10/10 paga S/79 sobre una
+mensualidad de S/89; desde 11/10 paga S/89. El corte previsto continúa siendo
+el día siguiente al vencimiento. Estas fechas no ejecutan cortes de red.
+
+`CALENDAR_PP5` concede S/5 hasta el día 29 del mes, o el último día de febrero
+si es anterior. En el primer mes calendario, el generador cobra solo desde la
+instalación hasta el cierre; utiliza el prorrateo comercial existente de 30
+días y su tarifa diaria redondeada. Los meses siguientes tienen precio completo.
+La política asignada al plan gobierna estas reglas, sin sustituir excepciones
+comerciales por una comparación del año.
+
+El descuento de una aplicación confirmada permanece aplicado después de su
+fecha límite. Anular el pago devuelve tanto el dinero como ese descuento al
+saldo, sin modificar los importes impresos del comprobante original.
+
+### Reconexión tras morosidad
+
+Un corte por morosidad con resultado exitoso genera un cargo fijo de
+reconexión, S/15 por defecto, vinculado mediante `source_cut_order` a esa OT.
+La relación única impide repetir el cobro al reprocesar el mismo resultado.
+Un atraso sin corte ejecutado, un corte fallido o uno voluntario no generan
+esta deuda. El cargo no tiene descuento y no acompaña cambios de tarifa.
+
+Antes de completar la reconexión de ese servicio se exige saldar su deuda vencida y
+el cargo de reconexión. Un pago pendiente de confirmación no permite reactivar.
+Las mensualidades futuras y deudas de otras suscripciones no bloquean esta operación. La tarifa queda
+configurable en la política de cobro; no se habilita una integración con equipos
+de red ni un scheduler de cortes por este cambio.
 
 ## Pantalla de deudas
 

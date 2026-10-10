@@ -1,3 +1,5 @@
+{% load accounting_review_ui %}
+{% accounting_review_available as can_review_accounting %}
 {% comment %}
 Navegación lateral global del SICV.
 
@@ -5,44 +7,56 @@ El rol Administrador se concentra en gestión administrativa. Los módulos de
 NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
 {% endcomment %}
 
-<aside class="sicv-sidebar" aria-label="Navegación principal">
+<aside class="sicv-sidebar" id="sicv-navigation" aria-label="Navegación principal">
     <div class="sidebar-header d-lg-none">
-        <i class="bi bi-list"></i>
+        <i class="bi bi-list" aria-hidden="true"></i>
         <span class="sidebar-header-brand">TELECABLE</span>
     </div>
 
     <div class="sidebar-inner">
+        {% if perms.organization.view_operational_dashboard %}
+        <section class="sidebar-section" data-sidebar-section="panel administrador indicadores recaudacion cartera ordenes">
+            <a class="sidebar-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'dashboard_detail' %}active{% endif %}" href="{% url 'reports:dashboard' %}"><i class="bi bi-speedometer2" aria-hidden="true"></i>Panel administrador</a>
+        </section>
+        {% endif %}
         <div class="sidebar-search">
-            <i class="bi bi-search"></i>
-            <input type="text" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." autocomplete="off">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" id="sidebarFilter" class="form-control" placeholder="Buscar opción..." aria-label="Buscar opción del menú" autocomplete="off">
         </div>
 
-        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado">
+        <section class="sidebar-section" data-sidebar-section="clientes buscar cliente nuevo cliente ficha abonado calidad datos duplicados">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarClientes" aria-expanded="true">
-                <i class="bi bi-people"></i><span>Clientes</span><i class="bi bi-chevron-down chev"></i>
+                <i class="bi bi-people" aria-hidden="true"></i><span>Clientes</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarClientes">
                 <div class="sidebar-links">
-                    <a class="sidebar-link" href="{% url 'customers:search' %}"><i class="bi bi-search"></i>Buscar cliente</a>
+                    <a class="sidebar-link{% if request.resolver_match.app_name == 'customers' %} active{% endif %}" href="{% url 'customers:search' %}"><i class="bi bi-search" aria-hidden="true"></i>Buscar cliente</a>
                     {% if perms.customers.add_customer %}
-                        <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus"></i>Nuevo cliente</a>
+                        <a class="sidebar-link" href="{% url 'customers:create' %}"><i class="bi bi-person-plus" aria-hidden="true"></i>Nuevo cliente</a>
+                    {% endif %}
+                    {% if perms.customers.change_customer %}
+                        <a class="sidebar-link{% if request.resolver_match.url_name == 'customer_quality' %} active{% endif %}" href="{% url 'reports:customer_quality' %}"><i class="bi bi-clipboard-check" aria-hidden="true"></i>Calidad de datos</a>
                     {% endif %}
                 </div>
             </div>
         </section>
 
-        {% if user.role == "ADMIN" or user.role == "ACCOUNTING" %}
+        {% if user.role == "ADMIN" or user.role == "ACCOUNTING" or perms.payments.operate_cash or perms.payments.review_cash %}
         <section class="sidebar-section" data-sidebar-section="cobranza caja compromisos recaudacion">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarCobranza" aria-expanded="true">
-                <i class="bi bi-cash-coin"></i><span>Cobranza</span><i class="bi bi-chevron-down chev"></i>
+                <i class="bi bi-cash-coin" aria-hidden="true"></i><span>Cobranza</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarCobranza">
                 <div class="sidebar-links">
+                    {% if perms.payments.operate_cash or perms.payments.review_cash %}
+                        <a class="sidebar-link" href="{% url 'payments:cash_workspace' %}"><i class="bi bi-safe" aria-hidden="true"></i>Caja operativa</a>
+                    {% endif %}
+                    {% if perms.payments.request_debt_adjustment or perms.payments.review_debt_adjustment %}<a class="sidebar-link" href="{% url 'payments:adjustments' %}"><i class="bi bi-journal-minus" aria-hidden="true"></i>Ajustes de deuda</a>{% endif %}
                     {% if perms.payments.view_payment %}
-                        <a class="sidebar-link" href="{% url 'payments:daily_cash' %}"><i class="bi bi-wallet2"></i>Caja del día</a>
+                        <a class="sidebar-link" href="{% url 'payments:daily_cash' %}"><i class="bi bi-wallet2" aria-hidden="true"></i>Caja del día</a>
                     {% endif %}
                     {% if perms.payments.view_paymentcommitment %}
-                        <a class="sidebar-link" href="{% url 'payments:commitments' %}"><i class="bi bi-calendar-check"></i>Compromisos de pago</a>
+                        <a class="sidebar-link" href="{% url 'payments:commitments' %}"><i class="bi bi-calendar-check" aria-hidden="true"></i>Compromisos de pago</a>
                     {% endif %}
                 </div>
             </div>
@@ -53,18 +67,18 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
             {% if perms.work_orders.view_workorder or perms.work_orders.view_incident or perms.work_orders.view_outsideplant %}
             <section class="sidebar-section" data-sidebar-section="operaciones agenda calendario noc incidencias planta externa">
                 <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarOperaciones" aria-expanded="true">
-                    <i class="bi bi-briefcase"></i><span>Operaciones</span><i class="bi bi-chevron-down chev"></i>
+                    <i class="bi bi-briefcase" aria-hidden="true"></i><span>Operaciones</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
                 </button>
                 <div class="collapse show" id="sidebarOperaciones">
                     <div class="sidebar-links">
                         {% if perms.work_orders.view_workorder %}
-                            <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week"></i>Agenda / Calendario</a>
+                            <a class="sidebar-link" href="{% url 'work_orders:schedule_board' %}"><i class="bi bi-calendar2-week" aria-hidden="true"></i>Agenda / Calendario</a>
                         {% endif %}
                         {% if perms.work_orders.view_incident %}
-                            <a class="sidebar-link" href="{% url 'work_orders:incident_noc_queue' %}"><i class="bi bi-headset"></i>Incidencias NOC</a>
+                            <a class="sidebar-link" href="{% url 'work_orders:incident_noc_queue' %}"><i class="bi bi-headset" aria-hidden="true"></i>Incidencias NOC</a>
                         {% endif %}
                         {% if perms.work_orders.view_outsideplant %}
-                            <a class="sidebar-link" href="{% url 'work_orders:outside_plant_queue' %}"><i class="bi bi-diagram-3"></i>Planta Externa</a>
+                            <a class="sidebar-link" href="{% url 'work_orders:outside_plant_queue' %}"><i class="bi bi-diagram-3" aria-hidden="true"></i>Planta Externa</a>
                         {% endif %}
                     </div>
                 </div>
@@ -75,18 +89,18 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
         {% if perms.contracts.view_contract or perms.payments.view_receipt or perms.fiscal.view_fiscaldocument %}
         <section class="sidebar-section" data-sidebar-section="comercial contratos comprobantes">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarComercial" aria-expanded="true">
-                <i class="bi bi-file-earmark-text"></i><span>Comercial</span><i class="bi bi-chevron-down chev"></i>
+                <i class="bi bi-file-earmark-text" aria-hidden="true"></i><span>Comercial</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarComercial">
                 <div class="sidebar-links">
                     {% if perms.contracts.view_contract %}
-                        <a class="sidebar-link" href="{% url 'contracts:contract_list' %}"><i class="bi bi-file-earmark-pdf"></i>Contratos</a>
+                        <a class="sidebar-link" href="{% url 'contracts:contract_list' %}"><i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Contratos</a>
                     {% endif %}
                     {% if perms.payments.view_receipt %}
-                        <a class="sidebar-link" href="{% url 'payments:receipt_list' %}"><i class="bi bi-receipt"></i>Comprobantes</a>
+                        <a class="sidebar-link" href="{% url 'payments:receipt_list' %}"><i class="bi bi-receipt" aria-hidden="true"></i>Comprobantes</a>
                     {% endif %}
                     {% if perms.fiscal.view_fiscaldocument %}
-                        <a class="sidebar-link" href="{% url 'fiscal:list' %}"><i class="bi bi-file-earmark-check"></i>Preparación de facturación</a>
+                        <a class="sidebar-link" href="{% url 'fiscal:list' %}"><i class="bi bi-file-earmark-check" aria-hidden="true"></i>Preparación de facturación</a>
                     {% endif %}
                 </div>
             </div>
@@ -96,42 +110,50 @@ NOC/campo se ocultan y, además, ese rol no recibe sus permisos operativos.
         {% if perms.accounts.view_user or perms.services.view_plan or perms.services.view_servicetype %}
         <section class="sidebar-section" data-sidebar-section="configurar personal usuarios planes servicios catalogo precios">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarConfigurar" aria-expanded="true">
-                <i class="bi bi-sliders"></i><span>Configurar</span><i class="bi bi-chevron-down chev"></i>
+                <i class="bi bi-sliders" aria-hidden="true"></i><span>Configurar</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarConfigurar">
                 <div class="sidebar-links">
                     {% if perms.accounts.view_user %}
-                        <a class="sidebar-link" href="{% url 'accounts:personnel_list' %}"><i class="bi bi-people"></i>Personal</a>
+                        <a class="sidebar-link" href="{% url 'accounts:personnel_list' %}"><i class="bi bi-people" aria-hidden="true"></i>Personal</a>
                     {% endif %}
                     {% if perms.services.view_plan %}
-                        <a class="sidebar-link" href="{% url 'services:plan_list' %}"><i class="bi bi-list-stars"></i>Planes</a>
+                        <a class="sidebar-link" href="{% url 'services:plan_list' %}"><i class="bi bi-list-stars" aria-hidden="true"></i>Planes</a>
                     {% endif %}
                     {% if perms.services.view_servicetype %}
-                        <a class="sidebar-link" href="{% url 'services:servicetype_list' %}"><i class="bi bi-hdd-network"></i>Servicios</a>
+                        <a class="sidebar-link" href="{% url 'services:servicetype_list' %}"><i class="bi bi-hdd-network" aria-hidden="true"></i>Servicios</a>
                     {% endif %}
                 </div>
             </div>
         </section>
         {% endif %}
 
-        {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent or perms.payments.view_cash_closing %}
-        <section class="sidebar-section" data-sidebar-section="reportes ventas materiales cierre de caja consolidado emision actividad reciente auditoria">
+        {% if perms.services.view_subscription or perms.inventory.view_workordermaterialmovement or perms.audit.view_auditevent or perms.payments.view_cash_closing or perms.accounting.view_workspace %}
+        <section class="sidebar-section" data-sidebar-section="reportes ventas materiales cierre de caja consolidado emision actividad reciente auditoria revision contable ejemplos qa">
             <button class="sidebar-section-title" type="button" data-bs-toggle="collapse" data-bs-target="#sidebarReportes" aria-expanded="true">
-                <i class="bi bi-pie-chart"></i><span>Reportes</span><i class="bi bi-chevron-down chev"></i>
+                <i class="bi bi-pie-chart" aria-hidden="true"></i><span>Reportes</span><i class="bi bi-chevron-down chev" aria-hidden="true"></i>
             </button>
             <div class="collapse show" id="sidebarReportes">
+                    {% if perms.accounting.view_workspace %}
+                        <a class="sidebar-link" href="{% url 'accounting:workspace' %}"><i class="bi bi-intersect" aria-hidden="true"></i>Conciliación contable</a>
+                    {% endif %}
+                    {% if perms.accounting.view_bank %}<a class="sidebar-link" href="{% url 'accounting:bank_workspace' %}"><i class="bi bi-bank" aria-hidden="true"></i>Conciliación bancaria</a>{% endif %}
+                    {% if perms.accounting.view_revenue %}<a class="sidebar-link" href="{% url 'accounting:revenue' %}"><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Recaudación por empresa</a>{% endif %}
                 <div class="sidebar-links">
+                    {% if can_review_accounting %}
+                        <a class="sidebar-link" href="{% url 'reports:accounting_review' %}"><i class="bi bi-journal-check" aria-hidden="true"></i>Revisión contable · QA</a>
+                    {% endif %}
                     {% if perms.services.view_subscription %}
-                        <a class="sidebar-link" href="{% url 'reports:sales' %}"><i class="bi bi-graph-up-arrow"></i>Ventas por vendedor</a>
+                        <a class="sidebar-link" href="{% url 'reports:sales' %}"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i>Ventas por vendedor</a>
                     {% endif %}
                     {% if perms.inventory.view_workordermaterialmovement %}
-                        <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam"></i>Materiales</a>
+                        <a class="sidebar-link" href="{% url 'reports:materials' %}"><i class="bi bi-box-seam" aria-hidden="true"></i>Materiales</a>
                     {% endif %}
                     {% if perms.payments.view_cash_closing %}
-                        <a class="sidebar-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-cash-stack"></i>Cierre de caja</a>
+                        <a class="sidebar-link" href="{% url 'reports:cash_closing' %}"><i class="bi bi-cash-stack" aria-hidden="true"></i>Consolidado de emisión</a>
                     {% endif %}
                     {% if perms.audit.view_auditevent %}
-                        <a class="sidebar-link" href="{% url 'audit:activity' %}"><i class="bi bi-clock-history"></i>Actividad reciente</a>
+                        <a class="sidebar-link" href="{% url 'audit:activity' %}"><i class="bi bi-clock-history" aria-hidden="true"></i>Actividad reciente</a>
                     {% endif %}
                 </div>
             </div>

@@ -199,6 +199,9 @@ def incomplete_registration_issues(customer):
     if subscriptions.filter(installation_date__isnull=False).exists():
         issues.append("Existe un servicio con fecha de instalación.")
 
+    if subscriptions.filter(equipment_assignments__isnull=False).exists():
+        issues.append("El abonado tiene historial de equipos y debe conservarse.")
+
     if subscriptions.filter(work_orders__isnull=False).exists():
         issues.append(
             "Ya existe una orden de trabajo. Use el flujo de desistimiento "

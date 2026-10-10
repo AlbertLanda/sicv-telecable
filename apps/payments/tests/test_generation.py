@@ -24,6 +24,22 @@ PERIOD = date(2026, 9, 1)
 
 
 class MonthlyChargeGenerationTests(PaymentsTestCase):
+    def test_branch_follows_service_zone_not_customer_branch(self):
+        from apps.organization.models import Branch, Zone
+        other = Branch.objects.create(code="GEN-QA", name="Otra sede de prueba")
+        self.address.zone = Zone.objects.create(branch=other, name="Zona de prueba")
+        self.address.save()
+        self.assertEqual(generate_monthly_charges(PERIOD, branch=self.branch)["created"], [])
+        self.assertEqual(len(generate_monthly_charges(PERIOD, branch=other, dry_run=True)["created"]), 1)
+        self.assertEqual(Charge.objects.count(), 0)
+        self.assertEqual(len(generate_monthly_charges(PERIOD, branch=other)["created"]), 1)
+        self.assertEqual(generate_monthly_charges(PERIOD, branch=other)["skipped"], 1)
+
+    def test_branch_without_zone_falls_back_to_customer_branch(self):
+        self.address.zone = None
+        self.address.save()
+        self.assertEqual(len(generate_monthly_charges(PERIOD, branch=self.branch)["created"]), 1)
+
     def test_an_active_subscription_is_charged_its_monthly_price(self):
         result = generate_monthly_charges(PERIOD)
 
@@ -119,9 +135,11 @@ class MonthlyChargeGenerationTests(PaymentsTestCase):
 
         charge = generate_monthly_charges(PERIOD)["created"][0]
 
-        self.assertEqual(charge.due_date, date(2026, 9, 15))
-        self.assertEqual(charge.discount_deadline, date(2026, 9, 12))
-        self.assertEqual(charge.cut_date, date(2026, 9, 25))
+        self.assertEqual(charge.period_start, date(2026, 9, 15))
+        self.assertEqual(charge.period_end, date(2026, 10, 14))
+        self.assertEqual(charge.due_date, date(2026, 10, 14))
+        self.assertEqual(charge.discount_deadline, date(2026, 10, 11))
+        self.assertEqual(charge.cut_date, date(2026, 10, 24))
 
     def test_running_it_twice_does_not_duplicate_the_debt(self):
         generate_monthly_charges(PERIOD)

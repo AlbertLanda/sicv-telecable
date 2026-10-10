@@ -28,6 +28,8 @@ from django.utils import timezone
 from apps.customers.models import Customer
 from apps.organization.models import Branch, Office
 from apps.services.models import Subscription
+from .cash_models import CashClose, CashEntry, CashEvent, CashSession  # noqa: F401
+from .adjustment_models import DebtAdjustment  # noqa: F401
 
 
 ZERO = Decimal("0.00")
@@ -67,6 +69,7 @@ class Charge(models.Model):
         PENDING = "PENDING", "Pendiente"
         PARTIALLY_PAID = "PARTIALLY_PAID", "Pago parcial"
         PAID = "PAID", "Pagado"
+        ADJUSTED = "ADJUSTED", "Regularizado por ajuste"
         CANCELLED = "CANCELLED", "Anulado"
 
     customer = models.ForeignKey(
@@ -149,9 +152,8 @@ class Charge(models.Model):
         verbose_name="Actualizar automáticamente",
     )
 
-    # Primer día del mes facturado. Es lo que convierte «una mensualidad» en
-    # «la mensualidad de septiembre», y permite exigir que no se emita dos
-    # veces el mismo mes para la misma suscripción.
+    # Primer día del mes de referencia: conserva la clave contra duplicados.
+    # La cobertura efectiva usa period_start y period_end.
     period = models.DateField(
         null=True,
         blank=True,
@@ -166,6 +168,11 @@ class Charge(models.Model):
         null=True,
         blank=True,
         verbose_name="Cubre hasta",
+    )
+    period_start = models.DateField(null=True, blank=True, verbose_name="Cubre desde")
+    source_cut_order = models.OneToOneField(
+        "work_orders.WorkOrder", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="reconnection_charge", verbose_name="Corte que origina la reconexión",
     )
 
     amount = models.DecimalField(
@@ -246,6 +253,8 @@ class Charge(models.Model):
             raise ValidationError({
                 "period": "El periodo se guarda con el primer día del mes.",
             })
+        if self.period_start and self.period_end and self.period_start > self.period_end:
+            raise ValidationError({"period_end": "El fin de cobertura debe ser posterior al inicio."})
 
         if self.early_discount and self.amount and self.early_discount >= self.amount:
             raise ValidationError({
@@ -294,9 +303,25 @@ class Charge(models.Model):
 
     def balance_on(self, day=None):
         """Lo que falta pagar ese día. Nunca negativo."""
-        balance = self.amount_due_on(day) - self.paid_amount
+        applied = self.allocations.filter(payment__status=Payment.Status.REGISTERED).aggregate(
+            cash=Sum("amount"), discount=Sum("discount"),
+        )
+        # Un descuento ya concedido no se pierde al pasar su fecha límite.
+        # El descuento temporal y el ya ganado son el mismo beneficio: se
+        # conserva el mayor, no se suman al restituir un ajuste de deuda.
+        offered = self.amount - self.amount_due_on(day)
+        balance = self.amount - self.adjusted_amount - (applied["cash"] or ZERO) - max(offered, applied["discount"] or ZERO)
 
         return balance if balance > ZERO else ZERO
+
+    @property
+    def adjusted_amount(self):
+        return self.adjustments.filter(status="APPROVED").aggregate(total=Sum("amount"))["total"] or ZERO
+
+    @property
+    def nominal_balance(self):
+        applied = self.allocations.filter(payment__status=Payment.Status.REGISTERED).aggregate(cash=Sum("amount"), discount=Sum("discount"))
+        return max(ZERO, self.amount - self.adjusted_amount - (applied["cash"] or ZERO) - (applied["discount"] or ZERO))
 
     @property
     def balance(self):
@@ -321,15 +346,20 @@ class Charge(models.Model):
         return self.amount - self.amount_due_on()
 
     @property
+    def coverage_start(self):
+        # Los cargos anteriores conservan sus fechas y usan el inicio legado.
+        return self.period_start or self.period
+
+    @property
     def period_label(self):
         """El periodo como lo lee el operador: «01/09/2026 - 30/09/2026»."""
-        if not self.period:
+        if not self.coverage_start:
             return ""
 
         if not self.period_end:
-            return f"{self.period:%d/%m/%Y}"
+            return f"{self.coverage_start:%d/%m/%Y}"
 
-        return f"{self.period:%d/%m/%Y} - {self.period_end:%d/%m/%Y}"
+        return f"{self.coverage_start:%d/%m/%Y} - {self.period_end:%d/%m/%Y}"
 
     @property
     def paying_receipts(self):
@@ -379,9 +409,11 @@ class Charge(models.Model):
 
         paid = self.paid_amount
 
-        if paid <= ZERO:
+        if paid <= ZERO and self.nominal_balance <= ZERO and self.adjusted_amount > ZERO:
+            self.status = self.Status.ADJUSTED
+        elif paid <= ZERO:
             self.status = self.Status.PENDING
-        elif paid >= self.amount_due_on(day):
+        elif (self.nominal_balance <= ZERO if self.adjusted_amount else self.balance_on(day) <= ZERO):
             self.status = self.Status.PAID
         else:
             self.status = self.Status.PARTIALLY_PAID
@@ -730,6 +762,7 @@ class Payment(models.Model):
         verbose_name = "Pago"
         verbose_name_plural = "Pagos"
         ordering = ["-received_at", "-pk"]
+        indexes = [models.Index(fields=["status", "paid_at"], name="payment_status_paid_idx")]
         constraints = [
             models.CheckConstraint(
                 condition=Q(amount__gt=0),

@@ -5,7 +5,7 @@ from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.customers.models import CustomerAddress
+from apps.customers.models import Customer, CustomerAddress
 from apps.organization.models import Branch
 from apps.services.models import Subscription
 from apps.work_orders.models import (
@@ -1175,7 +1175,9 @@ def create_installation_work_order(
     try:
         locked_subscription = (
             Subscription.objects
-            .select_for_update()
+            # La suscripción serializa las altas concurrentes. La zona es
+            # opcional y su LEFT JOIN no admite FOR UPDATE en PostgreSQL.
+            .select_for_update(of=("self",))
             .select_related("customer__branch", "address__zone")
             .get(pk=subscription.pk)
         )
@@ -2070,7 +2072,10 @@ def _apply_cut_result(order, result_code):
 
     cut_detail.full_clean()
 
-    subscription = order.subscription
+    # El mismo orden de bloqueo de cobranza evita competir con un pago.
+    Customer.objects.select_for_update().get(pk=order.subscription.customer_id)
+    subscription = Subscription.objects.select_for_update(of=("self",)).get(pk=order.subscription_id)
+    order.subscription = subscription
     reason_code = order.reason.code
 
     if reason_code in TEMPORARY_CUT_REASONS:
@@ -2097,12 +2102,30 @@ def _apply_cut_result(order, result_code):
             "updated_at",
         ]
     )
+    if reason_code in {"DELINQUENCY", "NON_PAYMENT"}:
+        from apps.payments.services import ensure_reconnection_charge
+        ensure_reconnection_charge(order)
 
 def _apply_reconnection_result(order, result_code):
     if result_code != "SUCCESSFUL":
         return
 
-    subscription = order.subscription
+    Customer.objects.select_for_update().get(pk=order.subscription.customer_id)
+    subscription = Subscription.objects.select_for_update(of=("self",)).get(pk=order.subscription_id)
+    order.subscription = subscription
+
+    from apps.payments.models import Charge
+    # La reconexión de un corte por morosidad exige saldar su cargo y las
+    # mensualidades de ese servicio. No bloquea por otra suscripción del cliente.
+    has_delinquency_cut = Charge.objects.filter(
+        subscription=subscription, source_cut_order__isnull=False,
+    ).exists()
+    if has_delinquency_cut:
+        debts = Charge.objects.select_for_update().filter(subscription=subscription).filter(
+            models.Q(source_cut_order__isnull=False) | models.Q(due_date__lte=timezone.localdate())
+        ).exclude(status=Charge.Status.CANCELLED)
+        if any(charge.balance > 0 for charge in debts):
+            raise ValidationError("Debe cancelar la deuda del servicio y su reconexión antes de reactivarlo.")
 
     subscription.status = Subscription.Status.ACTIVE
     subscription.reconnection_date = timezone.localdate()

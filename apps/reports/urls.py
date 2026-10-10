@@ -1,12 +1,19 @@
 from django.urls import path
 
 from . import views
+from .dashboard_views import OperationalDashboardView, OperationalDashboardDetailView
+from .customer_quality_views import CustomerQualityView
+from .accounting_review_views import AccountingReviewView
 
 
 app_name = "reports"
 
 
 urlpatterns = [
+    path("revision-contable/", AccountingReviewView.as_view(), name="accounting_review"),
+    path("calidad-abonados/", CustomerQualityView.as_view(), name="customer_quality"),
+    path("panel/", OperationalDashboardView.as_view(), name="dashboard"),
+    path("panel/<str:kind>/", OperationalDashboardDetailView.as_view(), name="dashboard_detail"),
     path(
         "ventas/",
         views.SalesReportView.as_view(),

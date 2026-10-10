@@ -22,10 +22,10 @@ su cuenta:
    dice el nombre del reporte. La caja del día, en cambio, recorta por la
    fecha real de pago: son dos preguntas distintas.
 
-3. **Las filas que SICV todavía no registra salen en 0.** No hay gastos,
-   depósitos al banco, garantías, otros ingresos ni arqueo, y tampoco
-   cierres anteriores de los que sacar el saldo anterior. Se conservan igual
-   para que la hoja calce con la de SICAV.
+3. **Las partidas físicas no se mezclan con este consolidado por emisión.**
+   La caja operativa guarda apertura, movimientos y arqueo por cajero/oficina.
+   Este reporte conserva sus filas históricas en cero; no incorpora esos
+   importes ni acredita un cierre físico.
 
 4. **Las series son las de la hoja de SICAV de cada sede**, en su orden, y
    figuran aunque no hayan emitido, en 0. La hoja se lee comparándola con la
@@ -42,6 +42,20 @@ from apps.payments.models import Payment, Receipt, ReceiptSequence
 
 
 ZERO = Decimal("0.00")
+
+
+# Compartido por la pantalla y las exportaciones: los ceros de partidas que
+# no se incorporan aquí no acreditan ausencia de movimientos ni un arqueo.
+CASH_CLOSING_SCOPE_NOTICE = {
+    "title": "Consolidado parcial: no es un cierre de caja completo",
+    "detail": (
+        "Este consolidado por emisión no incorpora saldo anterior, garantías, "
+        "otros ingresos, gastos, depósitos ni arqueo de Caja operativa. "
+        "Estas partidas aparecen en cero en este reporte; esos ceros no "
+        "confirman ausencia de movimientos. Consulte Caja operativa para "
+        "revisar movimientos y cierres guardados por cajero y oficina."
+    ),
+}
 
 
 # El desplegable «Reporte». SICAV ofrece más de uno; el que Contabilidad usa

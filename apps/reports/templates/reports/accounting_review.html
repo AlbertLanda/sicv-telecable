@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block title %}Revisión contable · QA — SICV{% endblock %}
+{% block extra_css %}
+<style>
+    .review-stats { display:flex; flex-wrap:wrap; gap:12px; margin:20px 0; }
+    .review-stat { background:#fff; border:1px solid #dce3ed; border-radius:12px; padding:14px 20px; flex:1; min-width:140px; }
+    .review-stat strong { font-size:1.7rem; display:block; color:#183b68; }
+    .review-layout { display:grid; grid-template-columns:minmax(250px, 330px) minmax(0, 1fr); gap:20px; align-items:start; }
+    .review-nav { background:#fff; border:1px solid #dce3ed; border-radius:12px; padding:8px; }
+    .review-nav a { display:block; padding:10px 12px; color:#243b53; text-decoration:none; border-radius:8px; margin:2px 0; }
+    .review-nav a:hover, .review-nav a[aria-current="page"] { background:#eaf2ff; color:#123d78; }
+    .review-nav small { display:block; margin-top:3px; }
+    .review-panel { background:#fff; border:1px solid #dce3ed; border-radius:12px; padding:24px; margin-bottom:20px; }
+    .review-panel h2 { font-size:1.35rem; }
+    .review-panel th { width:36%; }
+    .review-panel td, .review-panel th, .review-note { overflow-wrap:anywhere; }
+    .review-note { white-space:pre-wrap; }
+    .review-panel li { margin:10px 0; }
+    .review-status { display:inline-block; font-size:.85rem; padding:4px 10px; background:#eff3f8; border-radius:7px; margin-bottom:14px; }
+    .review-form .errorlist { color:#a11919; }
+    @media(max-width:900px) { .review-layout { grid-template-columns:1fr; } .review-panel { padding:16px; } }
+    @media print { .sidebar, .sicv-topbar, .sicv-topnav, .review-nav, .review-controls, .review-form, .review-stats { display:none !important; } .review-layout { display:block; } .review-panel { border:0; padding:0; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="sicv-page">
+    <header class="sicv-page-heading">
+        <div><h1>Revisión contable · QA</h1>
+            <p>16 casos para comprobar datos, importes y necesidades del área. Puedes revisar por partes y volver después.</p></div>
+    </header>
+    <div class="alert alert-warning" role="note">
+        <strong>Ejemplos de prueba · sin validez tributaria.</strong>
+        Los datos de esta guía son ficticios. No generan deuda, cobros ni envíos a SUNAT.
+        Los casos ilustrativos muestran preguntas pendientes, no funciones terminadas.
+    </div>
+    <div class="review-panel">
+        <h2>Cómo revisar</h2>
+        <ol class="mb-2"><li>Abre un caso y compara los datos y el resultado esperado con lo que necesita Contabilidad.</li>
+            <li>Indica si falta un campo o ajuste y explica cómo debería verse con un ejemplo ficticio.</li>
+            <li>Pulsa <strong>Guardar revisión</strong>. Al terminar, descarga tus observaciones para compartirlas con TI.</li></ol>
+        <p class="small mb-0">Guardar una revisión no aprueba la emisión fiscal ni la migración. No escribas claves, datos personales ni adjuntes firmas o documentos reales.</p>
+    </div>
+    <div class="review-controls d-flex flex-wrap gap-2 align-items-center mb-3">
+        <a class="tc-btn" href="{{ export_url }}">Descargar revisión completa (CSV para Excel)</a>
+        <a class="tc-btn" href="{% url 'reports:cash_closing' %}">Ver reporte de caja parcial</a>
+        {% for link in sample_links %}<a class="tc-btn" href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
+    </div>
+    <p class="small text-muted">La guía contiene valores de referencia fijos. Las muestras operativas pueden cambiar al probar cobros o anulaciones.
+        Los enlaces a comprobantes usan los permisos actuales del usuario y la sede activa.</p>
+    {% if reviewers %}
+    <form method="get" class="review-controls d-flex flex-wrap gap-2 align-items-center mb-3">
+        <label for="reviewer-select">Consultar revisión de:</label>
+        <select id="reviewer-select" name="revisor" class="form-select" style="max-width:300px">
+            <option value="{{ request.user.pk }}" {% if own_review %}selected{% endif %}>Mi revisión</option>
+            {% for person in reviewers %}{% if person.pk != request.user.pk %}
+            <option value="{{ person.pk }}" {% if person.pk == reviewer.pk %}selected{% endif %}>{{ person.username }}</option>
+            {% endif %}{% endfor %}
+        </select>
+        <input type="hidden" name="caso" value="{{ selected.code }}"><button class="tc-btn" type="submit">Consultar</button>
+    </form>
+    {% endif %}
+    <p><strong>Revisor: {{ reviewer.username }}</strong> · Guía versión {{ catalog_version }}.
+        {% if not own_review %}Consulta de observaciones; solo su autor puede guardar nuevas revisiones.{% endif %}</p>
+    <div class="review-stats">
+        <div class="review-stat"><strong>{{ reviewed_count }} / 16</strong>Casos revisados</div>
+        <div class="review-stat"><strong>{{ pending_count }}</strong>Pendientes de revisar</div>
+        <div class="review-stat"><strong>{{ changes_count }}</strong>Con datos o ajustes pendientes</div>
+    </div>
+    <div class="review-layout">
+        <nav class="review-nav" aria-label="Casos de revisión contable">
+            {% for row in rows %}<a href="{{ row.url }}" {% if row.code == selected.code %}aria-current="page"{% endif %}>
+                {{ row.title }}<small>{% if row.review %}{{ row.review.get_status_display }}{% else %}Pendiente de revisar{% endif %}</small>
+            </a>{% endfor %}
+        </nav>
+        <div>
+            <article class="review-panel">
+                <p class="text-muted mb-1">{{ selected.area }}</p><h2>{{ selected.title }}</h2>
+                <span class="review-status">{{ selected.coverage }}</span>
+                <div class="table-responsive"><table class="table"><caption class="visually-hidden">Datos ficticios del caso</caption>
+                    <thead><tr><th scope="col">Dato</th><th scope="col">Ejemplo</th></tr></thead>
+                    <tbody>{% for label, value in selected.fields %}<tr><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+                <div class="alert alert-info"><strong>Qué comprobar:</strong> {{ selected.expected }}</div>
+                <h3 class="h5">Preguntas para Contabilidad</h3><ul>{% for check in selected.checks %}<li>{{ check }}</li>{% endfor %}</ul>
+            </article>
+            {% if own_review %}
+            <form method="post" class="review-panel review-form">
+                <h2>Tu observación sobre este caso</h2>
+                {% csrf_token %}{{ form.catalog_version }}{{ form.catalog_version.errors }}{{ form.non_field_errors }}
+                {% for field in form.visible_fields %}<div class="mb-3">
+                    {{ field.label_tag }}{{ field }}{{ field.errors }}
+                </div>{% endfor %}
+                <button type="submit" class="tc-btn tc-btn-primary">Guardar revisión</button>
+                {% if current %}<p class="small text-muted mt-2 mb-0">Última revisión: {{ current.created_at|date:'d/m/Y H:i' }} (Lima).</p>{% endif %}
+            </form>
+            {% endif %}
+            {% if history %}<section class="review-panel"><h2>Últimas revisiones de este caso</h2>
+                {% for note in history %}<div class="border-bottom py-3">
+                    <strong>{{ note.get_status_display }}</strong> · {{ note.created_at|date:'d/m/Y H:i' }} (Lima)
+                    {% if note.missing_data %}<p class="review-note mb-1">Dato faltante: {{ note.missing_data }}</p>{% endif %}
+                    {% if note.note %}<p class="review-note mb-0">{{ note.note }}</p>{% endif %}
+                </div>{% endfor %}
+            </section>{% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -22,6 +22,7 @@ from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
 
 from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
@@ -47,7 +48,7 @@ from .invoicing import (
     payment_condition,
     sunat_receiver_document,
 )
-from .models import ReceiptSequence, format_receipt_number
+from .models import Payment, ReceiptSequence, format_receipt_number
 
 
 # Media hoja apaisada, que es el tamaño en que se entrega este papel: dos por
@@ -63,7 +64,9 @@ PAGE_SIZE = landscape(A5)
 #
 # Las constantes se conservan con sus nombres porque este módulo las expone a
 # sus pruebas, que mueven `LOGO_DIR` para comprobar qué pasa sin archivo.
-LOGO_DIR = Path(settings.MEDIA_ROOT)
+# None selecciona MEDIA mediante Django; una ruta explícita sigue siendo
+# válida para las pruebas y diagnósticos locales, sin congelar MEDIA_ROOT.
+LOGO_DIR = None
 LOGO_STEM = branding.STEM
 LOGO_PATTERN = branding.PATRON
 LOGO_SUFFIXES = branding.SUFIJOS
@@ -229,7 +232,7 @@ def _cabecera_tique(receipt, estilos, ancho):
     # papel de referencia. A 11 mm se quedaba en una marca de agua arriba del
     # todo: en un tique de 80 mm es lo primero que identifica de quien es el
     # papel, y a esa escala habia que acercarselo a los ojos para verlo.
-    logo = _logo(ALTO_LOGO_TIQUE)
+    logo = _receipt_logo(receipt, ALTO_LOGO_TIQUE)
 
     # `_logo` devuelve una cadena vacía cuando no hay dibujo que poner, no
     # None: comparar contra None dejaba pasar esa cadena y el tique reventaba
@@ -240,6 +243,8 @@ def _cabecera_tique(receipt, estilos, ancho):
         piezas.append(logo)
         piezas.append(Spacer(1, 1.5 * mm))
 
+    if _is_qa_sample(receipt) and not issuer:
+        piezas.append(Paragraph("TELECABLE - DEMOSTRACIÓN", estilos["empresa"]))
     if issuer:
         piezas.append(Paragraph(issuer.business_name, estilos["empresa"]))
 
@@ -281,7 +286,7 @@ def _abonado_tique(receipt, estilos, ancho):
         [
             Paragraph("F. EMISIÓN", estilos["etiqueta"]),
             Paragraph(
-                receipt.issued_at.strftime("%d/%m/%Y"), estilos["dato"]
+                timezone.localtime(receipt.issued_at).strftime("%d/%m/%Y"), estilos["dato"]
             ),
         ],
         [
@@ -399,6 +404,8 @@ def _pie_tique(receipt, estilos, ancho, totals):
         ),
         Spacer(1, 2 * mm),
     ]
+    if receipt.payment.status == Payment.Status.PENDING:
+        piezas.insert(0, Paragraph("PAGO PENDIENTE DE CONFIRMACIÓN", estilos["etiqueta"]))
 
     codigo = _qr(receipt, totals, 30 * mm)
     codigo.hAlign = "CENTER"
@@ -407,7 +414,7 @@ def _pie_tique(receipt, estilos, ancho, totals):
     piezas.append(Paragraph(_resumen(receipt, totals), estilos["resumen"]))
     piezas.append(
         Paragraph(
-            "Representación impresa de "
+            _leyenda(receipt) if _is_qa_sample(receipt) else "Representación impresa de "
             f"{receipt.sequence.document_title}, verifique su "
             "comprobante en www.sunat.gob.pe",
             estilos["legal"],
@@ -425,7 +432,9 @@ def _render_ticket(receipt, buffer, lines, totals):
     fijo, y darle uno dejaria media cuarta en blanco en un cobro de una linea.
     """
     estilos = _estilos_tique()
-    ancho = ANCHO_TIQUE - 2 * MARGEN_TIQUE
+    # El marco de ReportLab reserva 6 puntos adicionales en cada lado.
+    # Medir con más ancho subestimaba los renglones y separaba el pie del ticket.
+    ancho = ANCHO_TIQUE - 2 * MARGEN_TIQUE - 2 * FRAME_PADDING
 
     historia = []
 
@@ -450,7 +459,7 @@ def _render_ticket(receipt, buffer, lines, totals):
     alto = sum(
         pieza.wrap(ancho, ALTO_TIQUE_MINIMO * 4)[1] for pieza in historia
     )
-    alto = max(ALTO_TIQUE_MINIMO, alto + 2 * MARGEN_TIQUE + COLA_TIQUE)
+    alto = max(ALTO_TIQUE_MINIMO, alto + 2 * MARGEN_TIQUE + 2 * FRAME_PADDING + COLA_TIQUE)
 
     documento = SimpleDocTemplate(
         buffer,
@@ -519,7 +528,7 @@ def _sin_margen_blanco(ruta):
     return branding.logo_sin_margen(ruta, umbral=UMBRAL_BLANCO)
 
 
-def _logo(alto):
+def _logo(alto, *, fallback=None):
     """El logotipo, o nada si no se puede dibujar.
 
     Un despliegue sin la imagen -o con una descargada a medias- tiene que
@@ -527,12 +536,10 @@ def _logo(alto):
     porque falte o se rompa un dibujo. Quien quiera saber si el sistema lo
     encuentra tiene `manage.py comprobar_logo`, que sí lo dice.
     """
-    ruta = find_logo()
-
-    if ruta is None:
-        return ""
-
     try:
+        ruta = find_logo() or fallback
+        if ruta is None:
+            return ""
         imagen = Image(_sin_margen_blanco(ruta))
         proporcion = imagen.imageWidth / imagen.imageHeight
     except Exception:
@@ -544,13 +551,22 @@ def _logo(alto):
     return imagen
 
 
+def _is_qa_sample(receipt):
+    return receipt.sequence.code == "QA-MUESTRAS-HYO" and receipt.series == "DEMOQA"
+
+
+def _receipt_logo(receipt, alto):
+    bundled = Path(settings.BASE_DIR) / "apps/work_orders/static/work_orders/branding/telecable-logo.jpg"
+    return _logo(alto, fallback=bundled if _is_qa_sample(receipt) and bundled.is_file() else None)
+
+
 def _cabecera(receipt, estilos, ancho):
     """Logotipo, razón social y el recuadro del RUC con el tipo de documento."""
     sequence = receipt.sequence
     issuer = sequence.issuer
 
     identidad = [
-        Paragraph(issuer.business_name if issuer else "", estilos["empresa"]),
+        Paragraph(issuer.business_name if issuer else ("TELECABLE - DEMOSTRACIÓN" if _is_qa_sample(receipt) else ""), estilos["empresa"]),
     ]
 
     if issuer and issuer.address:
@@ -563,7 +579,7 @@ def _cabecera(receipt, estilos, ancho):
 
     recuadro = Table(
         [
-            [Paragraph(f"R.U.C. {issuer.ruc if issuer else ''}", estilos["ruc"])],
+            [Paragraph("MUESTRA DE PRESENTACIÓN" if _is_qa_sample(receipt) and not issuer else f"R.U.C. {issuer.ruc if issuer else ''}", estilos["ruc"])],
             [Paragraph(sequence.document_title, estilos["titulo"])],
             [Paragraph(
                 f"{receipt.series}-{format_receipt_number(receipt.number)}",
@@ -583,7 +599,7 @@ def _cabecera(receipt, estilos, ancho):
     )
 
     tabla = Table(
-        [[_logo(ALTO_LOGO_HOJA), identidad, recuadro]],
+        [[_receipt_logo(receipt, ALTO_LOGO_HOJA), identidad, recuadro]],
         colWidths=[
             COLUMNA_LOGO_HOJA,
             ancho - COLUMNA_LOGO_HOJA - 68 * mm,
@@ -645,7 +661,7 @@ def _abonado(receipt, estilos, ancho):
     )
 
     filas_derecha = [
-        par("F. Emisión", receipt.issued_at.strftime("%d/%m/%Y %H:%M:%S")),
+        par("F. Emisión", timezone.localtime(receipt.issued_at).strftime("%d/%m/%Y %H:%M:%S")),
         par("Moneda", "SOLES"),
     ]
 
@@ -700,7 +716,7 @@ def _detalle(receipt, estilos, ancho, lines, relleno=RELLENO_MINIMO):
     que se reemplaza y lo que hace que un comprobante de una línea y otro de
     cinco tengan la misma silueta.
     """
-    anchos = [16 * mm, 17 * mm, ancho - 107 * mm, 26 * mm, 22 * mm, 26 * mm]
+    anchos = [20 * mm, 17 * mm, ancho - 111 * mm, 26 * mm, 22 * mm, 26 * mm]
 
     datos = [[
         Paragraph(texto, estilos["th"])
@@ -790,7 +806,7 @@ def _qr(receipt, totals, tamaño):
         format_receipt_number(receipt.number),
         f"{totals['igv']:.2f}",
         f"{totals['total']:.2f}",
-        receipt.issued_at.strftime("%Y-%m-%d"),
+        timezone.localtime(receipt.issued_at).strftime("%Y-%m-%d"),
         sunat_receiver_document(customer.document_type),
         customer.document_number,
         _resumen(receipt, totals),
@@ -830,7 +846,7 @@ def _resumen(receipt, totals):
 def _pie(receipt, estilos, ancho, totals):
     """Importe en letras, QR y el recuadro de importes."""
     payment = receipt.payment
-    pagado = payment.paid_at or payment.received_at
+    pagado = payment.paid_at or (payment.received_at if payment.status == Payment.Status.REGISTERED else None)
 
     izquierda = [
         Paragraph(
@@ -843,13 +859,15 @@ def _pie(receipt, estilos, ancho, totals):
         ),
         Paragraph(
             "Fecha de cancelación: "
-            f"{pagado.strftime('%d/%m/%Y') if pagado else ''}",
+            f"{timezone.localtime(pagado).strftime('%d/%m/%Y') if pagado else ''}",
             estilos["pie"],
         ),
         Spacer(1, 4 * mm),
         Paragraph(f"Resumen: {_resumen(receipt, totals)}", estilos["pie"]),
         Paragraph(_leyenda(receipt), estilos["pie"]),
     ]
+    if payment.status == Payment.Status.PENDING:
+        izquierda.insert(0, Paragraph("PAGO PENDIENTE DE CONFIRMACIÓN", estilos["pie"]))
 
     filas = [
         ("Op. Gravada", f"S/{totals['gravada']:.2f}"),
@@ -917,6 +935,8 @@ def _leyenda(receipt):
     encargo; que la promesa se sostenga depende de que se declare, no de
     esta línea.
     """
+    if _is_qa_sample(receipt):
+        return "Muestra interna de QA. Sin validez tributaria. No enviada a SUNAT."
     leyenda = f"Representación impresa de {receipt.sequence.document_title}"
 
     if _es_factura(receipt):
@@ -1005,7 +1025,7 @@ def _cuotas(receipt, estilos, ancho, totals):
     return tabla
 
 
-def render_receipt(receipt, buffer):
+def render_receipt(receipt, buffer, *, print_format=None):
     """Escribe el comprobante en `buffer` y devuelve el nombre del archivo.
 
     El nombre es el número completo -«B001-0041314.pdf»-, que es como el
@@ -1019,7 +1039,10 @@ def render_receipt(receipt, buffer):
     # que numero. Deducirlo aqui de la serie -«empieza por B»- pondria la
     # regla en el dibujo, y los blocks de un cobrador, que tambien son
     # boletas, acabarian en el papel equivocado.
-    if receipt.sequence.print_format == ReceiptSequence.PrintFormat.TICKET:
+    selected_format = print_format or receipt.sequence.print_format
+    if selected_format not in ReceiptSequence.PrintFormat.values:
+        raise ValueError("Formato de comprobante desconocido.")
+    if selected_format == ReceiptSequence.PrintFormat.TICKET:
         return _render_ticket(receipt, buffer, lines, totals)
 
     estilos = _estilos()

@@ -1,10 +1,37 @@
 # Contabilidad y cobranza: qué tiene SICV y qué falta
 
+## Actualización de entregas · 2026-10-10
+
+El levantamiento que sigue conserva el estado original; sus etiquetas de
+«falta» no sustituyen estas entregas posteriores:
+
+- [Caja operativa](caja_operativa.md): apertura, movimientos, arqueo y cierres
+  versionados con revisión.
+- [Conciliación bancaria y ajustes](conciliacion_bancaria_ajustes.md): ingresos
+  bancarios uno a uno y ajustes comerciales de deuda con aprobación.
+- [Recaudación por empresa](recaudacion_empresa.md): periodos, sedes/oficinas,
+  exportación y alertas administrativas configurables por RUC.
+
+SUNAT/SIRE automáticos siguen pospuestos. Estas entregas no acreditan todavía
+la migración conciliada ni la aceptación operativa final por las áreas.
+
 Auditoría técnica y funcional de Caja/Contabilidad, actualizada al 2026-10-01.
 La implementación revisada parte de `feature/sicav-legacy-import`, incorpora el
 MVP contable revisado y el reporte `Ingresos por usuario`.
 
 La evidencia operativa concreta se mantiene fuera del repositorio público.
+
+## Aviso de alcance del consolidado (2026-10-05)
+
+La rama `fix/cash-closing-scope-warning` añade un aviso en la pantalla de
+Cierre de caja y antes de los importes del consolidado Excel/PDF. Explica que
+saldo anterior, garantías, otros ingresos, gastos, depósitos y arqueo aún no
+se registran: sus ceros no acreditan ausencia de movimientos ni un cierre
+completo. El aviso se repite al imprimir varias páginas.
+
+Se conservan el orden de las partidas, los importes y el detalle. Los ingresos
+por usuario mantienen su exportación propia. Este cambio de presentación no
+implementa movimientos, arqueo ni cierre persistido.
 
 ## Entrega posterior: cobranza completa
 

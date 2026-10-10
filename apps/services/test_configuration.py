@@ -40,7 +40,7 @@ class ConfigurationTestCase(TestCase):
                 "name": "Aniversario - pronto pago S/ 10",
                 "billing_mode": BillingPolicy.Mode.ANNIVERSARY,
                 "discount_amount": Decimal("10.00"),
-                "discount_days_before_due": 2,
+                "discount_days_before_due": 3,
                 "cut_days_after_due": 1,
             },
         )

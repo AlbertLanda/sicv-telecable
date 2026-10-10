@@ -41,7 +41,24 @@ DJANGO_PRODUCTION=False
 ```
 
 No cambiar el perfil productivo para activar pruebas. El servicio las rechaza
-cuando `PRODUCTION=True`, aunque la variable de simulación esté activada.
+cuando `PRODUCTION=True`, aunque la variable de simulación esté activada, salvo
+la excepción explícita del App Service `sicv-telecable-qa` descrita abajo.
+
+### Entorno Azure QA
+
+El despliegue sigue usando la rama `feature/azure-pilot-readiness` y el App
+Service existente. En ese recurso, `startup.sh` aplica las migraciones pendientes
+antes de iniciar Gunicorn y habilita el simulador OSE. Conserva
+`DJANGO_PRODUCTION=True`, HTTPS y cookies seguras. La excepción requiere ambos:
+`DJANGO_FISCAL_QA_SIMULATION=True` y `WEBSITE_SITE_NAME=sicv-telecable-qa`.
+Otros recursos conservan el bloqueo y el arranque sin migración automática.
+
+Acceso de pruebas:
+https://sicv-telecable-qa-f8fnfrhug3cwajc6.centralus-01.azurewebsites.net/
+
+Usar una cuenta con permisos fiscales (el administrador tiene acceso). Para
+ejecutar una prueba, configurar primero la empresa en modo **Simulador local**.
+Los resultados siguen siendo simulados y sin validez tributaria.
 
 ```bash
 python manage.py migrate
