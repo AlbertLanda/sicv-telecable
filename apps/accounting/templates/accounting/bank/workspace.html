@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Conciliación bancaria - SICV{% endblock %}
+{% block extra_css %}{% include "_tc_design.html" %}{% endblock %}
+{% block content %}<div class="tc-content"><section class="tc-card tc-section tc-full"><div class="tc-section-head banner"><h1 class="tc-section-title">Conciliación bancaria</h1></div><div class="tc-section-body"><p>Compare extractos con cobros y depósitos de caja. Cada vínculo requiere confirmación; importar un archivo no cambia deuda, caja ni estados fiscales.</p>
+<div class="table-responsive"><table class="table"><thead><tr><th>Cuenta</th><th>Empresa titular</th><th>Moneda</th></tr></thead><tbody>{% for account in accounts %}<tr><td><a href="{% url 'accounting:bank_account' account.pk %}">{{ account }}</a></td><td>{{ account.issuer.business_name }}</td><td>{{ account.currency }}</td></tr>{% empty %}<tr><td colspan="3">No hay cuentas configuradas para sus empresas autorizadas.</td></tr>{% endfor %}</tbody></table></div>
+{% if perms.accounting.manage_access %}<a href="{% url 'accounting:access' %}">Administrar acceso por empresa</a>{% endif %}
+{% if perms.accounting.manage_bank_accounts %}<hr><details {% if form.errors %}open{% endif %}><summary class="fw-bold mb-3">Configurar cuenta bancaria</summary><p>Verifique la empresa titular, el banco y el número completo. La identidad de una cuenta con evidencia no se cambia.</p><form method="post">{% csrf_token %}{% include "payments/cash/_form.html" with form=form %}<button class="tc-btn primary">Crear cuenta PEN</button></form></details>{% endif %}
+</div></section></div>{% endblock %}

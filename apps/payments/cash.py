@@ -248,6 +248,8 @@ def reverse_movement(*, session_id, entry_id, actor, reason):
         raise ValidationError("La corrección requiere una caja abierta y un movimiento de ella o de un cierre aprobado anterior.")
     if CashEntry.objects.filter(reversal_of=original).exists():
         raise ValidationError("El movimiento ya fue revertido.")
+    if original.bank_matches.filter(active=True).exists():
+        raise ValidationError("Contabilidad debe deshacer la conciliación bancaria antes de revertir el depósito.")
     entry = CashEntry.objects.create(session=session, kind="REVERSAL", amount=-original.amount, method=original.method,
         issuer=original.issuer, issuer_label=original.issuer_label, issuer_ruc=original.issuer_ruc, actor=actor,
         description=reason, reference=f"Corrección movimiento #{original.pk}", reversal_of=original, occurred_at=timezone.now())

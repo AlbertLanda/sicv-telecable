@@ -29,6 +29,7 @@ from apps.customers.models import Customer
 from apps.organization.models import Branch, Office
 from apps.services.models import Subscription
 from .cash_models import CashClose, CashEntry, CashEvent, CashSession  # noqa: F401
+from .adjustment_models import DebtAdjustment  # noqa: F401
 
 
 ZERO = Decimal("0.00")
@@ -68,6 +69,7 @@ class Charge(models.Model):
         PENDING = "PENDING", "Pendiente"
         PARTIALLY_PAID = "PARTIALLY_PAID", "Pago parcial"
         PAID = "PAID", "Pagado"
+        ADJUSTED = "ADJUSTED", "Regularizado por ajuste"
         CANCELLED = "CANCELLED", "Anulado"
 
     customer = models.ForeignKey(
@@ -305,9 +307,21 @@ class Charge(models.Model):
             cash=Sum("amount"), discount=Sum("discount"),
         )
         # Un descuento ya concedido no se pierde al pasar su fecha límite.
-        balance = self.amount_due_on(day) - (applied["cash"] or ZERO) - (applied["discount"] or ZERO)
+        # El descuento temporal y el ya ganado son el mismo beneficio: se
+        # conserva el mayor, no se suman al restituir un ajuste de deuda.
+        offered = self.amount - self.amount_due_on(day)
+        balance = self.amount - self.adjusted_amount - (applied["cash"] or ZERO) - max(offered, applied["discount"] or ZERO)
 
         return balance if balance > ZERO else ZERO
+
+    @property
+    def adjusted_amount(self):
+        return self.adjustments.filter(status="APPROVED").aggregate(total=Sum("amount"))["total"] or ZERO
+
+    @property
+    def nominal_balance(self):
+        applied = self.allocations.filter(payment__status=Payment.Status.REGISTERED).aggregate(cash=Sum("amount"), discount=Sum("discount"))
+        return max(ZERO, self.amount - self.adjusted_amount - (applied["cash"] or ZERO) - (applied["discount"] or ZERO))
 
     @property
     def balance(self):
@@ -395,9 +409,11 @@ class Charge(models.Model):
 
         paid = self.paid_amount
 
-        if paid <= ZERO:
+        if paid <= ZERO and self.nominal_balance <= ZERO and self.adjusted_amount > ZERO:
+            self.status = self.Status.ADJUSTED
+        elif paid <= ZERO:
             self.status = self.Status.PENDING
-        elif self.balance_on(day) <= ZERO:
+        elif (self.nominal_balance <= ZERO if self.adjusted_amount else self.balance_on(day) <= ZERO):
             self.status = self.Status.PAID
         else:
             self.status = self.Status.PARTIALLY_PAID

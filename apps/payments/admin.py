@@ -202,9 +202,9 @@ class CollectionReadOnlyAdmin(admin.ModelAdmin):
         return False
 
 
-from .models import CashClose, CashEntry, CashEvent, CashSession
+from .models import CashClose, CashEntry, CashEvent, CashSession, DebtAdjustment
 
-for cash_model in (CashSession, CashEntry, CashClose, CashEvent):
+for cash_model in (CashSession, CashEntry, CashClose, CashEvent, DebtAdjustment):
     admin.site.register(cash_model, CollectionReadOnlyAdmin)
 
 
